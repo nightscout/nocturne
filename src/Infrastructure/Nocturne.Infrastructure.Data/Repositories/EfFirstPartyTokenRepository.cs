@@ -23,6 +23,26 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// <inheritdoc />
     public async Task CreateAsync(RefreshTokenRecord record, CancellationToken ct = default)
     {
+        // A demo tenant's visitor account is shared: anyone can obtain a session for it without
+        // signing up, and GET /api/v4/account/sessions lists every session for the subject —
+        // including IpAddress — to any member of it. Recording the caller's address would show
+        // each visitor where everyone else currently using the demo connects from, and let them
+        // revoke each other.
+        //
+        // Enforced here rather than at the callers because there are several and they do not
+        // agree: the sign-in endpoints pass no address deliberately, but rotation carries the old
+        // row's values forward and POST /api/auth/oidc/refresh is [AllowAnonymous], so the web
+        // app's first automatic token refresh put the real client address back within one
+        // access-token lifetime of any visit. Scrubbing at the single row-creating sink means no
+        // path can repopulate them, including one added later.
+        var isDemoSubject = await _context.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == record.SubjectId)
+            .Select(s => (bool?)s.IsDemoSubject)
+            .FirstOrDefaultAsync(ct);
+
+        var scrub = isDemoSubject is true;
+
         var entity = new RefreshTokenEntity
         {
             Id = record.Id,
@@ -30,8 +50,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             SubjectId = record.SubjectId,
             OidcSessionId = record.OidcSessionId,
             DeviceDescription = record.DeviceDescription,
-            IpAddress = record.IpAddress,
-            UserAgent = record.UserAgent,
+            IpAddress = scrub ? null : record.IpAddress,
+            UserAgent = scrub ? null : record.UserAgent,
             IssuedAt = record.IssuedAt,
             ExpiresAt = record.ExpiresAt,
             CreatedAt = DateTime.UtcNow,

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -139,4 +140,108 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         sessions[0].Id.Should().Be(active.Id);
         sessions[0].OidcSessionId.Should().Be("session-a");
     }
+
+    #region Demo subject IP/user-agent scrubbing
+
+    // A demo tenant's visitor account is shared: anyone can obtain a session for it without
+    // signing up, and GET /api/v4/account/sessions lists every session for the subject —
+    // IpAddress included — to any member of it. Recording the caller's address would show each
+    // visitor where every other current visitor connects from, and let them revoke each other.
+    //
+    // Enforced at this sink rather than at the callers because the callers do not agree: the
+    // sign-in endpoints pass no address on purpose, but RotateRefreshTokenAsync carries the old
+    // row's values forward, and POST /api/auth/oidc/refresh is [AllowAnonymous] — so the web
+    // app's first automatic refresh put the real client address straight back. Testing the
+    // rotate shape here, not just the issue shape, is the point.
+
+    [Fact]
+    public async Task CreateAsync_scrubs_ip_and_user_agent_for_a_demo_subject()
+    {
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+
+        await _repository.CreateAsync(NewRecord(
+            demoSubjectId, ipAddress: "203.0.113.44", userAgent: "Mozilla/5.0 (visitor)"));
+
+        var stored = _context.RefreshTokens.Single(t => t.SubjectId == demoSubjectId);
+        stored.IpAddress.Should().BeNull("a shared account must not accumulate visitor addresses");
+        stored.UserAgent.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateAsync_scrubs_a_rotated_row_carrying_the_previous_values_forward()
+    {
+        // The exact shape RotateRefreshTokenAsync produces: IpAddress = ipAddress ?? old.IpAddress.
+        // The issue path having passed nulls does not help once rotation supplies real ones.
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+
+        await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
+        await _repository.CreateAsync(NewRecord(
+            demoSubjectId, ipAddress: "198.51.100.9", userAgent: "Mozilla/5.0 (refresh)"));
+
+        _context.RefreshTokens
+            .Where(t => t.SubjectId == demoSubjectId)
+            .Should().OnlyContain(t => t.IpAddress == null && t.UserAgent == null,
+                "no path may repopulate them, including rotation");
+    }
+
+    [Fact]
+    public async Task CreateAsync_keeps_ip_and_user_agent_for_an_ordinary_subject()
+    {
+        // Real members rely on these: the session list is how someone spots a login they do not
+        // recognise. Scrubbing everyone would be a privacy regression, not a fix.
+        var subjectId = await AddSubjectAsync(isDemoSubject: false);
+
+        await _repository.CreateAsync(NewRecord(
+            subjectId, ipAddress: "203.0.113.44", userAgent: "Mozilla/5.0 (real)"));
+
+        var stored = _context.RefreshTokens.Single(t => t.SubjectId == subjectId);
+        stored.IpAddress.Should().Be("203.0.113.44");
+        stored.UserAgent.Should().Be("Mozilla/5.0 (real)");
+    }
+
+    [Fact]
+    public async Task CreateAsync_keeps_ip_and_user_agent_when_the_subject_row_is_absent()
+    {
+        // A missing subject is not a demo subject, and the row still has to be written — the
+        // scrub must not become a silent data-loss path for tokens whose subject this context
+        // cannot see.
+        await _repository.CreateAsync(NewRecord(
+            _otherSubjectId, ipAddress: "203.0.113.7", userAgent: "cli"));
+
+        var stored = _context.RefreshTokens.Single(t => t.SubjectId == _otherSubjectId);
+        stored.IpAddress.Should().Be("203.0.113.7");
+        stored.UserAgent.Should().Be("cli");
+    }
+
+    private async Task<Guid> AddSubjectAsync(bool isDemoSubject)
+    {
+        var subject = new SubjectEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Name = isDemoSubject ? "Demo Visitor" : "Real Person",
+            IsActive = true,
+            IsDemoSubject = isDemoSubject,
+        };
+        _context.Subjects.Add(subject);
+        await _context.SaveChangesAsync();
+        return subject.Id;
+    }
+
+    private static RefreshTokenRecord NewRecord(
+        Guid subjectId, string? ipAddress, string? userAgent) => new(
+            Id: Guid.CreateVersion7(),
+            TokenHash: Guid.NewGuid().ToString("N"),
+            SubjectId: subjectId,
+            OidcSessionId: null,
+            DeviceDescription: "demo-visitor",
+            IpAddress: ipAddress,
+            UserAgent: userAgent,
+            IssuedAt: DateTime.UtcNow,
+            ExpiresAt: DateTime.UtcNow.AddDays(30),
+            RevokedAt: null,
+            RevokedReason: null,
+            ReplacedByTokenId: null,
+            LastUsedAt: null);
+
+    #endregion
 }

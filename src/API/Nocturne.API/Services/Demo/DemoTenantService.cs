@@ -51,7 +51,7 @@ public sealed class DemoTenantService
     /// <summary>
     /// Ceiling on live <c>refresh_tokens</c> rows for the demo subject. Enforced by
     /// <see cref="TrimSessionsAsync"/> before every issue, so the table cannot grow past this
-    /// however many sessions are requested.
+    /// however many sessions are <em>issued</em>.
     /// </summary>
     /// <remarks>
     /// The per-IP rate limit on the sign-in endpoint does not bound this. That partition key
@@ -63,10 +63,18 @@ public sealed class DemoTenantService
     /// the friction it adds to naive abuse; this cap is the actual ceiling, and it is enforced
     /// on a value no caller supplies.
     /// <para>
+    /// Rotation is not bounded by this. Each refresh writes a replacement row and nothing trims
+    /// until an issue path is next hit, so the table can sit above the cap between sign-ins; what
+    /// the cap removes is unbounded growth driven by an anonymous endpoint.
+    /// </para>
+    /// <para>
     /// Sized for concurrent real visitors, not for one visitor: the account is shared, so a
-    /// trimmed session belongs to someone who has almost certainly left. Reaching the cap signs
-    /// the oldest visitor out rather than refusing the newest, because refusing would make the
-    /// demo unusable for everyone as soon as it filled.
+    /// trimmed session belongs to someone who has almost certainly left. Reaching the cap
+    /// displaces the oldest rather than refusing the newest, because refusing would make the demo
+    /// unusable for everyone as soon as it filled — and displacing costs little, because the
+    /// access token is a self-contained JWT with no revocation check. A visitor whose refresh row
+    /// is trimmed is not signed out mid-page; they lose only their next refresh, at which point
+    /// the login page signs them straight back in.
     /// </para>
     /// </remarks>
     public const int MaxLiveDemoSessions = 50;

@@ -73,6 +73,12 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(ConfigurationController), nameof(ConfigurationController.SaveConfiguration) },
         { typeof(ConfigurationController), nameof(ConfigurationController.SaveSecrets) },
         { typeof(ConnectorStatusController), nameof(ConnectorStatusController.GetStatus) },
+
+        // Completing the CareLink flow writes the signed-in Medtronic username and country into
+        // the tenant's connector configuration, which GET returns in the clear. The service also
+        // guards the write, but this flow stores a refresh token as a connector secret on the way
+        // and its persist step swallows exceptions, so it has to be refused at the edge too.
+        { typeof(CareLinkConnectController), nameof(CareLinkConnectController.Start) },
     };
 
     [Theory]

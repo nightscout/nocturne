@@ -99,7 +99,10 @@ public class DemoAdminController : ControllerBase
     [HttpPatch("status")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateStatus([FromBody] DemoStatusPatchDto patch, CancellationToken ct)
+    public async Task<IActionResult> UpdateStatus(
+        [FromBody] DemoStatusPatchDto patch,
+        [FromServices] IMemoryCache cache,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -120,10 +123,16 @@ public class DemoAdminController : ControllerBase
         if (patch.LastResetAt.HasValue)
             config.LastResetAt = patch.LastResetAt.Value;
 
+        var activeChanged = patch.IsActive.HasValue && patch.IsActive.Value != tenant.IsActive;
         if (patch.IsActive.HasValue)
             tenant.IsActive = patch.IsActive.Value;
 
         await db.SaveChangesAsync(ct);
+
+        // IsActive is carried on the cached tenant context, same as IsDemo — so without evicting,
+        // a deactivated demo keeps being served for the cache lifetime.
+        if (activeChanged)
+            TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
 
         return Ok(ToDto(tenant, alreadyExisted: true));
     }

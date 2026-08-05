@@ -116,6 +116,47 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         return response;
     }
 
+    /// <summary>
+    /// Refuses a write from a demo tenant's shared visitor account.
+    /// </summary>
+    /// <remarks>
+    /// Guarded on the asset rather than only on the controllers that reach it. Connector
+    /// configuration names a host the server will fetch from, and <c>GET</c> returns it in the
+    /// clear to any member — and every demo visitor is the same member. Gating controllers missed
+    /// <c>CareLinkConnectController</c>, which writes the visitor's real CareLink username and
+    /// country here after a Medtronic sign-in: a real person's health-account identifier, handed
+    /// to every later visitor, with their CGM data pulled into the shared tenant. Anything that
+    /// writes connector configuration in future is covered without needing to remember an
+    /// attribute.
+    /// <para>
+    /// The subject comes from <see cref="IAuditContext"/>, which
+    /// <c>AuditContextMiddleware</c> populates from the request's auth context. A caller with no
+    /// subject (instance key, background work) is not a demo visitor and is left alone.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">The caller is the demo visitor account.</exception>
+    private async Task EnsureNotDemoSubjectAsync(string connectorName, CancellationToken ct)
+    {
+        if (_auditContext.SubjectId is not { } subjectId)
+            return;
+
+        var isDemoSubject = await _context.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == subjectId)
+            .Select(s => (bool?)s.IsDemoSubject)
+            .FirstOrDefaultAsync(ct);
+
+        if (isDemoSubject is not true)
+            return;
+
+        _logger.LogWarning(
+            "Refusing to write {ConnectorName} configuration: the caller is the shared demo account",
+            connectorName);
+
+        throw new UnauthorizedAccessException(
+            "The demo account cannot change connector configuration.");
+    }
+
     /// <inheritdoc />
     public async Task<ConnectorConfigurationResponse> SaveConfigurationAsync(
         string connectorName,
@@ -123,6 +164,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
         var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
@@ -186,6 +229,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
         if (!_encryptionService.IsConfigured)
         {
             throw new InvalidOperationException(

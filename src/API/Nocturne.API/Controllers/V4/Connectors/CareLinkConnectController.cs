@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -23,6 +24,11 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [ApiController]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
+// Completing this flow writes the signed-in CareLink username and country into the
+// tenant's connector configuration, which GET returns in the clear. Every demo visitor is
+// the same member, so a visitor who signed in with their real Medtronic account would hand
+// that identifier to every later visitor and pull their CGM data into the shared tenant.
+[DenyDemoSubject]
 public partial class CareLinkConnectController : ControllerBase
 {
     private const string ConnectorName = "CareLink";

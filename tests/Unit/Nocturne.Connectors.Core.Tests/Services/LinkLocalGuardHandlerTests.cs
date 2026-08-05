@@ -68,11 +68,144 @@ public class LinkLocalGuardHandlerTests
         reachedTransport().Should().BeTrue();
     }
 
+    #region Redirects
+
+    // The guard sits above the transport, so it only ever sees the initial RequestUri. With the
+    // transport following 3xx itself, an allowed host answering 307 with a link-local Location
+    // would be fetched from inside the network beneath the guard, and connector status would
+    // report the outcome — the whole check bypassed by one response header. The transport has
+    // redirects disabled and the guard follows them itself, re-checking every hop.
+
+    [Theory]
+    [InlineData(HttpStatusCode.MovedPermanently)]
+    [InlineData(HttpStatusCode.Found)]
+    [InlineData(HttpStatusCode.SeeOther)]
+    [InlineData(HttpStatusCode.TemporaryRedirect)]
+    [InlineData(HttpStatusCode.PermanentRedirect)]
+    public async Task Refuses_ALinkLocalRedirectTarget(HttpStatusCode status)
+    {
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://attacker.example/start"] =
+                    (status, "http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var act = async () => await client.GetAsync("https://attacker.example/start");
+
+        await act.Should().ThrowAsync<HttpRequestException>().WithMessage("*link-local*");
+        // The first hop is allowed; the redirect target must never be requested.
+        transport.Requested.Should().Equal(["https://attacker.example/start"]);
+    }
+
+    [Fact]
+    public async Task Refuses_ALinkLocalTargetReachedThroughSeveralRedirects()
+    {
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://a.example/"] = (HttpStatusCode.Found, "https://b.example/"),
+                ["https://b.example/"] = (HttpStatusCode.Found, "http://169.254.169.254/"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var act = async () => await client.GetAsync("https://a.example/");
+
+        await act.Should().ThrowAsync<HttpRequestException>().WithMessage("*link-local*");
+        transport.Requested.Should().Equal("https://a.example/", "https://b.example/");
+    }
+
+    [Fact]
+    public async Task Follows_AnHttpToHttpsRedirect()
+    {
+        // A Nightscout behind an http-to-https redirect is an ordinary config, which is why the
+        // fix is per-hop re-checking rather than refusing redirects outright.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["http://mynightscout.example/api/v1/entries.json"] =
+                    (HttpStatusCode.MovedPermanently, "https://mynightscout.example/api/v1/entries.json"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var response = await client.GetAsync("http://mynightscout.example/api/v1/entries.json");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        transport.Requested.Should().Equal(
+            "http://mynightscout.example/api/v1/entries.json",
+            "https://mynightscout.example/api/v1/entries.json");
+    }
+
+    [Fact]
+    public async Task Follows_ARelativeRedirect()
+    {
+        var transport = new ScriptedHandler
+        {
+            Redirects = { ["https://ns.example/old"] = (HttpStatusCode.Found, "/new") },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var response = await client.GetAsync("https://ns.example/old");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        transport.Requested.Should().Equal("https://ns.example/old", "https://ns.example/new");
+    }
+
+    [Fact]
+    public async Task DropsCredentialHeaders_WhenARedirectCrossesOrigin()
+    {
+        // The connector sends the tenant's api-secret. A configured host that redirects elsewhere
+        // must not hand it to the redirect target.
+        var transport = new ScriptedHandler
+        {
+            Redirects = { ["https://ns.example/x"] = (HttpStatusCode.Found, "https://elsewhere.example/x") },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://ns.example/x");
+        request.Headers.TryAddWithoutValidation("api-secret", "the-tenant-secret");
+        request.Headers.TryAddWithoutValidation("Authorization", "Bearer the-token");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+
+        await client.SendAsync(request);
+
+        var followUp = transport.Headers["https://elsewhere.example/x"];
+        followUp.Should().NotContainKey("api-secret");
+        followUp.Should().NotContainKey("Authorization");
+        followUp.Should().ContainKey("Accept", "only credentials are dropped");
+    }
+
+    [Fact]
+    public async Task KeepsCredentialHeaders_WhenARedirectStaysOnTheSameOrigin()
+    {
+        var transport = new ScriptedHandler
+        {
+            Redirects = { ["https://ns.example/old"] = (HttpStatusCode.Found, "https://ns.example/new") },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://ns.example/old");
+        request.Headers.TryAddWithoutValidation("api-secret", "the-tenant-secret");
+
+        await client.SendAsync(request);
+
+        transport.Headers["https://ns.example/new"].Should().ContainKey("api-secret");
+    }
+
+    #endregion
+
     private static HttpClient BuildClient(
         OutboundDestination.AddressResolver resolver, out Func<bool> reachedTransport)
     {
-        var transport = new RecordingHandler();
-        reachedTransport = () => transport.WasCalled;
+        var transport = new ScriptedHandler();
+        reachedTransport = () => transport.Requested.Count > 0;
 
         var guard = new LinkLocalGuardHandler(NullLogger<LinkLocalGuardHandler>.Instance, resolver)
         {
@@ -82,14 +215,42 @@ public class LinkLocalGuardHandlerTests
         return new HttpClient(guard);
     }
 
-    private sealed class RecordingHandler : HttpMessageHandler
+    private static HttpClient BuildClient(
+        OutboundDestination.AddressResolver resolver, ScriptedHandler transport)
     {
-        public bool WasCalled { get; private set; }
+        var guard = new LinkLocalGuardHandler(NullLogger<LinkLocalGuardHandler>.Instance, resolver)
+        {
+            InnerHandler = transport,
+        };
+
+        return new HttpClient(guard);
+    }
+
+    /// <summary>
+    /// Records every URI it is asked for, and answers a redirect for the ones scripted to.
+    /// </summary>
+    private sealed class ScriptedHandler : HttpMessageHandler
+    {
+        public Dictionary<string, (HttpStatusCode Status, string Location)> Redirects { get; } = [];
+
+        public List<string> Requested { get; } = [];
+
+        public Dictionary<string, Dictionary<string, string>> Headers { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            WasCalled = true;
+            var uri = request.RequestUri!.AbsoluteUri;
+            Requested.Add(uri);
+            Headers[uri] = request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value));
+
+            if (Redirects.TryGetValue(uri, out var redirect))
+            {
+                var response = new HttpResponseMessage(redirect.Status);
+                response.Headers.TryAddWithoutValidation("Location", redirect.Location);
+                return Task.FromResult(response);
+            }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         }
     }

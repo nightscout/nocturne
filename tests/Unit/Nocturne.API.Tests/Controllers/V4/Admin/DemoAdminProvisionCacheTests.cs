@@ -71,6 +71,46 @@ public class DemoAdminProvisionCacheTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateStatus_EvictsWhenItChangesIsActive()
+    {
+        // IsActive rides on the same cached context as IsDemo, so deactivating the demo without
+        // evicting keeps serving it for the cache lifetime.
+        var controller = BuildController();
+        await controller.Provision(_cache, CancellationToken.None);
+
+        var staleContext = new TenantContext(
+            Guid.Empty, DemoSlug, "Nocturne Demo", IsActive: true, IsDemo: true);
+        _cache.Set(TenantResolutionMiddleware.TenantCacheKey(DemoSlug), staleContext);
+        _cache.Set(TenantResolutionMiddleware.SoleTenantCacheKey, staleContext);
+
+        await controller.UpdateStatus(
+            new DemoStatusPatchDto(IsActive: false), _cache, CancellationToken.None);
+
+        _cache.TryGetValue(TenantResolutionMiddleware.TenantCacheKey(DemoSlug), out _)
+            .Should().BeFalse("a deactivated demo must stop being served at once");
+        _cache.TryGetValue(TenantResolutionMiddleware.SoleTenantCacheKey, out _)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateStatus_LeavesTheCacheAloneWhenOnlyTheScheduleChanges()
+    {
+        // The reset schedule is not carried on the tenant context, so evicting for it would throw
+        // away a resolution the next request has to redo for nothing.
+        var controller = BuildController();
+        await controller.Provision(_cache, CancellationToken.None);
+
+        _cache.Set(TenantResolutionMiddleware.TenantCacheKey(DemoSlug), "kept");
+
+        await controller.UpdateStatus(
+            new DemoStatusPatchDto(NextResetAt: DateTime.UtcNow.AddHours(1)),
+            _cache, CancellationToken.None);
+
+        _cache.TryGetValue(TenantResolutionMiddleware.TenantCacheKey(DemoSlug), out _)
+            .Should().BeTrue();
+    }
+
+    [Fact]
     public void EvictTenant_RemovesBothKeysAndLeavesOtherTenantsAlone()
     {
         var other = new TenantContext(Guid.NewGuid(), "other", "Other", IsActive: true, IsDemo: false);

@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -124,7 +125,7 @@ public partial class TenantService : ITenantService
             .FirstAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
         await AddMemberAsync(tenant.Id, creatorSubjectId, [ownerRole.Id], ct: ct);
 
-        _cache.Remove("tenant:__sole__");
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
         return ToCreatedDto(tenant);
     }
 
@@ -156,7 +157,7 @@ public partial class TenantService : ITenantService
         // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
         await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
 
-        _cache.Remove("tenant:__sole__");
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
         return ToCreatedDto(tenant);
     }
 
@@ -232,8 +233,7 @@ public partial class TenantService : ITenantService
         await context.SaveChangesAsync(ct);
 
         // Invalidate cached tenant context
-        _cache.Remove($"tenant:{tenant.Slug}");
-        _cache.Remove("tenant:__sole__");
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
 
         return ToDto(tenant);
     }
@@ -248,8 +248,7 @@ public partial class TenantService : ITenantService
         await context.SaveChangesAsync(ct);
 
         // Invalidate cached tenant context
-        _cache.Remove($"tenant:{tenant.Slug}");
-        _cache.Remove("tenant:__sole__");
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
     }
 
     public async Task AddMemberAsync(
