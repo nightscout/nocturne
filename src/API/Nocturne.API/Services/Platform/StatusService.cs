@@ -146,31 +146,26 @@ public class StatusService : IStatusService
             settings["runtimeState"] = "demo";
         }
 
-        // Populate demo fields if this tenant is a demo instance. Read from the tenant
-        // row, not _demoModeService: whether a tenant is a demo is a property of the
-        // tenant, while demo mode is a server-wide toggle for the bundled generator.
-        // A deployment that runs the demo generator as a separate service leaves the
-        // API's toggle off, and the web app keys the demo banner and demo sign-in off
-        // these fields.
+        // Populate demo fields if this tenant is a demo instance. Demo-ness is a property of
+        // the tenant, carried on the resolved tenant context, rather than of _demoModeService,
+        // which is a server-wide toggle for the bundled generator: a deployment that runs the
+        // generator as a separate service leaves the API's toggle off. The web app keys the
+        // demo banner and demo sign-in off these fields. Only a demo tenant pays for the
+        // reset-time lookup; every other tenant answers from the context alone.
         bool? isDemo = null;
         DateTime? nextResetAt = null;
 
-        var demoTenantId = _tenantAccessor.Context?.TenantId;
-        if (demoTenantId.HasValue)
+        var tenantContext = _tenantAccessor.Context;
+        if (tenantContext is { IsDemo: true })
         {
-            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
-            var tenant = await ctx.Tenants
-                .AsNoTracking()
-                .Include(t => t.DemoConfig)
-                .Where(t => t.Id == demoTenantId.Value)
-                .Select(t => new { t.IsDemo, NextResetAt = t.DemoConfig != null ? t.DemoConfig.NextResetAt : null })
-                .FirstOrDefaultAsync();
+            isDemo = true;
 
-            if (tenant is { IsDemo: true })
-            {
-                isDemo = true;
-                nextResetAt = tenant.NextResetAt;
-            }
+            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+            nextResetAt = await ctx.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == tenantContext.TenantId)
+                .Select(t => t.DemoConfig != null ? t.DemoConfig.NextResetAt : null)
+                .FirstOrDefaultAsync();
         }
 
         // Resolve whether this tenant grants anonymous read access (its public subject carries a
