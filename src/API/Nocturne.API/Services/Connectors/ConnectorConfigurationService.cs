@@ -127,7 +127,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// country here after a Medtronic sign-in: a real person's health-account identifier, handed
     /// to every later visitor, with their CGM data pulled into the shared tenant. Anything that
     /// writes connector configuration in future is covered without needing to remember an
-    /// attribute.
+    /// attribute. Applied to all four write methods on
+    /// <see cref="Nocturne.Core.Contracts.Connectors.IConnectorConfigurationService"/> —
+    /// <c>SaveConfigurationAsync</c>, <c>SaveSecretsAsync</c>, <c>SetActiveAsync</c> and
+    /// <c>DeleteConfigurationAsync</c>. Enabling a connector or deleting its configuration are as
+    /// much a shared-account concern as writing a URL is.
     /// <para>
     /// The subject comes from <see cref="IAuditContext"/>, which
     /// <c>AuditContextMiddleware</c> populates from the request's auth context. A caller with no
@@ -465,6 +469,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
         var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
@@ -528,6 +534,8 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <inheritdoc />
     public async Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default)
     {
+        await EnsureNotDemoSubjectAsync(connectorName, ct);
+
         var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);

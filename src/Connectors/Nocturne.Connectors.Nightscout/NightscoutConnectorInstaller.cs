@@ -42,11 +42,15 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
 
         // URL comes from user config (possibly loaded from DB at runtime),
         // so configure it at registration time only if already available.
-        if (!string.IsNullOrEmpty(nightscoutConfig.Url))
-            services.AddHttpClient<NightscoutConnectorService>()
-                .ConfigureConnectorClient(nightscoutConfig.Url);
-        else
-            services.AddHttpClient<NightscoutConnectorService>();
+        // ConfigureConnectorClient unconditionally — the URL only decides whether there is a
+        // BaseAddress to set. The comment above is the whole point: the URL normally arrives from
+        // per-tenant configuration at runtime, so at startup it is empty and the bare branch is the
+        // one that actually runs in production. That branch skipped LinkLocalGuardHandler and left
+        // transport redirects on, which meant the guard was absent for exactly the connectors whose
+        // base URL a member supplies.
+        services.AddHttpClient<NightscoutConnectorService>()
+            .ConfigureConnectorClient(
+                string.IsNullOrEmpty(nightscoutConfig.Url) ? null : nightscoutConfig.Url);
 
         services.AddScoped<IConnectorSyncExecutor, NightscoutSyncExecutor>();
 
@@ -55,11 +59,9 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
 
         void RegisterWriteBackClient<TSink>() where TSink : class
         {
-            if (!string.IsNullOrEmpty(nightscoutConfig.Url))
-                services.AddHttpClient<TSink>()
-                    .ConfigureConnectorClient(nightscoutConfig.Url);
-            else
-                services.AddHttpClient<TSink>();
+            services.AddHttpClient<TSink>()
+                .ConfigureConnectorClient(
+                    string.IsNullOrEmpty(nightscoutConfig.Url) ? null : nightscoutConfig.Url);
         }
 
         RegisterWriteBackClient<NightscoutEntryWriteBackSink>();

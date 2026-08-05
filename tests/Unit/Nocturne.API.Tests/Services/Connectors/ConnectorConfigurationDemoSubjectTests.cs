@@ -12,6 +12,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -109,6 +110,73 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             "carelink-connect");
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task SetActive_IsRefusedForTheSharedDemoSubject()
+    {
+        // Enabling a connector starts it fetching on the tenant's behalf. Guarded because the
+        // stated goal is that every write method is covered without an attribute to remember —
+        // ConfigurationController's class-level attribute blocks the route today, but a second
+        // caller reaching the service directly would not be.
+        SetCaller(isDemoSubject: true);
+
+        var act = async () => await _service.SetActiveAsync(ConnectorName, true, "visitor");
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task DeleteConfiguration_IsRefusedForTheSharedDemoSubject()
+    {
+        SetCaller(isDemoSubject: false);
+        await _service.SaveConfigurationAsync(
+            ConnectorName, CareLinkAccount("owner@example.com", "AU"), "owner");
+
+        SetCaller(isDemoSubject: true);
+
+        var act = async () => await _service.DeleteConfigurationAsync(ConnectorName);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        _dbContext.ConnectorConfigurations.Should().ContainSingle(
+            "the visitor must not be able to delete a real member's connector setup");
+    }
+
+    [Fact]
+    public async Task EveryWriteMethodOnTheServiceIsGuarded()
+    {
+        // Pins the completeness claim itself. The four write methods on the interface must all
+        // refuse the demo subject; if a fifth is added, this fails rather than the claim quietly
+        // becoming false.
+        SetCaller(isDemoSubject: true);
+
+        var writes = new List<(string Name, Func<Task> Invoke)>
+        {
+            (nameof(IConnectorConfigurationService.SaveConfigurationAsync),
+                () => _service.SaveConfigurationAsync(ConnectorName, CareLinkAccount("a@b.c", "AU"))),
+            (nameof(IConnectorConfigurationService.SaveSecretsAsync),
+                () => _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["T"] = "v" })),
+            (nameof(IConnectorConfigurationService.SetActiveAsync),
+                () => _service.SetActiveAsync(ConnectorName, true)),
+            (nameof(IConnectorConfigurationService.DeleteConfigurationAsync),
+                () => _service.DeleteConfigurationAsync(ConnectorName)),
+        };
+
+        var writeMethodCount = typeof(IConnectorConfigurationService)
+            .GetMethods()
+            .Count(m => m.Name.StartsWith("Save", StringComparison.Ordinal)
+                        || m.Name.StartsWith("Set", StringComparison.Ordinal)
+                        || m.Name.StartsWith("Delete", StringComparison.Ordinal));
+
+        writes.Should().HaveCount(writeMethodCount,
+            "a write method was added to IConnectorConfigurationService without being guarded here");
+
+        foreach (var (name, invoke) in writes)
+        {
+            var act = invoke;
+            await act.Should().ThrowAsync<UnauthorizedAccessException>(
+                "{0} writes connector configuration", name);
+        }
     }
 
     [Fact]

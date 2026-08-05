@@ -199,6 +199,131 @@ public class LinkLocalGuardHandlerTests
         transport.Headers["https://ns.example/new"].Should().ContainKey("api-secret");
     }
 
+    [Fact]
+    public async Task DropsAnUnknownCredentialHeader_WhenARedirectCrossesOrigin()
+    {
+        // The header list is an allowlist, not a list of known credential names: a connector added
+        // later that authenticates with some header nobody enumerated must not leak it.
+        var transport = new ScriptedHandler
+        {
+            Redirects = { ["https://ns.example/x"] = (HttpStatusCode.Found, "https://elsewhere.example/x") },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://ns.example/x");
+        request.Headers.TryAddWithoutValidation("X-Api-Key", "a-future-connectors-secret");
+        request.Headers.TryAddWithoutValidation("X-Tenant-Token", "another-one");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+
+        await client.SendAsync(request);
+
+        var followUp = transport.Headers["https://elsewhere.example/x"];
+        followUp.Should().NotContainKey("X-Api-Key");
+        followUp.Should().NotContainKey("X-Tenant-Token");
+        followUp.Should().ContainKey("Accept");
+    }
+
+    [Fact]
+    public async Task Follows_AnHttpsToHttpDowngrade()
+    {
+        // HttpClient refuses a secure-to-insecure auto-redirect; this deliberately does not, because
+        // plain http is an accepted connector configuration by design, so the downgrade grants
+        // nothing configuring http directly would not. The hop is still address-checked.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://ns.example/x"] = (HttpStatusCode.Found, "http://ns.example/x"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var response = await client.GetAsync("https://ns.example/x");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        transport.Requested.Should().Equal("https://ns.example/x", "http://ns.example/x");
+    }
+
+    [Fact]
+    public async Task Refuses_AnHttpsToHttpDowngradeOntoALinkLocalAddress()
+    {
+        // The permissiveness above is about the scheme only — the address check still applies, which
+        // is what stops the downgrade being a way in.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://ns.example/x"] = (HttpStatusCode.Found, "http://169.254.169.254/"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var act = async () => await client.GetAsync("https://ns.example/x");
+
+        await act.Should().ThrowAsync<HttpRequestException>().WithMessage("*link-local*");
+    }
+
+    [Fact]
+    public async Task Stops_AtTheHopCeiling()
+    {
+        // A redirect loop must terminate rather than spin, and must not be reported as success.
+        var transport = new ScriptedHandler { RedirectEverythingTo = "https://loop.example/next" };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var act = async () => await client.GetAsync("https://loop.example/start");
+
+        await act.Should().ThrowAsync<HttpRequestException>().WithMessage("*redirects*");
+        transport.Requested.Should().HaveCountLessThan(60,
+            "the ceiling bounds the walk rather than letting it run indefinitely");
+    }
+
+    [Fact]
+    public async Task PreservesTheBody_AcrossTwoConsecutive307s()
+    {
+        // A 307 clone shares the caller's HttpContent instance, and HttpRequestMessage.Dispose
+        // disposes its Content — so disposing hop 1 after building hop 2 previously disposed the
+        // body hop 2 was about to send, and could dispose the caller's own content after returning.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://a.example/"] = (HttpStatusCode.TemporaryRedirect, "https://b.example/"),
+                ["https://b.example/"] = (HttpStatusCode.TemporaryRedirect, "https://c.example/"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var content = new FormUrlEncodedContent(
+            new Dictionary<string, string> { ["grant_type"] = "refresh_token" });
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://a.example/") { Content = content };
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        transport.Requested.Should().Equal("https://a.example/", "https://b.example/", "https://c.example/");
+        transport.Bodies.Values.Should().AllBe("grant_type=refresh_token",
+            "the body has to survive every hop, not be disposed with the previous request");
+    }
+
+    [Fact]
+    public async Task DoesNotDisposeTheCallersContent()
+    {
+        var transport = new ScriptedHandler
+        {
+            Redirects = { ["https://a.example/"] = (HttpStatusCode.TemporaryRedirect, "https://b.example/") },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var content = new StringContent("payload");
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://a.example/") { Content = content };
+
+        await client.SendAsync(request);
+
+        // Readable after the call means the caller's content outlived our intermediate disposals.
+        var act = async () => await content.ReadAsStringAsync();
+        await act.Should().NotThrowAsync("the caller owns its content; we must not dispose it");
+    }
+
     #endregion
 
     private static HttpClient BuildClient(
@@ -233,25 +358,41 @@ public class LinkLocalGuardHandlerTests
     {
         public Dictionary<string, (HttpStatusCode Status, string Location)> Redirects { get; } = [];
 
+        /// <summary>Answers every URI with a redirect, for exercising the hop ceiling.</summary>
+        public string? RedirectEverythingTo { get; init; }
+
         public List<string> Requested { get; } = [];
 
         public Dictionary<string, Dictionary<string, string>> Headers { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        /// <summary>Body as read off the wire per hop, so a disposed body shows up as a failure.</summary>
+        public Dictionary<string, string> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri!.AbsoluteUri;
             Requested.Add(uri);
             Headers[uri] = request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value));
 
+            if (request.Content is not null)
+                Bodies[uri] = await request.Content.ReadAsStringAsync(cancellationToken);
+
+            if (RedirectEverythingTo is { } always)
+            {
+                var looping = new HttpResponseMessage(HttpStatusCode.Found);
+                looping.Headers.TryAddWithoutValidation("Location", always);
+                return looping;
+            }
+
             if (Redirects.TryGetValue(uri, out var redirect))
             {
                 var response = new HttpResponseMessage(redirect.Status);
                 response.Headers.TryAddWithoutValidation("Location", redirect.Location);
-                return Task.FromResult(response);
+                return response;
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 }

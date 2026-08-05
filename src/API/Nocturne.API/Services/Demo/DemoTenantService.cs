@@ -389,6 +389,11 @@ public sealed class DemoTenantService
     /// so that exclusion is load-bearing and not merely tidy.
     /// </para>
     /// <para>
+    /// Session rows written before addresses were scrubbed at the repository sink still carry a
+    /// visitor address, and nothing backfills them: they are cleared by the first reset after
+    /// deployment, along with the subject they belong to.
+    /// </para>
+    /// <para>
     /// Only ever called with a subject read from the demo tenant's own membership; the
     /// <see cref="SubjectEntity.IsDemoSubject"/> check makes that explicit rather than
     /// implied, because this deletes a global row and must never reach a real account.

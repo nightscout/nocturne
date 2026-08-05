@@ -19,11 +19,13 @@ namespace Nocturne.Core.Models.Net;
 /// <item><see cref="IsPubliclyRoutableAsync"/> — for alert webhooks, which notify a third-party
 /// service on the internet. Nothing private is a legitimate target.</item>
 /// <item><see cref="IsNotLinkLocalAsync"/> — for connector base URLs. A self-hosted deployment
-/// legitimately points the Nightscout, remote-Nocturne or MyLife connector at a private address:
-/// a Nightscout on the same Docker network or LAN is an ordinary migration setup, so requiring
-/// public routability there would break real installs. Link-local is refused regardless, because
-/// no connector has any reason to reach <c>169.254.169.254</c> and that address is where cloud
-/// credentials live.</item>
+/// legitimately points a connector with a member-supplied base URL (Nightscout, remote Nocturne,
+/// MyLife) at a private address: a Nightscout on the same Docker network or LAN is an ordinary
+/// migration setup, so requiring public routability there would break real installs. Link-local is
+/// refused regardless, because no connector has any reason to reach <c>169.254.169.254</c> and that
+/// address is where cloud credentials live. Applied by
+/// <c>Nocturne.Connectors.Core.Services.LinkLocalGuardHandler</c>, which is installed per connector
+/// HTTP client — see the coverage note there.</item>
 /// </list>
 /// <para>
 /// Every resolved address is checked, so a name pointing at a refused address is refused too.

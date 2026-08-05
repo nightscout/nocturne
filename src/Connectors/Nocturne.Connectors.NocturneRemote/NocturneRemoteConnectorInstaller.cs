@@ -32,11 +32,14 @@ public class NocturneRemoteConnectorInstaller : IConnectorInstaller
 
         // URL comes from user config (possibly loaded from DB at runtime),
         // so configure it at registration time only if already available.
-        if (!string.IsNullOrEmpty(config.Url))
-            services.AddHttpClient<NocturneRemoteConnectorService>()
-                .ConfigureConnectorClient(config.Url);
-        else
-            services.AddHttpClient<NocturneRemoteConnectorService>();
+        // ConfigureConnectorClient unconditionally — the URL only decides whether there is a
+        // BaseAddress to set. The comment above is the whole point: the URL normally arrives from
+        // per-tenant configuration at runtime, so at startup it is empty and the bare branch is the
+        // one that actually runs in production. That branch skipped LinkLocalGuardHandler and left
+        // transport redirects on, which meant the guard was absent for exactly the connectors whose
+        // base URL a member supplies.
+        services.AddHttpClient<NocturneRemoteConnectorService>()
+            .ConfigureConnectorClient(string.IsNullOrEmpty(config.Url) ? null : config.Url);
 
         services.AddScoped<IConnectorSyncExecutor, NocturneRemoteSyncExecutor>();
     }

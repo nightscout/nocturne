@@ -24,10 +24,17 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [ApiController]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
-// Completing this flow writes the signed-in CareLink username and country into the
-// tenant's connector configuration, which GET returns in the clear. Every demo visitor is
-// the same member, so a visitor who signed in with their real Medtronic account would hand
-// that identifier to every later visitor and pull their CGM data into the shared tenant.
+// Completing this flow writes the signed-in CareLink username and country into the tenant's
+// connector configuration, which GET returns in the clear. Every demo visitor is the same member,
+// so a visitor who signed in with their real Medtronic account would hand that identifier to every
+// later visitor and pull their CGM data into the shared tenant.
+//
+// ConnectorConfigurationService refuses the write too, and that is what makes the property hold —
+// Complete calls SaveSecretsAsync outside any try/catch and before the configuration write, so the
+// service guard aborts the flow there and nothing is stored. This attribute is about where the
+// refusal lands: it answers 403 at authorization time, before the Medtronic authorization-code
+// exchange, so a visitor is not walked through a CAPTCHA and a sign-in only to have their
+// single-use code burned by a failure at the end.
 [DenyDemoSubject]
 public partial class CareLinkConnectController : ControllerBase
 {

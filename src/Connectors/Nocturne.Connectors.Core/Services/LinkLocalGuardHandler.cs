@@ -14,11 +14,11 @@ namespace Nocturne.Connectors.Core.Services;
 /// makes the connector fetch a request-forgery primitive.
 /// <para>
 /// Only link-local is refused, not every private range. A self-hosted deployment legitimately
-/// points the Nightscout, remote-Nocturne or MyLife connector at a private address — a Nightscout
-/// on the same Docker network or LAN is the ordinary migration setup — so requiring public
-/// routability would break real installs. <c>169.254.169.254</c> and its neighbours have no
-/// legitimate connector use and are where cloud instance credentials live, so that range is
-/// refused for every tenant regardless of what was configured.
+/// points a connector with a member-supplied base URL — Nightscout, remote Nocturne, MyLife — at a
+/// private address, and a Nightscout on the same Docker network or LAN is the ordinary migration
+/// setup, so requiring public routability would break real installs. <c>169.254.169.254</c> and
+/// its neighbours have no legitimate connector use and are where cloud instance credentials live,
+/// so that range is refused for every tenant regardless of what was configured.
 /// </para>
 /// <para>
 /// <b>Redirects are followed here, not by the transport.</b> Checking only
@@ -31,15 +31,28 @@ namespace Nocturne.Connectors.Core.Services;
 /// redirects disabled and this handler follows them itself, re-checking each hop.
 /// </para>
 /// <para>
-/// <c>Authorization</c> and connector API-secret headers are dropped when a redirect crosses to a
-/// different origin, matching <see cref="System.Net.Http.HttpClient"/>'s own behaviour: a
-/// tenant-configured host that redirects elsewhere must not hand that host's credentials to the
-/// redirect target.
+/// Request headers are reduced to <see cref="SafeCrossOriginHeaders"/> when a redirect crosses to
+/// a different origin: a tenant-configured host that redirects elsewhere must not hand that host's
+/// credentials to the redirect target. An allowlist rather than a list of known credential
+/// headers, so a connector added later that authenticates with some header nobody thought of does
+/// not leak it on the first cross-origin hop.
 /// </para>
 /// <para>
-/// Registered by <c>HttpClientExtensions.ConfigureConnectorClient</c>, which every connector
-/// client goes through. See the note on <see cref="OutboundDestination"/> about the residual gap
-/// between resolving a name and connecting to it.
+/// <b>Deliberately more permissive than <see cref="System.Net.Http.HttpClient"/> on one axis:</b>
+/// it refuses an automatic https-to-http redirect outright, and this does not. Plain <c>http</c>
+/// is an accepted connector configuration by design — a Nightscout on a LAN is normally served
+/// over it — so the downgrade grants nothing that configuring <c>http</c> directly would not, and
+/// refusing it would break a host that redirects between its own schemes. Every hop is still
+/// address-checked, which is the property that matters here.
+/// </para>
+/// <para>
+/// Registered by <c>HttpClientExtensions.ConfigureConnectorClient</c>. Not every connector client
+/// goes through that extension automatically — an installer calling <c>AddHttpClient</c> without
+/// it gets no guard and transport-level redirects, which is how the MyLife connector was left
+/// outside this for a while. <c>ConnectorClientGuardCoverageTests</c> walks every installer and
+/// fails if one registers a client without it. See the note on
+/// <see cref="OutboundDestination"/> about the residual gap between resolving a name and
+/// connecting to it.
 /// </para>
 /// </remarks>
 public sealed class LinkLocalGuardHandler : DelegatingHandler
@@ -51,15 +64,24 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
     private const int MaxRedirects = 50;
 
     /// <summary>
-    /// Request headers dropped when a redirect crosses to a different origin. Case-insensitive
-    /// because header names are.
+    /// The only request headers carried across a cross-origin redirect. Compared
+    /// case-insensitively, because header names are.
     /// </summary>
-    private static readonly string[] CredentialHeaders =
+    /// <remarks>
+    /// An allowlist, not a list of credential headers to strip. A denylist would have to name
+    /// every scheme any connector might ever authenticate with — <c>Authorization</c>,
+    /// <c>api-secret</c>, <c>Cookie</c> today, but a connector added later using
+    /// <c>X-Api-Key</c> would leak it silently on the first cross-origin hop, and nothing would
+    /// fail. These four are content negotiation and identification: none of them is a credential,
+    /// and a connector needing anything else on a redirect target it did not configure is not a
+    /// case worth opening the hole for.
+    /// </remarks>
+    private static readonly string[] SafeCrossOriginHeaders =
     [
-        "Authorization",
-        "api-secret",
-        "API-SECRET",
-        "Cookie",
+        "Accept",
+        "Accept-Encoding",
+        "Accept-Language",
+        "User-Agent",
     ];
 
     private readonly ILogger<LinkLocalGuardHandler> _logger;
@@ -111,7 +133,14 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
             response.Dispose();
 
             if (!ReferenceEquals(current, request))
+            {
+                // Detach the body first. A 307/308 clone shares the caller's HttpContent instance,
+                // and HttpRequestMessage.Dispose disposes its Content — so disposing the previous
+                // hop would dispose the content the next hop is about to send, and could dispose
+                // the caller's own request.Content after this method returns.
+                current.Content = null;
                 current.Dispose();
+            }
 
             current = next;
         }
@@ -167,6 +196,14 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
     /// Builds the follow-up request. 301/302/303 become GET without a body, as
     /// <see cref="System.Net.Http.HttpClient"/> does; 307/308 preserve method and content.
     /// </summary>
+    /// <remarks>
+    /// A 307/308 re-sends the <em>same</em> <see cref="HttpContent"/> instance, which only works
+    /// for buffered content. Every connector POST today uses
+    /// <see cref="FormUrlEncodedContent"/> or a serialized string, both buffered and re-readable;
+    /// a non-buffered body such as <see cref="StreamContent"/> would throw on the second send.
+    /// Buffering here to remove that limit would mean holding an arbitrary request body in memory
+    /// for a case no connector currently has, so it fails loudly instead.
+    /// </remarks>
     private static HttpRequestMessage CloneForRedirect(
         HttpRequestMessage original, HttpStatusCode status, Uri target)
     {
@@ -188,8 +225,11 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
 
         foreach (var header in original.Headers)
         {
-            if (crossOrigin && CredentialHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase))
+            if (crossOrigin
+                && !SafeCrossOriginHeaders.Contains(header.Key, StringComparer.OrdinalIgnoreCase))
+            {
                 continue;
+            }
 
             clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }

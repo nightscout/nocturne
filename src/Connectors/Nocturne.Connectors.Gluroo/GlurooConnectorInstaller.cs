@@ -30,11 +30,12 @@ public class GlurooConnectorInstaller : IConnectorInstaller
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
-        if (!string.IsNullOrEmpty(glurooConfig.Url))
-            services.AddHttpClient<GlurooConnectorService>()
-                .ConfigureConnectorClient(glurooConfig.Url);
-        else
-            services.AddHttpClient<GlurooConnectorService>();
+        // Always through ConfigureConnectorClient — the branch only decides whether there is a
+        // BaseAddress to set. The bare else-branch previously skipped LinkLocalGuardHandler and
+        // left transport redirects on for any deployment that had not configured a URL.
+        services.AddHttpClient<GlurooConnectorService>()
+            .ConfigureConnectorClient(
+                string.IsNullOrEmpty(glurooConfig.Url) ? null : glurooConfig.Url);
 
         services.AddScoped<IConnectorSyncExecutor, GlurooSyncExecutor>();
     }

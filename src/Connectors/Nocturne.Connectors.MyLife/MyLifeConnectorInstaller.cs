@@ -31,9 +31,14 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
-        services.AddHttpClient<MyLifeSoapClient>();
-        services.AddHttpClient<MyLifeAuthTokenProvider>();
-        services.AddHttpClient<MyLifeConnectorService>();
+        // ConfigureConnectorClient, not a bare AddHttpClient: it installs LinkLocalGuardHandler and
+        // turns off transport-level redirects. ServiceUrl is member-supplied (declared
+        // Format = "uri" on MyLifeConnectorConfiguration) and reaches the SOAP and REST calls
+        // through the session, so a bare registration let a member aim these clients at the cloud
+        // metadata endpoint and read the outcome off connector status.
+        services.AddHttpClient<MyLifeSoapClient>().ConfigureConnectorClient(null);
+        services.AddHttpClient<MyLifeAuthTokenProvider>().ConfigureConnectorClient(null);
+        services.AddHttpClient<MyLifeConnectorService>().ConfigureConnectorClient(null);
         services.AddSingleton<IMyLifeSessionCache, MyLifeSessionCache>();
         services.AddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IMyLifeSessionCache>());
 
