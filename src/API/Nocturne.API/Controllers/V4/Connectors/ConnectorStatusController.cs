@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using Nocturne.API.Models;
 using Nocturne.API.Services.Connectors;
 using OpenApi.Remote.Attributes;
@@ -16,6 +17,9 @@ namespace Nocturne.API.Controllers.V4;
 /// </remarks>
 /// <seealso cref="IConnectorHealthService"/>
 [Authorize]
+// Reports the outcome of a fetch to a tenant-configured host — the readback half of the
+// request-forgery shape gated on ConfigurationController.
+[DenyDemoSubject]
 [ApiController]
 [Tags("Connectors")]
 [Route("api/v4/connectors")]

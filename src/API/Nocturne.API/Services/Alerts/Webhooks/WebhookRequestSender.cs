@@ -1,4 +1,5 @@
 using System.Text;
+using Nocturne.Core.Models.Net;
 
 namespace Nocturne.API.Services.Alerts.Webhooks;
 
@@ -10,7 +11,7 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// Blank or null URLs are silently skipped. Failed URLs are collected and returned
 /// rather than raising an exception so that partial success is possible. A URL that is
 /// not a publicly routable http(s) destination is reported as failed without being
-/// requested — see <see cref="WebhookDestination"/>.
+/// requested — see <see cref="OutboundDestination"/>.
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
@@ -18,7 +19,7 @@ public class WebhookRequestSender(
 {
     /// <summary>
     /// Name of the HTTP client used for webhook delivery. Configured not to follow
-    /// redirects, so <see cref="WebhookDestination"/>'s verdict on the URL cannot be
+    /// redirects, so <see cref="OutboundDestination"/>'s verdict on the URL cannot be
     /// walked past by the target answering 3xx.
     /// </summary>
     public const string HttpClientName = "Webhook";
@@ -51,7 +52,7 @@ public class WebhookRequestSender(
 
         foreach (var url in urlList)
         {
-            if (!await WebhookDestination.IsAllowedAsync(url, cancellationToken))
+            if (!await OutboundDestination.IsPubliclyRoutableAsync(url, cancellationToken))
             {
                 failures.Add(url);
                 logger.LogWarning(

@@ -4,6 +4,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Controllers.V2;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.API.Controllers.V4.Identity;
 using Xunit;
 
@@ -64,6 +65,14 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(GuestLinkController), nameof(GuestLinkController.GetGuestLinks) },
         { typeof(GuestLinkController), nameof(GuestLinkController.RevokeGuestLink) },
         { typeof(GuestLinkController), nameof(GuestLinkController.DismissGuestLink) },
+
+        // Connector configuration names the host the server fetches from, and connector status
+        // reports what came back — together, aiming a request from inside the deployment's
+        // network and reading the result. tenant.settings is in the demo role, so a permission
+        // check would pass.
+        { typeof(ConfigurationController), nameof(ConfigurationController.SaveConfiguration) },
+        { typeof(ConfigurationController), nameof(ConfigurationController.SaveSecrets) },
+        { typeof(ConnectorStatusController), nameof(ConnectorStatusController.GetStatus) },
     };
 
     [Theory]

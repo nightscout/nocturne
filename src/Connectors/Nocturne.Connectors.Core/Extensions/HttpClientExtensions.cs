@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Nocturne.Connectors.Core.Services;
 using Polly;
 
 namespace Nocturne.Connectors.Core.Extensions;
@@ -73,6 +74,13 @@ public static class HttpClientExtensions
                         PooledConnectionLifetime = effectiveTimeout
                     }
                 );
+
+            // Connector base URLs come from tenant configuration, and the request goes out from
+            // inside the deployment's network with its outcome reported back through connector
+            // status. Refuse link-local targets — the cloud metadata endpoint — for every
+            // connector, at the sink, so a row already in the database is covered too.
+            builder.Services.AddTransient<LinkLocalGuardHandler>();
+            builder.AddHttpMessageHandler<LinkLocalGuardHandler>();
 
             if (addResilience)
             {

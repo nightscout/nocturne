@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Connectors;
 
@@ -16,6 +17,12 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [Tags("Connectors")]
 [Route("api/v4/connectors/config")]
 [Authorize]
+// Connector configuration names the host the server will fetch from, and connector status
+// reports what happened, so these endpoints let their caller aim a request from inside the
+// deployment's network and read the result. That is a tenant owner's business, not an anonymous
+// visitor's: the demo's account is shared and obtainable without signing up. A permission gate
+// would not do — the demo member holds tenant.settings.
+[DenyDemoSubject]
 public class ConfigurationController : ControllerBase
 {
     private readonly IConnectorConfigurationService _configService;
@@ -265,9 +272,64 @@ public class ConfigurationController : ControllerBase
                     errors.Add($"Field '{configProp.Name}' value '{actualValue}' is not one of: {string.Join(", ", validValues)}");
                 }
             }
+
+            // Validate format: "uri". Declared by every connector that takes a base URL
+            // (Nightscout, remote Nocturne, MyLife) and previously unenforced, so anything at all
+            // could be stored — a non-http scheme, or a string that is not a URL, which then
+            // failed at sync time instead of at the write. The address the URL resolves to is not
+            // judged here; that is enforced at the sink, where a row stored by any other path is
+            // covered too (see LinkLocalGuardHandler).
+            if (propSchema.TryGetProperty("format", out var formatProp)
+                && formatProp.GetString() == "uri"
+                && configProp.Value.ValueKind == JsonValueKind.String)
+            {
+                var candidate = configProp.Value.GetString();
+                if (!IsAcceptableUri(candidate))
+                {
+                    errors.Add(
+                        $"Field '{configProp.Name}' must be an http or https URL " +
+                        "with no embedded credentials");
+                }
+            }
         }
 
         return errors;
+    }
+
+    /// <summary>
+    /// An <c>http</c>/<c>https</c> URL carrying no <c>user:password@</c> component. A bare
+    /// hostname is accepted and treated as <c>https</c>.
+    /// </summary>
+    /// <remarks>
+    /// The bare-host allowance mirrors the connectors' own normalisation
+    /// (<c>NightscoutConnectorService.ResolveBaseUrl</c> supplies <c>https://</c> when the stored
+    /// value has no scheme), so validating here does not reject a value the connector would have
+    /// accepted — an existing tenant re-saving <c>mysite.example</c> must not start failing.
+    /// <para>
+    /// Embedded credentials are refused because this value is stored in the connector's runtime
+    /// configuration, which <c>GET</c> returns in the clear — the secret fields are the ones kept
+    /// out of that response, and a password smuggled into the URL would bypass that.
+    /// </para>
+    /// </remarks>
+    private static bool IsAcceptableUri(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        // A value carrying its own scheme has to name http or https. Tested before the bare-host
+        // fallback, because prepending https:// to "file:///etc/passwd" produces something that
+        // still parses and would sail through.
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
+        {
+            if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+                return false;
+
+            return string.IsNullOrEmpty(absolute.UserInfo);
+        }
+
+        // No scheme at all: a bare host, which the connectors read as https.
+        return Uri.TryCreate($"https://{candidate}", UriKind.Absolute, out var implied)
+            && string.IsNullOrEmpty(implied.UserInfo);
     }
 
     /// <summary>

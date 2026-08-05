@@ -764,7 +764,7 @@ public static class ServiceRegistrationExtensions
         // Webhook infrastructure (reused by new alert engine)
         services.AddScoped<WebhookRequestSender>();
 
-        // Webhook targets are supplied by whoever is signed in, and WebhookDestination can
+        // Webhook targets are supplied by whoever is signed in, and OutboundDestination can
         // only vet the URL it is given. Following redirects would walk straight past that
         // check — a target answering 307 with http://169.254.169.254/ or an internal
         // service name reaches it from inside the deployment network — so this client does
