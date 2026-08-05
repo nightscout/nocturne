@@ -13,6 +13,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
@@ -173,6 +174,7 @@ public class DemoSessionControllerTests : IDisposable
             dbFactory.Object,
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
+            new Mock<ICacheService>().Object,
             new Mock<ILogger<DemoTenantService>>().Object);
 
         var controller = new DemoSessionController(

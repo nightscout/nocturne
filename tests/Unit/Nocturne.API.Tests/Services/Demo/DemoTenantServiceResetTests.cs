@@ -8,6 +8,7 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -56,6 +57,7 @@ public class DemoTenantServiceResetTests : IDisposable
             dbFactory.Object,
             _tenantService.Object,
             TestPublicAccessCache.Create(),
+            new Mock<ICacheService>().Object,
             new Mock<ILogger<DemoTenantService>>().Object);
     }
 

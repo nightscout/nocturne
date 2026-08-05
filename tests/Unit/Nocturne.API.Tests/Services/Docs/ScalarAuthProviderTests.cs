@@ -15,6 +15,7 @@ using Nocturne.API.Services.Docs;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -341,6 +342,7 @@ public class ScalarAuthProviderTests : IDisposable
             dbFactory.Object,
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
+            new Mock<ICacheService>().Object,
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new ScalarAuthProvider(
