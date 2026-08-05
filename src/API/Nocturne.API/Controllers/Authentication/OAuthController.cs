@@ -296,6 +296,28 @@ public class OAuthController : ControllerBase
             });
         }
 
+        // A user cannot delegate more than they hold. Without this cap, approving a consent
+        // screen that asked for "*" issued a token with full access regardless of the
+        // approver's own permissions on the tenant — turning any authenticated member into a
+        // superuser by way of their own browser. The ceiling is the caller's resolved scopes on
+        // this tenant, which MemberScopeMiddleware has already narrowed to their membership.
+        var approverScopes = HttpContext.GetGrantedScopes();
+        if (!OAuthScopes.SatisfiesScope(approverScopes, OAuthScopes.FullAccess))
+        {
+            normalizedScopes = normalizedScopes
+                .Where(scope => OAuthScopes.SatisfiesScope(approverScopes, scope))
+                .ToHashSet();
+
+            if (normalizedScopes.Count == 0)
+            {
+                return BadRequest(new OAuthError
+                {
+                    Error = "invalid_scope",
+                    ErrorDescription = "None of the requested scopes are available to this account.",
+                });
+            }
+        }
+
         // Generate authorization code
         return await IssueAuthorizationCode(
             client.Id,

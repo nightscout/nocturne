@@ -156,6 +156,30 @@ public static class TenantPermissions
     public static readonly List<string> DefaultPublicShareScopes = [GlucoseRead];
 
     /// <summary>
+    /// Permissions for a demo tenant's shared visitor member: everything needed to explore and
+    /// change the patient-facing surfaces, and nothing that manages who can get in.
+    /// </summary>
+    /// <remarks>
+    /// Anyone can obtain a session for that member, so it must not hold
+    /// <see cref="MembersManage"/>, <see cref="MembersInvite"/> or <see cref="RolesManage"/>.
+    /// Member management is an escalation primitive — direct permissions and role permissions
+    /// are unioned into the member's effective set, so the ability to edit either is the
+    /// ability to grant oneself <see cref="Superuser"/>. <see cref="SharingManage"/> and
+    /// <see cref="AuditRead"/> are excluded for the same reason: one mints public links to the
+    /// tenant, the other reads who did what.
+    /// </remarks>
+    public static readonly List<string> DemoVisitorPermissions =
+    [
+        GlucoseReadWrite, TreatmentsReadWrite, DevicesReadWrite,
+        HeartRateReadWrite, StepCountReadWrite, SleepReadWrite, FoodReadWrite,
+        ReportsRead,
+        TherapyReadWrite, AlertsReadWrite,
+        IdentityRead,
+        TenantSettings,
+        DeviceNotify, DeviceActuate,
+    ];
+
+    /// <summary>
     /// Seed role slugs.
     /// </summary>
     public static class SeedRoles

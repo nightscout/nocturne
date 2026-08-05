@@ -12,13 +12,14 @@ namespace Nocturne.API.Services.Demo;
 /// resetting it back to a freshly provisioned state.
 /// </summary>
 /// <remarks>
-/// The demo tenant carries two access paths. The Public system subject holds the
-/// Admin role, which widens the tenant's public share view to the full history of
-/// every shareable category (the share host narrows any grant to
-/// <see cref="TenantPermissions.PublicShareScopes"/>). Separately, one non-system
-/// member holds the Admin role so an anonymous visitor can be signed in as a real
-/// member (see <c>DemoSessionController</c>) and reach the write and settings
-/// surfaces the read-only share host cannot serve.
+/// The demo tenant carries two access paths, both on its own <c>demo-visitor</c> role
+/// (<see cref="TenantPermissions.DemoVisitorPermissions"/>) rather than a seed role. The
+/// Public system subject holds it, which widens the tenant's public share view to the full
+/// history of every shareable category (the share host narrows any grant to
+/// <see cref="TenantPermissions.PublicShareScopes"/>). Separately, one non-system member
+/// holds it so an anonymous visitor can be signed in as a real member (see
+/// <c>DemoSessionController</c>) and reach the write and settings surfaces the read-only
+/// share host cannot serve.
 /// <para>
 /// The demo member is identified by its <em>membership</em> row
 /// (<c>tenant_members.username</c>, unique per tenant), never by the subject's global
@@ -39,6 +40,12 @@ public sealed class DemoTenantService
 
     /// <summary>Display name of the demo member, shown in the app's account menu.</summary>
     public const string DemoMemberName = "Demo Visitor";
+
+    /// <summary>
+    /// Slug of the demo tenant's own role. Not one of the seed roles — see
+    /// <see cref="EnsureDemoRoleAsync"/>.
+    /// </summary>
+    public const string DemoRoleSlug = "demo-visitor";
 
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ITenantService _tenantService;
@@ -89,8 +96,8 @@ public sealed class DemoTenantService
 
     /// <summary>
     /// Applies the demo tenant's access configuration: marks onboarding complete so
-    /// the app serves the dashboard instead of the setup wizard, grants the Public
-    /// subject the Admin role, and ensures the demo member exists with the Admin role.
+    /// the app serves the dashboard instead of the setup wizard, and puts both the Public
+    /// subject and the demo member on the tenant's <c>demo-visitor</c> role.
     /// Idempotent — called on every provision and after every reset, so a reset that
     /// failed part-way is repaired by the demo service's next provision.
     /// </summary>
@@ -105,21 +112,10 @@ public sealed class DemoTenantService
 
         ApplyTenantDefaults(tenant);
 
-        var adminRole = await db.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin, ct);
+        var demoRole = await EnsureDemoRoleAsync(db, tenantId, ct);
 
-        if (adminRole is null)
-        {
-            // Roles are seeded before this runs, so a missing Admin role means the
-            // re-seed did not complete. Surface it: without the grants below the demo
-            // has no way in, and silently returning would leave that until the next reset.
-            await db.SaveChangesAsync(ct);
-            throw new InvalidOperationException(
-                $"Demo tenant {tenantId} has no '{TenantPermissions.SeedRoles.Admin}' role — cannot grant demo access.");
-        }
-
-        await GrantPublicAccessAsync(db, tenantId, adminRole.Id, ct);
-        await EnsureDemoMemberAsync(db, tenantId, adminRole.Id, ct);
+        await GrantPublicAccessAsync(db, tenantId, demoRole.Id, ct);
+        await EnsureDemoMemberAsync(db, tenantId, demoRole.Id, ct);
 
         await db.SaveChangesAsync(ct);
 
@@ -313,7 +309,47 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Assigns the Admin role to the Public system subject's membership and lifts its
+    /// Ensures the demo tenant's own role exists, carrying
+    /// <see cref="TenantPermissions.DemoVisitorPermissions"/>, and rewrites its permissions
+    /// to that list on every call so the role cannot drift.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the seed <c>admin</c> role: that includes <c>members.manage</c> and
+    /// <c>roles.manage</c>, and role and direct permissions are unioned into a member's
+    /// effective set, so holding either is the ability to grant oneself <c>*</c>. Anyone can
+    /// get a session for the demo member, so it must not hold an escalation primitive.
+    /// </remarks>
+    private static async Task<TenantRoleEntity> EnsureDemoRoleAsync(
+        NocturneDbContext db, Guid tenantId, CancellationToken ct)
+    {
+        var role = await db.TenantRoles
+            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == DemoRoleSlug, ct);
+
+        if (role is null)
+        {
+            role = new TenantRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Name = "Demo Visitor",
+                Slug = DemoRoleSlug,
+                Permissions = new List<string>(TenantPermissions.DemoVisitorPermissions),
+                IsSystem = true,
+                SysCreatedAt = DateTime.UtcNow,
+                SysUpdatedAt = DateTime.UtcNow,
+            };
+            db.TenantRoles.Add(role);
+            await db.SaveChangesAsync(ct);
+            return role;
+        }
+
+        role.Permissions = new List<string>(TenantPermissions.DemoVisitorPermissions);
+        role.SysUpdatedAt = DateTime.UtcNow;
+        return role;
+    }
+
+    /// <summary>
+    /// Assigns the demo role to the Public system subject's membership and lifts its
     /// 24-hour history limit, widening the tenant's public share view to the full
     /// history of every shareable category.
     /// </summary>
