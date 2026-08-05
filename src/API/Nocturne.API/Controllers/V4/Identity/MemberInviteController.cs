@@ -291,11 +291,17 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        // Every refusal on this controller carries its reason in the title as well as the detail:
+        // openapi-remote-codegen 0.2.0 resolves a ProblemDetails to `title` before `detail`, so a
+        // reason carried only in the detail reaches the member list as the literal "Bad Request".
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
 
         if (request.RoleIds.Count == 0 && (member.DirectPermissions == null || member.DirectPermissions.Count == 0))
-            return Problem(detail: "Cannot remove all roles when member has no direct permissions", statusCode: 400, title: "Bad Request");
+        {
+            const string reason = "Cannot remove all roles when member has no direct permissions";
+            return Problem(detail: reason, statusCode: 400, title: reason);
+        }
 
         var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
             tenantId, request.RoleIds, HttpContext.GetGrantedScopes(), ct);
@@ -356,10 +362,13 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
 
         if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.MemberRoles.Count == 0)
-            return Problem(detail: "Cannot remove all permissions when member has no roles", statusCode: 400, title: "Bad Request");
+        {
+            const string reason = "Cannot remove all permissions when member has no roles";
+            return Problem(detail: reason, statusCode: 400, title: reason);
+        }
 
         // The Public system subject serves the anonymous share viewer, so the granter's own
         // permissions are the wrong bound: an owner holding "*" would otherwise be able to give an
@@ -373,10 +382,8 @@ public class MemberInviteController : ControllerBase
                 .ToList();
             if (outsideShareVocabulary.Count > 0)
             {
-                return Problem(
-                    detail: $"Public access cannot be granted: {string.Join(", ", outsideShareVocabulary)}.",
-                    statusCode: 400,
-                    title: "Bad Request");
+                var reason = $"Public access cannot be granted: {string.Join(", ", outsideShareVocabulary)}.";
+                return Problem(detail: reason, statusCode: 400, title: reason);
             }
         }
         else
@@ -451,7 +458,7 @@ public class MemberInviteController : ControllerBase
         // The clamp is enforced in RLS via app.share_full_history, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
         if (IsCallersOwnMembership(member))
-            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: SelfEditDetail);
 
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -479,20 +486,21 @@ public class MemberInviteController : ControllerBase
         => HttpContext.GetSubjectId() is { } subjectId && member.SubjectId == subjectId;
 
     /// <summary>
-    /// An unknown permission is malformed input; exceeding the ceiling is a refusal.
+    /// An unknown permission is malformed input; exceeding the ceiling is a refusal. Either way the
+    /// description is what the granter reads, so it travels in the title as well as the detail.
     /// </summary>
     private ObjectResult GrantProblem(GrantCeilingViolation violation) =>
         violation.Code == GrantCeilingViolation.UnknownPermission
-            ? Problem(detail: violation.Description, statusCode: 400, title: "Bad Request")
-            : Problem(detail: violation.Description, statusCode: 403, title: "Forbidden");
+            ? Problem(detail: violation.Description, statusCode: 400, title: violation.Description)
+            : Problem(detail: violation.Description, statusCode: 403, title: violation.Description);
 
     /// <summary>
     /// A foreign role id is malformed input; a role conferring more than the caller holds is a refusal.
     /// </summary>
     private ObjectResult RoleGrantProblem(RoleGrantValidation validation) =>
         validation.ErrorCode == RoleGrantValidation.ForeignRole
-            ? Problem(detail: validation.ErrorDescription, statusCode: 400, title: "Bad Request")
-            : Problem(detail: validation.ErrorDescription, statusCode: 403, title: "Forbidden");
+            ? Problem(detail: validation.ErrorDescription, statusCode: 400, title: validation.ErrorDescription)
+            : Problem(detail: validation.ErrorDescription, statusCode: 403, title: validation.ErrorDescription);
 }
 
 public class CreateMemberInviteRequest

@@ -142,6 +142,25 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         };
     }
 
+    /// <summary>
+    /// Asserts the refusal the granter actually reads. openapi-remote-codegen 0.2.0 resolves a
+    /// ProblemDetails to <c>title</c> before <c>detail</c>, so a reason carried only in the detail
+    /// reaches the members page as the literal "Bad Request" or "Forbidden" — asserting the title is
+    /// what makes the reason testable.
+    /// </summary>
+    private static void ShouldRefuse(IActionResult result, int statusCode, string reason)
+    {
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(statusCode);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be(reason);
+        details.Detail.Should().Be(reason);
+    }
+
+    /// <summary>The reason both role and permission edits give for a self-edit.</summary>
+    private const string SelfEditReason =
+        "Cannot change your own roles or permissions; ask another member with members.manage.";
+
     private Task<List<string>?> TargetPermissionsAsync() => PermissionsOfAsync(_targetMemberId);
 
     private async Task<List<string>?> PermissionsOfAsync(Guid memberId)
@@ -161,8 +180,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        ShouldRefuse(
+            result,
+            StatusCodes.Status403Forbidden,
+            "Cannot grant '*' because the caller does not hold it.");
 
         (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
     }
@@ -179,8 +200,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        ShouldRefuse(
+            result,
+            StatusCodes.Status403Forbidden,
+            "Cannot grant 'audit.manage' because the caller does not hold it.");
 
         (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
     }
@@ -199,8 +222,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        ShouldRefuse(
+            result,
+            StatusCodes.Status400BadRequest,
+            "'glucose.destroy' is not a known permission.");
 
         (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
     }
@@ -267,8 +292,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, SelfEditReason);
 
         (await PermissionsOfAsync(_callerMemberId)).Should().BeEquivalentTo(AdministratorScopes);
     }
@@ -284,8 +308,10 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        ShouldRefuse(
+            result,
+            StatusCodes.Status403Forbidden,
+            "Cannot grant '*' because the caller does not hold it.");
 
         (await _dbContext.TenantMemberRoles.AnyAsync()).Should().BeFalse();
     }
@@ -302,8 +328,12 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        // Every Caretaker atom is within the Administrator ceiling, so the owner role's superuser
+        // is the only violation the union can report, whatever order the two roles resolve in.
+        ShouldRefuse(
+            result,
+            StatusCodes.Status403Forbidden,
+            "Cannot grant '*' because the caller does not hold it.");
 
         (await _dbContext.TenantMemberRoles.AnyAsync()).Should().BeFalse();
     }
@@ -335,10 +365,27 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             _publicAccessCache,
             CancellationToken.None);
 
-        result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, SelfEditReason);
 
         (await _dbContext.TenantMemberRoles.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetMemberLimitTo24Hours_rejectsEditingTheCallersOwnMembership()
+    {
+        // The clamp is the third self-edit refusal, and the only one whose reason had no test.
+        var controller = BuildController(TenantPermissions.Superuser);
+
+        var result = await controller.SetMemberLimitTo24Hours(
+            _callerMemberId,
+            new SetMemberLimitTo24HoursRequest(true),
+            _publicAccessCache,
+            CancellationToken.None);
+
+        ShouldRefuse(result, StatusCodes.Status400BadRequest, SelfEditReason);
+
+        var caller = await _dbContext.TenantMembers.AsNoTracking().FirstAsync(m => m.Id == _callerMemberId);
+        caller.LimitTo24Hours.Should().BeFalse("the refusal returned before the clamp was written");
     }
 
     public void Dispose() => _dbContext.Dispose();
