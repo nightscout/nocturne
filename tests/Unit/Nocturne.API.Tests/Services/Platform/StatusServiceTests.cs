@@ -89,6 +89,117 @@ public class StatusServiceTests
         _statusService = CreateStatusService(_configuration, _dbContext);
     }
 
+    #region Demo tenant fields
+
+    // isDemo/nextResetAt are read from the resolved TenantContext, not from the server-wide
+    // IDemoModeService toggle: whether a tenant is a demo is a property of that tenant, and a
+    // deployment that runs the generator as a separate service leaves the API's toggle off. The
+    // web app keys its demo banner and its demo sign-in redirect off these two fields, so a
+    // regression here is a demo tenant whose login page nobody can complete.
+
+    [Fact]
+    public async Task GetSystemStatusAsync_OnADemoTenant_ReportsIsDemoAndTheNextReset()
+    {
+        var nextResetAt = new DateTime(2026, 8, 5, 3, 0, 0, DateTimeKind.Utc);
+        var dbName = $"nocturne_status_demo_{Guid.NewGuid()}";
+        var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
+        var tenantId = MockTenantAccessor.DefaultTenantId;
+
+        ctx.Tenants.Add(new TenantEntity
+        {
+            Id = tenantId,
+            Slug = "demo",
+            DisplayName = "Nocturne Demo",
+            IsActive = true,
+            IsDemo = true,
+            DemoConfig = new TenantDemoConfigEntity { TenantId = tenantId, NextResetAt = nextResetAt },
+        });
+        await ctx.SaveChangesAsync();
+
+        var service = CreateStatusService(
+            _configuration, ctx, dbName,
+            MockTenantAccessor.Create(tenantId: tenantId, slug: "demo", isDemo: true).Object);
+
+        var result = await service.GetSystemStatusAsync();
+
+        result.IsDemo.Should().BeTrue("the web app gates the demo banner and demo sign-in on this");
+        result.NextResetAt.Should().Be(nextResetAt);
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_OnAnOrdinaryTenant_LeavesTheDemoFieldsUnset()
+    {
+        var service = CreateStatusService(
+            _configuration,
+            tenantAccessor: MockTenantAccessor.Create(isDemo: false).Object);
+
+        var result = await service.GetSystemStatusAsync();
+
+        result.IsDemo.Should().BeNull("an ordinary tenant reports no demo state at all");
+        result.NextResetAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_OnlyChargesADemoTenantForTheResetLookup()
+    {
+        // Status is polled often and is generated per cache miss, so the demo-config lookup is
+        // gated on the context flag rather than run for everyone. Counting contexts opened
+        // (other parts of status generation open some too) pins the gate: the demo tenant pays
+        // for exactly one more than an ordinary tenant does.
+        var ordinary = await CountContextsOpenedAsync(isDemo: false);
+        var demo = await CountContextsOpenedAsync(isDemo: true);
+
+        demo.Should().Be(ordinary + 1,
+            "the reset lookup is the only extra query a demo tenant causes, and an ordinary " +
+            "tenant must not cause it at all");
+    }
+
+    private async Task<int> CountContextsOpenedAsync(bool isDemo)
+    {
+        var dbName = $"nocturne_status_cost_{Guid.NewGuid()}";
+        var ctx = TestDbContextFactory.CreateInMemoryContext(dbName);
+        var tenantId = MockTenantAccessor.DefaultTenantId;
+
+        ctx.Tenants.Add(new TenantEntity
+        {
+            Id = tenantId,
+            Slug = "t",
+            DisplayName = "T",
+            IsActive = true,
+            IsDemo = isDemo,
+            DemoConfig = new TenantDemoConfigEntity { TenantId = tenantId, NextResetAt = DateTime.UtcNow },
+        });
+        await ctx.SaveChangesAsync();
+
+        var opened = 0;
+        var mockFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        mockFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                opened++;
+                var factoryCtx = TestDbContextFactory.CreateInMemoryContext(dbName);
+                factoryCtx.TenantId = tenantId;
+                return factoryCtx;
+            });
+
+        var service = new StatusService(
+            _configuration,
+            _mockCacheService.Object,
+            _mockDemoModeService.Object,
+            ctx,
+            mockFactory.Object,
+            _httpContextAccessor,
+            MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
+            TestPublicAccessCache.Create(),
+            _mockLogger.Object);
+
+        await service.GetSystemStatusAsync();
+        return opened;
+    }
+
+    #endregion
+
     #region GetSystemStatusAsync Tests
 
     [Fact]
@@ -884,7 +995,8 @@ public class StatusServiceTests
     private StatusService CreateStatusService(
         IConfiguration configuration,
         NocturneDbContext? context = null,
-        string? databaseName = null
+        string? databaseName = null,
+        ITenantAccessor? tenantAccessor = null
     )
     {
         var dbName = databaseName ?? $"nocturne_status_tests_{Guid.NewGuid()}";
@@ -905,7 +1017,7 @@ public class StatusServiceTests
             ctx,
             mockDbContextFactory.Object,
             _httpContextAccessor,
-            _mockTenantAccessor.Object,
+            tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
             _mockLogger.Object
         );

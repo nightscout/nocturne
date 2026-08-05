@@ -382,6 +382,10 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return cached;
 
+        // Bounded like the sign-in endpoint: /scalar is anonymous too, and the token cache is
+        // keyed on the subject, so a reset (which changes it) lets the docs mint again.
+        await _demoTenantService.TrimSessionsAsync(subjectId.Value, context.RequestAborted);
+
         // No IP or user-agent — see DemoSessionController: the demo subject is shared, and its
         // session list is readable by anyone holding a demo session.
         var session = await _sessionService.IssueSessionAsync(

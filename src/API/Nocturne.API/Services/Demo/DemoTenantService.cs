@@ -48,6 +48,29 @@ public sealed class DemoTenantService
     /// </summary>
     public const string DemoRoleSlug = "demo-visitor";
 
+    /// <summary>
+    /// Ceiling on live <c>refresh_tokens</c> rows for the demo subject. Enforced by
+    /// <see cref="TrimSessionsAsync"/> before every issue, so the table cannot grow past this
+    /// however many sessions are requested.
+    /// </summary>
+    /// <remarks>
+    /// The per-IP rate limit on the sign-in endpoint does not bound this. That partition key
+    /// comes from <c>Connection.RemoteIpAddress</c>, which <c>UseForwardedHeaders</c> — running
+    /// before the rate limiter, with <c>KnownProxies</c> and <c>KnownIPNetworks</c> cleared
+    /// because the API is only meant to be reachable through the gateway — takes from
+    /// <c>X-Forwarded-For</c>. The gateway does not strip that header, so a caller rotating it
+    /// gets a fresh partition per request and the limit bounds nothing. The limit is kept for
+    /// the friction it adds to naive abuse; this cap is the actual ceiling, and it is enforced
+    /// on a value no caller supplies.
+    /// <para>
+    /// Sized for concurrent real visitors, not for one visitor: the account is shared, so a
+    /// trimmed session belongs to someone who has almost certainly left. Reaching the cap signs
+    /// the oldest visitor out rather than refusing the newest, because refusing would make the
+    /// demo unusable for everyone as soon as it filled.
+    /// </para>
+    /// </remarks>
+    public const int MaxLiveDemoSessions = 50;
+
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
@@ -96,6 +119,71 @@ public sealed class DemoTenantService
                 && m.RevokedAt == null)
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Deletes the demo subject's oldest sessions so that at most
+    /// <see cref="MaxLiveDemoSessions"/> - 1 remain, leaving room for the caller to issue one.
+    /// Call immediately before issuing a demo session.
+    /// </summary>
+    /// <remarks>
+    /// Deletes rather than revokes: a revoked row still occupies the table, and the point of the
+    /// cap is that an endpoint anyone can call cannot grow it without bound. Expired and revoked
+    /// rows are dropped first, so a live session is only ever displaced once there is nothing
+    /// dead left to clear.
+    /// </remarks>
+    /// <param name="subjectId">
+    /// The demo member's subject. Verified to carry <see cref="SubjectEntity.IsDemoSubject"/>
+    /// before anything is deleted — this removes credential rows, so it must never be pointed at
+    /// a real account.
+    /// </param>
+    /// <returns>The number of session rows deleted.</returns>
+    public async Task<int> TrimSessionsAsync(Guid subjectId, CancellationToken ct = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+
+        var isDemoSubject = await db.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == subjectId)
+            .Select(s => (bool?)s.IsDemoSubject)
+            .FirstOrDefaultAsync(ct);
+
+        if (isDemoSubject is not true)
+        {
+            _logger.LogWarning(
+                "Refusing to trim sessions for subject {SubjectId}: not a demo subject", subjectId);
+            return 0;
+        }
+
+        var now = DateTime.UtcNow;
+
+        // Age out the dead rows first; they are nobody's session.
+        var deleted = await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId && (t.RevokedAt != null || t.ExpiresAt <= now))
+            .ExecuteDeleteAsync(ct);
+
+        var keep = MaxLiveDemoSessions - 1;
+        var surplus = await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .OrderByDescending(t => t.IssuedAt)
+            .Skip(keep)
+            .Select(t => t.Id)
+            .ToListAsync(ct);
+
+        if (surplus.Count > 0)
+        {
+            deleted += await db.RefreshTokens
+                .Where(t => surplus.Contains(t.Id))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        if (deleted > 0)
+        {
+            _logger.LogInformation(
+                "Trimmed {Count} demo session row(s) for subject {SubjectId}", deleted, subjectId);
+        }
+
+        return deleted;
     }
 
     /// <summary>
@@ -384,12 +472,21 @@ public sealed class DemoTenantService
     /// A third writer granting the write and administration atoms the demo member holds would
     /// leave the narrower two decorative, and would rest the whole property on
     /// <c>AuthenticationMiddleware</c> re-narrowing the grant on every share request.
+    /// <para>
+    /// Role assignments are cleared rather than left alone. Effective permissions are the union
+    /// of role and direct permissions, so a role row left in place would widen the grant past
+    /// that vocabulary and make setting <c>DirectPermissions</c> pointless. This is not
+    /// hypothetical on an already-provisioned tenant: the code this replaced assigned the seed
+    /// <c>admin</c> role to this exact membership, so the production demo tenant carries one,
+    /// and provisioning is the only thing that will remove it.
+    /// </para>
     /// </remarks>
     private async Task GrantPublicAccessAsync(
         NocturneDbContext db, Guid tenantId, CancellationToken ct)
     {
         var publicMember = await db.TenantMembers
             .Include(m => m.Subject)
+            .Include(m => m.MemberRoles)
             .FirstOrDefaultAsync(
                 m => m.TenantId == tenantId && m.Subject!.IsSystemSubject && m.Subject.Name == "Public", ct);
 
@@ -402,6 +499,15 @@ public sealed class DemoTenantService
 
         publicMember.LimitTo24Hours = false;
         publicMember.DirectPermissions = [.. TenantPermissions.PublicShareScopes];
+
+        if (publicMember.MemberRoles.Count > 0)
+        {
+            _logger.LogInformation(
+                "Removing {Count} role assignment(s) from the Public membership on demo tenant {TenantId}: " +
+                "its grant is the share vocabulary alone",
+                publicMember.MemberRoles.Count, tenantId);
+            db.TenantMemberRoles.RemoveRange(publicMember.MemberRoles);
+        }
     }
 
     /// <summary>

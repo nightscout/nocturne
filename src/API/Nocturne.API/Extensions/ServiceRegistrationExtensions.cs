@@ -363,9 +363,12 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
-            // Demo sign-in: 10 sessions per IP per 5 minutes. Each demo reset revokes
-            // the member's tokens, so the ceiling bounds how fast one client can add
-            // refresh-token rows between resets.
+            // Demo sign-in: 10 sessions per IP per 5 minutes. Friction against naive abuse
+            // only — this does NOT bound the refresh_tokens table. The partition key comes from
+            // Connection.RemoteIpAddress, which UseForwardedHeaders sets from X-Forwarded-For
+            // with no trusted-proxy list, and the gateway does not strip that header, so a
+            // caller rotating it gets a fresh partition every request. The real ceiling is
+            // DemoTenantService.MaxLiveDemoSessions, enforced on the subject id.
             options.AddPolicy(
                 "demo-session",
                 context =>

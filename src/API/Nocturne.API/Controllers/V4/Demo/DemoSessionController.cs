@@ -75,6 +75,11 @@ public class DemoSessionController : ControllerBase
         if (subjectId is null)
             return NotFound();
 
+        // The endpoint is anonymous and each call writes a refresh_tokens row, so the table
+        // needs a ceiling that does not depend on the per-IP rate limit — whose partition key
+        // is X-Forwarded-For and therefore caller-supplied. See MaxLiveDemoSessions.
+        await _demoTenantService.TrimSessionsAsync(subjectId.Value, ct);
+
         // No IP or user-agent: every visitor shares this subject, and the session list at
         // /api/v4/account/sessions is readable by any member of it — recording them would
         // show each visitor the addresses of everyone else currently using the demo.

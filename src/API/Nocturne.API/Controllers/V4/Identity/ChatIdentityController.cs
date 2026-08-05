@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -17,6 +18,10 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [ApiController]
 [Tags("Identity")]
 [Authorize]
+// Every endpoint here binds or reads a chat identity for a subject. The demo's subject is
+// shared, so one visitor's Discord or Telegram binding would be enumerable and revocable by
+// the next — GetLinks lists by tenant, not by subject.
+[DenyDemoSubject]
 [Route("api/v4/chat-identity")]
 public class ChatIdentityController : ControllerBase
 {

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
@@ -37,6 +38,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -83,6 +85,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpGet]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<GuestLinkInfo>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetGuestLinks(
@@ -108,6 +111,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpDelete("{grantId:guid}")]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -129,6 +133,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpPatch("{grantId:guid}/dismiss")]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

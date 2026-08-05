@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
@@ -46,7 +48,9 @@ public class DemoAdminController : ControllerBase
     /// </summary>
     [HttpPost("provision")]
     [ProducesResponseType(typeof(DemoStateDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Provision(CancellationToken ct)
+    public async Task<IActionResult> Provision(
+        [FromServices] IMemoryCache cache,
+        CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -75,9 +79,14 @@ public class DemoAdminController : ControllerBase
 
         await db.SaveChangesAsync(ct);
 
-        // Grant the Public subject write access so the demo service can write
-        // entries/treatments without auth, and create the demo member visitors
-        // are signed in as.
+        // TenantResolutionMiddleware caches the resolved context, IsDemo included, and
+        // CreateWithoutOwnerAsync may already have populated it. IsDemo gates the demo sign-in
+        // endpoint and the status field the login page keys off, so without this the tenant is
+        // non-demo for the cache lifetime — a login page with no passkey and no way in.
+        TenantResolutionMiddleware.EvictTenant(cache, tenant.Slug);
+
+        // Open the Public subject's share grant and create the demo member visitors are
+        // signed in as.
         await _demoTenantService.ConfigureAccessAsync(created.Id, ct);
 
         tenant.DemoConfig = config;

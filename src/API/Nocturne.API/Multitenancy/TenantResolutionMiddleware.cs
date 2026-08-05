@@ -273,12 +273,39 @@ public class TenantResolutionMiddleware
         return false;
     }
 
+    /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
+    public static string TenantCacheKey(string slug) => $"tenant:{slug}";
+
+    /// <summary>Cache key holding the sole-tenant context used to resolve the apex.</summary>
+    public const string SoleTenantCacheKey = "tenant:__sole__";
+
+    /// <summary>
+    /// Drops the cached <see cref="TenantContext"/> for a tenant, so the next request rebuilds it
+    /// from the row.
+    /// </summary>
+    /// <remarks>
+    /// Call after writing any column the context carries. <see cref="TenantContext.IsDemo"/> in
+    /// particular gates <c>GET /api/v4/demo/session</c> and the <c>isDemo</c> field on
+    /// <c>/api/v4/status</c>, so without this a tenant stays non-demo for
+    /// <see cref="CacheDuration"/> after being flagged — a login page with no passkey and no
+    /// working demo sign-in.
+    /// <para>
+    /// Both keys go: the apex resolves single-tenant installs through
+    /// <see cref="SoleTenantCacheKey"/>, which holds a copy of the same context.
+    /// </para>
+    /// </remarks>
+    public static void EvictTenant(IMemoryCache cache, string slug)
+    {
+        cache.Remove(TenantCacheKey(slug));
+        cache.Remove(SoleTenantCacheKey);
+    }
+
     /// <summary>
     /// Resolves a tenant by subdomain slug.
     /// </summary>
     private async Task<TenantContext?> ResolveTenantBySlugAsync(IServiceProvider services, string slug)
     {
-        var cacheKey = $"tenant:{slug}";
+        var cacheKey = TenantCacheKey(slug);
 
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
@@ -315,7 +342,7 @@ public class TenantResolutionMiddleware
     /// </summary>
     private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
     {
-        var cacheKey = "tenant:__sole__";
+        var cacheKey = SoleTenantCacheKey;
 
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;

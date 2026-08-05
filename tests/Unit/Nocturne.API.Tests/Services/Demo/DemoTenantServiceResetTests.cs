@@ -145,6 +145,185 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task ConfigureAccessAsync_StripsAPreExistingRoleFromThePublicMembership()
+    {
+        // The reset path wipes the tenant first, so the cascade removes any stale role for
+        // free. POST /provision on an already-provisioned tenant does NOT wipe — it calls
+        // ConfigureAccessAsync alone — and that is the state production is in, because the
+        // code this branch replaced assigned the seed admin role to the Public membership.
+        // Effective permissions union roles with direct permissions, so leaving that row
+        // would keep tenant.settings and members.manage on the anonymous share viewer and
+        // make writing DirectPermissions pointless.
+        var tenantId = SeedDemoTenant();
+
+        // Put the tenant back into the state the replaced code left it in: the Public
+        // membership carrying the seed admin role.
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            db.TenantId = tenantId;
+            var publicMemberId = await db.TenantMembers
+                .Where(m => m.TenantId == tenantId && m.Subject!.IsSystemSubject)
+                .Select(m => m.Id)
+                .SingleAsync();
+            var adminRoleId = await db.TenantRoles
+                .Where(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin)
+                .Select(r => r.Id)
+                .SingleAsync();
+
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantMemberId = publicMemberId,
+                TenantRoleId = adminRoleId,
+                SysCreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await _service.ConfigureAccessAsync(tenantId);
+
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            db.TenantId = tenantId;
+            var publicMember = await db.TenantMembers
+                .Include(m => m.MemberRoles)
+                    .ThenInclude(mr => mr.TenantRole)
+                .Include(m => m.Subject)
+                .SingleAsync(m => m.TenantId == tenantId && m.Subject!.IsSystemSubject);
+
+            publicMember.MemberRoles.Should().BeEmpty(
+                "provisioning rewrites the Public grant from source, so a stale admin role must go");
+            publicMember.DirectPermissions.Should().BeEquivalentTo(TenantPermissions.PublicShareScopes);
+        }
+    }
+
+    [Fact]
+    public async Task TrimSessionsAsync_HoldsTheDemoSubjectUnderTheSessionCap()
+    {
+        // The sign-in endpoint is anonymous and writes a refresh_tokens row per call. Its
+        // per-IP rate limit partitions on X-Forwarded-For, which the caller supplies, so it
+        // bounds nothing; this cap is the ceiling, and it is enforced on the subject id.
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        const int issued = DemoTenantService.MaxLiveDemoSessions + 25;
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            for (var i = 0; i < issued; i++)
+            {
+                db.RefreshTokens.Add(new RefreshTokenEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = subjectId,
+                    TokenHash = $"hash-{i}",
+                    IssuedAt = DateTime.UtcNow.AddMinutes(-issued + i),
+                    ExpiresAt = DateTime.UtcNow.AddDays(30),
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await _service.TrimSessionsAsync(subjectId);
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        var remaining = await check.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .OrderByDescending(t => t.IssuedAt)
+            .ToListAsync();
+
+        remaining.Should().HaveCount(DemoTenantService.MaxLiveDemoSessions - 1,
+            "the trim leaves room for the session about to be issued");
+        remaining.Select(t => t.TokenHash).Should().Contain($"hash-{issued - 1}",
+            "the newest session is kept");
+        remaining.Select(t => t.TokenHash).Should().NotContain("hash-0",
+            "the oldest sessions are the ones displaced");
+    }
+
+    [Fact]
+    public async Task TrimSessionsAsync_ClearsDeadRowsBeforeDisplacingALiveSession()
+    {
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            db.RefreshTokens.Add(new RefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                TokenHash = "expired",
+                IssuedAt = DateTime.UtcNow.AddDays(-40),
+                ExpiresAt = DateTime.UtcNow.AddDays(-10),
+            });
+            db.RefreshTokens.Add(new RefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                TokenHash = "revoked",
+                IssuedAt = DateTime.UtcNow.AddDays(-1),
+                ExpiresAt = DateTime.UtcNow.AddDays(29),
+                RevokedAt = DateTime.UtcNow.AddHours(-1),
+            });
+            db.RefreshTokens.Add(new RefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                TokenHash = "live",
+                IssuedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var deleted = await _service.TrimSessionsAsync(subjectId);
+
+        deleted.Should().Be(2, "the expired and revoked rows go; they are nobody's session");
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        var remaining = await check.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .Select(t => t.TokenHash)
+            .ToListAsync();
+        remaining.Should().BeEquivalentTo(["live"]);
+    }
+
+    [Fact]
+    public async Task TrimSessionsAsync_RefusesASubjectThatIsNotADemoSubject()
+    {
+        // This deletes credential rows, so pointing it at a real account must be impossible.
+        SeedDemoTenant();
+
+        Guid realSubjectId;
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            var real = new SubjectEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "Real Person",
+                IsActive = true,
+            };
+            db.Subjects.Add(real);
+            db.RefreshTokens.Add(new RefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = real.Id,
+                TokenHash = "their-session",
+                IssuedAt = DateTime.UtcNow.AddDays(-40),
+                ExpiresAt = DateTime.UtcNow.AddDays(-1),
+            });
+            await db.SaveChangesAsync();
+            realSubjectId = real.Id;
+        }
+
+        var deleted = await _service.TrimSessionsAsync(realSubjectId);
+
+        deleted.Should().Be(0);
+        await using var check = new NocturneDbContext(_dbOptions);
+        (await check.RefreshTokens.CountAsync(t => t.SubjectId == realSubjectId))
+            .Should().Be(1, "an expired session belonging to a real account is not ours to delete");
+    }
+
+    [Fact]
     public async Task ConfigureAccessAsync_DoesNotBindDemoMemberToAnUnrelatedSubjectNamedDemo()
     {
         // subjects.username carries no unique index and any operator or invitee can pick
@@ -349,16 +528,25 @@ public class DemoTenantServiceResetTests : IDisposable
         db.SaveChanges();
     }
 
-    /// <summary>Mirrors the seed-roles + Public-membership half of provisioning.</summary>
+    /// <summary>
+    /// Mirrors the seed-roles + Public-membership half of provisioning, and reproduces the
+    /// state an already-provisioned demo tenant is in: the code this branch replaced assigned
+    /// the seed <c>admin</c> role to the Public membership, so production carries one and
+    /// provisioning has to remove it. Without that role here, the assertion that the Public
+    /// membership ends with none would only pin "does not add one".
+    /// </summary>
     private async Task SeedRolesAndPublicMemberAsync(Guid tenantId)
     {
         await using var db = new NocturneDbContext(_dbOptions);
 
+        var roles = new Dictionary<string, Guid>();
         foreach (var (slug, permissions) in TenantPermissions.SeedRolePermissions)
         {
+            var roleId = Guid.CreateVersion7();
+            roles[slug] = roleId;
             db.TenantRoles.Add(new TenantRoleEntity
             {
-                Id = Guid.CreateVersion7(),
+                Id = roleId,
                 TenantId = tenantId,
                 Name = TenantPermissions.SeedRoleNames[slug],
                 Slug = slug,
@@ -382,13 +570,22 @@ public class DemoTenantServiceResetTests : IDisposable
             db.Subjects.Add(publicSubject);
         }
 
+        var publicMemberId = Guid.CreateVersion7();
         db.TenantMembers.Add(new TenantMemberEntity
         {
-            Id = Guid.CreateVersion7(),
+            Id = publicMemberId,
             TenantId = tenantId,
             SubjectId = publicSubject.Id,
             LimitTo24Hours = true,
             Label = "Public Access",
+        });
+
+        db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantMemberId = publicMemberId,
+            TenantRoleId = roles[TenantPermissions.SeedRoles.Admin],
+            SysCreatedAt = DateTime.UtcNow,
         });
 
         await db.SaveChangesAsync();
