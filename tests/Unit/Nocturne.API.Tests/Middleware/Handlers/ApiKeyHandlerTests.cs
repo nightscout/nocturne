@@ -506,7 +506,7 @@ public class ApiKeyHandlerTests : IDisposable
     private DefaultHttpContext CreateHttpContext()
     {
         var context = new DefaultHttpContext();
-        context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true);
+        context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
         return context;
     }
 
@@ -520,7 +520,7 @@ public class ApiKeyHandlerTests : IDisposable
         {
             RequestServices = serviceProvider,
         };
-        context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true);
+        context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
         return context;
     }
 }

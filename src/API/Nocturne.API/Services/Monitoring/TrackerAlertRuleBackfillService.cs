@@ -79,7 +79,7 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
                 using var tenantScope = _serviceProvider.CreateScope();
                 var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
                 tenantAccessor.SetTenant(new TenantContext(
-                    tenantId, slug ?? string.Empty, displayName ?? string.Empty, true));
+                    tenantId, slug ?? string.Empty, displayName ?? string.Empty, true, IsDemo: false));
                 var sync = tenantScope.ServiceProvider.GetRequiredService<ITrackerAlertRuleSyncService>();
 
                 foreach (var definitionId in definitionIds)

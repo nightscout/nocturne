@@ -174,7 +174,7 @@ public class V4GoldenFixture : IAsyncLifetime
     }
 
     private void PinTenant(Guid tenantId) =>
-        _accessor.SetTenant(new TenantContext(tenantId, $"t-{tenantId:N}", "Golden", IsActive: true));
+        _accessor.SetTenant(new TenantContext(tenantId, $"t-{tenantId:N}", "Golden", IsActive: true, IsDemo: false));
 
     private async Task SeedTenantAsync(Guid tenantId)
     {

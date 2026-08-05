@@ -29,9 +29,9 @@ public class TenantIsolationTests
 {
     private static readonly Guid TenantAId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid TenantBId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-    private static readonly TenantContext TenantA = new(TenantAId, "alice", "Alice", true);
-    private static readonly TenantContext TenantB = new(TenantBId, "bob", "Bob", true);
-    private static readonly TenantContext InactiveTenant = new(TenantAId, "alice", "Alice", false);
+    private static readonly TenantContext TenantA = new(TenantAId, "alice", "Alice", true, IsDemo: false);
+    private static readonly TenantContext TenantB = new(TenantBId, "bob", "Bob", true, IsDemo: false);
+    private static readonly TenantContext InactiveTenant = new(TenantAId, "alice", "Alice", false, IsDemo: false);
 
     /// <summary>
     /// Creates a mock HubCallerContext backed by a real HttpContext.
@@ -750,7 +750,7 @@ public class TenantIsolationTests
         {
             foreach (var (slug, id, active) in tenants)
             {
-                var ctx = new TenantContext(id, slug, slug, active);
+                var ctx = new TenantContext(id, slug, slug, active, IsDemo: false);
                 cache.Set($"tenant:{slug}", ctx, TimeSpan.FromMinutes(5));
             }
 
@@ -759,7 +759,7 @@ public class TenantIsolationTests
             if (string.IsNullOrEmpty(baseDomain) && activeTenants.Length == 1)
             {
                 var (slug, id, _) = activeTenants[0];
-                var singleCtx = new TenantContext(id, slug, slug, true);
+                var singleCtx = new TenantContext(id, slug, slug, true, IsDemo: false);
                 cache.Set("tenant:__sole__", singleCtx, TimeSpan.FromMinutes(5));
             }
         }

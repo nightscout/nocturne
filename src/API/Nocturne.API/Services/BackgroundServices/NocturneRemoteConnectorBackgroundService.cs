@@ -56,7 +56,7 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
                 using var tenantScope = ServiceProvider.CreateScope();
 
                 var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 var loader = tenantScope.ServiceProvider
                     .GetRequiredService<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>>();

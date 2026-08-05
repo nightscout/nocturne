@@ -298,7 +298,7 @@ public class HubCredentialKindTests
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] =
-            new TenantContext(Tenant, "default", "Default", IsActive: true);
+            new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
 
         var features = new FeatureCollection();
         features.Set<IHttpContextFeature>(new StubHttpContextFeature { HttpContext = httpContext });
@@ -349,7 +349,7 @@ public class HubCredentialKindTests
 
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(Tenant, "default", "Default", IsActive: true));
+            .Returns(new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false));
 
         var service = new SignalRBroadcastService(
             dataHub.Object,

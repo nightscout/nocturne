@@ -60,7 +60,7 @@ public class DirectGrantControllerTests : IDisposable
 
         // Set up authenticated HttpContext
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true);
+        httpContext.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,

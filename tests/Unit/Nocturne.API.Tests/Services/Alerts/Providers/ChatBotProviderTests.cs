@@ -61,7 +61,7 @@ public class ChatBotProviderTests
         {
             tenantAccessorMock
                 .Setup(a => a.Context)
-                .Returns(new TenantContext(Guid.NewGuid(), tenantSlug, "Acme", true));
+                .Returns(new TenantContext(Guid.NewGuid(), tenantSlug, "Acme", true, IsDemo: false));
         }
 
         var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();

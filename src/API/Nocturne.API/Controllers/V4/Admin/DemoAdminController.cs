@@ -251,7 +251,7 @@ public class DemoAdminController : ControllerBase
             .FirstOrDefaultAsync(ct);
 
         var seeded = await seeder.SeedAsync(
-            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
             request?.Days ?? 7,
             publicSubjectId,
             DataSources.DemoService,

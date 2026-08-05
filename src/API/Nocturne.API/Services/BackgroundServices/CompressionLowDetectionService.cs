@@ -116,7 +116,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             {
                 using var scope = _serviceProvider.CreateScope();
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();
@@ -182,7 +182,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
             {
                 using var scope = _serviceProvider.CreateScope();
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 // Determine "last night" in the user's local timezone
                 var therapySettingsResolver = scope.ServiceProvider.GetRequiredService<ITherapySettingsResolver>();

@@ -367,14 +367,24 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so
-    /// no visitor session outlives the reset and no visitor IP or user-agent is retained,
-    /// then deletes the subject itself along with any membership it picked up.
+    /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so no
+    /// visitor session outlives the reset, then deletes the subject itself along with any
+    /// membership it picked up.
     /// </summary>
     /// <remarks>
+    /// The session rows are the part this controls. It is not the case that the demo retains no
+    /// visitor addresses at all: <c>AuditContextMiddleware</c> stamps
+    /// <c>Connection.RemoteIpAddress</c> onto every <c>mutation_audit_log</c> row, so a visitor's
+    /// address is recorded for each write they make and survives until the next reset clears the
+    /// table by cascade. Nobody can read it in the meantime — <c>AuditController</c> gates on
+    /// <c>audit.read</c>, which <see cref="TenantPermissions.DemoVisitorPermissions"/> excludes,
+    /// so that exclusion is load-bearing and not merely tidy.
+    /// </para>
+    /// <para>
     /// Only ever called with a subject read from the demo tenant's own membership; the
     /// <see cref="SubjectEntity.IsDemoSubject"/> check makes that explicit rather than
     /// implied, because this deletes a global row and must never reach a real account.
+    /// </para>
     /// <para>
     /// A membership outside the demo tenant is deleted rather than treated as a reason to
     /// keep the subject: an account anyone can obtain a session for has no business holding

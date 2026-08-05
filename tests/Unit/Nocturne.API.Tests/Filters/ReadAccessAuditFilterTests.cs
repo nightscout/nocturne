@@ -21,7 +21,7 @@ namespace Nocturne.API.Tests.Filters;
 public class ReadAccessAuditFilterTests
 {
     private static readonly Guid TestTenantId = Guid.CreateVersion7();
-    private static readonly TenantContext TestTenantContext = new(TestTenantId, "test", "Test Tenant", true);
+    private static readonly TenantContext TestTenantContext = new(TestTenantId, "test", "Test Tenant", true, IsDemo: false);
 
     private readonly Mock<ITenantAuditConfigCache> _configCache = new();
     private readonly Mock<IAuditContext> _auditContext = new();

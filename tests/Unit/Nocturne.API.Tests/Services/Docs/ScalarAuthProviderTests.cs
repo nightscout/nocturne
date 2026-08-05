@@ -167,6 +167,41 @@ public class ScalarAuthProviderTests : IDisposable
             .Should().Equal("https://demo.nocturne.run/scalar");
     }
 
+    [Fact]
+    public async Task PrepareAsync_StopsAddingRedirectUrisAtTheCap()
+    {
+        // Unreachable by construction — the URI comes from configuration plus the stored slug,
+        // and only https survives on a public host — but the row is written by an unauthenticated
+        // request, so the bound must not rest on that argument staying true. Exercised directly
+        // because nothing else can reach it.
+        var tenantId = SeedTenant("demo", isDemo: true, withDemoMember: true);
+
+        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
+
+        await using (var seed = new NocturneDbContext(_dbOptions))
+        {
+            var client = await seed.OAuthClients.IgnoreQueryFilters()
+                .SingleAsync(c => c.TenantId == tenantId);
+            client.RedirectUris = JsonSerializer.Serialize(
+                Enumerable.Range(0, ScalarAuthProvider.MaxRedirectUris)
+                    .Select(i => $"https://origin{i}.example/scalar")
+                    .ToList());
+            await seed.SaveChangesAsync();
+        }
+
+        var context = BuildContext("demo.nocturne.run");
+        await BuildProvider().PrepareAsync(context);
+
+        context.Items.Should().NotContainKey(ScalarAuthContext.HttpContextItemKey,
+            "at the cap the provider declines rather than growing the row");
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var after = await db.OAuthClients.IgnoreQueryFilters()
+            .SingleAsync(c => c.TenantId == tenantId);
+        JsonSerializer.Deserialize<List<string>>(after.RedirectUris)
+            .Should().HaveCount(ScalarAuthProvider.MaxRedirectUris);
+    }
+
     /// <summary>
     /// The request host is client-controllable — the gateway forwards X-Forwarded-Host
     /// untouched and UseForwardedHeaders trusts any proxy. It may therefore only select a

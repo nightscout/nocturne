@@ -184,7 +184,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
         if (tenant is not null)
         {
             context.Items["TenantContext"] =
-                new TenantContext(tenant.Value, "acme", "Acme", IsActive: true);
+                new TenantContext(tenant.Value, "acme", "Acme", IsActive: true, IsDemo: false);
         }
         return context;
     }

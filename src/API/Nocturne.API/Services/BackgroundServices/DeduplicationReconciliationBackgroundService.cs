@@ -91,7 +91,7 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
                 using var scope = _serviceProvider.CreateScope();
 
                 var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                tenantAccessor.SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
                 var dedup = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
                 var result = await dedup.ReconcileNewLinksAsync(BatchSize, MaxBatchesPerTick, ct);

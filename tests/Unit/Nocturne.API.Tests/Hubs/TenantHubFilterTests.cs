@@ -53,7 +53,7 @@ public class TenantHubFilterTests
         if (withTenant)
         {
             httpContext.Items[TenantAwareHub.TenantContextKey] =
-                new TenantContext(Tenant, "default", "Default", IsActive: true);
+                new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
         }
 
         var features = new FeatureCollection();

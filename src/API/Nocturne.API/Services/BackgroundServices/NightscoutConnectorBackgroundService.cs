@@ -104,7 +104,7 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         using var tenantScope = ServiceProvider.CreateScope();
 
         var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true));
+        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
         var loader = tenantScope.ServiceProvider
             .GetRequiredService<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();

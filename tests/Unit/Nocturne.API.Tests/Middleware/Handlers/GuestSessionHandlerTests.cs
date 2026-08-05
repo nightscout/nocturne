@@ -198,7 +198,7 @@ public class GuestSessionHandlerTests
         if (tenantId is not null)
         {
             context.Items["TenantContext"] =
-                new TenantContext(tenantId.Value, "acme", "Acme", IsActive: true);
+                new TenantContext(tenantId.Value, "acme", "Acme", IsActive: true, IsDemo: false);
         }
         return context;
     }

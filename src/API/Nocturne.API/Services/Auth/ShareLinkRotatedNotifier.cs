@@ -61,7 +61,7 @@ public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
                 return;
 
             scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
-                .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true));
+                .SetTenant(new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, true, IsDemo: false));
 
             // in_app_notifications is tenant-scoped and FORCE ROW LEVEL SECURITY is on, so the
             // insert is only visible to the policy once the RLS tenant is pinned on the scoped

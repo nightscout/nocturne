@@ -10,7 +10,7 @@ namespace Nocturne.API.Tests.Filters;
 
 public class TenantCacheVaryFilterTests
 {
-    private static readonly TenantContext TestTenant = new(Guid.CreateVersion7(), "test", "Test Tenant", true);
+    private static readonly TenantContext TestTenant = new(Guid.CreateVersion7(), "test", "Test Tenant", true, IsDemo: false);
 
     private static async Task<HttpContext> RunAsync(
         TenantContext? tenant,

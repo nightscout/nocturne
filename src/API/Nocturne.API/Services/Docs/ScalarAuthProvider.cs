@@ -59,11 +59,22 @@ public sealed class ScalarAuthProvider
     private const string ClientName = "Scalar API Reference";
 
     /// <summary>
-    /// Ceiling on redirect URIs held by one tenant's Scalar client. One per origin the
-    /// instance is served on; more than a handful means something is registering them
-    /// that is not an operator opening the docs.
+    /// Ceiling on redirect URIs held by one tenant's Scalar client.
     /// </summary>
-    private const int MaxRedirectUris = 5;
+    /// <remarks>
+    /// Unreachable by construction as things stand: the URI is assembled from the configured base
+    /// domain and the tenant's stored slug, and the only part a caller influences is the scheme,
+    /// which <see cref="RedirectUriValidator"/> narrows to https on a public host and http on
+    /// loopback. So one tenant can accumulate at most one entry per deployment origin, and a
+    /// deployment has one.
+    /// <para>
+    /// Kept rather than deleted because the row is written by an unauthenticated request, so the
+    /// bound should not depend on the URI-construction argument staying true. An earlier commit
+    /// message on this branch claimed a test covered this cap; none did. <see
+    /// cref="Docs.ScalarAuthProviderTests"/> now exercises it directly.
+    /// </para>
+    /// </remarks>
+    internal const int MaxRedirectUris = 5;
 
     // Matches the tenant-resolution and public-access caches: long enough to keep the
     // docs page off the database, short enough that a demo reset heals within a couple
@@ -192,7 +203,7 @@ public sealed class ScalarAuthProvider
     private async Task<(TenantEntity Tenant, string RedirectUri)?> ResolveAsync(
         HostString requestHost, string scheme, CancellationToken ct)
     {
-        var (baseHost, basePort) = SplitHostPort(_baseDomain.BaseDomain);
+        var (baseHost, basePort) = _baseDomain.SplitHostPort();
         if (baseHost is null || string.IsNullOrEmpty(requestHost.Host))
             return null;
 
@@ -203,7 +214,9 @@ public sealed class ScalarAuthProvider
 
         var slug = SubdomainParser.Extract(requestHost.Host, baseHost);
 
-        if (slug is not null && slug.EndsWith(".share", StringComparison.OrdinalIgnoreCase))
+        // A share grants anonymous read-only access, so it must not be handed an OAuth client
+        // or a token. Shared with TenantResolutionMiddleware so both agree what a share host is.
+        if (slug is not null && SubdomainParser.TryExtractShareToken(slug, out _))
             return null;
 
         await using var db = await _factory.CreateDbContextAsync(ct);
@@ -242,43 +255,6 @@ public sealed class ScalarAuthProvider
         var authority = basePort is null ? canonicalHost : $"{canonicalHost}:{basePort}";
 
         return (tenant, $"{scheme}://{authority}/scalar");
-    }
-
-    /// <summary>
-    /// Splits a configured <c>host[:port]</c>. Returns a null host when the value carries
-    /// more than one colon (and is not a bracketed IPv6 literal) or an unparseable port.
-    /// </summary>
-    private static (string? Host, int? Port) SplitHostPort(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return (null, null);
-
-        value = value.Trim();
-
-        if (value.StartsWith('['))
-        {
-            var close = value.IndexOf(']');
-            if (close < 0)
-                return (null, null);
-
-            var literal = value[..(close + 1)];
-            var rest = value[(close + 1)..];
-            if (rest.Length == 0)
-                return (literal, null);
-            if (rest[0] != ':' || !int.TryParse(rest[1..], out var literalPort) || literalPort is < 1 or > 65535)
-                return (null, null);
-            return (literal, literalPort);
-        }
-
-        var parts = value.Split(':');
-        if (parts.Length == 1)
-            return (parts[0], null);
-        if (parts.Length != 2)
-            return (null, null);
-        if (!int.TryParse(parts[1], out var port) || port is < 1 or > 65535)
-            return (null, null);
-
-        return (parts[0], port);
     }
 
     /// <summary>

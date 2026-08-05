@@ -177,7 +177,7 @@ public class LegacyJwtHandlerTests
 
         var context = CreateHttpContext(token);
         context.Items["TenantContext"] = new TenantContext(
-            Guid.CreateVersion7(), "other", "Other", true);
+            Guid.CreateVersion7(), "other", "Other", true, IsDemo: false);
 
         var result = await _handler.AuthenticateAsync(context);
 
@@ -196,7 +196,7 @@ public class LegacyJwtHandlerTests
             tenantId: _tenantId);
 
         var context = CreateHttpContext(token);
-        context.Items["TenantContext"] = new TenantContext(_tenantId, "default", "Default", true);
+        context.Items["TenantContext"] = new TenantContext(_tenantId, "default", "Default", true, IsDemo: false);
 
         var result = await _handler.AuthenticateAsync(context);
 

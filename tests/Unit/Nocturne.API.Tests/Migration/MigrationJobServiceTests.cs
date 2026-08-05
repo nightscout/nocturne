@@ -39,7 +39,7 @@ public class MigrationJobServiceTests
         return (service, provider);
     }
 
-    private static TenantContext Tenant(Guid id) => new(id, $"slug-{id:N}", "Test Tenant", true);
+    private static TenantContext Tenant(Guid id) => new(id, $"slug-{id:N}", "Test Tenant", true, IsDemo: false);
 
     private static StartMigrationRequest ApiRequest() => new()
     {

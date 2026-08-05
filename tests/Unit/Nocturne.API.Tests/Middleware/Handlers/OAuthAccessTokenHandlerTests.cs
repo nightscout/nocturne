@@ -120,7 +120,7 @@ public class OAuthAccessTokenHandlerTests
     }
 
     private TenantContext Tenant(Guid? id = null) =>
-        new(id ?? _tenantId, "acme", "Acme", IsActive: true);
+        new(id ?? _tenantId, "acme", "Acme", IsActive: true, IsDemo: false);
 
     [Fact]
     public async Task Accepts_a_scoped_tenant_pinned_token_on_the_issuing_tenant()

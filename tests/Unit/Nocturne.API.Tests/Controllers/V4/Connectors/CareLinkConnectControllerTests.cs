@@ -51,7 +51,7 @@ public sealed class CareLinkConnectControllerTests
         return controller;
     }
 
-    private static TenantContext Tenant() => new(TenantId, "acme", "Acme", IsActive: true);
+    private static TenantContext Tenant() => new(TenantId, "acme", "Acme", IsActive: true, IsDemo: false);
 
     private static AuthContext Auth() => new()
     {

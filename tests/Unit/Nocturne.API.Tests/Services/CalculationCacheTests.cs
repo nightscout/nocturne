@@ -87,7 +87,7 @@ public class Phase3CalculationCacheTests
 
         _mockTenantAccessor
             .Setup(x => x.Context)
-            .Returns(new TenantContext(tenantId, "test-tenant", "Test Tenant", true));
+            .Returns(new TenantContext(tenantId, "test-tenant", "Test Tenant", true, IsDemo: false));
 
         var expectedCacheKey = CacheKeyBuilder.BuildIobCalculationKey(tenantId.ToString(), timestamp);
         _mockCacheService

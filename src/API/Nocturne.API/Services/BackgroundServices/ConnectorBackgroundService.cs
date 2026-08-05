@@ -287,7 +287,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         // Set tenant context for this scope
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true));
+        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
         // Populate audit context so mutations are attributed to this connector
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();

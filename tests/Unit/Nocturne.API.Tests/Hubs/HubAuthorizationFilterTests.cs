@@ -35,7 +35,7 @@ public class HubAuthorizationFilterTests
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] =
-            new TenantContext(Tenant, "default", "Default", IsActive: true);
+            new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
 
         var features = new FeatureCollection();
         features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = httpContext });

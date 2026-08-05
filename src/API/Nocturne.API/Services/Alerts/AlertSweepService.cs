@@ -130,7 +130,8 @@ public class AlertSweepService : BackgroundService
                 tenantContext.TenantId,
                 tenantContext.Slug ?? string.Empty,
                 tenantContext.DisplayName ?? string.Empty,
-                true));
+                true,
+                IsDemo: false));
 
             var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
             var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
@@ -204,7 +205,7 @@ public class AlertSweepService : BackgroundService
                     // Signal loss detected for this rule. Create a scoped service and evaluate.
                     using var tenantScope = _serviceProvider.CreateScope();
                     var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                    tenantAccessor.SetTenant(new TenantContext(tenantContext.TenantId, tenantContext.Slug ?? string.Empty, tenantContext.DisplayName ?? string.Empty, true));
+                    tenantAccessor.SetTenant(new TenantContext(tenantContext.TenantId, tenantContext.Slug ?? string.Empty, tenantContext.DisplayName ?? string.Empty, true, IsDemo: false));
 
                     var excursionTracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
                     await excursionTracker.ProcessEvaluationAsync(rule.Id, true, ct);
@@ -336,7 +337,8 @@ public class AlertSweepService : BackgroundService
             tenantContext.TenantId,
             tenantContext.Slug ?? string.Empty,
             tenantContext.DisplayName ?? string.Empty,
-            true));
+            true,
+            IsDemo: false));
 
         // Wrap each instance's snooze conditions in a synthetic composite{and, conditions}
         // rule. RuleDataNeeds.Walk inspects the trees to decide what to enrich; rule identity
@@ -484,7 +486,8 @@ public class AlertSweepService : BackgroundService
                 tenantContext.TenantId,
                 tenantContext.Slug ?? string.Empty,
                 tenantContext.DisplayName ?? string.Empty,
-                true));
+                true,
+                IsDemo: false));
 
             var engine = tenantScope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
             var enricher = tenantScope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
@@ -566,7 +569,8 @@ public class AlertSweepService : BackgroundService
                 tenantContext.TenantId,
                 tenantContext.Slug ?? string.Empty,
                 tenantContext.DisplayName ?? string.Empty,
-                true));
+                true,
+                IsDemo: false));
 
             var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
 

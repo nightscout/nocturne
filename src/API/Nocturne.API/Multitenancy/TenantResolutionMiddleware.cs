@@ -101,7 +101,7 @@ public class TenantResolutionMiddleware
         // Public share link: {token}.share.{baseDomain}. Resolve the tenant by its share token
         // and mark the request read-only-public. An unknown token returns the same 404 as an
         // unknown slug, so the share host can't be used as a tenant-existence oracle.
-        if (slug != null && TryExtractShareToken(slug, out var shareToken))
+        if (slug != null && SubdomainParser.TryExtractShareToken(slug, out var shareToken))
         {
             var shareCache = context.RequestServices.GetRequiredService<ShareTokenCacheService>();
             var shareTenant = await shareCache.ResolveByTokenAsync(shareToken);
@@ -251,27 +251,6 @@ public class TenantResolutionMiddleware
         db.ShareFullHistory = false;
     }
 
-    private const string ShareSubdomainLabel = "share";
-
-    /// <summary>
-    /// Detects the public-share host form <c>{token}.share</c> (the subdomain left of the base
-    /// domain) and extracts the token. Returns false for ordinary tenant slugs, empty tokens,
-    /// or nested forms — slugs and tokens never contain dots. The token is lower-cased because
-    /// hostnames are case-insensitive and generated tokens are always lowercase.
-    /// </summary>
-    private static bool TryExtractShareToken(string subdomain, out string token)
-    {
-        const string suffix = "." + ShareSubdomainLabel;
-        if (subdomain.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-        {
-            token = subdomain[..^suffix.Length].ToLowerInvariant();
-            if (token.Length > 0 && !token.Contains('.'))
-                return true;
-        }
-
-        token = string.Empty;
-        return false;
-    }
 
     /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
     public static string TenantCacheKey(string slug) => $"tenant:{slug}";

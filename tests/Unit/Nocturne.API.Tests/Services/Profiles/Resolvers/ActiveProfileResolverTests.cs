@@ -26,7 +26,7 @@ public class ActiveProfileResolverTests : IDisposable
     public ActiveProfileResolverTests()
     {
         _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
-        _tenantAccessor.Setup(t => t.Context).Returns(new TenantContext(TenantId, "test", "Test", true));
+        _tenantAccessor.Setup(t => t.Context).Returns(new TenantContext(TenantId, "test", "Test", true, IsDemo: false));
 
         _sut = new ActiveProfileResolver(
             _stateSpanService.Object,

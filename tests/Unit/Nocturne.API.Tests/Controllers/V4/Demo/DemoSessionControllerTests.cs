@@ -116,6 +116,67 @@ public class DemoSessionControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateSession_RecordsNoVisitorIpOrUserAgent()
+    {
+        // Every visitor shares this subject, and /api/v4/account/sessions is readable by any
+        // member of it — so recording the caller's address would show each visitor where
+        // everyone else currently using the demo is connecting from. Asserted rather than left
+        // to the absence of an argument, because putting IpAddress back would break nothing.
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        var controller = BuildController(tenantId, isDemo: true);
+
+        await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(
+                It.IsAny<Guid>(),
+                It.Is<SessionContext>(c => c.IpAddress == null && c.UserAgent == null),
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "a shared account must not accumulate the addresses of the people using it");
+    }
+
+    [Fact]
+    public async Task CreateSession_TrimsTheSubjectsSessionsBeforeIssuing()
+    {
+        // The endpoint is anonymous and each call writes a refresh_tokens row, and the per-IP
+        // rate limit partitions on a caller-supplied header, so the cap is the only ceiling.
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+        var subjectId = await new DemoTenantService(
+            BuildDbFactory(), new Mock<ITenantService>().Object, TestPublicAccessCache.Create(),
+            new Mock<ICacheService>().Object, new Mock<ILogger<DemoTenantService>>().Object)
+            .FindDemoMemberSubjectIdAsync(tenantId);
+
+        subjectId.Should().NotBeNull();
+
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId!.Value);
+            subject.IsDemoSubject = true;
+            for (var i = 0; i < DemoTenantService.MaxLiveDemoSessions + 5; i++)
+            {
+                db.RefreshTokens.Add(new RefreshTokenEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = subjectId!.Value,
+                    TokenHash = $"h{i}",
+                    IssuedAt = DateTime.UtcNow.AddMinutes(-100 + i),
+                    ExpiresAt = DateTime.UtcNow.AddDays(30),
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var controller = BuildController(tenantId, isDemo: true);
+        await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        (await check.RefreshTokens.CountAsync(t => t.SubjectId == subjectId!.Value))
+            .Should().Be(DemoTenantService.MaxLiveDemoSessions - 1,
+                "the controller trims before issuing; the issue itself is mocked here");
+    }
+
+    [Fact]
     public async Task CreateSession_ReturnsTokenPair_WhenFormatIsJson()
     {
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
@@ -164,14 +225,18 @@ public class DemoSessionControllerTests : IDisposable
         return tenant.Id;
     }
 
-    private DemoSessionController BuildController(Guid tenantId, bool isDemo, bool shareAccess = false)
+    private IDbContextFactory<NocturneDbContext> BuildDbFactory()
     {
         var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
+        return dbFactory.Object;
+    }
 
+    private DemoSessionController BuildController(Guid tenantId, bool isDemo, bool shareAccess = false)
+    {
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object,
+            BuildDbFactory(),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             new Mock<ICacheService>().Object,

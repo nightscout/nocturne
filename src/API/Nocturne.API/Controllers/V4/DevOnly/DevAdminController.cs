@@ -599,7 +599,7 @@ public class DevAdminController : ControllerBase
             {
                 // Set tenant context so the sync service operates in the right tenant
                 _tenantAccessor.SetTenant(new TenantContext(
-                    tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive));
+                    tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
 
                 try
                 {
@@ -1031,7 +1031,7 @@ public class DevAdminController : ControllerBase
         if (request.SampleData)
         {
             seeded = await sampleDataService.SeedAsync(
-                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
+                new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenantEntity.IsDemo),
                 request.SampleDataDays,
                 subjectResult.Subject.Id,
                 ct: ct);
@@ -1101,7 +1101,7 @@ public class DevAdminController : ControllerBase
             : null;
 
         var seeded = await sampleDataService.SeedAsync(
-            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
             request?.Days ?? 7,
             owner?.SubjectId,
             ct: ct);
