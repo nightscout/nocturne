@@ -124,7 +124,7 @@ public sealed class DemoTenantService
 
         await db.SaveChangesAsync(ct);
 
-        // The Public membership's roles and history limit were just rewritten, and
+        // The Public membership's permissions and history limit were just rewritten, and
         // misses are cached too — evict so the share host sees the new grant at once.
         _publicAccessCache.Evict(tenantId);
     }
