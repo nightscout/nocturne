@@ -3,7 +3,7 @@ namespace Nocturne.API.Multitenancy;
 /// <summary>
 /// Platform-wide base domain configuration.
 /// Used for subdomain tenant resolution, WebAuthn RP ID derivation, and URL construction.
-/// Bound from the flat "BaseDomain" configuration key (env var: BaseDomain).
+/// Bound from the flat "BASE_DOMAIN" configuration key (env var: BASE_DOMAIN).
 /// </summary>
 public class BaseDomainOptions
 {

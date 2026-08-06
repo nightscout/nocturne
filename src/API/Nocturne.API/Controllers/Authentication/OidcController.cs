@@ -660,21 +660,23 @@ public class OidcController : ControllerBase
     /// </summary>
     private bool IsValidReturnUrl(string returnUrl)
     {
-        if (Uri.TryCreate(returnUrl, UriKind.Relative, out _))
+        // Site-local path: starts with "/" but not "//" or "/\", which browsers
+        // resolve as scheme-relative — "Location: //evil.com" leaves the site.
+        if (returnUrl.StartsWith('/'))
         {
-            return true;
+            return returnUrl.Length == 1 || (returnUrl[1] != '/' && returnUrl[1] != '\\');
         }
 
+        // Absolute URL: parse and compare scheme + authority against the public
+        // origin, so neither "https://example.com.evil.com" (prefix) nor
+        // "https://example.com@evil.com" (userinfo) can pass a string match.
         var origin = _baseDomain.PublicOrigin;
-        if (!string.IsNullOrEmpty(origin))
-        {
-            // Match on the origin boundary: "https://example.com/..." but not
-            // "https://example.com.evil.com".
-            return returnUrl.Equals(origin, StringComparison.OrdinalIgnoreCase)
-                || returnUrl.StartsWith(origin + "/", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return false;
+        return !string.IsNullOrEmpty(origin)
+            && Uri.TryCreate(returnUrl, UriKind.Absolute, out var target)
+            && Uri.TryCreate(origin, UriKind.Absolute, out var expected)
+            && target.Scheme == expected.Scheme
+            && string.Equals(target.Authority, expected.Authority, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrEmpty(target.UserInfo);
     }
 
     /// <summary>
