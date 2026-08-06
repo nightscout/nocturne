@@ -699,9 +699,10 @@ public class DataSourceService : IDataSourceService
             info.Description = "FreeStyle Libre CGM";
         }
         else if (
-            lowerDevice.Contains("medtronic")
-            || lowerDevice.Contains("minimed")
-            || lowerDevice.Contains("carelink")
+            (lowerDevice.Contains("medtronic")
+                || lowerDevice.Contains("minimed")
+                || lowerDevice.Contains("carelink"))
+            && ConnectorMetadataService.GetByDataSourceId(dataSource) != null
         )
         {
             info.Name = "Medtronic";

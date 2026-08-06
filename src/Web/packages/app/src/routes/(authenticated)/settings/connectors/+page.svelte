@@ -431,6 +431,7 @@
                 totalEntries={source.totalEntries}
                 entriesLast24h={source.entriesLast24h}
                 lastSeen={source.lastSeen}
+                subtitle={source.name !== source.deviceId ? source.deviceId : undefined}
                 onclick={() => openDataSourceDialog(source)}
               >
                 {#snippet badges()}
