@@ -30,6 +30,8 @@ public class ConnectorConfigurationUriValidationTests
     [InlineData("https://mysite.example")]
     [InlineData("http://mysite.example:1337")]
     [InlineData("mysite.example")]                 // bare host: the connector supplies https://
+    [InlineData("mysite.example:1337")]            // bare host with port: Nightscout's default self-hosted port
+    [InlineData("localhost:1337")]                 // same, and parses as scheme "localhost"
     [InlineData("http://nightscout:1337")]         // sibling container
     [InlineData("http://192.168.1.50:1337")]       // LAN
     public async Task SaveConfiguration_AcceptsAUsableUrl(string url)

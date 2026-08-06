@@ -297,18 +297,31 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
-    /// An <c>http</c>/<c>https</c> URL carrying no <c>user:password@</c> component. A bare
-    /// hostname is accepted and treated as <c>https</c>.
+    /// An <c>http</c>/<c>https</c> URL carrying no <c>user:password@</c> component. A value with no
+    /// scheme of its own — a bare hostname, or a <c>host:port</c> pair — is accepted and treated as
+    /// <c>https</c>.
     /// </summary>
     /// <remarks>
-    /// The bare-host allowance mirrors the connectors' own normalisation
-    /// (<c>NightscoutConnectorService.ResolveBaseUrl</c> supplies <c>https://</c> when the stored
-    /// value has no scheme), so validating here does not reject a value the connector would have
-    /// accepted — an existing tenant re-saving <c>mysite.example</c> must not start failing.
+    /// The scheme-less allowance mirrors the connectors' own normalisation
+    /// (<c>NightscoutConnectorService.ResolveBaseUrl</c> and <c>ConfigureConnectorClient</c> prepend
+    /// <c>https://</c> to any stored value that does not already begin with <c>http</c>), so
+    /// validating here does not reject a value the connector would have accepted — an existing
+    /// tenant re-saving <c>mysite.example</c> or <c>mysite.example:1337</c> must not start failing.
+    /// <para>
+    /// A scheme-less <c>host:port</c> cannot be told apart from an explicit scheme by an absolute
+    /// parse alone: <c>Uri.TryCreate("mysite.example:1337", UriKind.Absolute, …)</c> succeeds with
+    /// <c>Scheme == "mysite.example"</c> and an empty host, and <c>"localhost:1337"</c> the same way
+    /// — 1337 is Nightscout's default self-hosted port, so that form is common. A candidate
+    /// therefore counts as carrying its own scheme only when the absolute parse yields http/https,
+    /// or when it contains <c>"://"</c>. The second test is what keeps <c>file://</c> and friends
+    /// off the prepend path, where they would parse as a host named <c>file</c> and sail through.
+    /// </para>
     /// <para>
     /// Embedded credentials are refused because this value is stored in the connector's runtime
     /// configuration, which <c>GET</c> returns in the clear — the secret fields are the ones kept
-    /// out of that response, and a password smuggled into the URL would bypass that.
+    /// out of that response, and a password smuggled into the URL would bypass that. The check runs
+    /// on the prepended form too, since <c>admin:hunter2@mysite.example</c> only reveals its
+    /// userinfo once a scheme is in front of it.
     /// </para>
     /// </remarks>
     private static bool IsAcceptableUri(string? candidate)
@@ -316,18 +329,18 @@ public class ConfigurationController : ControllerBase
         if (string.IsNullOrWhiteSpace(candidate))
             return false;
 
-        // A value carrying its own scheme has to name http or https. Tested before the bare-host
-        // fallback, because prepending https:// to "file:///etc/passwd" produces something that
-        // still parses and would sail through.
-        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute)
+            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
         {
-            if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
-                return false;
-
             return string.IsNullOrEmpty(absolute.UserInfo);
         }
 
-        // No scheme at all: a bare host, which the connectors read as https.
+        // Any other explicit scheme is out. Tested before the scheme-less fallback, because
+        // prepending https:// to "file:///etc/passwd" produces something that still parses.
+        if (candidate.Contains("://", StringComparison.Ordinal))
+            return false;
+
+        // No scheme of its own: a host, optionally with a port, which the connectors read as https.
         return Uri.TryCreate($"https://{candidate}", UriKind.Absolute, out var implied)
             && string.IsNullOrEmpty(implied.UserInfo);
     }

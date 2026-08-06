@@ -93,12 +93,22 @@ public class ConnectorClientGuardCoverageTests
                 "AddHttpClient opts it out of the link-local guard",
                 connectorName, clientName);
 
-            if (builder.PrimaryHandler is SocketsHttpHandler sockets)
+            var primary = builder.PrimaryHandler;
+            var followsRedirects = primary switch
             {
-                sockets.AllowAutoRedirect.Should().BeFalse(
-                    "{0}'s '{1}' client would otherwise follow a 3xx beneath the guard",
-                    connectorName, clientName);
-            }
+                SocketsHttpHandler sockets => sockets.AllowAutoRedirect,
+                HttpClientHandler legacy => legacy.AllowAutoRedirect,
+                // A handler this test cannot read counts as following redirects rather than being
+                // skipped: "redirects are off" and "the test could not tell" must not look alike.
+                _ => true,
+            };
+
+            followsRedirects.Should().BeFalse(
+                "{0}'s '{1}' client must have redirects off on its primary handler (a {2}); the " +
+                "guard only ever sees the first URI, so a 3xx the transport follows is fetched " +
+                "unwatched. An unrecognised handler type fails here too — a connector's primary " +
+                "handler has to be one whose redirect behaviour this test can verify",
+                connectorName, clientName, primary.GetType().Name);
         }
     }
 
@@ -199,6 +209,10 @@ public class ConnectorClientGuardCoverageTests
     private sealed class HandlerBuilder(IServiceProvider services) : HttpMessageHandlerBuilder
     {
         public override string? Name { get; set; }
+
+        // The framework's own default, and it allows redirects — so a client that configures no
+        // primary handler is left holding one that follows a 3xx, and fails the redirect assertion
+        // rather than being waved through.
         public override HttpMessageHandler PrimaryHandler { get; set; } = new HttpClientHandler();
         public override IList<DelegatingHandler> AdditionalHandlers { get; } = [];
         public override IServiceProvider Services { get; } = services;

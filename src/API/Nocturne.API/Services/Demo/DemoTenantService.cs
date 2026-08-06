@@ -380,6 +380,7 @@ public sealed class DemoTenantService
     /// membership it picked up.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The session rows are the part this controls. It is not the case that the demo retains no
     /// visitor addresses at all: <c>AuditContextMiddleware</c> stamps
     /// <c>Connection.RemoteIpAddress</c> onto every <c>mutation_audit_log</c> row, so a visitor's
