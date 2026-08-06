@@ -50,6 +50,22 @@ function alarmRoom(tenantSlug: string): string {
   return `alarm:${tenantSlug}`;
 }
 
+/**
+ * Map each v3-client collection name to the API v3 endpoint path it reads from.
+ * The API's controller names don't always match the client collection names
+ * (`foods` → `/api/v3/food`, singular), so this is used to probe per-collection
+ * read authorization: a token that can read `/api/v3/entries` is authorized for
+ * the `entries` room, but not necessarily for `treatments` or `settings`.
+ */
+const COLLECTION_READ_ENDPOINT: Record<string, string> = {
+  entries: '/api/v3/entries',
+  treatments: '/api/v3/treatments',
+  devicestatus: '/api/v3/devicestatus',
+  profile: '/api/v3/profile',
+  foods: '/api/v3/food',
+  settings: '/api/v3/settings',
+};
+
 interface SocketIOConfig {
   cors?: {
     origin: string | string[];
@@ -461,16 +477,19 @@ class SocketIOServer {
     // is delivered only to sockets subscribed to the matching collection room,
     // translating the API's collection spelling (e.g. `profiles`, `food`) to the
     // v3-client spelling (`profile`, `foods`) so a socket that subscribed to
-    // `profile` receives broadcasts the API emits as `profiles`.
+    // `profile` receives broadcasts the API emits as `profiles`. The payload's
+    // `colName` is amended to the client spelling too, since AAPS routes the
+    // event by reading `colName` from the payload.
     if (this.storageNsp && tenantSlug) {
       const broadcastCollection =
         typeof data?.colName === 'string' ? data.colName
         : typeof data?.collection === 'string' ? data.collection
         : null;
       if (broadcastCollection) {
+        const clientCollection = clientCollectionName(broadcastCollection);
         this.storageNsp
-          .to(storageRoom(tenantSlug, clientCollectionName(broadcastCollection)))
-          .emit(eventType, data);
+          .to(storageRoom(tenantSlug, clientCollection))
+          .emit(eventType, { ...data, colName: clientCollection });
       }
     }
   }
@@ -540,21 +559,24 @@ class SocketIOServer {
    * Replay an AAPS access token against the API to authorize a v3-namespace
    * `subscribe`. This mirrors the legacy `handleAuthorize` probe (#547): the
    * token is sent to the API scoped to the connection's own tenant via
-   * X-Forwarded-Host, and the API applies its per-tenant read policy. The probe
-   * carries the client's credential and nothing else — never the bridge's
-   * instance key, which would authenticate any anonymous caller as a service.
-   * Returns true when the API accepts the token for that tenant.
+   * X-Forwarded-Host, and the API applies its per-tenant, per-collection read
+   * policy (each v3 endpoint carries its own `RequireScope`). The probe carries
+   * the client's credential and nothing else — never the bridge's instance key,
+   * which would authenticate any anonymous caller as a service.
+   *
+   * Returns true when the API accepts the token for that tenant + endpoint.
    */
   async probeAccessToken(
     accessToken: string,
     tenantSlug: string,
+    endpointPath: string,
   ): Promise<boolean> {
     if (!this.apiBaseUrl) {
       logger.warn('v3 namespace auth probe has no API base URL configured');
       return false;
     }
     try {
-      const url = new URL(`${this.apiBaseUrl}/api/v3/entries`);
+      const url = new URL(`${this.apiBaseUrl}${endpointPath}`);
       url.searchParams.set('count', '1');
       const probe = await fetch(url, {
         method: 'GET',
@@ -616,7 +638,16 @@ class SocketIOServer {
     });
   }
 
-  /** Handle the v3 `/storage` `subscribe` event. Exposed for unit testing. */
+  /**
+   * Handle the v3 `/storage` `subscribe` event. Exposed for unit testing.
+   *
+   * Each requested collection is probed independently against its own v3 read
+   * endpoint, so a token with read access to `entries` but not `treatments`
+   * only joins the `entries` room. A token denied for every collection is
+   * rejected outright — and the socket is disconnected so the client has to
+   * re-establish the connection (going back through TLS/transport) rather than
+   * immediately retrying `subscribe` as a credential-guessing oracle.
+   */
   async handleStorageSubscribe(
     socket: Socket,
     payload: unknown,
@@ -633,6 +664,7 @@ class SocketIOServer {
     const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
       return;
     }
 
@@ -641,26 +673,37 @@ class SocketIOServer {
     const requested = Array.isArray(message.collections)
       ? message.collections.filter((c): c is string => typeof c === 'string')
       : [];
-    const collections = requested.length > 0
+    const candidateCollections = requested.length > 0
       ? requested.filter((c) => (KNOWN_STORAGE_COLLECTIONS as readonly string[]).includes(c))
       : [...KNOWN_STORAGE_COLLECTIONS];
 
-    const authorized = await this.probeAccessToken(accessToken, tenantSlug);
-    if (!authorized) {
-      logger.warn(`/storage subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
-      ack?.({ success: false, message: 'Missing or bad accessToken' });
+    // Probe each collection's read endpoint independently so authorization is
+    // per-collection, matching the API's per-endpoint RequireScope.
+    const authorized: string[] = [];
+    for (const collection of candidateCollections) {
+      const endpoint = COLLECTION_READ_ENDPOINT[collection];
+      const ok = await this.probeAccessToken(accessToken, tenantSlug, endpoint);
+      if (ok) authorized.push(collection);
+    }
+
+    if (authorized.length === 0) {
+      logger.warn(
+        `/storage subscribe denied for ${socket.id} (tenant ${tenantSlug}): token not authorized for any collection`,
+      );
+      ack?.({ success: false, message: 'Unauthorized to receive any collection' });
+      socket.disconnect(true);
       return;
     }
 
-    for (const collection of collections) {
+    for (const collection of authorized) {
       socket.join(storageRoom(tenantSlug, collection));
     }
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
     logger.info(
-      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${collections.join(', ')}`,
+      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`,
     );
-    ack?.({ success: true, collections });
+    ack?.({ success: true, collections: authorized });
   }
 
   /**
@@ -721,7 +764,13 @@ class SocketIOServer {
     });
   }
 
-  /** Handle the v3 `/alarm` `subscribe` event. Exposed for unit testing. */
+  /**
+   * Handle the v3 `/alarm` `subscribe` event. Exposed for unit testing.
+   *
+   * On failure the socket is disconnected so the client has to re-establish the
+   * connection rather than immediately retrying `subscribe` as a
+   * credential-guessing oracle.
+   */
   async handleAlarmSubscribe(
     socket: Socket,
     payload: unknown,
@@ -738,13 +787,21 @@ class SocketIOServer {
     const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
       return;
     }
 
-    const authorized = await this.probeAccessToken(accessToken, tenantSlug);
+    // Probe the entries read endpoint — alarm subscription requires the same
+    // tenant read access as a storage subscription.
+    const authorized = await this.probeAccessToken(
+      accessToken,
+      tenantSlug,
+      COLLECTION_READ_ENDPOINT.entries,
+    );
     if (!authorized) {
       logger.warn(`/alarm subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
       ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
       return;
     }
 

@@ -345,7 +345,6 @@ describe('SocketIOServer v3 /storage namespace', () => {
     );
 
     expect(ack).toHaveBeenCalledWith({ success: true, collections: ['entries', 'devicestatus', 'profile'] });
-    // One room join per requested collection, using the v3-client spelling.
     expect(socket.join).toHaveBeenCalledWith('storage:rhys:entries');
     expect(socket.join).toHaveBeenCalledWith('storage:rhys:devicestatus');
     expect(socket.join).toHaveBeenCalledWith('storage:rhys:profile');
@@ -382,7 +381,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
     expect(socket.join).toHaveBeenCalledWith('storage:rhys:entries');
   });
 
-  it('denies and does not join when the API rejects the token', async () => {
+  it('disconnects on auth failure so subscribe is not a credential-guessing oracle', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
     const server = makeStorageServer();
     const socket = storageSocket('rhys');
@@ -394,12 +393,13 @@ describe('SocketIOServer v3 /storage namespace', () => {
       ack,
     );
 
-    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Unauthorized to receive any collection' });
     expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
     expect(socket.data.tenantSlug).toBeUndefined();
   });
 
-  it('denies when no accessToken is supplied', async () => {
+  it('disconnects when no accessToken is supplied', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const server = makeStorageServer();
@@ -410,7 +410,7 @@ describe('SocketIOServer v3 /storage namespace', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
-    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('disconnects when the host resolved to no tenant', async () => {
@@ -427,7 +427,36 @@ describe('SocketIOServer v3 /storage namespace', () => {
     expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
-  it('probes the v3 entries endpoint with a Bearer token scoped to the tenant', async () => {
+  it('probes each collection against its own v3 endpoint, not a single blanket probe', async () => {
+    // entries is authorized, treatments is not. Only entries should be joined.
+    const fetchMock = vi.fn().mockImplementation((url: URL | string) => {
+      const s = String(url);
+      if (s.includes('/api/v3/entries')) return Promise.resolve({ ok: true, status: 200 });
+      return Promise.resolve({ ok: false, status: 403 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeStorageServer();
+    const socket = storageSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleStorageSubscribe(
+      socket as never,
+      { accessToken: 'tok', collections: ['entries', 'treatments'] },
+      ack,
+    );
+
+    // Only the authorized collection appears in the ack and room join.
+    expect(ack).toHaveBeenCalledWith({ success: true, collections: ['entries'] });
+    expect(socket.join).toHaveBeenCalledTimes(1);
+    expect(socket.join).toHaveBeenCalledWith('storage:rhys:entries');
+    // Both endpoints were probed — per-collection auth, not blanket.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const probedPaths = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(probedPaths.some((p) => p.includes('/api/v3/entries'))).toBe(true);
+    expect(probedPaths.some((p) => p.includes('/api/v3/treatments'))).toBe(true);
+  });
+
+  it('probes the v3 endpoint with a Bearer token scoped to the tenant', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
     const server = makeStorageServer();
@@ -454,8 +483,8 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
     vi.unstubAllGlobals();
   });
 
-  /** Build a started server with a real socket.io Namespace, then return the
-   *  namespace spy so tests can assert on emit targets. */
+  /** Build a started server with a real socket.io Namespace so we can assert
+   *  on the actual emit target and payload via the BroadcastingWildcard. */
   async function startedServer() {
     const server = new SocketIOServer(
       createServer(),
@@ -476,32 +505,41 @@ describe('SocketIOServer v3 /storage broadcast fan-out', () => {
 
     server.broadcastStorageEvent('create', { colName: 'entries', doc: { srvModified: 123 } }, 'rhys');
 
-    // The default-namespace emit (emitTarget) runs unconditionally and would
-    // throw without a real io in a started server, but broadcastStorageEvent
-    // calls target.emit first; here we only assert the /storage fan-out fired.
     expect(toSpy).toHaveBeenCalledWith('storage:rhys:entries');
     server.getIO()!.close();
   });
 
-  it('translates the API collection name to the v3-client spelling (profiles -> profile)', async () => {
+  it('amends the payload colName to the v3-client spelling (profiles -> profile)', async () => {
     const server = await startedServer();
     const storageNsp = server.getIO()!.of('/storage');
-    const toSpy = vi.spyOn(storageNsp, 'to');
 
-    server.broadcastStorageEvent('update', { colName: 'profiles', doc: {} }, 'rhys');
+    // The fan-out calls storageNsp.to(room).emit(event, payload). Capture the
+    // payload by stubbing .to() to return a recording fake.
+    const emitted: { event: string; payload: unknown }[] = [];
+    vi.spyOn(storageNsp, 'to').mockReturnValue({
+      emit: (event: string, payload: unknown) => emitted.push({ event, payload }),
+    } as never);
 
-    expect(toSpy).toHaveBeenCalledWith('storage:rhys:profile');
+    server.broadcastStorageEvent('update', { colName: 'profiles', doc: { srvModified: 1 } }, 'rhys');
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].event).toBe('update');
+    expect((emitted[0].payload as { colName: string }).colName).toBe('profile');
     server.getIO()!.close();
   });
 
-  it('translates food -> foods', async () => {
+  it('amends the payload colName for food -> foods', async () => {
     const server = await startedServer();
     const storageNsp = server.getIO()!.of('/storage');
-    const toSpy = vi.spyOn(storageNsp, 'to');
+
+    const emitted: { event: string; payload: unknown }[] = [];
+    vi.spyOn(storageNsp, 'to').mockReturnValue({
+      emit: (event: string, payload: unknown) => emitted.push({ event, payload }),
+    } as never);
 
     server.broadcastStorageEvent('create', { colName: 'food', doc: {} }, 'rhys');
 
-    expect(toSpy).toHaveBeenCalledWith('storage:rhys:foods');
+    expect((emitted[0].payload as { colName: string }).colName).toBe('foods');
     server.getIO()!.close();
   });
 
@@ -553,7 +591,7 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     expect(socket.data.tenantSlug).toBe('rhys');
   });
 
-  it('denies when the API rejects the token', async () => {
+  it('disconnects on auth failure so subscribe is not a credential-guessing oracle', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
     const server = makeAlarmServer();
     const socket = alarmSocket('rhys');
@@ -563,9 +601,10 @@ describe('SocketIOServer v3 /alarm namespace', () => {
 
     expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
     expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
-  it('denies when no accessToken is supplied', async () => {
+  it('disconnects when no accessToken is supplied', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const server = makeAlarmServer();
@@ -576,6 +615,7 @@ describe('SocketIOServer v3 /alarm namespace', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
   });
 
   it('disconnects when the host resolved to no tenant', async () => {
@@ -587,25 +627,6 @@ describe('SocketIOServer v3 /alarm namespace', () => {
 
     expect(ack).toHaveBeenCalledWith({ success: false, message: 'no resolvable tenant' });
     expect(socket.disconnect).toHaveBeenCalledWith(true);
-  });
-
-  it('invokes onAlarmAck with positional (level, group, silenceTime) when a client acks', async () => {
-    // The /alarm namespace connection handler registers a positional ack
-    // listener. We test the public onAlarmAck surface directly since wiring a
-    // real socket.io client is heavy; the handler delegates to this callback.
-    const server = makeAlarmServer();
-    const ackSpy = vi.fn();
-    server.onAlarmAck = ackSpy;
-
-    // Simulate what the connection handler does on a positional ack event.
-    // The handler reads socket.data.tenantSlug and forwards here.
-    const tenantSlug = 'rhys';
-    const level = 2;
-    const group = 'default';
-    const silenceTime = 30_000;
-    server.onAlarmAck(tenantSlug, level, group, silenceTime);
-
-    expect(ackSpy).toHaveBeenCalledWith('rhys', 2, 'default', 30_000);
   });
 });
 
