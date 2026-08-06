@@ -51,6 +51,7 @@
     badges?: Snippet;
     actions?: Snippet;
     onclick?: () => void;
+    subtitle?: string;
   }
 
   let {
@@ -69,6 +70,7 @@
     badges,
     actions,
     onclick,
+    subtitle,
   }: Props = $props();
 
   function getIconColors(s: DataSourceStatus): {
@@ -167,6 +169,9 @@
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium">{name}</span>
+          {#if subtitle}
+            <span class="text-xs text-muted-foreground/80">— {subtitle}</span>
+          {/if}
 
           <!-- Status badge -->
           {#if syncProgress?.phase === "Syncing" || status === "syncing"}

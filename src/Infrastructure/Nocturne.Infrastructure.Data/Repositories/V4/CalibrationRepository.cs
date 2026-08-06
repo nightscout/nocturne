@@ -70,7 +70,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.Calibrations
-            .Where(e => e.DataSource == source)
+            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
