@@ -1,5 +1,5 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -26,7 +26,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/calibrations")]
-[Authorize]
+[RequireScope(OAuthScopes.GlucoseRead)]
 [Produces("application/json")]
 public class CalibrationController(ICalibrationRepository repo)
     : V4CrudControllerBase<Calibration, UpsertCalibrationRequest, UpsertCalibrationRequest, ICalibrationRepository>(repo)

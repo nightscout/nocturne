@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
@@ -44,7 +43,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
-[Authorize]
+[RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]
 public class NutritionController : ControllerBase, IWriteScopedController
 {

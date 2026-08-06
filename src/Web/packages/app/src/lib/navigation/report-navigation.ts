@@ -31,6 +31,12 @@ export interface ReportItem {
   href: string;
   icon: IconComponent;
   status: "available" | "coming-soon";
+  /**
+   * The report reads a data category that can never be granted to a public share link
+   * (sleep, therapy settings — see the API's `TenantPermissions.PublicShareScopes`), so it
+   * is hidden from anonymous share viewers rather than rendered as a guaranteed error.
+   */
+  memberOnly?: boolean;
 }
 
 export interface ReportCategory {
@@ -166,6 +172,7 @@ export const reportCategories: ReportCategory[] = [
         href: "/reports/sleep",
         icon: Moon,
         status: "available",
+        memberOnly: true,
       },
       {
         title: "Meal Analysis",
@@ -226,6 +233,7 @@ export const reportCategories: ReportCategory[] = [
         href: "/reports/idp",
         icon: Syringe,
         status: "available",
+        memberOnly: true,
       },
       {
         title: "Battery",
@@ -238,13 +246,24 @@ export const reportCategories: ReportCategory[] = [
   },
 ];
 
-/** Flat list of all available report items for sidebar navigation. */
-export function getSidebarReportItems(): {
+/**
+ * Report categories visible to the current viewer. An anonymous viewer (public share link)
+ * does not see member-only reports; categories left empty are dropped.
+ */
+export function visibleReportCategories(anonymous: boolean): ReportCategory[] {
+  if (!anonymous) return reportCategories;
+  return reportCategories
+    .map((c) => ({ ...c, reports: c.reports.filter((r) => !r.memberOnly) }))
+    .filter((c) => c.reports.length > 0);
+}
+
+/** Flat list of available report items for sidebar navigation, per viewer. */
+export function getSidebarReportItems(anonymous = false): {
   title: string;
   href: string;
   icon: IconComponent;
 }[] {
-  return reportCategories
+  return visibleReportCategories(anonymous)
     .flatMap((c) => c.reports)
     .filter((r) => r.status === "available")
     .map((r) => ({

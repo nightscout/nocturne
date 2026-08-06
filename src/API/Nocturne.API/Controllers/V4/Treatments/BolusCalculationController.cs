@@ -1,5 +1,5 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -24,7 +24,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/calculations")]
-[Authorize]
+[RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]
 public class BolusCalculationController(IBolusCalculationRepository repo)
     : V4CrudControllerBase<BolusCalculation, UpsertBolusCalculationRequest, UpsertBolusCalculationRequest, IBolusCalculationRepository>(repo)

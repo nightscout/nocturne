@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -26,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/observations/notes")]
-[Authorize]
+[RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]
 public class NoteController(INoteRepository repo)
     : V4CrudControllerBase<Note, UpsertNoteRequest, UpsertNoteRequest, INoteRepository>(repo)

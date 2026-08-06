@@ -61,7 +61,8 @@
     Calendar,
     ChevronRight,
   } from "lucide-svelte";
-  import { reportCategories } from "$lib/navigation/report-navigation";
+  import { page } from "$app/state";
+  import { visibleReportCategories } from "$lib/navigation/report-navigation";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
@@ -451,7 +452,7 @@
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
         completeOn: { event: "click" },
       })}>
-        {#each reportCategories as category, categoryIndex}
+        {#each visibleReportCategories(!page.data.user) as category, categoryIndex}
           {@const CategoryIcon = category.icon}
           {@const styles = categoryVariants({
             category: category.id as CategoryType,

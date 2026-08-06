@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -32,7 +31,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="UpdateBasalInjectionRequest"/>
 [ApiController]
 [Route("api/v4/insulin/basal-injections")]
-[Authorize]
+[RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]
 public class BasalInjectionController(
     IBasalInjectionRepository repo,

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
@@ -21,7 +20,6 @@ namespace Nocturne.API.Controllers.V4.Health;
 [ApiController]
 [Tags("Health")]
 [Route("api/v4/[controller]")]
-[Authorize]
 [Produces("application/json")]
 public class HeartRateController : ControllerBase
 {
