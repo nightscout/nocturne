@@ -403,15 +403,31 @@ public class Entry : ProcessableDocumentBase
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
+    /// Falls back to Mills so every serialized entry carries it: NS v3 socket clients (AAPS)
+    /// read it unconditionally from realtime storage events and drop docs without it.
     /// </summary>
+    private long? _srvModified;
+
     [JsonPropertyName("srvModified")]
-    public long? SrvModified { get; set; }
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvModified
+    {
+        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        set => _srvModified = value;
+    }
 
     /// <summary>
     /// Gets or sets the server-created timestamp (Unix milliseconds). V3 compatibility field.
     /// </summary>
+    private long? _srvCreated;
+
     [JsonPropertyName("srvCreated")]
-    public long? SrvCreated { get; set; }
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvCreated
+    {
+        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        set => _srvCreated = value;
+    }
 
     /// <summary>
     /// Gets or sets the subject identifier. V3 compatibility field.

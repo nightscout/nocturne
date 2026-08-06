@@ -334,6 +334,35 @@ public class DeviceStatusProjectionServiceTests
         result.ExtensionData.Should().ContainKey("configuration");
     }
 
+    [Fact]
+    public void ProjectAsync_WithSrvTimestampsInExtras_AssignsTypedPropertiesNotExtensionData()
+    {
+        // NS-migrated docs carry srvModified/srvCreated in extras. Splatting them into
+        // ExtensionData would serialize each key twice (typed Mills fallback + extras
+        // value); strict client parsers reject duplicate keys.
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
+
+        var extras = new DeviceStatusExtras
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = aps.CorrelationId!.Value,
+            Timestamp = ReferenceTime,
+            Extras = new Dictionary<string, object?>
+            {
+                ["srvModified"] = JsonSerializer.SerializeToElement(1_722_945_600_000L, JsonOptions),
+                ["srvCreated"] = JsonSerializer.SerializeToElement(1_722_945_500_000L, JsonOptions),
+            },
+        };
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, extras);
+
+        result.SrvModified.Should().Be(1_722_945_600_000L);
+        result.SrvCreated.Should().Be(1_722_945_500_000L);
+        result.ExtensionData.Should().NotContainKey("srvModified");
+        result.ExtensionData.Should().NotContainKey("srvCreated");
+    }
+
     #endregion
 
     #region Correlation
