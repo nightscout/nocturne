@@ -70,17 +70,6 @@ builder.Configuration.AddJsonFile(
 // Ensure environment variables (injected by Aspire) take precedence over appsettings.json
 builder.Configuration.AddEnvironmentVariables();
 
-if (string.IsNullOrEmpty(builder.Configuration["NocturneApiUrl"]))
-{
-    var baseUrl = builder.Configuration["BaseUrl"];
-    if (!string.IsNullOrEmpty(baseUrl))
-    {
-        builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["NocturneApiUrl"] = baseUrl }
-        );
-    }
-}
-
 // Configure Kestrel to allow larger request bodies for analytics endpoints
 // 90 days of demo data can exceed the 30MB default limit
 builder.WebHost.ConfigureKestrel(options =>

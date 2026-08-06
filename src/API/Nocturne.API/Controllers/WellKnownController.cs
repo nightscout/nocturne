@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Constants;
@@ -32,18 +33,18 @@ namespace Nocturne.API.Controllers;
 public class WellKnownController : ControllerBase
 {
     private readonly JwtOptions _jwtOptions;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
 
     /// <summary>
     /// Creates a new instance of WellKnownController
     /// </summary>
     public WellKnownController(
         IOptions<JwtOptions> jwtOptions,
-        IConfiguration configuration
+        IOptions<BaseDomainOptions> baseDomainOptions
     )
     {
         _jwtOptions = jwtOptions.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
     }
 
     /// <summary>
@@ -169,13 +170,7 @@ public class WellKnownController : ControllerBase
 
     private string GetBaseUrl()
     {
-        var configuredUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl];
-        if (!string.IsNullOrEmpty(configuredUrl))
-        {
-            return configuredUrl.TrimEnd('/');
-        }
-
-        return $"{Request.Scheme}://{Request.Host}";
+        return _baseDomain.PublicOrigin ?? $"{Request.Scheme}://{Request.Host}";
     }
 }
 

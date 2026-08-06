@@ -1,6 +1,6 @@
 # HA-style configuration with autoscaling and PDBs.
 
-baseUrl: https://nocturne.example.com
+baseDomain: nocturne.example.com
 
 instanceKey:
   existingSecret: nocturne-instance-key

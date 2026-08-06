@@ -14,4 +14,14 @@ public class BaseDomainOptions
     /// Requests to rhys.nocturnecgm.com resolve tenant "rhys".
     /// </summary>
     public string BaseDomain { get; set; } = "";
+
+    /// <summary>
+    /// Public origin of the deployment apex: "https://{BaseDomain}", or null when
+    /// no base domain is configured. The platform serves HTTPS at the edge
+    /// (WebAuthn already requires it), so the scheme is not configurable.
+    /// Used for OIDC redirect URIs, invite links, Pushover callbacks, and other
+    /// externally visible URLs.
+    /// </summary>
+    public string? PublicOrigin =>
+        string.IsNullOrEmpty(BaseDomain) ? null : $"https://{BaseDomain}";
 }

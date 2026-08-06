@@ -2,9 +2,10 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -33,7 +34,7 @@ public class MemberInviteServiceTests : IDisposable
 
     private const string FakeToken = "fake-random-token-abc123";
     private const string FakeTokenHash = "hashed-fake-token";
-    private const string BaseUrl = "https://app.nocturnecgm.com";
+    private const string BaseDomain = "app.nocturnecgm.com";
 
     public MemberInviteServiceTests()
     {
@@ -58,10 +59,6 @@ public class MemberInviteServiceTests : IDisposable
 
         _tenantService = new Mock<ITenantService>();
 
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["BaseUrl"] = BaseUrl })
-            .Build();
-
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
@@ -72,7 +69,7 @@ public class MemberInviteServiceTests : IDisposable
                 _dbContext,
                 // Only SeedRolesForTenantAsync takes a context of its own, and nothing here seeds.
                 Mock.Of<IDbContextFactory<NocturneDbContext>>()),
-            configuration,
+            Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             logger.Object);
 
         // Seed tenant and subjects
@@ -133,7 +130,7 @@ public class MemberInviteServiceTests : IDisposable
             [_followerRoleId]);
 
         result.Token.Should().Be(FakeToken);
-        result.InviteUrl.Should().Be($"{BaseUrl}/join?token={FakeToken}");
+        result.InviteUrl.Should().Be($"https://{BaseDomain}/join?token={FakeToken}");
         result.Id.Should().NotBeEmpty();
         result.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
 

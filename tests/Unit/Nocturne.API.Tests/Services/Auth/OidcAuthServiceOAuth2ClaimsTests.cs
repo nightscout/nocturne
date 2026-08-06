@@ -2,10 +2,10 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -45,7 +45,7 @@ public class OidcAuthServiceOAuth2ClaimsTests
             new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
-            new Mock<IConfiguration>().Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcAuthService>.Instance);
     }
 

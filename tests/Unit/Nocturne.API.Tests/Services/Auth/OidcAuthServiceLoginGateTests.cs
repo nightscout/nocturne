@@ -1,10 +1,10 @@
 using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -32,7 +32,6 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IMemberInviteService> _memberInviteService = new();
-    private readonly Mock<IConfiguration> _configuration = new();
     private readonly OidcAuthService _service;
 
     public OidcAuthServiceLoginGateTests()
@@ -49,7 +48,7 @@ public class OidcAuthServiceLoginGateTests
             _memberInviteService.Object,
             new EphemeralDataProtectionProvider(),
             options,
-            _configuration.Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcAuthService>.Instance);
     }
 

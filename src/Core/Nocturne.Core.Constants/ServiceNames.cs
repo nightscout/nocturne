@@ -214,12 +214,6 @@ public static class ServiceNames
         public const string InstanceKey = "INSTANCE_KEY";
 
         /// <summary>
-        /// Public base URL of the deployment, used for OIDC redirects, invite links,
-        /// Pushover callbacks, and other external-facing URLs.
-        /// </summary>
-        public const string BaseUrl = "BaseUrl";
-
-        /// <summary>
         /// Site name reported by the legacy Nightscout <c>/status</c> endpoint.
         /// </summary>
         public const string NightscoutSiteName = "Nightscout:SiteName";

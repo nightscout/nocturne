@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -26,7 +26,6 @@ public class OidcAuthServiceLinkTests
     private readonly Mock<IRefreshTokenService> _refreshTokenService = new();
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
-    private readonly Mock<IConfiguration> _configuration = new();
     private readonly OidcAuthService _service;
 
     public OidcAuthServiceLinkTests()
@@ -43,7 +42,7 @@ public class OidcAuthServiceLinkTests
             new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             options,
-            _configuration.Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcAuthService>.Instance);
     }
 

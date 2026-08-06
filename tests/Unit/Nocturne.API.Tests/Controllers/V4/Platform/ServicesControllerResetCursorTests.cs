@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -28,7 +27,6 @@ public class ServicesControllerResetCursorTests
             Mock.Of<IConnectorHealthService>(),
             syncService,
             Mock.Of<ILogger<ServicesController>>(),
-            Mock.Of<IConfiguration>(),
             Mock.Of<ITenantAccessor>(),
             Options.Create(new BaseDomainOptions()));
 

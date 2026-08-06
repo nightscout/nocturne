@@ -79,7 +79,7 @@ kubectl create secret generic nocturne-db-web \
 
 # 2. Write a values file.
 cat > my-values.yaml <<EOF
-baseUrl: https://nocturne.example.com
+baseDomain: nocturne.example.com
 
 instanceKey:
   existingSecret: nocturne-instance-key
@@ -157,7 +157,7 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 
 | Key | Description |
 |---|---|
-| `baseUrl` | Public URL the deployment is reachable at. Used by the API for OIDC redirects, invite links, etc. |
+| `baseDomain` | Public base domain the deployment is reachable at (bare host, no scheme; HTTPS is assumed at the edge). Drives tenant subdomains, the WebAuthn RP ID, OIDC redirects, and invite links. |
 | `instanceKey.existingSecret` | Secret containing the shared HMAC key. **Required.** |
 | `externalDatabase.host` / `.port` / `.database` / `.sslMode` | Postgres connection details. |
 | `externalDatabase.{app,migrator,web}Secret.existingSecret` | Secret with each role's password under key `password` (override with `existingSecretKey`). |

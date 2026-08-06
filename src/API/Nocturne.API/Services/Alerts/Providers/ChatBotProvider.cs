@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// The bot endpoint is derived from <c>WEB_URL</c>, which names the web app's
 /// deployment-internal address (the AppHost wires it from the web resource's
 /// endpoint; the Compose bundles set <c>http://nocturne-web:&lt;port&gt;</c>).
-/// The deployment's public base URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>)
+/// The deployment's public origin (derived from <c>BASE_DOMAIN</c>)
 /// is deliberately not used as a fallback. It is a hairpin: an intra-cluster call
 /// between two containers on the same network would leave the deployment, traverse
 /// the CDN and the edge proxy, and come back in — carrying the instance-key service

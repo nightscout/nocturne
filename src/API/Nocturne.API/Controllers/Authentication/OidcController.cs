@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -43,7 +44,7 @@ public class OidcController : ControllerBase
     private readonly IAuthAuditService _auditService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _options;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
 
     /// <summary>
@@ -56,7 +57,7 @@ public class OidcController : ControllerBase
         IAuthAuditService auditService,
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcController> logger
     )
     {
@@ -66,7 +67,7 @@ public class OidcController : ControllerBase
         _auditService = auditService;
         _tenantMemberService = tenantMemberService;
         _options = options.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -664,10 +665,13 @@ public class OidcController : ControllerBase
             return true;
         }
 
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl];
-        if (!string.IsNullOrEmpty(baseUrl))
+        var origin = _baseDomain.PublicOrigin;
+        if (!string.IsNullOrEmpty(origin))
         {
-            return returnUrl.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
+            // Match on the origin boundary: "https://example.com/..." but not
+            // "https://example.com.evil.com".
+            return returnUrl.Equals(origin, StringComparison.OrdinalIgnoreCase)
+                || returnUrl.StartsWith(origin + "/", StringComparison.OrdinalIgnoreCase);
         }
 
         return false;

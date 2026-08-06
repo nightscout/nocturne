@@ -2,11 +2,11 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Helpers;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -31,7 +31,6 @@ public class OidcAuthServiceStateProtectionTests
 
     public OidcAuthServiceStateProtectionTests()
     {
-        var configuration = new Mock<IConfiguration>();
         _service = new OidcAuthService(
             _providerService.Object,
             new Mock<ISubjectService>().Object,
@@ -43,7 +42,7 @@ public class OidcAuthServiceStateProtectionTests
             new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
-            configuration.Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcAuthService>.Instance);
 
         _providerService
@@ -193,7 +192,7 @@ public class OidcAuthServiceStateProtectionTests
             new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
-            new Mock<IConfiguration>().Object,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcAuthService>.Instance);
 
     private static JsonDocument? DecodeAsPlainJson(string state)
