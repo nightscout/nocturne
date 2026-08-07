@@ -192,7 +192,10 @@ public static class ActivityStateSpanMapper
             State = activity.Type ?? category.ToString().ToLowerInvariant(),
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
             EndTimestamp = CalculateEndTimestamp(activity),
-            Source = activity.EnteredBy ?? "nightscout",
+            // DataSource first: it is the connector that wrote the record, which is what a
+            // resume watermark is scoped by. EnteredBy is the uploader name carried in the
+            // payload and stays the fallback for activities posted through the v1 API.
+            Source = activity.DataSource ?? activity.EnteredBy ?? "nightscout",
             OriginalId = activity.Id,
             Metadata = BuildMetadata(activity)
         };
@@ -225,6 +228,7 @@ public static class ActivityStateSpanMapper
             activity.Description = GetMetadataString(stateSpan.Metadata, "description");
             activity.Notes = GetMetadataString(stateSpan.Metadata, "notes");
             activity.Name = GetMetadataString(stateSpan.Metadata, "name");
+            activity.EnteredBy = GetMetadataString(stateSpan.Metadata, "enteredBy") ?? stateSpan.Source;
             activity.Intensity = GetMetadataString(stateSpan.Metadata, "intensity");
             activity.DateString = GetMetadataString(stateSpan.Metadata, "dateString");
             activity.CreatedAt = GetMetadataString(stateSpan.Metadata, "createdAt");
@@ -288,6 +292,11 @@ public static class ActivityStateSpanMapper
 
         if (!string.IsNullOrEmpty(activity.Name))
             metadata["name"] = activity.Name;
+
+        // Kept because Source now holds the connector for connector-published activities, so it
+        // is no longer the uploader name to read EnteredBy back from. Mirrors BuildSleepMetadata.
+        if (!string.IsNullOrEmpty(activity.EnteredBy))
+            metadata["enteredBy"] = activity.EnteredBy;
 
         if (!string.IsNullOrEmpty(activity.Intensity))
             metadata["intensity"] = activity.Intensity;

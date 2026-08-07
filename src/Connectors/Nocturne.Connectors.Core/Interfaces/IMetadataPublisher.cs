@@ -56,9 +56,12 @@ public interface IMetadataPublisher
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the timestamp of the most recent activity record for the current tenant,
-    /// used by connectors to resume catch-up from where they left off, or <c>null</c> if none exist.
+    /// Returns the timestamp of the most recent activity record written by
+    /// <paramref name="source"/>, used by connectors to resume catch-up from where they left off,
+    /// or <c>null</c> when this source has written none.
     /// </summary>
+    /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);

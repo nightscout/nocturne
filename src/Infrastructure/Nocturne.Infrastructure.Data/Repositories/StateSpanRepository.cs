@@ -33,6 +33,13 @@ public class StateSpanRepository : IStateSpanRepository
     };
 
     /// <summary>
+    /// The stored <c>Category</c> values that represent v1 Activity records, as strings for
+    /// translation into SQL.
+    /// </summary>
+    private static readonly List<string> ActivityCategories =
+        ActivityStateSpanMapper.ActivityCategories.Select(c => c.ToString()).ToList();
+
+    /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
     /// </summary>
     /// <param name="context">The database context</param>
@@ -505,11 +512,7 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
-        var query = _context.StateSpans.AsNoTracking().Where(s => activityCategories.Contains(s.Category));
+        var query = _context.StateSpans.AsNoTracking().Where(s => ActivityCategories.Contains(s.Category));
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))
@@ -524,6 +527,16 @@ public class StateSpanRepository : IStateSpanRepository
         return entities.Select(StateSpanMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    ) =>
+        await _context.StateSpans
+            .AsNoTracking()
+            .Where(s => ActivityCategories.Contains(s.Category) && s.Source == source)
+            .MaxAsync(s => (DateTime?)s.StartTimestamp, cancellationToken);
+
     /// <summary>
     /// Get a state span by ID that represents an Activity record
     /// </summary>
@@ -535,19 +548,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
@@ -603,19 +612,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }
@@ -639,19 +644,15 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var activityCategories = ActivityStateSpanMapper
-            .ActivityCategories.Select(c => c.ToString())
-            .ToList();
-
         var entity = await _context.StateSpans.FirstOrDefaultAsync(
-            s => s.OriginalId == id && activityCategories.Contains(s.Category),
+            s => s.OriginalId == id && ActivityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
             entity = await _context.StateSpans.FirstOrDefaultAsync(
-                s => s.Id == guidId && activityCategories.Contains(s.Category),
+                s => s.Id == guidId && ActivityCategories.Contains(s.Category),
                 cancellationToken
             );
         }

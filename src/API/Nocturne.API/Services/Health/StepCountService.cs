@@ -80,6 +80,15 @@ public class StepCountService
         return entities.Select(ToDomainModel);
     }
 
+    public Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    ) =>
+        EntitySet
+            .AsNoTracking()
+            .Where(s => s.DataSource == source)
+            .MaxAsync(s => (DateTime?)s.Timestamp, cancellationToken);
+
     public Task<StepCount?> GetStepCountByIdAsync(
         string id,
         CancellationToken cancellationToken = default

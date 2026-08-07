@@ -154,6 +154,23 @@ public class ActivityService : IActivityService
     }
 
     /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var candidates = new[]
+        {
+            await _stateSpanService.GetLatestActivityTimestampAsync(source, cancellationToken),
+            await _heartRateService.GetLatestTimestampAsync(source, cancellationToken),
+            await _stepCountService.GetLatestTimestampAsync(source, cancellationToken),
+        };
+
+        var present = candidates.Where(t => t.HasValue).Select(t => t!.Value).ToList();
+        return present.Count > 0 ? present.Max() : null;
+    }
+
+    /// <inheritdoc />
     public async Task<Activity?> GetActivityByIdAsync(
         string id,
         CancellationToken cancellationToken = default

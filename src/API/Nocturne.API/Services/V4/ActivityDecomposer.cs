@@ -432,6 +432,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             EnteredBy = activity.EnteredBy,
             CreatedAt = activity.CreatedAt,
             UtcOffset = activity.UtcOffset,
+            DataSource = activity.DataSource,
         };
     }
 
@@ -444,11 +445,14 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             Id = activity.Id,
             Mills = activity.Mills,
             Metric = GetIntValue(props, "metric"),
+            // StepCount.Source is the absolute/delta bitmask, not a provenance string;
+            // the originating connector goes on DataSource.
             Source = GetIntValue(props, "source"),
             Device = GetStringValue(props, "device") ?? activity.EnteredBy,
             EnteredBy = activity.EnteredBy,
             CreatedAt = activity.CreatedAt,
             UtcOffset = activity.UtcOffset,
+            DataSource = activity.DataSource,
         };
     }
 
