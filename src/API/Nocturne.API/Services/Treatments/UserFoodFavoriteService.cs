@@ -81,16 +81,20 @@ public class UserFoodFavoriteService : IUserFoodFavoriteService
 
     /// <inheritdoc />
     public async Task<IEnumerable<Food>> GetRecentFoodsAsync(
-        string userId,
+        string? userId,
         int limit = 20,
         CancellationToken cancellationToken = default
     )
     {
-        var favorites = await _favoriteRepository.GetFavoriteFoodsAsync(
-            userId,
-            cancellationToken
-        );
-        var favoriteIds = favorites.Select(f => f.Id).ToHashSet();
+        var favoriteIds = new HashSet<string?>();
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var favorites = await _favoriteRepository.GetFavoriteFoodsAsync(
+                userId,
+                cancellationToken
+            );
+            favoriteIds = favorites.Select(f => f.Id).ToHashSet();
+        }
 
         var recentCandidates = await _treatmentFoodRepository.GetRecentFoodsAsync(
             limit + favoriteIds.Count,

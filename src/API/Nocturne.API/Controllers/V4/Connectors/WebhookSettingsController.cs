@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.Core.Models.Configuration;
 
@@ -87,7 +87,10 @@ public class WebhookSettingsController(
                 return Problem(detail: "Webhook secret is required", statusCode: 400, title: "Bad Request");
             }
 
-            var userId = GetUserId();
+            // The test payload attributes the dispatch to the caller. A subject-less caller (the
+            // instance key, a guest session) is reported as null rather than as a stand-in
+            // identity the receiving endpoint could mistake for a real subject.
+            var userId = HttpContext.GetSubjectIdString();
             var payload = JsonSerializer.Serialize(
                 new
                 {
@@ -120,13 +123,6 @@ public class WebhookSettingsController(
             logger.LogError(ex, "Failed to test webhook settings");
             return Problem(detail: "Failed to test webhook settings", statusCode: 500, title: "Internal Server Error");
         }
-    }
-
-    private string GetUserId()
-    {
-        var userId =
-            User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        return string.IsNullOrEmpty(userId) ? "00000000-0000-0000-0000-000000000001" : userId;
     }
 }
 

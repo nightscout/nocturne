@@ -43,10 +43,12 @@ public interface IUserFoodFavoriteService
     );
 
     /// <summary>
-    /// Get the user's recently used foods, excluding favorites.
+    /// Get the recently used foods, excluding <paramref name="userId"/>'s favorites. Recents are
+    /// tenant-wide; the subject only determines what is subtracted, so a null or empty
+    /// <paramref name="userId"/> subtracts nothing.
     /// </summary>
     Task<IEnumerable<Food>> GetRecentFoodsAsync(
-        string userId,
+        string? userId,
         int limit = 20,
         CancellationToken cancellationToken = default
     );

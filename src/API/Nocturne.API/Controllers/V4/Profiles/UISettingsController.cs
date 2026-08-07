@@ -416,24 +416,6 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         }
     }
 
-    /// <summary>
-    /// Resolves the authenticated user's ID from standard name identifier or sub claims.
-    /// Falls back to a fixed development placeholder when auth is not fully configured.
-    /// </summary>
-    /// <returns>The user identifier string.</returns>
-    private string GetUserId()
-    {
-        var userId =
-            User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub");
-        if (string.IsNullOrEmpty(userId))
-        {
-            // Fallback for when auth is not fully configured or in dev variants
-            return "00000000-0000-0000-0000-000000000001";
-        }
-        return userId;
-    }
-
     private static UserAlarmConfiguration GenerateDefaultAlarmConfiguration()
     {
         return new UserAlarmConfiguration
