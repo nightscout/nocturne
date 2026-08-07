@@ -72,8 +72,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ];
 
     // ── Per-sync state (populated in PerformSyncInternalAsync) ─────────
-    // TODO: These instance fields are not safe for concurrent multi-tenant syncs.
-    // They should be refactored to local variables threaded through helper methods.
+    // These fields are not safe for concurrent syncs on one instance: a second
+    // InitializeMappers overwrites the first sync's session and mappers.
 
     private string? _sessionCookie;
     private GlookoUserData? _userData;

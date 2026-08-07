@@ -34,7 +34,8 @@ public class WebhookSettingsController(
         CancellationToken cancellationToken = default
     )
     {
-        // TODO: Re-implement with new alert engine storage
+        // Not wired to the current alert engine's storage, so this reports disabled
+        // regardless of what the tenant configured.
         return Task.FromResult<ActionResult<WebhookNotificationSettings>>(Ok(
             new WebhookNotificationSettings
             {
@@ -57,7 +58,6 @@ public class WebhookSettingsController(
         CancellationToken cancellationToken = default
     )
     {
-        // TODO: Re-implement with new alert engine storage
         logger.LogWarning("Webhook settings save is a no-op until new alert engine is implemented");
         return Task.FromResult<ActionResult<WebhookNotificationSettings>>(Ok(settings));
     }

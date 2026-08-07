@@ -367,7 +367,8 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            // TODO: Re-implement with new alert engine
+            // The profile is discarded: this is not wired to the current alert engine's
+            // storage.
             return await GetAlarmConfiguration(cancellationToken);
         }
         catch (Exception ex)
@@ -405,8 +406,8 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            // TODO: Re-implement with new alert engine
-
+            // The profile id is discarded: this is not wired to the current alert engine's
+            // storage.
             return await GetAlarmConfiguration(cancellationToken);
         }
         catch (Exception ex)

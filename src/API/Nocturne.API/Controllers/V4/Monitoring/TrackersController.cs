@@ -93,7 +93,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (tracker.Visibility == TrackerVisibility.Private && tracker.UserId == currentUserId)
             return true;
 
-        // TODO: RoleRestricted visibility check
+        // RoleRestricted has no check yet, so it falls through to hidden — including from
+        // the tracker's own owner.
         return false;
     }
 

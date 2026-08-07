@@ -30,10 +30,10 @@ public interface IMealMatchingService
     /// Accept a meal match, creating a TreatmentFood entry
     /// </summary>
     /// <param name="foodEntryId">The connector food entry ID</param>
-    /// <param name="treatmentId">The treatment to link to</param>
+    /// <param name="carbIntakeId">The carb intake to link the food to</param>
     /// <param name="carbs">The carb amount (may be adjusted from original)</param>
-    /// <param name="timeOffsetMinutes">Minutes offset from treatment time (0 = ate at bolus time)</param>
-    Task AcceptMatchAsync(Guid foodEntryId, Guid treatmentId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
+    /// <param name="timeOffsetMinutes">Minutes offset from the carb intake time (0 = ate at bolus time)</param>
+    Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default);
 
     /// <summary>
     /// Dismiss a match, marking the food entry as standalone

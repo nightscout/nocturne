@@ -114,10 +114,9 @@ public sealed class ChatIdentityPendingLinkService(
         });
     }
 
-    // TODO(v1.1): wire CleanupExpiredAsync into a scheduled IHostedService.
     /// <summary>
-    /// Deletes all expired rows. Call periodically from a background sweep
-    /// (cleanup wiring is deferred to v1.1 per plan).
+    /// Deletes all expired rows. Call periodically from a background sweep; nothing
+    /// schedules it yet, so expired rows currently accumulate.
     /// </summary>
     public async Task<int> CleanupExpiredAsync(CancellationToken ct)
     {

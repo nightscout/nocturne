@@ -120,7 +120,7 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    public async Task AcceptMatchAsync(Guid foodEntryId, Guid treatmentId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
+    public async Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
     {
         var foodEntry = await _foodEntryRepository.GetByIdAsync(foodEntryId, ct);
         if (foodEntry == null)
@@ -129,12 +129,12 @@ public class MealMatchingService : IMealMatchingService
             return;
         }
 
-        // TODO: Phase 9 — MealMatchingService needs to be updated to work with CarbIntake records
-        // instead of legacy Treatments. For now, treatmentId is passed as CarbIntakeId.
+        // The suggestion path still passes a legacy Treatment id here, so that path keys
+        // the row against the wrong record. The Glooko caller passes a real carb intake.
         var treatmentFood = new TreatmentFood
         {
             Id = Guid.CreateVersion7(),
-            CarbIntakeId = treatmentId,
+            CarbIntakeId = carbIntakeId,
             FoodId = foodEntry.FoodId,
             Portions = foodEntry.Servings,
             Carbs = carbs,
@@ -152,9 +152,9 @@ public class MealMatchingService : IMealMatchingService
             ct);
 
         _logger.LogInformation(
-            "Accepted meal match: food entry {FoodEntryId} linked to treatment {TreatmentId}",
+            "Accepted meal match: food entry {FoodEntryId} linked to carb intake {CarbIntakeId}",
             foodEntryId,
-            treatmentId);
+            carbIntakeId);
     }
 
     public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
