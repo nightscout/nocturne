@@ -88,12 +88,16 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (tracker.Visibility == TrackerVisibility.Public)
             return true;
 
-        // Private trackers only visible to owner
+        // The owner sees their own tracker at every visibility, not just Private, so that a
+        // visibility value with no view rule of its own can never hide a tracker from the person
+        // who set it. RoleRestricted is rejected on write and migrated to Private, so this is
+        // belt-and-braces rather than the only thing standing between an owner and their data.
+        // An unattributed tracker (UserId defaulted to "") must not match a caller carrying no
+        // subject, so an empty id matches nothing.
         var currentUserId = HttpContext.GetSubjectIdString();
-        if (tracker.Visibility == TrackerVisibility.Private && tracker.UserId == currentUserId)
+        if (!string.IsNullOrEmpty(currentUserId) && tracker.UserId == currentUserId)
             return true;
 
-        // TODO: RoleRestricted visibility check
         return false;
     }
 
@@ -901,7 +905,7 @@ public class TrackerDefinitionDto
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
 
@@ -1052,7 +1056,7 @@ public class CreateTrackerDefinitionRequest
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
 
@@ -1105,7 +1109,7 @@ public class UpdateTrackerDefinitionRequest
     public DashboardVisibility? DashboardVisibility { get; set; }
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
 
