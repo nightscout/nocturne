@@ -19,14 +19,6 @@ public interface IMealMatchingService
     Task ProcessNewFoodEntriesAsync(string userId, IEnumerable<Guid> foodEntryIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Process a newly created treatment and create match notifications for pending food entries.
-    /// </summary>
-    /// <param name="userId">The user ID for notification delivery.</param>
-    /// <param name="treatmentId">ID of the newly created treatment to evaluate against pending food entries.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task ProcessNewTreatmentAsync(string userId, Guid treatmentId, CancellationToken ct = default);
-
-    /// <summary>
     /// Accept a meal match, creating a TreatmentFood entry
     /// </summary>
     /// <param name="foodEntryId">The connector food entry ID</param>
@@ -59,16 +51,16 @@ public interface IMealMatchingService
 }
 
 /// <summary>
-/// A suggested meal match pairing a connector food entry with a treatment.
+/// A suggested meal match pairing a connector food entry with a carb intake.
 /// </summary>
 /// <param name="FoodEntryId">The ID of the pending <see cref="ConnectorFoodEntry"/>.</param>
 /// <param name="FoodName">Individual food item name, if available.</param>
 /// <param name="MealName">Meal name from the connector, if available.</param>
 /// <param name="Carbs">Carbohydrate amount in grams from the food entry.</param>
 /// <param name="ConsumedAt">When the food was consumed according to the connector.</param>
-/// <param name="TreatmentId">The ID of the candidate matching treatment.</param>
-/// <param name="TreatmentCarbs">Carbohydrate amount in grams recorded on the treatment.</param>
-/// <param name="TreatmentMills">Treatment timestamp in Unix milliseconds.</param>
+/// <param name="CarbIntakeId">The ID of the candidate matching carb intake.</param>
+/// <param name="CarbIntakeCarbs">Carbohydrate amount in grams recorded on the carb intake.</param>
+/// <param name="CarbIntakeMills">Carb intake timestamp in Unix milliseconds.</param>
 /// <param name="MatchScore">Computed match score (higher is a better match).</param>
 public record SuggestedMealMatchResult(
     Guid FoodEntryId,
@@ -76,8 +68,8 @@ public record SuggestedMealMatchResult(
     string? MealName,
     decimal Carbs,
     DateTimeOffset ConsumedAt,
-    Guid TreatmentId,
-    decimal TreatmentCarbs,
-    long TreatmentMills,
+    Guid CarbIntakeId,
+    decimal CarbIntakeCarbs,
+    long CarbIntakeMills,
     double MatchScore
 );

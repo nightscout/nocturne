@@ -93,12 +93,12 @@
   const suggestionsByCarbIntake = $derived.by(() => {
     const map = new Map<string, SuggestedMealMatch[]>();
     for (const match of suggestedMatches) {
-      const treatmentId = match.treatmentId;
-      if (!treatmentId) continue;
-      if (!map.has(treatmentId)) {
-        map.set(treatmentId, []);
+      const carbIntakeId = match.carbIntakeId;
+      if (!carbIntakeId) continue;
+      if (!map.has(carbIntakeId)) {
+        map.set(carbIntakeId, []);
       }
-      map.get(treatmentId)!.push(match);
+      map.get(carbIntakeId)!.push(match);
     }
     return map;
   });
@@ -348,7 +348,7 @@
     try {
       await acceptMatch({
         foodEntryId: match.foodEntryId!,
-        treatmentId: match.treatmentId!,
+        carbIntakeId: match.carbIntakeId!,
         carbs: match.carbs ?? 0,
         timeOffsetMinutes: 0,
       });
@@ -466,7 +466,7 @@
     }
   }}
   entry={editFoodEntry}
-  treatmentId={editFoodEntryMeal?.carbIntakes?.[0]?.id}
+  carbIntakeId={editFoodEntryMeal?.carbIntakes?.[0]?.id}
   totalCarbs={editFoodEntryMeal?.totalCarbs ?? 0}
   remainingCarbs={editFoodEntryMeal
     ? getRemainingCarbsForEntry(editFoodEntryMeal, editFoodEntry?.id)

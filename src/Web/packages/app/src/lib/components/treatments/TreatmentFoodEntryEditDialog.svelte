@@ -22,7 +22,7 @@
     /** The treatment food entry to edit */
     entry: TreatmentFood | null;
     /** The treatment ID */
-    treatmentId: string | undefined;
+    carbIntakeId: string | undefined;
     /** Total carbs from the treatment */
     totalCarbs?: number;
     /** Remaining unspecified carbs (excluding this entry) */
@@ -35,7 +35,7 @@
     open = $bindable(),
     onOpenChange,
     entry,
-    treatmentId,
+    carbIntakeId,
     totalCarbs = 0,
     remainingCarbs = 0,
     onSave,
@@ -184,12 +184,12 @@
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (!treatmentId || !entry?.id) return;
+    if (!carbIntakeId || !entry?.id) return;
 
     isSubmitting = true;
     try {
       await updateCarbIntakeFood({
-        id: treatmentId,
+        id: carbIntakeId,
         foodEntryId: entry.id,
         request: {
           foodId: entry.foodId ?? null,
