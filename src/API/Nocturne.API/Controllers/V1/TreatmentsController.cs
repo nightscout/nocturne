@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -115,7 +116,7 @@ public class TreatmentsController : ControllerBase
 
             var treatments = await _treatmentService.GetTreatmentsAsync(
                 find: findQuery,
-                count: count,
+                count: LegacyReadLimits.ClampCount(count),
                 skip: skip,
                 cancellationToken: cancellationToken
             );

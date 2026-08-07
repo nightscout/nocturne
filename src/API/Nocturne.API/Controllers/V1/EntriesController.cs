@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -289,7 +290,7 @@ public class EntriesController : ControllerBase
     /// Get entries with optional query parameters
     /// Supports advanced query features including find filters, date ranges, and pagination
     /// </summary>
-    /// <param name="count">Maximum number of entries to return (if not specified, returns all matching entries)</param>
+    /// <param name="count">Maximum number of entries to return (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
     /// <param name="type">Entry type filter (default: "sgv")</param>
     /// <param name="find">MongoDB-style find query filters (JSON format) - for unit tests</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -374,8 +375,8 @@ public class EntriesController : ControllerBase
                 // Nightscout returns empty array for count=0 or negative values
                 return Ok(Array.Empty<Entry>());
             }
-            // Nightscout defaults to 10 when count is not specified
-            var limitedCount = count ?? 10;
+            // Nightscout defaults to 10 when count is not specified; the upper bound is ours.
+            var limitedCount = LegacyReadLimits.ClampCount(count ?? 10);
 
             // Use advanced filtering if any advanced parameters are provided
             // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
