@@ -2209,8 +2209,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_tenant");
 
-            // ChatIdentityDirectoryService.CreateLinkAsync auto-suffixes label collisions
-            // within a (platform, platform_user_id) set before insert, so this holds.
+            // Labels route bot commands, so they must be unambiguous within a platform user's set
+            // of links. ChatIdentityDirectoryService.CreateLinkAsync auto-suffixes a colliding
+            // label before insert and retries against this index when it loses a race.
             b.HasIndex(e => new { e.Platform, e.PlatformUserId, e.Label })
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_label");

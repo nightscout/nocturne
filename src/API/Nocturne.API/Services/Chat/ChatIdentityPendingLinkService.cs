@@ -13,8 +13,9 @@ namespace Nocturne.API.Services.Chat;
 /// <para>
 /// Tokens are 32 random bytes encoded as 64-character uppercase hex strings. Each token row
 /// is deleted on first successful consumption (<see cref="TryConsumeAsync"/>), making the
-/// token single-use. Expired rows are not automatically purged; call
-/// <see cref="CleanupExpiredAsync"/> from a background sweep to reclaim space.
+/// token single-use. A token abandoned before consumption leaves its row behind;
+/// <see cref="ChatIdentityPendingLinkCleanupService"/> sweeps those via
+/// <see cref="CleanupExpiredAsync"/>.
 /// </para>
 /// <para>
 /// <see cref="TryConsumeAsync"/> wraps the read-delete-commit sequence in a user-initiated
@@ -115,8 +116,8 @@ public sealed class ChatIdentityPendingLinkService(
     }
 
     /// <summary>
-    /// Deletes all expired rows. Call periodically from a background sweep; nothing
-    /// schedules it yet, so expired rows currently accumulate.
+    /// Deletes all expired rows. Swept periodically by
+    /// <see cref="ChatIdentityPendingLinkCleanupService"/>.
     /// </summary>
     public async Task<int> CleanupExpiredAsync(CancellationToken ct)
     {
