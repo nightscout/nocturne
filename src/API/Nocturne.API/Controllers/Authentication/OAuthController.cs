@@ -602,6 +602,11 @@ public class OAuthController : ControllerBase
     /// Token revocation endpoint (RFC 7009). Per the specification, always returns <c>200 OK</c>
     /// regardless of whether the token was found or already revoked.
     /// </summary>
+    /// <remarks>
+    /// Anonymous, unlike the introspection endpoint below: the response carries nothing about the
+    /// token, and a client whose token has already stopped working still needs to be able to
+    /// retire it.
+    /// </remarks>
     /// <param name="token">The access token or refresh token to revoke.</param>
     /// <param name="token_type_hint">Optional hint: <c>access_token</c> or <c>refresh_token</c>.</param>
     [HttpPost("revoke")]
@@ -877,20 +882,49 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// Token introspection endpoint (RFC 7662).
     /// Returns metadata about a token including its active status, scopes, and subject.
-    /// Per RFC 7662, always returns 200 OK; invalid tokens get <c>active=false</c>.
+    /// Per RFC 7662, an authenticated caller always gets 200 OK; invalid tokens get <c>active=false</c>.
     /// </summary>
+    /// <remarks>
+    /// RFC 7662 section 2.1 requires the endpoint to authenticate its caller. Every client here is
+    /// public (no client secrets), so the caller authenticates as a subject the same way the other
+    /// credential-bearing endpoints on this controller do, and a request with no identity is
+    /// refused rather than answered.
+    /// <para>
+    /// The response is bounded by that identity: a token issued to another subject reads as
+    /// inactive, so the endpoint resolves only tokens the caller already holds an identity for.
+    /// </para>
+    /// </remarks>
     /// <param name="token">The token to introspect (access token or refresh token).</param>
     /// <param name="token_type_hint">Optional hint: <c>access_token</c> or <c>refresh_token</c>.</param>
     /// <returns>A <see cref="TokenIntrospectionResponse"/> with <c>active=false</c> for invalid, expired, or revoked tokens.</returns>
     [HttpPost("introspect")]
-    [AllowAnonymous]
     [EnableRateLimiting("oauth-token")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(typeof(TokenIntrospectionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<TokenIntrospectionResponse>> Introspect(
         [FromForm] string token,
         [FromForm] string? token_type_hint = null)
     {
+        if (!HttpContext.IsAuthenticated())
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+        }
+
+        var callerSubjectId = HttpContext.GetSubjectId();
+        if (callerSubjectId == null)
+        {
+            return Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+        }
+
         if (string.IsNullOrEmpty(token))
         {
             return Ok(new TokenIntrospectionResponse { Active = false });
@@ -914,6 +948,18 @@ public class OAuthController : ControllerBase
                 // A revoked grant takes its outstanding access tokens with it
                 if (claims is { GrantId: not null, TenantId: not null } &&
                     await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+                {
+                    return Ok(new TokenIntrospectionResponse { Active = false });
+                }
+
+                // A token belonging to someone else is reported as inactive rather than resolved
+                // to its subject and scopes. Subjects are global across tenants, so a tenant-pinned
+                // token is bound to the caller's tenant too — the same subject in tenant A cannot
+                // resolve its tenant-B token here. A non-pinned token (legacy session JWT, no
+                // TenantId claim) carries no such restriction and is matched on subject alone.
+                var callerTenantId = HttpContext.GetAuthContext()?.TenantId;
+                if (claims.SubjectId != callerSubjectId.Value
+                    || (claims.TenantId.HasValue && claims.TenantId != callerTenantId))
                 {
                     return Ok(new TokenIntrospectionResponse { Active = false });
                 }

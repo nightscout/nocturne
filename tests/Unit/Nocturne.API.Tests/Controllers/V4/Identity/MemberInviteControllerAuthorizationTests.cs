@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -472,7 +473,11 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     /// <summary>An invite as the tenant-bounded lookup returns it.</summary>
-    private MemberInviteInfo Invite() => new(
+    private MemberInviteInfo Invite(
+        bool isValid = true,
+        bool isExpired = false,
+        bool isRevoked = false,
+        List<InviteUsageInfo>? usedBy = null) => new(
         Guid.CreateVersion7(),
         _tenantId,
         "Chris",
@@ -484,11 +489,11 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         DateTime.UtcNow.AddDays(7),
         null,
         0,
-        true,
-        false,
-        false,
+        isValid,
+        isExpired,
+        isRevoked,
         DateTime.UtcNow,
-        []);
+        usedBy ?? []);
 
     /// <summary>
     /// The invitee's browser resolves the tenant by host, and the invite belongs to exactly one
@@ -550,6 +555,93 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         result.Should().BeOfType<OkObjectResult>().Which.Value
             .Should().BeOfType<MemberInviteInfo>().Which.Viewer.Should().BeNull();
+        _tenantMemberService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// The accept page names the tenant and the inviter and lists what is being granted, so an
+    /// invite that can still be accepted keeps returning all of it — the redaction below must not
+    /// reach the case the page exists for.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_forAnAcceptableInvite_returnsWhatTheAcceptPageNeeds()
+    {
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
+
+        var controller = BuildController();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        var info = result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<MemberInviteInfo>().Subject;
+        info.TenantName.Should().Be("Chris");
+        info.CreatedByName.Should().Be("Chris");
+        info.DirectPermissions.Should().Equal(TenantPermissions.GlucoseRead);
+        info.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// The token is the only thing gating this endpoint, and a link outlives the invite behind it.
+    /// An invite that can no longer be accepted answers with the reason alone: the record names the
+    /// tenant, the inviter, the roles and permissions being granted, and every subject that has
+    /// already joined through it.
+    /// <para>
+    /// 400, like the acceptance refusal: the generated client passes a 400 ProblemDetails through
+    /// to the join page, where the reason is shown; other 4xx statuses collapse to the generic
+    /// message. The reason is asserted on the title because openapi-remote-codegen 0.2.0 resolves a
+    /// ProblemDetails to <c>title</c> before <c>detail</c>.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, "This invite has expired.")]
+    [InlineData(false, true, "This invite has been revoked.")]
+    [InlineData(false, false, "This invite has reached its maximum uses.")]
+    public async Task GetInviteInfo_forAnUnacceptableInvite_returnsTheReasonAndNothingElse(
+        bool isExpired, bool isRevoked, string expectedReason)
+    {
+        var joinedSubjectId = Guid.CreateVersion7();
+        var invite = Invite(
+            isValid: false,
+            isExpired: isExpired,
+            isRevoked: isRevoked,
+            usedBy: [new InviteUsageInfo(joinedSubjectId, "Prior Joiner", DateTime.UtcNow)])
+            with
+        { TenantName = "Acme Clinic", CreatedByName = "Invite Author" };
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(invite);
+
+        var controller = BuildController();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be(expectedReason);
+        details.Detail.Should().Be(expectedReason);
+
+        var body = JsonSerializer.Serialize(problem.Value);
+        body.Should().NotContain("Acme Clinic");
+        body.Should().NotContain("Invite Author");
+        body.Should().NotContain("Prior Joiner");
+        body.Should().NotContain(joinedSubjectId.ToString());
+        body.Should().NotContain(TenantPermissions.GlucoseRead);
+    }
+
+    /// <summary>
+    /// Membership is not consulted for an invite nobody can accept — the viewer block exists to
+    /// let the page offer acceptance.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_forAnUnacceptableInvite_doesNotReportTheViewer()
+    {
+        _inviteService
+            .Setup(s => s.GetInviteByTokenAsync("tok", _tenantId))
+            .ReturnsAsync(Invite(isValid: false, isExpired: true));
+
+        var controller = BuildController();
+
+        await controller.GetInviteInfo("tok", CancellationToken.None);
+
         _tenantMemberService.VerifyNoOtherCalls();
     }
 
