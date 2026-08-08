@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -73,8 +74,22 @@ public class ActivityController : ControllerBase
     {
         try
         {
+            // Normalize skip parameter (negative is not valid)
+            if (skip < 0)
+            {
+                skip = 0; // Normalize to 0 for Nightscout compatibility
+            }
+
+            // An empty array covers both a 0-or-negative count (Nightscout behavior) and a page
+            // starting past the merged paging window.
+            var pageCount = LegacyReadLimits.ClampMergedPage(count, skip);
+            if (pageCount <= 0)
+            {
+                return Ok(Array.Empty<Activity>());
+            }
+
             var activities = await _activityService.GetActivitiesAsync(
-                count: count,
+                count: pageCount,
                 skip: skip,
                 cancellationToken: cancellationToken
             );

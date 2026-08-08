@@ -1,14 +1,16 @@
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Treatments;
 
 /// <summary>
-/// Matches connector food entries (primarily from MyFitnessPal) to existing meal-bolus treatments
+/// Matches connector food entries (primarily from MyFitnessPal) to existing carb intake records
 /// within a configurable time window, linking them via <see cref="ITreatmentFoodService"/>. Raises
 /// an in-app notification for new matches so users can review auto-linked meals.
 /// </summary>
@@ -21,8 +23,11 @@ public class MealMatchingService : IMealMatchingService
     /// </summary>
     public const string SuggestedMatchNotificationType = "meal_matching.suggested_match";
 
+    /// <summary>Cap on carb intake records pulled per matching window.</summary>
+    private const int CandidateLimit = 1000;
+
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
-    private readonly ITreatmentStore _treatmentStore;
+    private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IInAppNotificationService _notificationService;
     private readonly IInAppNotificationRepository _notificationRepository;
@@ -31,7 +36,7 @@ public class MealMatchingService : IMealMatchingService
 
     public MealMatchingService(
         IConnectorFoodEntryRepository foodEntryRepository,
-        ITreatmentStore treatmentStore,
+        ICarbIntakeRepository carbIntakeRepository,
         ITreatmentFoodService treatmentFoodService,
         IInAppNotificationService notificationService,
         IInAppNotificationRepository notificationRepository,
@@ -39,7 +44,7 @@ public class MealMatchingService : IMealMatchingService
         ILogger<MealMatchingService> logger)
     {
         _foodEntryRepository = foodEntryRepository;
-        _treatmentStore = treatmentStore;
+        _carbIntakeRepository = carbIntakeRepository;
         _treatmentFoodService = treatmentFoodService;
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
@@ -80,47 +85,7 @@ public class MealMatchingService : IMealMatchingService
         }
     }
 
-    public async Task ProcessNewTreatmentAsync(string userId, Guid treatmentId, CancellationToken ct = default)
-    {
-        var settings = await GetSettingsAsync(ct);
-        if (!settings.EnableMatchNotifications)
-        {
-            _logger.LogDebug("Match notifications disabled, skipping processing");
-            return;
-        }
-
-        var treatment = await _treatmentStore.GetByIdAsync(treatmentId.ToString(), ct);
-        if (treatment == null)
-        {
-            _logger.LogWarning("Treatment {TreatmentId} not found", treatmentId);
-            return;
-        }
-
-        // Only process meal treatments
-        if (treatment.Carbs is null or <= 0 &&
-            (treatment.EventType == null || !treatment.EventType.Contains("Meal", StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
-        var treatmentTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
-        var timeWindow = TimeSpan.FromMinutes(settings.MatchTimeWindowMinutes);
-
-        var pendingEntries = await _foodEntryRepository.GetPendingInTimeRangeAsync(
-            treatmentTime - timeWindow,
-            treatmentTime + timeWindow,
-            ct);
-
-        foreach (var entry in pendingEntries)
-        {
-            if (IsMatch(entry, treatment, settings))
-            {
-                await CreateMatchNotificationAsync(userId, entry, treatment, ct);
-            }
-        }
-    }
-
-    public async Task AcceptMatchAsync(Guid foodEntryId, Guid treatmentId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
+    public async Task AcceptMatchAsync(Guid foodEntryId, Guid carbIntakeId, decimal carbs, int timeOffsetMinutes, CancellationToken ct = default)
     {
         var foodEntry = await _foodEntryRepository.GetByIdAsync(foodEntryId, ct);
         if (foodEntry == null)
@@ -129,12 +94,20 @@ public class MealMatchingService : IMealMatchingService
             return;
         }
 
-        // TODO: Phase 9 — MealMatchingService needs to be updated to work with CarbIntake records
-        // instead of legacy Treatments. For now, treatmentId is passed as CarbIntakeId.
+        // treatment_foods.carb_intake_id carries no foreign key, so an unknown id here would
+        // persist a row no breakdown can ever resolve — and flip the food entry to Matched,
+        // so it never resurfaces as a suggestion.
+        var carbIntake = await _carbIntakeRepository.GetByIdAsync(carbIntakeId, ct);
+        if (carbIntake == null)
+        {
+            _logger.LogWarning("Carb intake {CarbIntakeId} not found", carbIntakeId);
+            return;
+        }
+
         var treatmentFood = new TreatmentFood
         {
             Id = Guid.CreateVersion7(),
-            CarbIntakeId = treatmentId,
+            CarbIntakeId = carbIntakeId,
             FoodId = foodEntry.FoodId,
             Portions = foodEntry.Servings,
             Carbs = carbs,
@@ -152,9 +125,9 @@ public class MealMatchingService : IMealMatchingService
             ct);
 
         _logger.LogInformation(
-            "Accepted meal match: food entry {FoodEntryId} linked to treatment {TreatmentId}",
+            "Accepted meal match: food entry {FoodEntryId} linked to carb intake {CarbIntakeId}",
             foodEntryId,
-            treatmentId);
+            carbIntakeId);
     }
 
     public async Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default)
@@ -193,42 +166,30 @@ public class MealMatchingService : IMealMatchingService
             return Array.Empty<SuggestedMealMatchResult>();
         }
 
-        // Expand the search window for treatments to account for matching window
-        var treatmentsFrom = from - timeWindow;
-        var treatmentsTo = to + timeWindow;
-        var treatments = await _treatmentStore.QueryAsync(new TreatmentQuery
-        {
-            Find = $"date[$gte]={treatmentsFrom.ToUnixTimeMilliseconds()}&date[$lte]={treatmentsTo.ToUnixTimeMilliseconds()}",
-            Count = 1000,
-        }, ct);
+        // Expand the search window for carb intakes to account for matching window
+        var carbIntakes = await GetCarbIntakesInWindowAsync(from - timeWindow, to + timeWindow, ct);
 
         var results = new List<SuggestedMealMatchResult>();
 
         foreach (var entry in pendingEntries)
         {
-            foreach (var treatment in treatments)
+            foreach (var carbIntake in carbIntakes)
             {
-                if (!IsMatch(entry, treatment, settings))
+                if (!IsMatch(entry, carbIntake, settings))
                 {
                     continue;
                 }
 
-                var score = CalculateMatchScore(entry, treatment, settings);
-                if (treatment.DbId == null)
-                {
-                    _logger.LogWarning("Treatment {TreatmentId} has no DbId, skipping", treatment.Id);
-                    continue;
-                }
                 results.Add(new SuggestedMealMatchResult(
                     FoodEntryId: entry.Id,
                     FoodName: entry.Food?.Name,
                     MealName: entry.MealName,
                     Carbs: entry.Carbs,
                     ConsumedAt: entry.ConsumedAt,
-                    TreatmentId: treatment.DbId.Value,
-                    TreatmentCarbs: (decimal)(treatment.Carbs ?? 0),
-                    TreatmentMills: treatment.Mills,
-                    MatchScore: score
+                    CarbIntakeId: carbIntake.Id,
+                    CarbIntakeCarbs: (decimal)carbIntake.Carbs,
+                    CarbIntakeMills: carbIntake.Mills,
+                    MatchScore: CalculateMatchScore(entry, carbIntake, settings)
                 ));
             }
         }
@@ -247,92 +208,109 @@ public class MealMatchingService : IMealMatchingService
         CancellationToken ct)
     {
         var timeWindow = TimeSpan.FromMinutes(settings.MatchTimeWindowMinutes);
-        var from = entry.ConsumedAt - timeWindow;
-        var to = entry.ConsumedAt + timeWindow;
-        var treatments = await _treatmentStore.QueryAsync(new TreatmentQuery
-        {
-            Find = $"date[$gte]={from.ToUnixTimeMilliseconds()}&date[$lte]={to.ToUnixTimeMilliseconds()}",
-            Count = 1000,
-        }, ct);
+        var carbIntakes = await GetCarbIntakesInWindowAsync(
+            entry.ConsumedAt - timeWindow,
+            entry.ConsumedAt + timeWindow,
+            ct);
 
-        var bestMatch = FindBestMatch(entry, treatments, settings);
+        var bestMatch = FindBestMatch(entry, carbIntakes, settings);
         if (bestMatch != null)
         {
             await CreateMatchNotificationAsync(userId, entry, bestMatch, ct);
         }
     }
 
-    private Treatment? FindBestMatch(
+    private async Task<IReadOnlyList<CarbIntake>> GetCarbIntakesInWindowAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken ct)
+    {
+        // Newest-first: a window wider than CandidateLimit is truncated by the database, and
+        // the pending food entries being matched are the recent ones. Fetching oldest-first
+        // would spend the budget on the far end of the range and find nothing.
+        var carbIntakes = await _carbIntakeRepository.GetAsync(
+            from: from.UtcDateTime,
+            to: to.UtcDateTime,
+            device: null,
+            source: null,
+            limit: CandidateLimit,
+            offset: 0,
+            descending: true,
+            ct: ct);
+
+        return carbIntakes.ToList();
+    }
+
+    private CarbIntake? FindBestMatch(
         ConnectorFoodEntry entry,
-        IReadOnlyList<Treatment> treatments,
+        IReadOnlyList<CarbIntake> carbIntakes,
         MyFitnessPalMatchingSettings settings)
     {
-        Treatment? bestMatch = null;
+        CarbIntake? bestMatch = null;
         double bestScore = 0;
 
-        foreach (var treatment in treatments)
+        foreach (var carbIntake in carbIntakes)
         {
-            if (!IsMatch(entry, treatment, settings))
+            if (!IsMatch(entry, carbIntake, settings))
             {
                 continue;
             }
 
-            var score = CalculateMatchScore(entry, treatment, settings);
+            var score = CalculateMatchScore(entry, carbIntake, settings);
             if (score > bestScore)
             {
                 bestScore = score;
-                bestMatch = treatment;
+                bestMatch = carbIntake;
             }
         }
 
         return bestMatch;
     }
 
-    private bool IsMatch(ConnectorFoodEntry entry, Treatment treatment, MyFitnessPalMatchingSettings settings)
+    private static bool IsMatch(ConnectorFoodEntry entry, CarbIntake carbIntake, MyFitnessPalMatchingSettings settings)
     {
-        var treatmentTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
-        var timeDiff = Math.Abs((entry.ConsumedAt - treatmentTime).TotalMinutes);
+        var timeDiff = Math.Abs((entry.ConsumedAt - CarbIntakeTime(carbIntake)).TotalMinutes);
 
         if (timeDiff > settings.MatchTimeWindowMinutes)
         {
             return false;
         }
 
-        var treatmentCarbs = treatment.Carbs ?? 0;
-        var carbDiff = Math.Abs((double)(entry.Carbs - (decimal)treatmentCarbs));
-        var carbPercent = treatmentCarbs > 0 ? (carbDiff / treatmentCarbs) * 100 : 100;
+        var carbDiff = Math.Abs((double)entry.Carbs - carbIntake.Carbs);
+        var carbPercent = carbIntake.Carbs > 0 ? (carbDiff / carbIntake.Carbs) * 100 : 100;
 
         return carbDiff <= settings.MatchCarbToleranceGrams ||
                carbPercent <= settings.MatchCarbTolerancePercent;
     }
 
-    private double CalculateMatchScore(
+    private static double CalculateMatchScore(
         ConnectorFoodEntry entry,
-        Treatment treatment,
+        CarbIntake carbIntake,
         MyFitnessPalMatchingSettings settings)
     {
-        var treatmentTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
-        var timeDiff = Math.Abs((entry.ConsumedAt - treatmentTime).TotalMinutes);
+        var timeDiff = Math.Abs((entry.ConsumedAt - CarbIntakeTime(carbIntake)).TotalMinutes);
         var timeScore = 1 - (timeDiff / settings.MatchTimeWindowMinutes);
 
-        var treatmentCarbs = treatment.Carbs ?? 0;
-        var carbDiff = Math.Abs((double)(entry.Carbs - (decimal)treatmentCarbs));
-        var carbRatio = treatmentCarbs > 0 ? carbDiff / treatmentCarbs : 1;
+        var carbDiff = Math.Abs((double)entry.Carbs - carbIntake.Carbs);
+        var carbRatio = carbIntake.Carbs > 0 ? carbDiff / carbIntake.Carbs : 1;
         var carbScore = 1 - Math.Min(carbRatio, 1);
 
         return (timeScore * 0.6) + (carbScore * 0.4);
     }
 
+    private static DateTimeOffset CarbIntakeTime(CarbIntake carbIntake) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(carbIntake.Mills);
+
     private async Task CreateMatchNotificationAsync(
         string userId,
         ConnectorFoodEntry entry,
-        Treatment treatment,
+        CarbIntake carbIntake,
         CancellationToken ct)
     {
         // The notification store does not dedupe on source, and an entry reaches this more than once
-        // — re-imported with a corrected consumed time, restored after a withdrawal, or scanned again
-        // by ProcessNewTreatmentAsync — so without this check the same suggestion stacks up until the
-        // source's active-notification cap trips and starts throwing.
+        // — re-imported with a corrected consumed time, or restored after a withdrawal — so without
+        // this check the same suggestion stacks up until the source's active-notification cap trips
+        // and starts throwing.
         var existing = await _notificationRepository.FindBySourceAsync(
             userId,
             SuggestedMatchNotificationType,
@@ -348,8 +326,7 @@ public class MealMatchingService : IMealMatchingService
         }
 
         var foodName = entry.Food?.Name ?? entry.MealName;
-        var treatmentTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
-        var timeDisplay = FormatTimeDisplay(treatmentTime);
+        var timeDisplay = FormatTimeDisplay(CarbIntakeTime(carbIntake));
 
         var title = $"Confirm you ate \"{foodName}\" {timeDisplay}";
         var subtitle = $"{entry.MealName} · {entry.Carbs:0}g carbs · via MyFitnessPal";
@@ -363,9 +340,9 @@ public class MealMatchingService : IMealMatchingService
 
         var metadata = new Dictionary<string, object>
         {
-            ["treatmentId"] = treatment.Id!,
-            ["treatmentCarbs"] = treatment.Carbs ?? 0,
-            ["treatmentMills"] = treatment.Mills,
+            ["carbIntakeId"] = carbIntake.Id,
+            ["carbIntakeCarbs"] = carbIntake.Carbs,
+            ["carbIntakeMills"] = carbIntake.Mills,
             ["foodEntryCarbs"] = entry.Carbs,
             ["consumedAtMills"] = entry.ConsumedAt.ToUnixTimeMilliseconds(),
         };
@@ -381,9 +358,9 @@ public class MealMatchingService : IMealMatchingService
             cancellationToken: ct);
 
         _logger.LogInformation(
-            "Created meal match notification for food entry {FoodEntryId} and treatment {TreatmentId}",
+            "Created meal match notification for food entry {FoodEntryId} and carb intake {CarbIntakeId}",
             entry.Id,
-            treatment.Id);
+            carbIntake.Id);
     }
 
     private static string FormatTimeDisplay(DateTimeOffset time)

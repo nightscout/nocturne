@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Audit;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -1000,7 +1001,9 @@ internal class MigrationJob
         var totalMigrated = 0L;
         var totalFailed = 0L;
         DateTime? currentTo = FirstPageAnchor;
-        const int pageSize = 10000;
+        // The v1 read clamps to this, and the loop below terminates on a short page, so a larger
+        // page size here would silently end the pull after one page.
+        const int pageSize = LegacyReadLimits.MaxMergedCount;
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<IDeviceStatusDecomposer>();
@@ -1236,7 +1239,9 @@ internal class MigrationJob
         var totalMigrated = 0L;
         var totalFailed = 0L;
         DateTime? currentTo = FirstPageAnchor;
-        const int pageSize = 10000;
+        // The v1 read clamps to this, and the loop below terminates on a short page, so a larger
+        // page size here would silently end the pull after one page.
+        const int pageSize = LegacyReadLimits.MaxMergedCount;
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<IActivityDecomposer>();

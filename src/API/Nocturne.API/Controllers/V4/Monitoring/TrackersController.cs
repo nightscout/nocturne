@@ -98,6 +98,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (!string.IsNullOrEmpty(currentUserId) && tracker.UserId == currentUserId)
             return true;
 
+        // RoleRestricted has no check yet, so it falls through to hidden — including from
+        // the tracker's own owner.
         return false;
     }
 

@@ -2184,9 +2184,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_tenant");
 
-            // TODO(Task 1.5): ChatIdentityDirectoryService.CreateLinkAsync must
-            // auto-suffix label collisions within a (platform, platform_user_id)
-            // set before insert — this unique index will throw otherwise.
+            // ChatIdentityDirectoryService.CreateLinkAsync auto-suffixes label collisions
+            // within a (platform, platform_user_id) set before insert, so this holds.
             b.HasIndex(e => new { e.Platform, e.PlatformUserId, e.Label })
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_label");
