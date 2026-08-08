@@ -62,6 +62,15 @@ public class ControllerAuthorizationCoverageTests
             ["Nocturne.API.Controllers.V4.Analytics.RetrospectiveController"] = "public-share read analytics (fallback + share RLS)",
             ["Nocturne.API.Controllers.V4.Analytics.PredictionController"] = "public-share read analytics (fallback + share RLS)",
 
+            // ── V4 tracker reads ─────────────────────────────────────────────────────────────
+            // GET definitions/instances lean on the fallback policy: a bare unauthenticated request
+            // on a tenant subdomain has an empty trie and is rejected, so a private tenant exposes
+            // no tracker anonymously. The actions still filter by owner/visibility in
+            // CanViewTracker. Tracker tables are not in ShareDataCategories, so a public-share
+            // subject (admitted by the fallback) reads nothing via the share RLS policy. The write
+            // actions carry [Authorize] + [RequireDeclaredWriteScope] and are gated explicitly.
+            ["Nocturne.API.Controllers.V4.Monitoring.TrackersController"] = "tracker reads gated by fallback trie (rejects bare anonymous); not share-governed",
+
             // ── Legacy Nightscout v1 surfaces (authorize via OAuth scope in the fallback trie) ──
             // v1 endpoints authenticate via the api-secret / token trie and are gated by the
             // fallback policy plus in-handler scope checks, matching upstream Nightscout behaviour.

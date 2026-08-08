@@ -180,11 +180,14 @@ public class TrackersController : ControllerBase, IWriteScopedController
     #region Definitions
 
     /// <summary>
-    /// Get all tracker definitions. Returns public trackers for unauthenticated users,
-    /// or all visible trackers for authenticated users.
+    /// Get all tracker definitions: the caller's own plus any Public-visibility tracker.
+    /// Gated by the fallback authorization policy (no <c>[AllowAnonymous]</c>): a bare
+    /// unauthenticated request on a tenant subdomain carries an empty permission trie and is
+    /// rejected, so a private tenant exposes no tracker anonymously. A public-share subject is
+    /// admitted by the policy but reads nothing here — tracker tables are not in
+    /// <see cref="ShareDataCategories"/>, so the share RLS policy hides them.
     /// </summary>
     [HttpGet("definitions")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto[]>> GetDefinitions(
@@ -223,7 +226,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto>> GetDefinition(Guid id)
@@ -474,7 +476,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get active tracker instances
     /// </summary>
     [HttpGet("instances")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
@@ -518,7 +519,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get upcoming tracker expirations for calendar
     /// </summary>
     [HttpGet("instances/upcoming")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetUpcomingInstances(
@@ -1063,9 +1063,11 @@ public class CreateTrackerDefinitionRequest
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
+    /// Visibility level for this tracker: Public or Private. Defaults to Private so a tracker is
+    /// never made Public by omission; the owner opts into Public explicitly. RoleRestricted is
+    /// rejected.
     /// </summary>
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
@@ -1116,7 +1118,8 @@ public class UpdateTrackerDefinitionRequest
     public DashboardVisibility? DashboardVisibility { get; set; }
 
     /// <summary>
-    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
+    /// Visibility level for this tracker: Public or Private. Null keeps the current value, so an
+    /// update never defaults a tracker to Public by omission. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
 

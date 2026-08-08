@@ -130,7 +130,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     /// Visibility level for this tracker: Public or Private
     /// </summary>
     [Column("visibility")]
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// When this definition was created
