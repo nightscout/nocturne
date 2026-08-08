@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807125200_RetireTrackerRoleRestrictedVisibility")]
+    partial class RetireTrackerRoleRestrictedVisibility
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1971,10 +1974,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_heart_rates_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
-                    b.HasIndex("TenantId", "DataSource", "Timestamp")
-                        .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_heart_rates_tenant_source_timestamp");
-
                     b.ToTable("heart_rates");
                 });
 
@@ -3902,13 +3901,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SupersededById")
                         .HasDatabaseName("ix_state_spans_superseded_by_id");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("Category", "StartTimestamp")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_state_spans_category_start");
-
-                    b.HasIndex("TenantId", "Source", "Category", "StartTimestamp")
-                        .IsDescending(false, false, false, true)
-                        .HasDatabaseName("ix_state_spans_tenant_source_category_start");
 
                     b.ToTable("state_spans");
                 });
@@ -4001,10 +3998,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_step_counts_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
-
-                    b.HasIndex("TenantId", "DataSource", "Timestamp")
-                        .IsDescending(false, false, true)
-                        .HasDatabaseName("ix_step_counts_tenant_source_timestamp");
 
                     b.ToTable("step_counts");
                 });

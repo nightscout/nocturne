@@ -127,16 +127,10 @@ public class TrackerDefinitionEntity : ITenantScoped
     public TrackerMode Mode { get; set; } = TrackerMode.Duration;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private
     /// </summary>
     [Column("visibility")]
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
-
-    /// <summary>
-    /// Required role names for RoleRestricted visibility (JSON array)
-    /// </summary>
-    [Column("required_roles", TypeName = "jsonb")]
-    public string? RequiredRoles { get; set; }
 
     /// <summary>
     /// When this definition was created

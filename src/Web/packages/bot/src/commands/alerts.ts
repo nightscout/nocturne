@@ -6,11 +6,10 @@ const logger = createLogger();
 
 export function registerAlertCommands(bot: Chat) {
   bot.onAction("ack_alert", async (event) => {
-    // TODO: requireLink for actions — see plan Task 3.4 notes.
-    // ActionEvent shape differs from SlashCommandEvent (no `channel`, `text`,
-    // or `command`), so it can't be passed to requireLink as-is. Until a
-    // dedicated helper exists this will call the ambient (unscoped) api and
-    // fail if no tenant is in scope. Secondary surface; fix in a follow-up.
+    // ActionEvent shape differs from SlashCommandEvent (no `channel`, `text`, or
+    // `command`), so it can't be passed to requireLink as-is. Until a dedicated
+    // helper exists this calls the ambient (unscoped) api and fails if no tenant
+    // is in scope.
     try {
       const api = getApi();
       await api.alerts.acknowledge({ acknowledgedBy: event.user.fullName ?? "Unknown" });

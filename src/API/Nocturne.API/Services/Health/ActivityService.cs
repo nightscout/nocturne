@@ -37,6 +37,13 @@ public class ActivityService : IActivityService
     private readonly ILogger<ActivityService> _logger;
 
     /// <summary>
+    /// Upper bound on rows pulled from each source when reads merge the four sources in memory and
+    /// re-paginate, which defeats limit pushdown. Independent of any controller-level ceiling on
+    /// what a caller may request.
+    /// </summary>
+    private const int MaxOverFetch = 100_000;
+
+    /// <summary>
     /// Initializes a new instance of <see cref="ActivityService"/>.
     /// </summary>
     public ActivityService(
@@ -92,8 +99,10 @@ public class ActivityService : IActivityService
                 actualSkip
             );
 
-            // Over-fetch from each source so we can merge and re-paginate
-            var fetchCount = actualCount + actualSkip;
+            // Over-fetch from each source so we can merge and re-paginate. Clamped into range: a
+            // large skip overflows the sum, and a non-positive fetch count faults every source
+            // query. Callers with no ceiling of their own rely on the upper bound here.
+            var fetchCount = (int)Math.Clamp((long)actualCount + actualSkip, 1, MaxOverFetch);
 
             // Source 1: Regular activities from StateSpans (exercise, illness, travel — no longer sleep)
             var stateSpanActivities = await _stateSpanService.GetActivitiesAsync(

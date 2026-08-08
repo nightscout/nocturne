@@ -1079,7 +1079,6 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             if (!result.Success)
             {
                 _logger.LogWarning("Failed to initiate device authorization: {Error}", result.Error);
-                // TODO: Show error in widget
                 return;
             }
 

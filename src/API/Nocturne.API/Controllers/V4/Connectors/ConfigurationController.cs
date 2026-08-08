@@ -83,16 +83,16 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the effective configuration from a running connector.
-    /// This returns the actual runtime values including those resolved from environment variables.
-    /// This endpoint is public since it only exposes non-secret configuration values.
+    /// Gets the effective configuration for a connector: the non-secret runtime values resolved
+    /// from stored configuration and environment variables. Secret values (passwords, tokens) are
+    /// excluded, but the result includes non-secret account identifiers such as the connector
+    /// account username or email, so it requires authentication (the class-level <c>[Authorize]</c>).
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Dictionary of property names to effective values</returns>
     [HttpGet("{connectorName}/effective")]
     [RemoteQuery]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<Dictionary<string, object?>>> GetEffectiveConfiguration(

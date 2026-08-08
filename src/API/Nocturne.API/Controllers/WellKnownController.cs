@@ -150,7 +150,11 @@ public class WellKnownController : ControllerBase
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
                 RevocationEndpoint = $"{baseUrl}/api/oauth/revoke",
-                IntrospectionEndpoint = $"{baseUrl}/api/oauth/introspect",
+                // Introspection is first-party self-introspection: the caller authenticates with
+                // its own session or bearer credential, not a client secret, and there is no
+                // registered token_endpoint_auth_method that describes that. It is left out of the
+                // advertised metadata so an external resource server reading discovery does not
+                // treat it as a client-authenticated RFC 7662 endpoint and get an undocumented 401.
                 RegistrationEndpoint = $"{baseUrl}/api/oauth/register",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
                 ResponseTypesSupported = new[] { "code" },

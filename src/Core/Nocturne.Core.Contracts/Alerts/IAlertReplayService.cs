@@ -51,6 +51,32 @@ public interface IAlertReplayService
 }
 
 /// <summary>
+/// Thrown when a replay request's resolved window is longer than the configured maximum
+/// (<c>AlertEvaluation:MaxReplayWindow</c>). Replay evaluates every enabled rule on a 5-minute
+/// tick and re-enriches each tick from the historical repositories, so an unbounded window is
+/// an unbounded amount of work and an unbounded transition log. The request is rejected so the
+/// caller narrows it, rather than being answered with a silently truncated window.
+/// </summary>
+public sealed class ReplayWindowTooLargeException : Exception
+{
+    /// <param name="requested">The resolved window span the caller asked for.</param>
+    /// <param name="maximum">The configured maximum span.</param>
+    public ReplayWindowTooLargeException(TimeSpan requested, TimeSpan maximum)
+        : base(FormattableString.Invariant(
+            $"Replay window of {requested.TotalHours:F1} hours exceeds the maximum of {maximum.TotalHours:F1} hours."))
+    {
+        Requested = requested;
+        Maximum = maximum;
+    }
+
+    /// <summary>The resolved window span the caller asked for.</summary>
+    public TimeSpan Requested { get; }
+
+    /// <summary>The configured maximum span.</summary>
+    public TimeSpan Maximum { get; }
+}
+
+/// <summary>
 /// In-memory rule definition layered into a dry-run replay. Mirrors the editor's pre-save
 /// shape. <see cref="Id"/> is optional: when present and matching an existing rule it
 /// replaces it for the replay; otherwise the override is appended to the rule list.
