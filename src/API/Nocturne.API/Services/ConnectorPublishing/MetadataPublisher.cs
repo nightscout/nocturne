@@ -264,7 +264,6 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         string source,
         CancellationToken cancellationToken = default)
     {
-        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
         var latest = (await _activityService.GetActivitiesAsync(
                 count: 1,
                 skip: 0,

@@ -834,14 +834,6 @@ public class Treatment : ProcessableDocumentBase
     public Guid? CanonicalId { get; set; }
 
     /// <summary>
-    /// Gets or sets the PostgreSQL database ID.
-    /// This is the actual UUID primary key in the treatments table.
-    /// </summary>
-    [JsonPropertyName("dbId")]
-    [NocturneOnly]
-    public Guid? DbId { get; set; }
-
-    /// <summary>
     /// Gets or sets the list of data sources that contributed to this unified record.
     /// Only populated when returning merged/unified DTOs.
     /// </summary>

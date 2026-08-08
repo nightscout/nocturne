@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
@@ -120,7 +121,7 @@ public class DeviceStatusController : ControllerBase
             }
 
             var deviceStatusEntries = await _projection.GetAsync(
-                count, skip, findQuery, cancellationToken
+                LegacyReadLimits.ClampMergedCount(count), skip, findQuery, cancellationToken
             );
             var deviceStatusArray = deviceStatusEntries.ToArray();
 

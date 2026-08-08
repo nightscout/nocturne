@@ -89,6 +89,7 @@ public class AlertReplayServiceTests
             TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
+            Options.Create(new AlertEvaluationOptions()),
             NullLogger<AlertReplayService>.Instance);
     }
 
