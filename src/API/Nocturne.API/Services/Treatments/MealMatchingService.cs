@@ -94,6 +94,16 @@ public class MealMatchingService : IMealMatchingService
             return;
         }
 
+        // treatment_foods.carb_intake_id carries no foreign key, so an unknown id here would
+        // persist a row no breakdown can ever resolve — and flip the food entry to Matched,
+        // so it never resurfaces as a suggestion.
+        var carbIntake = await _carbIntakeRepository.GetByIdAsync(carbIntakeId, ct);
+        if (carbIntake == null)
+        {
+            _logger.LogWarning("Carb intake {CarbIntakeId} not found", carbIntakeId);
+            return;
+        }
+
         var treatmentFood = new TreatmentFood
         {
             Id = Guid.CreateVersion7(),
@@ -215,6 +225,9 @@ public class MealMatchingService : IMealMatchingService
         DateTimeOffset to,
         CancellationToken ct)
     {
+        // Newest-first: a window wider than CandidateLimit is truncated by the database, and
+        // the pending food entries being matched are the recent ones. Fetching oldest-first
+        // would spend the budget on the far end of the range and find nothing.
         var carbIntakes = await _carbIntakeRepository.GetAsync(
             from: from.UtcDateTime,
             to: to.UtcDateTime,
@@ -222,7 +235,7 @@ public class MealMatchingService : IMealMatchingService
             source: null,
             limit: CandidateLimit,
             offset: 0,
-            descending: false,
+            descending: true,
             ct: ct);
 
         return carbIntakes.ToList();

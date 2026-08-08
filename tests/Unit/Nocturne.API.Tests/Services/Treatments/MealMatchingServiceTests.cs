@@ -185,4 +185,54 @@ public class MealMatchingServiceTests
         suggestions.Should().ContainSingle()
             .Which.CarbIntakeId.Should().Be(carbIntakeId);
     }
+
+    /// <summary>
+    /// A window holding more candidates than the fetch limit is truncated by the database, so
+    /// the fetch has to be newest-first — the pending entries being matched are the recent
+    /// ones, and oldest-first spends the whole budget on the far end of the range.
+    /// </summary>
+    [Fact]
+    public async Task GetSuggestionsAsync_FetchesTheNewestCandidatesWhenTheWindowIsTruncated()
+    {
+        _foodEntryRepository
+            .Setup(r => r.GetPendingInTimeRangeAsync(
+                It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(Guid.NewGuid())]);
+
+        await NewService().GetSuggestionsAsync(ConsumedAt.AddMonths(-6), ConsumedAt);
+
+        _carbIntakeRepository.Verify(
+            s => s.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    /// <summary>
+    /// <c>treatment_foods.carb_intake_id</c> has no foreign key, so an unknown id would persist
+    /// a row nothing can resolve and strand the food entry in Matched.
+    /// </summary>
+    [Fact]
+    public async Task AcceptMatchAsync_WritesNothingWhenTheCarbIntakeDoesNotExist()
+    {
+        var foodEntryId = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdAsync(foodEntryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Entry(foodEntryId));
+
+        _carbIntakeRepository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CarbIntake?)null);
+
+        await NewService().AcceptMatchAsync(foodEntryId, Guid.CreateVersion7(), 30, 0);
+
+        _treatmentFoodService.Verify(
+            s => s.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _foodEntryRepository.Verify(
+            r => r.UpdateStatusAsync(
+                It.IsAny<Guid>(), It.IsAny<ConnectorFoodEntryStatus>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }
