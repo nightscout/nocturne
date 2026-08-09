@@ -59,7 +59,58 @@ public class ShareReadSurfaceReachabilityTests
             ["Nocturne.API.Controllers.V4.Health.StepCountController"] = OAuthScopes.StepCountRead,
             ["Nocturne.API.Controllers.V4.Analytics.SensorIntegrityController"] = OAuthScopes.ReportsRead,
             ["Nocturne.API.Controllers.V4.Analytics.StatisticsController"] = OAuthScopes.ReportsRead,
+            // Feeds the data quality report. Its rows are hidden from shares by RLS
+            // (compression_low_suggestions has no ShareDataCategories entry), so the gate decides
+            // error-vs-empty-list, not what a share can see.
+            ["Nocturne.API.Controllers.V4.TenantAdmin.CompressionLowController"] = OAuthScopes.GlucoseRead,
         };
+
+    /// <summary>
+    /// Reads that serve the share surface through <c>[AllowAnonymous]</c> plus the
+    /// <c>HasPermissions</c> fallback rather than a scope gate, keyed <c>Controller.Action</c>.
+    /// The tracker tables carry no <see cref="ShareDataCategories"/> category, so RLS hides their
+    /// rows from a share and the endpoints return the public-visibility set — but they must stay
+    /// reachable, because the calendar renders them beside glucose a share can see.
+    /// </summary>
+    private static readonly string[] AnonymouslyReachableReads =
+    [
+        "TrackersController.GetDefinitions",
+        "TrackersController.GetActiveInstances",
+        "TrackersController.GetInstanceHistory",
+        "TrackersController.GetUpcomingInstances",
+    ];
+
+    [Fact]
+    public void AnonymouslyReachableReads_StayAnonymouslyReachable()
+    {
+        var offenders = new List<string>();
+
+        foreach (var name in AnonymouslyReachableReads)
+        {
+            var (typeName, actionName) = (name.Split('.')[0], name.Split('.')[1]);
+            var type = ApiAssembly.GetTypes().SingleOrDefault(t => t.Name == typeName);
+            if (type is null)
+            {
+                offenders.Add($"{name}: controller not found");
+                continue;
+            }
+
+            var action = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .SingleOrDefault(m => m.Name == actionName);
+            if (action is null)
+            {
+                offenders.Add($"{name}: action not found");
+                continue;
+            }
+
+            if (!action.GetCustomAttributes(inherit: true).OfType<AllowAnonymousAttribute>().Any())
+                offenders.Add($"{name}: lost [AllowAnonymous], so every public share 401s on it");
+        }
+
+        offenders.Should().BeEmpty(
+            "these reads back share-visible views and the share principal is IsAuthenticated: false:\n  "
+            + string.Join("\n  ", offenders));
+    }
 
     /// <summary>
     /// Actions whose required scope deviates from their controller's, keyed
@@ -188,6 +239,16 @@ public class ShareReadSurfaceReachabilityTests
                 t => t.Name == controller && Actions(t).Any(a => a.Name == action),
                 $"{key} is listed in ActionScopeOverrides but no such action exists");
         }
+    }
+
+    [Fact]
+    public void EveryListedController_Resolves()
+    {
+        // Controllers() drops names that no longer resolve, so a rename or a move between
+        // namespaces would otherwise retire a controller from this guard silently.
+        var missing = ShareReadableControllers.Keys.Where(n => ApiAssembly.GetType(n) is null);
+
+        missing.Should().BeEmpty("a listed controller that no longer resolves stops being guarded");
     }
 
     private static IEnumerable<Type> Controllers() =>

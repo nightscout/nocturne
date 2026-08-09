@@ -492,17 +492,20 @@ public class TrackersController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// Get completed tracker instances (history)
+    /// Get completed tracker instances (history). Matches <see cref="GetActiveInstances"/> and
+    /// <see cref="GetUpcomingInstances"/>: a caller carrying no subject reads the public-visibility
+    /// instances only. <c>[Authorize]</c> here instead 401'd the calendar for every public share,
+    /// which renders history alongside the active and upcoming instances.
     /// </summary>
     [HttpGet("instances/history")]
-    [Authorize]
+    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
         [FromQuery] int limit = 100
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetCompletedInstancesAsync(
             userId,
             limit,
