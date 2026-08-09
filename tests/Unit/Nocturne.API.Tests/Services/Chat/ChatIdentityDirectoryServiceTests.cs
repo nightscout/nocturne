@@ -126,8 +126,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
 
     /// <summary>
     /// Context whose insert always fails without any other writer touching the table, standing in
-    /// for a rejection the caller owns (FK violation, over-long label, a save the Npgsql retry
-    /// strategy already exhausted its own backoff on).
+    /// for a rejection the caller owns (FK violation, over-long label).
     /// </summary>
     private sealed class BarrenFailureDbContext(DbContextOptions<NocturneDbContext> options)
         : NocturneDbContext(options)
@@ -332,7 +331,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         factory.ContextsCreated.Should().Be(
             2,
             "an unchanged label set on the re-read means no race to lose, so the failure surfaces "
-            + "immediately instead of burning MaxCreateAttempts saves under the Npgsql backoff");
+            + "immediately instead of burning MaxCreateAttempts saves");
     }
 
     [Fact]

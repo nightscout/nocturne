@@ -23,6 +23,13 @@ internal sealed class ChatIdentityPendingLinkCleanupService(
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
+    /// <summary>
+    /// Delay before the first sweep, so the sweep does not open a connection while the host is still
+    /// starting — the API also boots for OpenAPI generation, where it never migrates and may have no
+    /// database to reach. Settable so tests do not have to wait it out.
+    /// </summary>
+    internal TimeSpan InitialDelay { get; init; } = TimeSpan.FromSeconds(10);
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,6 +37,8 @@ internal sealed class ChatIdentityPendingLinkCleanupService(
 
         try
         {
+            await Task.Delay(InitialDelay, stoppingToken);
+
             using var timer = new PeriodicTimer(Interval);
 
             do

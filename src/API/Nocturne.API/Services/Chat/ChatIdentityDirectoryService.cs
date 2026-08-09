@@ -40,9 +40,10 @@ public sealed class ChatIdentityDirectoryService(
     ILogger<ChatIdentityDirectoryService> logger)
 {
     /// <summary>
-    /// Insert attempts <see cref="CreateLinkAsync"/> makes before letting the unique-index rejection
-    /// reach the caller. Only a rejection accompanied by an observable concurrent write is retried
-    /// at all, so this bounds repeatedly losing a real race, not a retry storm.
+    /// Insert attempts <see cref="CreateLinkAsync"/> makes before letting the rejection reach the
+    /// caller. Retrying continues only while each re-read shows another writer moved, so the budget
+    /// bounds repeatedly losing a real race; a rejection no concurrent write explains normally costs
+    /// one extra read rather than the whole budget.
     /// </summary>
     private const int MaxCreateAttempts = 5;
 
@@ -114,8 +115,7 @@ public sealed class ChatIdentityDirectoryService(
     /// <summary>
     /// Creates a directory link between a chat platform user and a tenant, auto-suffixing the label
     /// if it collides. Returns the existing entry when one already links this platform user to this
-    /// tenant — including a revoked one, since the pre-check ignores <c>IsActive</c> to match the
-    /// unique index, which does too.
+    /// tenant — the pre-check ignores <c>IsActive</c> to match the unique index, which does too.
     /// </summary>
     public async Task<ChatIdentityDirectoryEntry> CreateLinkAsync(
         string platform, string platformUserId, Guid tenantId, Guid nocturneUserId,
@@ -142,11 +142,13 @@ public sealed class ChatIdentityDirectoryService(
                 .Select(d => d.Label)
                 .ToListAsync(ct);
 
-            // A rejection worth retrying is one another writer caused, and such a writer always
+            // A rejection worth retrying is one another writer caused, and a winning insert always
             // leaves a trace: a new row for this tenant (returned above) or a new label in this
             // platform user's set. Nothing moved means the rejection was ours to own — an FK
-            // violation, an over-long label, or a save the retry strategy already gave up on after
-            // its own backoff — so surface it rather than paying for it MaxCreateAttempts times.
+            // violation, an over-long label — so surface it rather than paying for it
+            // MaxCreateAttempts times. The one case this reads wrong is a concurrent insert that a
+            // RevokeAsync then hard-deletes before the re-read, restoring the label set: the caller
+            // gets the rejection though a further retry would have succeeded.
             if (lastFailure is not null && labelsAtLastFailure!.SetEquals(existingLabels))
             {
                 ExceptionDispatchInfo.Capture(lastFailure).Throw();

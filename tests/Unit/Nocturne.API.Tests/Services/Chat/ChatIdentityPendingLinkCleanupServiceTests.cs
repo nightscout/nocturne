@@ -130,11 +130,14 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
         (await _sut.SweepAsync(CancellationToken.None)).Should().Be(0);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_sweeps_once_before_waiting_for_the_next_tick()
+    /// <summary>
+    /// Builds a service under test whose sweep signals the returned task once its context has been
+    /// disposed, so a test can wait for the loop to reach the sweep instead of polling the same
+    /// SQLite connection the sweep is using from another thread. The caller disposes the provider.
+    /// </summary>
+    private (ServiceProvider Provider, ChatIdentityPendingLinkCleanupService Sut, Task Swept)
+        CreateSweepSignallingService()
     {
-        SeedToken("EXPIRED1", TimeSpan.FromMinutes(-20));
-
         var swept = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var services = new ServiceCollection();
@@ -142,30 +145,58 @@ public class ChatIdentityPendingLinkCleanupServiceTests : IDisposable
         services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
             new SignallingDbContextFactory(_options, () => swept.TrySetResult()));
         services.AddScoped<ChatIdentityPendingLinkService>();
-        await using var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
 
         var sut = new ChatIdentityPendingLinkCleanupService(
-            provider, NullLogger<ChatIdentityPendingLinkCleanupService>.Instance);
+            provider, NullLogger<ChatIdentityPendingLinkCleanupService>.Instance)
+        {
+            InitialDelay = TimeSpan.Zero,
+        };
+
+        return (provider, sut, swept.Task);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_sweeps_once_before_waiting_for_the_next_tick()
+    {
+        SeedToken("EXPIRED1", TimeSpan.FromMinutes(-20));
+
+        var (provider, sut, swept) = CreateSweepSignallingService();
+        await using var _ = provider;
 
         await sut.StartAsync(CancellationToken.None);
 
         // Wait for the sweep's context to be disposed, then stop the loop, so the connection is
         // only ever touched by one thread at a time.
-        var finished = await Task.WhenAny(swept.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var finished = await Task.WhenAny(swept, Task.Delay(TimeSpan.FromSeconds(10)));
         await sut.StopAsync(CancellationToken.None);
 
-        finished.Should().Be(swept.Task, "starting the hosted service must reach CleanupExpiredAsync");
+        finished.Should().Be(swept, "starting the hosted service must reach CleanupExpiredAsync");
 
         using var db = new NocturneDbContext(_options);
         (await db.ChatIdentityPendingLinks.CountAsync()).Should().Be(0);
     }
 
+    /// <summary>
+    /// Cancellation is an ordinary shutdown, not a fault. The wait for the first sweep is what makes
+    /// this test say anything: the host schedules <c>ExecuteAsync</c> on the thread pool, so stopping
+    /// straight after <c>StartAsync</c> can cancel the loop before its body ever runs, leaving a
+    /// cancelled task that proves nothing about how the loop handles cancellation.
+    /// </summary>
     [Fact]
     public async Task ExecuteAsync_stops_cleanly_on_cancellation()
     {
-        await _sut.StartAsync(CancellationToken.None);
+        var (provider, sut, swept) = CreateSweepSignallingService();
+        await using var _ = provider;
 
-        var stop = async () => await _sut.StopAsync(CancellationToken.None);
-        await stop.Should().NotThrowAsync();
+        await sut.StartAsync(CancellationToken.None);
+        (await Task.WhenAny(swept, Task.Delay(TimeSpan.FromSeconds(10))))
+            .Should().Be(swept, "the loop must be running before its cancellation means anything");
+
+        await sut.StopAsync(CancellationToken.None);
+
+        sut.ExecuteTask!.Status.Should().Be(
+            TaskStatus.RanToCompletion,
+            "a running loop absorbs the cancellation instead of letting it escape");
     }
 }
