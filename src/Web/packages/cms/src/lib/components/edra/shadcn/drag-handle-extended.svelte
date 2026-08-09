@@ -76,9 +76,10 @@
 			.run();
 	};
 
-	const handleCopyToClipboard = () => {
+	const handleCopyToClipboard = async () => {
+		if (!currentNode) return;
 		editor.chain().setMeta('hideDragHandle', true).setNodeSelection(currentNodePos).run();
-		document.execCommand('copy');
+		await navigator.clipboard.writeText(currentNode.textContent);
 	};
 
 	const handleDelete = () => {

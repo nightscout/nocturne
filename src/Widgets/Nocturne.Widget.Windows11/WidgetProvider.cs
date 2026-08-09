@@ -297,6 +297,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         {
             if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
             {
+                widgetInfo.CustomizationApiUrl = null;
+                widgetInfo.CustomizationError = null;
                 widgetInfo.CustomizationMode = connected
                     ? CustomizationState.Settings
                     : CustomizationState.EnterServerUrl;
@@ -462,9 +464,14 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                     var setupSettings = await _settingsStore.GetAsync();
                     dataNode = new JsonObject
                     {
-                        ["apiUrl"] = pendingAuth?.ApiUrl ?? existingCreds?.ApiUrl ?? "",
+                        ["apiUrl"] = widgetInfo.CustomizationApiUrl
+                            ?? pendingAuth?.ApiUrl
+                            ?? existingCreds?.ApiUrl
+                            ?? "",
                         ["hasCredentials"] = existingCreds != null,
                         ["unit"] = setupSettings.Unit.ToString(),
+                        ["hasError"] = !string.IsNullOrWhiteSpace(widgetInfo.CustomizationError),
+                        ["errorMessage"] = widgetInfo.CustomizationError ?? "",
                     };
                     break;
 
@@ -553,6 +560,16 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         "placeholder": "https://your-server.com",
                         "value": "${apiUrl}",
                         "isRequired": true
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "${errorMessage}",
+                        "color": "Attention",
+                        "size": "Small",
+                        "wrap": true,
+                        "maxLines": 2,
+                        "isVisible": "${hasError}",
+                        "spacing": "Small"
                     }
                 ],
                 "actions": [
@@ -1079,6 +1096,17 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             if (!result.Success)
             {
                 _logger.LogWarning("Failed to initiate device authorization: {Error}", result.Error);
+                lock (_widgetLock)
+                {
+                    if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+                    {
+                        widgetInfo.CustomizationApiUrl = apiUrl;
+                        widgetInfo.CustomizationError = string.IsNullOrWhiteSpace(result.Error)
+                            ? "Unable to connect to Nocturne server"
+                            : result.Error;
+                    }
+                }
+                UpdateWidget(widgetId);
                 return;
             }
 
@@ -1086,6 +1114,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             {
                 if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
                 {
+                    widgetInfo.CustomizationApiUrl = null;
+                    widgetInfo.CustomizationError = null;
                     widgetInfo.CustomizationMode = CustomizationState.AwaitingAuthorization;
                 }
             }
@@ -1325,6 +1355,8 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         public bool IsActive { get; set; }
         public string? CustomState { get; set; }
         public CustomizationState CustomizationMode { get; set; }
+        public string? CustomizationApiUrl { get; set; }
+        public string? CustomizationError { get; set; }
 
         /// <summary>Current pinned size ("small"/"medium"/"large"); the glucose widget renders by this.</summary>
         public string Size { get; set; } = "small";
