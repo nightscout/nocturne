@@ -240,17 +240,27 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             StartTimestamp = EarlyJune,
             OriginalId = "carries-none",
         };
+        var carriesBlank = new StateSpan
+        {
+            Category = StateSpanCategory.Exercise,
+            State = "exercise",
+            StartTimestamp = EarlyJune,
+            Source = "",
+            OriginalId = "carries-blank",
+        };
 
         await _publisher.PublishStateSpansAsync(
-            [carriesForeignSource, carriesNone], SourceMirror, WriteOrigin.Live);
+            [carriesForeignSource, carriesNone, carriesBlank], SourceMirror, WriteOrigin.Live);
 
         carriesForeignSource.Source.Should().Be(SourceMirror);
         carriesNone.Source.Should().Be(SourceMirror);
+        carriesBlank.Source.Should().Be(SourceMirror);
 
-        // A displaced source is stashed, not dropped, so the origin stays recoverable. A span
-        // that arrived with nothing has nothing to stash.
+        // A displaced source is stashed, not dropped, so the origin stays recoverable. A span that
+        // arrived with no source — null or blank — has nothing worth stashing.
         carriesForeignSource.Metadata.Should().Contain("originSource", SourceA);
         carriesNone.Metadata.Should().BeNull();
+        carriesBlank.Metadata.Should().BeNull();
     }
 
     [Fact]

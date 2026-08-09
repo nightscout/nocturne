@@ -211,7 +211,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
                 // NocturneRemote replays another instance's spans verbatim, and honouring their
                 // Source would advance a watermark the named connector never earned. A displaced
                 // value is stashed so the remote origin stays recoverable.
-                if (span.Source is not null && span.Source != source)
+                if (!string.IsNullOrEmpty(span.Source) && span.Source != source)
                 {
                     span.Metadata ??= [];
                     span.Metadata["originSource"] = span.Source;
