@@ -4919,10 +4919,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
-                    b.Property<string>("RequiredRoles")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("required_roles");
-
                     b.Property<string>("StartEventType")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
