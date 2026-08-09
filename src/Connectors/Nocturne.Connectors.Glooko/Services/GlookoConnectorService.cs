@@ -71,33 +71,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         SyncDataType.Profiles
     ];
 
-    // ── Per-sync state (populated in PerformSyncInternalAsync) ─────────
-    // These fields are not safe for concurrent syncs on one instance: a second
-    // InitializeMappers overwrites the first sync's session and mappers.
-
-    private string? _sessionCookie;
-    private GlookoUserData? _userData;
-    private GlookoConnectorConfiguration? _syncConfig;
-    private GlookoTimeMapper? _timeMapper;
-    private GlookoSensorGlucoseMapper? _sensorGlucoseMapper;
-    private GlookoV4TreatmentMapper? _v4TreatmentMapper;
-    private GlookoStateSpanMapper? _stateSpanMapper;
-    private GlookoTempBasalMapper? _tempBasalMapper;
-    private GlookoSystemEventMapper? _systemEventMapper;
-    private GlookoProfileMapper? _profileMapper;
-
-    private void InitializeMappers(GlookoConnectorConfiguration config)
-    {
-        _syncConfig = config;
-        _timeMapper = new GlookoTimeMapper(config, _glookoLogger);
-        _sensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, ConnectorSource, _timeMapper, _glookoLogger);
-        _v4TreatmentMapper = new GlookoV4TreatmentMapper(ConnectorSource, _timeMapper, _glookoLogger);
-        _stateSpanMapper = new GlookoStateSpanMapper(ConnectorSource, _timeMapper, _glookoLogger);
-        _tempBasalMapper = new GlookoTempBasalMapper(ConnectorSource, _timeMapper, _glookoLogger);
-        _systemEventMapper = new GlookoSystemEventMapper(ConnectorSource, _timeMapper, _glookoLogger);
-        _profileMapper = new GlookoProfileMapper(ConnectorSource, _glookoLogger);
-    }
-
     // ── Authentication ──────────────────────────────────────────────────
 
     public override async Task<bool> AuthenticateAsync()
