@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
-using System.Runtime.ExceptionServices;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Chat;
 
@@ -41,9 +41,8 @@ public sealed class ChatIdentityDirectoryService(
 {
     /// <summary>
     /// Insert attempts <see cref="CreateLinkAsync"/> makes before letting the rejection reach the
-    /// caller. Retrying continues only while each re-read shows another writer moved, so the budget
-    /// bounds repeatedly losing a real race; a rejection no concurrent write explains normally costs
-    /// one extra read rather than the whole budget.
+    /// caller. Only a unique-index rejection is retried at all, so this bounds repeatedly losing a
+    /// real race rather than replaying a failure a re-read cannot fix.
     /// </summary>
     private const int MaxCreateAttempts = 5;
 
@@ -121,9 +120,6 @@ public sealed class ChatIdentityDirectoryService(
         string platform, string platformUserId, Guid tenantId, Guid nocturneUserId,
         string suggestedLabel, string suggestedDisplayName, CancellationToken ct)
     {
-        DbUpdateException? lastFailure = null;
-        HashSet<string>? labelsAtLastFailure = null;
-
         for (var attempt = 1; ; attempt++)
         {
             await using var db = await contextFactory.CreateDbContextAsync(ct);
@@ -141,18 +137,6 @@ public sealed class ChatIdentityDirectoryService(
                 .Where(d => d.Platform == platform && d.PlatformUserId == platformUserId)
                 .Select(d => d.Label)
                 .ToListAsync(ct);
-
-            // A rejection worth retrying is one another writer caused, and a winning insert always
-            // leaves a trace: a new row for this tenant (returned above) or a new label in this
-            // platform user's set. Nothing moved means the rejection was ours to own — an FK
-            // violation, an over-long label — so surface it rather than paying for it
-            // MaxCreateAttempts times. The one case this reads wrong is a concurrent insert that a
-            // RevokeAsync then hard-deletes before the re-read, restoring the label set: the caller
-            // gets the rejection though a further retry would have succeeded.
-            if (lastFailure is not null && labelsAtLastFailure!.SetEquals(existingLabels))
-            {
-                ExceptionDispatchInfo.Capture(lastFailure).Throw();
-            }
 
             var resolvedLabel = ResolveUniqueLabel(existingLabels, suggestedLabel);
             var isFirst = existingLabels.Count == 0;
@@ -175,16 +159,15 @@ public sealed class ChatIdentityDirectoryService(
             {
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException ex) when (attempt < MaxCreateAttempts)
+            catch (DbUpdateException ex) when (attempt < MaxCreateAttempts && ex.IsUniqueViolation())
             {
                 // The reads above are not serialized with the insert, so a concurrent create for the
                 // same platform user can take the label (ux_directory_user_label), the tenant slot
                 // (ux_directory_user_tenant) or the default flag (ux_directory_user_one_default) in
                 // between. Every one of those resolves the same way: re-read on a fresh context and
                 // try again — a taken label moves to the next suffix, a taken tenant slot returns
-                // the winner's row, a taken default flag leaves IsDefault false.
-                lastFailure = ex;
-                labelsAtLastFailure = [.. existingLabels];
+                // the winner's row, a taken default flag leaves IsDefault false. Anything else the
+                // database rejects is deterministic, and the filter above lets it straight out.
                 logger.LogWarning(ex,
                     "Chat identity directory insert for {Platform}:{PlatformUserId} -> tenant {TenantId} was rejected on attempt {Attempt}; retrying with a fresh read",
                     platform, platformUserId, tenantId, attempt);
