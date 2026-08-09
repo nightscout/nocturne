@@ -99,7 +99,14 @@ public record MatchCriteria
 /// <summary>
 /// Input for batch deduplication — one per record being ingested.
 /// </summary>
-public record DeduplicationInput(Guid RecordId, long Mills, string DataSource, MatchCriteria Criteria);
+public record DeduplicationInput(Guid RecordId, long Mills, string DataSource, MatchCriteria Criteria)
+{
+    /// <summary>
+    /// Substituted for a record that carries no data source. It names no connector, so it cannot
+    /// establish that two records came from different ones and is ineligible for wide matching.
+    /// </summary>
+    public const string UnknownDataSource = "unknown";
+}
 
 /// <summary>
 /// Stats returned from a batch deduplication call.

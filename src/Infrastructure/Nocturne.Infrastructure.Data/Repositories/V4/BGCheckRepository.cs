@@ -152,7 +152,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: new MatchCriteria { GlucoseValue = e.Glucose, GlucoseTolerance = 1.0 }
             )).ToList();
 

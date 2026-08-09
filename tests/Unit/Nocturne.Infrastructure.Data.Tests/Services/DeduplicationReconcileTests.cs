@@ -165,10 +165,11 @@ public class DeduplicationReconcileTests : IDisposable
     public async Task MergeDuplicateGroupsAsync_DoesNotMergeOutsideWindow()
     {
         var t = DateTime.UtcNow;
+        // 15 minutes apart: past the wide window, so neither pass can reach across.
         var mylife = await AddCarb(t, "mylife-connector", 50);
-        var glooko = await AddCarb(t.AddSeconds(90), "glooko-connector", 50);
+        var glooko = await AddCarb(t.AddMinutes(15), "glooko-connector", 50);
         AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(90)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddMinutes(15)), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -271,6 +272,317 @@ public class DeduplicationReconcileTests : IDisposable
         // The far pair still has its two separate primaries.
         var farLinks = links.Where(l => l.RecordId == farA || l.RecordId == farB).ToList();
         farLinks.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_MergesCrossSourceGroups_PastTheTightWindow()
+    {
+        var t = DateTime.UtcNow;
+        // A pair the ingest path missed because the connectors' clocks drifted 64 seconds apart.
+        var mylife = await AddCarb(t, "mylife-connector", 50);
+        var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(1);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(l => l.IsPrimary).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_RefusesWideMerge_WithAThirdCandidateGroup()
+    {
+        var t = DateTime.UtcNow;
+        // Three same-value groups all inside each other's wide window: no group has a single
+        // candidate, so none of them merge.
+        var mylife = await AddCarb(t, "mylife-connector", 50);
+        var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
+        var libre = await AddCarb(t.AddSeconds(128), "libre-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, libre, ToMills(t.AddSeconds(128)), "libre-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(0);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_RefusesWideMerge_ForSameSourceGroups()
+    {
+        var t = DateTime.UtcNow;
+        // One connector reporting 50g twice inside the wide window is two real meals.
+        var first = await AddCarb(t, "mylife-connector", 50);
+        var second = await AddCarb(t.AddSeconds(64), "mylife-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(64)), "mylife-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(0);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_DefersAPairWhoseGroupTouchesTheLoadBoundary()
+    {
+        // The neighbour margin was sized for groups that are single points. A group that has
+        // already absorbed a wide join spans a window of its own, so it can sit flush against the
+        // end of what was loaded with an ambiguator just beyond. Defer rather than guess — and the
+        // same rows must still merge once a pass can see everything.
+        var candidate = await AddCarb(WideBase, "mylife-connector", 50);
+        var spanningPrimary = await AddCarb(WideBase.AddMinutes(10), "glooko-connector", 50);
+        var spanningMember = await AddCarb(WideBase.AddMinutes(20), "libre-connector", 50);
+
+        var candidateCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+        var spanningCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+        AddLink(
+            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            spanningCanonical, isPrimary: false);
+        await _context.SaveChangesAsync();
+
+        var deferred = await _service.MergeDuplicateGroupsAsync(
+            RecordType.CarbIntake,
+            new HashSet<Guid> { candidateCanonical },
+            CancellationToken.None);
+
+        deferred.Should().Be(0, "the spanning group runs up against the end of the neighbour load");
+        var afterDeferral = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        afterDeferral.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(1, "the full job sees the whole picture and the pair is genuinely one event");
+        var afterMerge = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        afterMerge.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_RefusesWideMerge_WhenTheAmbiguatorSitsBeyondTheCandidateLoad()
+    {
+        // Same shape, but a third same-value group sits past the end of the candidate-bounded load.
+        // The candidate pass must not merge on the strength of what it happens to have read; the
+        // full job then refuses outright, which is the answer the deferral was protecting.
+        var candidate = await AddCarb(WideBase, "mylife-connector", 50);
+        var spanningPrimary = await AddCarb(WideBase.AddMinutes(10), "glooko-connector", 50);
+        var spanningMember = await AddCarb(WideBase.AddMinutes(20), "libre-connector", 50);
+        var beyond = await AddCarb(WideBase.AddMinutes(30), "mylife-connector", 50);
+
+        var candidateCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+        var spanningCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+        AddLink(
+            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            spanningCanonical, isPrimary: false);
+        AddPrimaryLink(RecordType.CarbIntake, beyond, ToMills(WideBase.AddMinutes(30)), "mylife-connector");
+        await _context.SaveChangesAsync();
+
+        var deferred = await _service.MergeDuplicateGroupsAsync(
+            RecordType.CarbIntake,
+            new HashSet<Guid> { candidateCanonical },
+            CancellationToken.None);
+
+        deferred.Should().Be(0);
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(0, "the spanning group pairs with both of the others, so nothing is unambiguous");
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CountsAmbiguityAgainstEveryCanonicalBeneathARoot()
+    {
+        // The tight pass collapses two canonicals whose values differ inside its tolerance, so the
+        // resulting root carries two slightly different values. Comparing on one representative
+        // would hide the root from the pair below and let that pair merge.
+        var tightA = await AddCarb(WideBase, "mylife-connector", 50);
+        var tightB = await AddCarb(WideBase.AddSeconds(10), "glooko-connector", 50.5);
+        var pairA = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
+        var pairB = await AddCarb(WideBase.AddMinutes(3), "dexcom-connector", 50.5);
+
+        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(2)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(3)), "dexcom-connector");
+        await _context.SaveChangesAsync();
+
+        await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3,
+            "the tight pair collapses to one group; the other two stay apart because that group's second value makes them ambiguous");
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_MatchesAgainstEveryCanonicalBeneathARoot()
+    {
+        // The merge-direction companion: the root's second value is the one that matches, so
+        // comparing against a single representative would refuse a pair the insert path — which
+        // compares an incoming record against every link it can see — would have joined.
+        var tightA = await AddCarb(WideBase, "mylife-connector", 50);
+        var tightB = await AddCarb(WideBase.AddSeconds(10), "glooko-connector", 50.5);
+        var partner = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
+
+        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, partner, ToMills(WideBase.AddMinutes(2)), "libre-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(2, "the tight pair collapses, then the wide pass folds the partner in");
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(l => l.IsPrimary).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_NeverPromotesAnOrphanedLinkToPrimary()
+    {
+        // An orphaned link points at a record that no longer exists. Reads hide it exactly as they
+        // hide a soft-deleted one, so promoting it would leave the merged group showing nothing.
+        var live = await AddCarb(WideBase.AddSeconds(30), "mylife-connector", 50);
+        var other = await AddCarb(WideBase.AddSeconds(50), "glooko-connector", 50);
+
+        var liveCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, live, ToMills(WideBase.AddSeconds(30)), "mylife-connector");
+        AddLink(
+            RecordType.CarbIntake, Guid.CreateVersion7(), ToMills(WideBase), "libre-connector",
+            liveCanonical, isPrimary: false);
+        AddPrimaryLink(RecordType.CarbIntake, other, ToMills(WideBase.AddSeconds(50)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(1);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(l => l.IsPrimary).Should().Be(1);
+        links.Single(l => l.IsPrimary).RecordId.Should().Be(live,
+            "the earliest record a read can actually show survives as primary");
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_RefusesWideMerge_WhenAGroupMemberIsTheAmbiguityEvidence()
+    {
+        // An already-wide-joined group spans nineteen minutes, so its primary is a poor stand-in
+        // for where its records actually are. Its later member sits six minutes from the first of
+        // a would-be pair, which makes that pair ambiguous — the insert path scans every link and
+        // would refuse, so reconcile must refuse too.
+        var spanningPrimary = await AddCarb(WideBase, "mylife-connector", 50);
+        var spanningMember = await AddCarb(WideBase.AddMinutes(19), "glooko-connector", 50);
+        var pairA = await AddCarb(WideBase.AddMinutes(25), "mylife-connector", 50);
+        var pairB = await AddCarb(WideBase.AddMinutes(30), "glooko-connector", 50);
+
+        var spanningCanonical = AddPrimaryLink(
+            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase), "mylife-connector");
+        AddLink(
+            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(19)), "glooko-connector",
+            spanningCanonical, isPrimary: false);
+        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(25)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(30)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        merged.Should().Be(0);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Theory]
+    [InlineData(600_000, 1)]
+    [InlineData(600_001, 2)]
+    public async Task MergeDuplicateGroupsAsync_PinsWideWindowEdge(int offsetMillis, int expectedGroups)
+    {
+        var mylife = await AddCarb(WideBase, "mylife-connector", 50);
+        var glooko = await AddCarb(WideBase.AddMilliseconds(offsetMillis), "glooko-connector", 50);
+        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(WideBase), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(WideBase.AddMilliseconds(offsetMillis)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(expectedGroups);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task MergeDuplicateGroupsAsync_RefusesWideMerge_WithAThirdGroupBeyondTheCandidateBounds(int candidateIndex)
+    {
+        // Three same-value groups nine minutes apart. The outer two are more than a wide window
+        // apart, so only the middle group pairs with both — which makes every pair ambiguous. The
+        // deciding evidence sits up to a full window beyond the candidate's own window, so the
+        // verdict must not depend on which of the three the reconcile pass was handed.
+        var first = await AddCarb(WideBase, "mylife-connector", 50);
+        var second = await AddCarb(WideBase.AddMinutes(9), "glooko-connector", 50);
+        var third = await AddCarb(WideBase.AddMinutes(18), "mylife-connector", 50);
+        var canonicals = new[]
+        {
+            AddPrimaryLink(RecordType.CarbIntake, first, ToMills(WideBase), "mylife-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, second, ToMills(WideBase.AddMinutes(9)), "glooko-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, third, ToMills(WideBase.AddMinutes(18)), "mylife-connector"),
+        };
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(
+            RecordType.CarbIntake,
+            new HashSet<Guid> { canonicals[candidateIndex] },
+            CancellationToken.None);
+
+        merged.Should().Be(0);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_LeavesNonCandidatePairToALaterPass()
+    {
+        // A clean pair that is nobody's candidate sits near the edge of the neighbour load, so its
+        // own evidence horizon is cut short. This pass must leave it alone — and the pass that does
+        // own it must still merge it, so nothing is lost.
+        var candidate = await AddCarb(WideBase, "mylife-connector", 99);
+        var pairA = await AddCarb(WideBase.AddMinutes(15), "mylife-connector", 50);
+        var pairB = await AddCarb(WideBase.AddMinutes(16), "glooko-connector", 50);
+        var candidateCanonical = AddPrimaryLink(RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(15)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(16)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        var deferred = await _service.MergeDuplicateGroupsAsync(
+            RecordType.CarbIntake,
+            new HashSet<Guid> { candidateCanonical },
+            CancellationToken.None);
+
+        deferred.Should().Be(0, "the pair belongs to a later pass, not this one");
+        var afterDeferral = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        afterDeferral.Select(l => l.CanonicalId).Distinct().Should().HaveCount(3);
+
+        var merged = await _service.MergeDuplicateGroupsAsync(
+            RecordType.CarbIntake,
+            new HashSet<Guid> { pairACanonical },
+            CancellationToken.None);
+
+        merged.Should().Be(1, "the pass that owns the pair merges it");
+        var afterMerge = await _context.LinkedRecords.IgnoreQueryFilters().Where(l => l.RecordType == "carbintake").ToListAsync();
+        afterMerge.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
     }
 
     [Fact]
@@ -416,6 +728,12 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     /// <summary>
+    /// Fixed event time the wide-window reconcile tests are anchored on, so millisecond offsets
+    /// are exact.
+    /// </summary>
+    private static readonly DateTime WideBase = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
     /// Inserts a <see cref="CarbIntakeEntity"/> for the test tenant and returns its id.
     /// </summary>
     private async Task<Guid> AddCarb(DateTime timestamp, string dataSource, double carbs, DateTime? deletedAt = null)
@@ -441,6 +759,16 @@ public class DeduplicationReconcileTests : IDisposable
     private Guid AddPrimaryLink(RecordType recordType, Guid recordId, long mills, string source)
     {
         var canonicalId = Guid.CreateVersion7();
+        AddLink(recordType, recordId, mills, source, canonicalId, isPrimary: true);
+        return canonicalId;
+    }
+
+    /// <summary>
+    /// Adds a link to an existing canonical group, standing in for a group an earlier pass already
+    /// collapsed — the case where a group spans far more than its primary's timestamp suggests.
+    /// </summary>
+    private void AddLink(
+        RecordType recordType, Guid recordId, long mills, string source, Guid canonicalId, bool isPrimary) =>
         _context.LinkedRecords.Add(new LinkedRecordEntity
         {
             Id = Guid.CreateVersion7(),
@@ -450,11 +778,9 @@ public class DeduplicationReconcileTests : IDisposable
             RecordId = recordId,
             SourceTimestamp = mills,
             DataSource = source,
-            IsPrimary = true,
+            IsPrimary = isPrimary,
             SysCreatedAt = DateTime.UtcNow
         });
-        return canonicalId;
-    }
 
     /// <summary>
     /// Overrides <see cref="LinkedRecordEntity.SysCreatedAt"/> on all of the tenant's links.

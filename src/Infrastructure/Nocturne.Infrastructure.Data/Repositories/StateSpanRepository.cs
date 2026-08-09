@@ -255,7 +255,7 @@ public class StateSpanRepository : IStateSpanRepository
                     new(
                         RecordId: entity.Id,
                         Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        DataSource: entity.Source ?? "unknown",
+                        DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
                         Criteria: new MatchCriteria
                         {
                             Category = Enum.Parse<StateSpanCategory>(entity.Category, true),

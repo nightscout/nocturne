@@ -382,8 +382,13 @@ public class TempBasalRepository : ITempBasalRepository
                 var dedupInputs = entities.Select(e => new DeduplicationInput(
                     RecordId: e.Id,
                     Mills: new DateTimeOffset(e.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    DataSource: e.DataSource ?? "unknown",
-                    Criteria: new MatchCriteria { Rate = e.Rate, RateTolerance = 0.05 }
+                    DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
+                    Criteria: new MatchCriteria
+                    {
+                        Rate = e.Rate,
+                        RateTolerance = 0.05,
+                        Duration = e.EndTimestamp.HasValue ? e.EndTimestamp.Value - e.StartTimestamp : null
+                    }
                 )).ToList();
 
                 await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);

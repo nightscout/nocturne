@@ -308,7 +308,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: new MatchCriteria { Carbs = e.Carbs, CarbsTolerance = 1.0 }
             )).ToList();
 
