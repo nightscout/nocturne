@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -21,6 +22,13 @@ public class DeduplicationService : IDeduplicationService
     private readonly NocturneDbContext _context;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DeduplicationService> _logger;
+
+    /// <summary>
+    /// The ambient tenant of the scope this instance was resolved in. Null in hosts that do not
+    /// register tenant resolution; only <see cref="StartDeduplicationJobAsync"/> and the job-status
+    /// lookups need it, and they fail closed without it.
+    /// </summary>
+    private readonly ITenantAccessor? _tenantAccessor;
 
     private static readonly TimeSpan MatchingWindow = TimeSpan.FromSeconds(30);
     private static readonly long MatchingWindowMillis = (long)MatchingWindow.TotalMilliseconds;
@@ -142,6 +150,12 @@ public class DeduplicationService : IDeduplicationService
     private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> _jobCancellations = new();
 
     /// <summary>
+    /// Owning tenant of each job. The job dictionaries are static and therefore shared by every
+    /// tenant in the process, so status and cancellation are matched against this before answering.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Guid, Guid> _jobTenants = new();
+
+    /// <summary>
     /// Event types that should be grouped together for deduplication.
     /// When a Basal and Temp Basal occur at the same time, they represent
     /// the same underlying event and should be deduplicated together.
@@ -166,11 +180,13 @@ public class DeduplicationService : IDeduplicationService
     public DeduplicationService(
         NocturneDbContext context,
         IServiceScopeFactory scopeFactory,
-        ILogger<DeduplicationService> logger)
+        ILogger<DeduplicationService> logger,
+        ITenantAccessor? tenantAccessor = null)
     {
         _context = context;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _tenantAccessor = tenantAccessor;
     }
 
     /// <inheritdoc />
@@ -2086,6 +2102,18 @@ public class DeduplicationService : IDeduplicationService
     /// <inheritdoc />
     public async Task<Guid> StartDeduplicationJobAsync(CancellationToken cancellationToken = default)
     {
+        // Capture the caller's tenant before leaving the request scope. Without it the background
+        // scope's DbContext is unpinned, and under FORCE row-level security every tenant-scoped
+        // table reads as empty — the job would report success having processed nothing. Fail here
+        // instead: a job that cannot see the tenant's data must not look like one that ran.
+        var tenantContext = _tenantAccessor?.Context;
+        if (tenantContext is null)
+        {
+            throw new InvalidOperationException(
+                "Cannot start a deduplication job without a resolved tenant: the background scope "
+                + "would read no rows and report a vacuous success.");
+        }
+
         var jobId = Guid.CreateVersion7();
         var cts = new CancellationTokenSource();
 
@@ -2097,6 +2125,7 @@ public class DeduplicationService : IDeduplicationService
         };
 
         _runningJobs[jobId] = status;
+        _jobTenants[jobId] = tenantContext.TenantId;
         _jobCancellations[jobId] = cts;
 
         // Start the job in the background with its own scope
@@ -2104,6 +2133,12 @@ public class DeduplicationService : IDeduplicationService
         {
             // Create a new scope for the background work to get a fresh DbContext
             await using var scope = _scopeFactory.CreateAsyncScope();
+
+            // Pin the tenant before anything is resolved from the scope: the scoped DbContext reads
+            // the accessor in its factory, so resolving the service first would bake in an empty
+            // tenant. Same ordering as DeduplicationReconciliationBackgroundService.
+            scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(tenantContext);
+
             var scopedService = scope.ServiceProvider.GetRequiredService<IDeduplicationService>();
 
             try
@@ -2163,6 +2198,9 @@ public class DeduplicationService : IDeduplicationService
         Guid jobId,
         CancellationToken cancellationToken = default)
     {
+        if (!OwnsJob(jobId))
+            return Task.FromResult<DeduplicationJobStatus?>(null);
+
         _runningJobs.TryGetValue(jobId, out var status);
         return Task.FromResult(status);
     }
@@ -2170,12 +2208,28 @@ public class DeduplicationService : IDeduplicationService
     /// <inheritdoc />
     public Task<bool> CancelJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
+        if (!OwnsJob(jobId))
+            return Task.FromResult(false);
+
         if (_jobCancellations.TryGetValue(jobId, out var cts))
         {
             cts.Cancel();
             return Task.FromResult(true);
         }
         return Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// Whether the calling scope's tenant started <paramref name="jobId"/>. Answers false for an
+    /// unknown job and for a caller with no resolved tenant, so both look exactly like a job that
+    /// does not exist.
+    /// </summary>
+    private bool OwnsJob(Guid jobId)
+    {
+        var tenantId = _tenantAccessor?.Context?.TenantId;
+        return tenantId is not null
+               && _jobTenants.TryGetValue(jobId, out var owner)
+               && owner == tenantId;
     }
 
     private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateTypeAsync<TEntity>(
