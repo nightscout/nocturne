@@ -192,9 +192,8 @@ public static class ActivityStateSpanMapper
             State = activity.Type ?? category.ToString().ToLowerInvariant(),
             StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(activity.Mills).UtcDateTime,
             EndTimestamp = CalculateEndTimestamp(activity),
-            // DataSource first: it is the connector that wrote the record, which is what a
-            // resume watermark is scoped by. EnteredBy is the uploader name carried in the
-            // payload and stays the fallback for activities posted through the v1 API.
+            // DataSource is the connector a resume watermark is scoped by; EnteredBy is the
+            // uploader name, and stays the fallback for activities posted through the v1 API.
             Source = activity.DataSource ?? activity.EnteredBy ?? "nightscout",
             OriginalId = activity.Id,
             Metadata = BuildMetadata(activity)
@@ -293,8 +292,8 @@ public static class ActivityStateSpanMapper
         if (!string.IsNullOrEmpty(activity.Name))
             metadata["name"] = activity.Name;
 
-        // Kept because Source now holds the connector for connector-published activities, so it
-        // is no longer the uploader name to read EnteredBy back from. Mirrors BuildSleepMetadata.
+        // Source holds the connector for connector-published activities, so EnteredBy round-trips
+        // through metadata instead. Mirrors BuildSleepMetadata.
         if (!string.IsNullOrEmpty(activity.EnteredBy))
             metadata["enteredBy"] = activity.EnteredBy;
 

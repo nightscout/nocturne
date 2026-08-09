@@ -29,11 +29,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
 /// <summary>
-/// End-to-end cover for the connector activity watermark: two connectors publish activity into the
-/// same tenant, and each must resolve its catch-up window from its OWN newest record. Runs the real
-/// publish and read paths (decomposer, state spans, heart rates, step counts) over an in-memory
-/// database rather than mocks, because the bug being pinned is that the source never reached
-/// storage in the first place.
+/// Two connectors publish activity into the same tenant, and each must resolve its catch-up window
+/// from its own newest record. Runs the real publish and read paths (decomposer, state spans, heart
+/// rates, step counts) over an in-memory database rather than mocks, so a filter that never matches
+/// because nothing stamped the source fails here.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ActivityWatermarkSourceScopeTests : IDisposable
@@ -148,8 +147,8 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
         await _publisher.PublishActivityAsync([Exercise(EarlyJune)], SourceA, WriteOrigin.Live);
         await _publisher.PublishActivityAsync([Exercise(LateJune)], SourceB, WriteOrigin.Live);
 
-        // Before the fix both calls returned LateJune (the tenant-global newest), so SourceA
-        // concluded it was caught up and skipped everything between EarlyJune and LateJune.
+        // A tenant-global latest hands SourceA LateJune, so it concludes it is caught up and skips
+        // everything in between.
         (await _publisher.GetLatestActivityTimestampAsync(SourceA)).Should().Be(EarlyJune);
         (await _publisher.GetLatestActivityTimestampAsync(SourceB)).Should().Be(LateJune);
     }
@@ -202,8 +201,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             [Exercise(MidJune), HeartRate(MidJune), Steps(MidJune)], SourceA, WriteOrigin.Live);
         published.Should().BeTrue();
 
-        // A filter is only as good as the value it matches: the connector source has to reach
-        // every destination column, not the payload's own EnteredBy.
+        // The connector source has to reach every destination column, not the payload's EnteredBy.
         (await _context.StateSpans.AsNoTracking().Select(s => s.Source).ToListAsync())
             .Should().Equal(SourceA);
         (await _context.HeartRates.AsNoTracking().Select(h => h.DataSource).ToListAsync())
@@ -280,8 +278,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
     {
         // NocturneRemote replays a remote instance's StateSpan records verbatim, Source included.
         // Honouring that Source would file the row under the Nightscout connector and hand it a
-        // watermark it never earned — #656 relocated, and the local connector would then skip the
-        // window it still has to sync.
+        // watermark it never earned, so it would skip the window it still has to sync.
         await _publisher.PublishActivityAsync([Exercise(EarlyJune)], SourceA, WriteOrigin.Live);
 
         var mirrored = new StateSpan

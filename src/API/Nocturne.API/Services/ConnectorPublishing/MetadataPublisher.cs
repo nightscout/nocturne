@@ -181,10 +181,8 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     {
         try
         {
-            // Attribution rule (shared with PublishStateSpansAsync): a record's source is the
-            // connector that wrote it into THIS instance, never a source carried in the payload.
-            // Stamped unconditionally so the decomposed destinations (state spans, heart rates,
-            // step counts) all resolve to this connector's watermark.
+            // Stamp the publishing connector so every decomposed destination (state spans, heart
+            // rates, step counts) resolves to this connector's watermark.
             var activityList = activities.ToList();
             foreach (var activity in activityList)
                 activity.DataSource = source;
@@ -209,17 +207,10 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         {
             foreach (var span in stateSpans)
             {
-                // Attribution rule (shared with PublishActivityAsync): a record's source is the
-                // connector that wrote it into THIS instance, never a source carried in the
-                // payload. Preserving an incoming Source would let a mirroring connector
-                // (NocturneRemote replays a remote instance's spans verbatim) file rows under
-                // another connector's name and advance a watermark that connector never earned,
-                // making it skip its own window. Every other producer already sets its own
-                // ConnectorSource here, so the overwrite is a no-op for them.
-                //
-                // When the overwrite actually displaces a value, the displaced one is stashed
-                // rather than dropped — mirroring how ToStateSpan stashes a displaced EnteredBy —
-                // so a mirrored span's origin on the remote instance stays recoverable.
+                // Source is the connector writing the row here, not one carried in the payload:
+                // NocturneRemote replays another instance's spans verbatim, and honouring their
+                // Source would advance a watermark the named connector never earned. A displaced
+                // value is stashed so the remote origin stays recoverable.
                 if (span.Source is not null && span.Source != source)
                 {
                     span.Metadata ??= [];
@@ -279,14 +270,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         }
     }
 
-    /// <summary>
-    /// Returns the resume watermark for the connector activity sync: the latest stored activity
-    /// timestamp across the decomposed destinations (StateSpans, HeartRate, StepCount) for THIS
-    /// source, or <c>null</c> when the source has written none. Source-scoping is required for
-    /// multi-connector catch-up — a tenant-global latest hands one connector another connector's
-    /// newest record, so it concludes it is caught up and silently skips the window it still
-    /// needs. Mirrors <see cref="ITreatmentPublisher.GetLatestTreatmentTimestampAsync"/>.
-    /// </summary>
+    /// <inheritdoc />
     public Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default)

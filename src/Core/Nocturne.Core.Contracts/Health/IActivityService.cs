@@ -31,10 +31,9 @@ public interface IActivityService
     /// watermark — or <c>null</c> when that source has written no activity record.
     /// </summary>
     /// <remarks>
-    /// Sleep sessions are excluded: they carry a device-vendor <c>Source</c> (Apple, Oura, …),
-    /// not a connector data source, so they cannot be scoped. Omitting them can only under-report
-    /// the watermark, which makes a connector re-fetch a window it already holds — publishes are
-    /// idempotent, so that is safe, whereas over-reporting would silently skip a window.
+    /// Sleep sessions are excluded: their <c>Source</c> is a device vendor (Apple, Oura, …), not a
+    /// connector, so they cannot be scoped. That can only under-report the watermark, costing an
+    /// idempotent re-fetch; over-reporting would skip a window outright.
     /// </remarks>
     /// <param name="source">The data source to scope to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

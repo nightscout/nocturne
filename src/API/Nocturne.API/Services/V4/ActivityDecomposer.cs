@@ -445,8 +445,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             Id = activity.Id,
             Mills = activity.Mills,
             Metric = GetIntValue(props, "metric"),
-            // StepCount.Source is the absolute/delta bitmask, not a provenance string;
-            // the originating connector goes on DataSource.
+            // StepCount.Source is the absolute/delta bitmask, not provenance — that is DataSource.
             Source = GetIntValue(props, "source"),
             Device = GetStringValue(props, "device") ?? activity.EnteredBy,
             EnteredBy = activity.EnteredBy,

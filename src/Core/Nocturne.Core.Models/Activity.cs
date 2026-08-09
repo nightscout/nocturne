@@ -125,10 +125,9 @@ public class Activity : ProcessableDocumentBase
     /// Use constants from <see cref="Core.Constants.DataSources"/> for consistent values.
     /// </summary>
     /// <remarks>
-    /// Carried through decomposition onto every destination that stores a connector source
-    /// (<see cref="StateSpan.Source"/>, <see cref="HeartRate.DataSource"/>,
-    /// <see cref="StepCount.DataSource"/>) so a connector's resume watermark can be scoped to
-    /// its own records.
+    /// Carried through decomposition onto <see cref="StateSpan.Source"/>,
+    /// <see cref="HeartRate.DataSource"/> and <see cref="StepCount.DataSource"/> so a connector's
+    /// resume watermark can be scoped to its own records.
     /// </remarks>
     /// <example>
     /// Common values: "nightscout-connector", "glooko-connector", "manual"

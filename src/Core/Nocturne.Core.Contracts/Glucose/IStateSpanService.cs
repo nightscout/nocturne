@@ -146,16 +146,9 @@ public interface IStateSpanService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the latest start timestamp across activity-category state spans, optionally scoped
-    /// to a data source. Returns <c>null</c> when the source has written no activity span.
+    /// Returns the latest start timestamp across activity-category state spans written by
+    /// <paramref name="source"/>, or <c>null</c> when it has written none.
     /// </summary>
-    /// <remarks>
-    /// This reads the attribution the connector publisher writes: <c>Source</c> is the connector
-    /// that wrote the row into this instance, never a source carried in the payload. That is what
-    /// makes the value safe as a resume watermark — a mirroring connector's replay of another
-    /// instance's spans is filed under the mirroring connector, so it cannot advance the mirrored
-    /// connector's own watermark past a window that connector has not actually synced.
-    /// </remarks>
     /// <param name="source">The data source to scope to.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(

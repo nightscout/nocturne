@@ -5,9 +5,9 @@ using Nocturne.Infrastructure.Data.Mappers;
 namespace Nocturne.Infrastructure.Data.Tests.Mappers;
 
 /// <summary>
-/// A state span's Source now carries the connector that wrote it, displacing the uploader name it
-/// used to hold. These pin both directions of that displacement, including the fallbacks that keep
-/// rows written before the change readable.
+/// A state span's Source carries the connector that wrote it, displacing the uploader name it used
+/// to hold. Pins both directions of that displacement, including the fallbacks that keep rows
+/// written before the change readable.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ActivityStateSpanMapperSourceTests
@@ -50,12 +50,9 @@ public class ActivityStateSpanMapperSourceTests
     [Fact]
     public void ToActivity_recovers_the_uploader_name_from_a_row_written_before_the_change()
     {
-        // Old-shape row: Source IS the uploader name, and metadata is populated (the old
-        // BuildMetadata always wrote description/notes/etc.) but has no enteredBy key, because
-        // nothing stashed one until Source was displaced. Every pre-existing
-        // exercise/illness/travel row looks like this, and the fallback is the only thing keeping
-        // their v1 enteredBy from reading as null. Metadata must be non-empty: a null bag skips
-        // the whole read block and would leave the assertion pinning nothing.
+        // Old-shape row: Source IS the uploader name and metadata carries no enteredBy key. Every
+        // pre-existing exercise/illness/travel row looks like this. Metadata has to be non-empty
+        // or the read block is skipped wholesale and the assertion pins nothing.
         var oldShape = new StateSpan
         {
             Category = StateSpanCategory.Exercise,

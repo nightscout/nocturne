@@ -168,6 +168,8 @@ public class ActivityService : IActivityService
         CancellationToken cancellationToken = default
     )
     {
+        // Sequential: the three services share one DbContext. Max over DateTime? skips the
+        // destinations this source has never written to, and is null when that is all of them.
         var candidates = new[]
         {
             await _stateSpanService.GetLatestActivityTimestampAsync(source, cancellationToken),
@@ -175,8 +177,7 @@ public class ActivityService : IActivityService
             await _stepCountService.GetLatestTimestampAsync(source, cancellationToken),
         };
 
-        var present = candidates.Where(t => t.HasValue).Select(t => t!.Value).ToList();
-        return present.Count > 0 ? present.Max() : null;
+        return candidates.Max();
     }
 
     /// <inheritdoc />

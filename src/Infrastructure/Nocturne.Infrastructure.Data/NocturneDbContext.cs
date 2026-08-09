@@ -851,9 +851,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
-        // Connector resume watermark: MAX(timestamp) for one data source, run every sync cycle.
-        // The tenant+timestamp index above cannot serve it, and a source with no rows yet (every
-        // source, until its first publish) would otherwise scan the tenant's whole table.
+        // Connector resume watermark: MAX(timestamp) for one data source, every sync cycle. A
+        // source with no rows yet would otherwise scan the tenant's whole table.
         modelBuilder
             .Entity<StepCountEntity>()
             .HasIndex(s => new { s.TenantId, s.DataSource, s.Timestamp })
@@ -885,9 +884,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
-        // Connector resume watermark: MAX(timestamp) for one data source, run every sync cycle.
-        // Matters most here — heart rate arrives at up to 1 Hz, so an unindexed source filter
-        // scans the tenant's largest table on every cycle a source has no rows of its own.
+        // Connector resume watermark, as on step_counts. Heart rate arrives at up to 1 Hz, so this
+        // is the largest table an unindexed source filter would scan.
         modelBuilder
             .Entity<HeartRateEntity>()
             .HasIndex(h => new { h.TenantId, h.DataSource, h.Timestamp })
@@ -1204,10 +1202,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_state_spans_source");
 
         // Connector resume watermark: MAX(start_timestamp) over the activity categories for one
-        // data source. ix_state_spans_source alone still walks every span that source ever wrote.
-        // Tenant leads: a source id is the same string installation-wide, so leading with it has
-        // near-zero selectivity and a tenant with no spans for that source would walk every
-        // tenant's.
+        // data source. Tenant leads because a source id is the same string installation-wide, so
+        // ix_state_spans_source would walk every tenant's spans for that source.
         modelBuilder
             .Entity<StateSpanEntity>()
             .HasIndex(s => new { s.TenantId, s.Source, s.Category, s.StartTimestamp })

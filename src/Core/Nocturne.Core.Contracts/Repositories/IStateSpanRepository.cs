@@ -191,8 +191,7 @@ public interface IStateSpanRepository
     /// <summary>
     /// Returns the latest <c>StartTimestamp</c> across activity-category state spans written by
     /// <paramref name="source"/> (a connector's resume watermark), or <c>null</c> when that source
-    /// has written no activity span. Scoping is mandatory: an unscoped latest is what made
-    /// multi-connector catch-up skip windows.
+    /// has written no activity span.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
