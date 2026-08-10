@@ -58,7 +58,11 @@ public class BasalInjectionRepositoryTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private static BasalInjection MakeInjection(string dataSource, string syncIdentifier, double units = 10.0)
+    private static BasalInjection MakeInjection(
+        string dataSource,
+        string syncIdentifier,
+        double units = 10.0,
+        bool withInsulinContext = true)
     {
         return new BasalInjection
         {
@@ -66,14 +70,16 @@ public class BasalInjectionRepositoryTests : IDisposable
             DataSource = dataSource,
             SyncIdentifier = syncIdentifier,
             Units = units,
-            InsulinContext = new TreatmentInsulinContext
-            {
-                PatientInsulinId = Guid.NewGuid(),
-                InsulinName = "Tresiba",
-                Dia = 24.0,
-                Peak = 720,
-                Curve = "long-acting",
-            },
+            InsulinContext = withInsulinContext
+                ? new TreatmentInsulinContext
+                {
+                    PatientInsulinId = Guid.NewGuid(),
+                    InsulinName = "Tresiba",
+                    Dia = 24.0,
+                    Peak = 720,
+                    Curve = "long-acting",
+                }
+                : null,
         };
     }
 
@@ -124,5 +130,52 @@ public class BasalInjectionRepositoryTests : IDisposable
             .FirstOrDefaultAsync(e => e.Id == created.Id);
         raw.Should().NotBeNull();
         raw!.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateAsync_round_trips_a_null_InsulinContext()
+    {
+        // Uploader shape: the client knows nothing about the patient's insulin catalog.
+        var created = await _repo.CreateAsync(
+            MakeInjection("xdrip", "sync-4", withInsulinContext: false), WriteOrigin.Live);
+
+        created.InsulinContext.Should().BeNull();
+
+        var stored = await _context.BasalInjections
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == created.Id);
+        stored.Should().NotBeNull();
+        stored!.InsulinContextJson.Should().BeNull("a missing snapshot is stored as SQL NULL, as for Bolus");
+
+        var reread = await _repo.GetByIdAsync(created.Id);
+        reread.Should().NotBeNull();
+        reread!.InsulinContext.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifierAsync_soft_deletes_the_matching_row()
+    {
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-5"), WriteOrigin.Live);
+
+        var deleted = await _repo.DeleteBySyncIdentifierAsync("aaps", "sync-5", WriteOrigin.Live);
+
+        deleted.Should().Be(1);
+        (await _repo.FindBySyncIdentifierAsync("aaps", "sync-5")).Should().BeNull();
+
+        var raw = await _context.BasalInjections
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.Id == created.Id);
+        raw.Should().NotBeNull();
+        raw!.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifierAsync_returns_zero_when_nothing_matches()
+    {
+        await _repo.CreateAsync(MakeInjection("aaps", "sync-6"), WriteOrigin.Live);
+
+        var deleted = await _repo.DeleteBySyncIdentifierAsync("aaps", "no-such-sync-id", WriteOrigin.Live);
+
+        deleted.Should().Be(0);
     }
 }

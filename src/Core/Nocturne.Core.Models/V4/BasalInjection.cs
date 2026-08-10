@@ -40,9 +40,11 @@ public class BasalInjection : IV4Record, IDeviceAttributed
 
     /// <summary>
     /// Snapshot of the patient's insulin pharmacokinetic settings at injection time.
-    /// Required: long-acting injections must reference a known PatientInsulin with role Basal or Both.
+    /// Optional: populated when the write referenced a known PatientInsulin with role Basal or
+    /// Both, and left <c>null</c> when the writer (typically an uploader client) knows nothing
+    /// about the patient's insulin catalog. Same shape as <see cref="Bolus.InsulinContext"/>.
     /// </summary>
-    public TreatmentInsulinContext InsulinContext { get; set; } = null!;
+    public TreatmentInsulinContext? InsulinContext { get; set; }
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns.

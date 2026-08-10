@@ -16,10 +16,15 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// </summary>
 /// <remarks>
 /// Both create and update enforce the same rules: <see cref="BasalInjection.Units"/> must be in (0, 500],
-/// <see cref="BasalInjection.Timestamp"/> may not be more than five minutes in the future, the referenced
-/// <see cref="PatientInsulin"/> must exist with role <see cref="InsulinRole.Basal"/> or <see cref="InsulinRole.Both"/>,
-/// and the insulin must be active at the injection time. The server resolves <see cref="PatientInsulin"/>
-/// fresh on every write to populate the <see cref="TreatmentInsulinContext"/> snapshot.
+/// <see cref="BasalInjection.Timestamp"/> may not be more than five minutes in the future, and — when the
+/// request carries a <c>PatientInsulinId</c> — the referenced <see cref="PatientInsulin"/> must exist with
+/// role <see cref="InsulinRole.Basal"/> or <see cref="InsulinRole.Both"/> and be active at the injection
+/// time. The server resolves <see cref="PatientInsulin"/> fresh on every write to populate the
+/// <see cref="TreatmentInsulinContext"/> snapshot.
+///
+/// The insulin reference is optional, matching <see cref="BolusController"/>: uploader-style clients that
+/// know nothing about the patient's insulin catalog omit it, and the record is stored with a <c>null</c>
+/// <see cref="BasalInjection.InsulinContext"/>.
 ///
 /// On update, immutable fields (<see cref="BasalInjection.LegacyId"/>, <see cref="BasalInjection.CreatedAt"/>)
 /// are preserved from the existing record. <see cref="BasalInjection.CorrelationId"/> falls back to the
@@ -66,7 +71,7 @@ public class BasalInjectionController(
             return insulinProblem;
 
         var model = MapCreateToModel(request);
-        model.InsulinContext = BuildContext(insulin!);
+        model.InsulinContext = insulin is null ? null : BuildContext(insulin);
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -88,7 +93,7 @@ public class BasalInjectionController(
             return insulinProblem;
 
         var model = MapUpdateToModel(id, request, existing);
-        model.InsulinContext = BuildContext(insulin!);
+        model.InsulinContext = insulin is null ? null : BuildContext(insulin);
 
         try
         {
@@ -179,12 +184,33 @@ public class BasalInjectionController(
                 return insulinProblem;
 
             var model = MapCreateToModel(request);
-            model.InsulinContext = BuildContext(insulin!);
+            model.InsulinContext = insulin is null ? null : BuildContext(insulin);
             models.Add(model);
         }
 
         var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         return StatusCode(201, persisted.ToArray());
+    }
+
+    /// <summary>
+    /// Delete a basal injection by its external sync identifier (dataSource + syncIdentifier pair).
+    /// </summary>
+    [HttpDelete("by-sync-id")]
+    [RequireDeclaredWriteScope]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> DeleteBySyncIdentifier(
+        [FromQuery] string dataSource,
+        [FromQuery] string syncIdentifier,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
+            return BadRequest("dataSource and syncIdentifier are required");
+
+        var deleted = await ((IBasalInjectionRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
+        return deleted > 0 ? NoContent() : NotFound();
     }
 
     private ObjectResult? ValidateUnitsAndTimestamp(double units, DateTimeOffset timestamp)
@@ -198,10 +224,30 @@ public class BasalInjectionController(
         return null;
     }
 
+    /// <summary>
+    /// Resolves the referenced <see cref="PatientInsulin"/>, or short-circuits when the request
+    /// omits the reference.
+    /// </summary>
+    /// <param name="patientInsulinId">
+    /// The requested insulin reference, or <c>null</c>. A <c>null</c> reference is not an error:
+    /// resolution is skipped and both tuple members come back <c>null</c>, leaving the caller to
+    /// store the injection without an insulin context (uploader parity with
+    /// <see cref="BolusController"/>).
+    /// </param>
+    /// <param name="timestamp">Injection time, checked against the insulin's active window.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// The resolved insulin and a <c>null</c> problem on success; a <c>400 Bad Request</c> problem
+    /// when a supplied reference is unknown, is not a basal insulin, or was inactive at
+    /// <paramref name="timestamp"/>.
+    /// </returns>
     private async Task<(PatientInsulin? Insulin, ObjectResult? Problem)> ResolveInsulinAsync(
-        Guid patientInsulinId, DateTimeOffset timestamp, CancellationToken ct)
+        Guid? patientInsulinId, DateTimeOffset timestamp, CancellationToken ct)
     {
-        var insulin = await insulinRepo.GetByIdAsync(patientInsulinId, ct);
+        if (patientInsulinId is not { } insulinId)
+            return (null, null);
+
+        var insulin = await insulinRepo.GetByIdAsync(insulinId, ct);
         if (insulin is null)
             return (null, Problem(detail: "PatientInsulin not found.", statusCode: 400, title: "Bad Request"));
 

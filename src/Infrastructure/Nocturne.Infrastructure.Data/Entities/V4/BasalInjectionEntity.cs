@@ -113,9 +113,11 @@ public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable, I
 
     /// <summary>
     /// Snapshot of insulin pharmacokinetic settings at injection time (JSONB).
+    /// Null when the write carried no PatientInsulin reference — the uploader-client shape,
+    /// mirroring <see cref="BolusEntity.InsulinContextJson"/>.
     /// </summary>
     [Column("insulin_context", TypeName = "jsonb")]
-    public string InsulinContextJson { get; set; } = "{}";
+    public string? InsulinContextJson { get; set; }
 
     /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns

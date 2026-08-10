@@ -375,8 +375,10 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private async Task ResolvePatientInsulinsForBasalInjectionsAsync(
         List<BasalInjection> records, WriteOrigin origin, CancellationToken ct)
     {
+        // A null context is the uploader shape (no insulin catalog knowledge) and stays null;
+        // only the placeholder Guid.Empty context is resolved. Mirrors the bolus path above.
         var needsResolution = records
-            .Where(r => r.InsulinContext.PatientInsulinId == Guid.Empty)
+            .Where(r => r.InsulinContext is { PatientInsulinId: var id } && id == Guid.Empty)
             .ToList();
 
         if (needsResolution.Count == 0) return;
@@ -386,7 +388,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         foreach (var injection in needsResolution)
         {
             var resolved = await ResolveOrCreatePatientInsulinAsync(
-                injection.InsulinContext, InsulinRole.Basal, cache, origin, ct);
+                injection.InsulinContext!, InsulinRole.Basal, cache, origin, ct);
             injection.InsulinContext = resolved;
         }
     }

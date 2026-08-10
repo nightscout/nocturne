@@ -522,7 +522,7 @@ public class TreatmentPublisherTests
             Times.Once);
 
         // The record should now have a real PatientInsulinId (not Guid.Empty)
-        records[0].InsulinContext.PatientInsulinId.Should().NotBe(Guid.Empty);
+        records[0].InsulinContext!.PatientInsulinId.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
@@ -576,7 +576,7 @@ public class TreatmentPublisherTests
             Times.Never);
 
         // Should resolve to the existing ID
-        records[0].InsulinContext.PatientInsulinId.Should().Be(existingInsulinId);
+        records[0].InsulinContext!.PatientInsulinId.Should().Be(existingInsulinId);
     }
 
     [Fact]
@@ -613,7 +613,7 @@ public class TreatmentPublisherTests
         _mockPatientInsulinRepository.Verify(
             r => r.GetAllAsync(It.IsAny<CancellationToken>()),
             Times.Never);
-        records[0].InsulinContext.PatientInsulinId.Should().Be(existingId);
+        records[0].InsulinContext!.PatientInsulinId.Should().Be(existingId);
     }
 
     #endregion

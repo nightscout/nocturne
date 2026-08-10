@@ -40,11 +40,15 @@ public class CreateBasalInjectionRequest
     public string? SyncIdentifier { get; set; }
 
     /// <summary>
-    /// Reference to the <see cref="PatientInsulin"/> used for this injection. The referenced
-    /// insulin's role must be <c>Basal</c> or <c>Both</c>. The server resolves this to a
-    /// <see cref="TreatmentInsulinContext"/> snapshot at write time.
+    /// Optional reference to the <see cref="PatientInsulin"/> used for this injection. When
+    /// supplied, the referenced insulin must exist, carry role <c>Basal</c> or <c>Both</c>, and be
+    /// active at <see cref="Timestamp"/>; the server resolves it to a
+    /// <see cref="TreatmentInsulinContext"/> snapshot at write time and rejects the request with
+    /// <c>400 Bad Request</c> otherwise. When omitted, no insulin is resolved and the stored
+    /// record's <see cref="BasalInjection.InsulinContext"/> stays <c>null</c> — the shape uploader
+    /// clients produce when they know nothing about the patient's insulin catalog.
     /// </summary>
-    public required Guid PatientInsulinId { get; set; }
+    public Guid? PatientInsulinId { get; set; }
 
     /// <summary>
     /// Insulin units injected. Must be greater than zero.
