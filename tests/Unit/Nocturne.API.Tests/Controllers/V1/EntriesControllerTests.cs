@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Extensions;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V1;
@@ -405,5 +406,151 @@ public class EntriesControllerTests
         processedInput.Should().NotBeNull();
         processedInput.Should().HaveCount(1);
         processedInput![0].Mills.Should().Be(1686565800000);
+    }
+
+    [Fact]
+    public async Task CreateEntries_AllDuplicates_EchoesStoredEntriesWithSameCount()
+    {
+        // v1 uploaders (Loop's NightscoutKit) require one response object per submitted
+        // entry; an all-duplicate batch must echo the stored entries, not return [].
+        var submitted = new[]
+        {
+            new Entry { Sgv = 164, Mills = 1000, Device = "Dexcom G7" },
+            new Entry { Sgv = 158, Mills = 2000, Device = "Dexcom G7" },
+        };
+        var stored1 = new Entry { Id = "stored-1", Sgv = 164, Mills = 1000, Device = "Dexcom G7", Type = "sgv" };
+        var stored2 = new Entry { Id = "stored-2", Sgv = 158, Mills = 2000, Device = "Dexcom G7", Type = "sgv" };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        _mockEntryService
+            .Setup(x =>
+                x.CheckForDuplicateEntryAsync(
+                    It.IsAny<string?>(),
+                    It.IsAny<string>(),
+                    It.IsAny<double?>(),
+                    1000L,
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(stored1);
+        _mockEntryService
+            .Setup(x =>
+                x.CheckForDuplicateEntryAsync(
+                    It.IsAny<string?>(),
+                    It.IsAny<string>(),
+                    It.IsAny<double?>(),
+                    2000L,
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(stored2);
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync(Array.Empty<Entry>());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(201);
+
+        var body = objectResult
+            .Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+        body.Should().HaveCount(2);
+        body[0].Id.Should().Be("stored-1");
+        body[1].Id.Should().Be("stored-2");
+
+        // Nothing new is written for an all-duplicate batch
+        createInput.Should().NotBeNull();
+        createInput.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateEntries_MixedDuplicateAndNew_EchoesOneResponsePerSubmittedEntry()
+    {
+        var submitted = new[]
+        {
+            new Entry { Sgv = 120, Mills = 1000, Device = "Dexcom G7" },
+            new Entry { Sgv = 130, Mills = 2000, Device = "Dexcom G7" }, // duplicate of a stored entry
+            new Entry { Sgv = 140, Mills = 3000, Device = "Dexcom G7" },
+        };
+        var storedDuplicate = new Entry { Id = "stored-dup", Sgv = 130, Mills = 2000, Device = "Dexcom G7", Type = "sgv" };
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+
+        _mockEntryService
+            .Setup(x =>
+                x.CheckForDuplicateEntryAsync(
+                    It.IsAny<string?>(),
+                    It.IsAny<string>(),
+                    It.IsAny<double?>(),
+                    It.IsAny<long>(),
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync((Entry?)null);
+        _mockEntryService
+            .Setup(x =>
+                x.CheckForDuplicateEntryAsync(
+                    It.IsAny<string?>(),
+                    It.IsAny<string>(),
+                    It.IsAny<double?>(),
+                    2000L,
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(storedDuplicate);
+
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x =>
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
+            )
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+
+        // Act
+        var result = await _controller.CreateEntries(submitted);
+
+        // Assert
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(201);
+
+        var body = objectResult
+            .Value.Should()
+            .BeAssignableTo<IEnumerable<object>>()
+            .Subject.Cast<EntryV1Response>()
+            .ToList();
+
+        // One response object per submitted entry, in submission order; the duplicate
+        // slot carries the stored entry's _id, not the resubmitted copy's.
+        body.Should().HaveCount(3);
+        body[0].Mills.Should().Be(1000);
+        body[1].Id.Should().Be("stored-dup");
+        body[2].Mills.Should().Be(3000);
+        body[0].Id.Should().NotBeNullOrEmpty();
+        body[2].Id.Should().NotBeNullOrEmpty();
+
+        // Only the two non-duplicates are written
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Mills).Should().Equal(1000, 3000);
     }
 }

@@ -593,8 +593,14 @@ public class EntriesController : ControllerBase
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
             var processedArray = processedEntries.ToArray();
 
-            // Filter out duplicates using database-backed detection
+            // Filter out duplicates using database-backed detection. Duplicates are
+            // excluded from the write but must still be echoed in the response: v1
+            // uploaders (Loop's NightscoutKit) require one response object per
+            // submitted entry, and treat a shorter array as a failed upload — the
+            // batch is then retried forever and the client never uploads anything
+            // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
             var uniqueEntries = new List<Entry>();
+            var responseEntries = new List<Entry>();
             foreach (var entry in processedArray)
             {
                 var duplicate = await _entryService.CheckForDuplicateEntryAsync(
@@ -615,10 +621,12 @@ public class EntriesController : ControllerBase
                         entry.Sgv,
                         entry.Mills
                     );
+                    responseEntries.Add(duplicate);
                     continue;
                 }
 
                 uniqueEntries.Add(entry);
+                responseEntries.Add(entry);
             }
 
             _logger.LogDebug(
@@ -639,7 +647,7 @@ public class EntriesController : ControllerBase
             // Evaluate alert rules against the latest created entry
             await EvaluateAlertsAsync(createdArray, cancellationToken);
 
-            return StatusCode(201, createdArray.ToV1Responses());
+            return StatusCode(201, responseEntries.ToV1Responses());
         }
         catch (JsonException ex)
         {
