@@ -601,12 +601,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     /// <param name="buildUrl">Builds the request URL for the given bounds.</param>
     /// <param name="oldestOf">Extracts the oldest record time from a page, or null when the page has no usable times.</param>
     /// <param name="operationName">Operation label for fetch logging.</param>
+    /// <param name="keep">Optional page filter; pagination still steps on the unfiltered page.</param>
     private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
         DateTime? from,
         DateTime? to,
         Func<DateTime?, DateTime?, string> buildUrl,
         Func<T[], DateTime?> oldestOf,
-        string operationName)
+        string operationName,
+        Func<T[], T[]>? keep = null)
     {
         var currentTo = AnchorUnboundedFetch(from, to);
 
@@ -624,7 +626,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             if (page.Length == 0)
                 yield break;
 
-            yield return page;
+            var kept = keep is null ? page : keep(page);
+            if (kept.Length > 0)
+                yield return kept;
 
             // Fewer than MaxCount means we've fetched everything in this range
             if (page.Length < _currentConfig.MaxCount)
@@ -660,25 +664,74 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             : null;
     }
 
+    private static DateTimeOffset? ParseCreatedAt(string? createdAt) =>
+        DateTimeOffset.TryParse(createdAt, out var parsed) ? parsed : null;
+
     /// <summary>
     ///     Oldest created_at on a page. Uses DateTimeOffset for consistent UTC comparison
     ///     regardless of system timezone.
     /// </summary>
-    private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf)
-    {
-        return page
-            .Select(item => DateTimeOffset.TryParse(createdAtOf(item), out var dto) ? dto.UtcDateTime : (DateTime?)null)
-            .Where(dt => dt.HasValue)
-            .Min();
-    }
+    private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
+        page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Min();
 
     /// <summary>Newest created_at on a page; the counterpart of <see cref="OldestCreatedAt{T}"/>.</summary>
-    private static DateTime? NewestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf)
+    private static DateTime? NewestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
+        page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Max();
+
+    /// <summary>
+    ///     Oldest created_at on a page as the source wrote it — the key the source orders and
+    ///     filters by. Labelled UTC so formatting it back into a bound reproduces that wall clock
+    ///     verbatim rather than shifting it by the host's timezone.
+    /// </summary>
+    private static DateTime? OldestWrittenCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
+        page.Select(item => ParseCreatedAt(createdAtOf(item)) is { } parsed
+                ? DateTime.SpecifyKind(parsed.DateTime, DateTimeKind.Utc)
+                : (DateTime?)null)
+            .Min();
+
+    /// <summary>
+    ///     Whether a created_at falls inside the caller's window. A value that will not parse is
+    ///     kept: the crawl has never dropped records it cannot date.
+    /// </summary>
+    private static bool WithinWindow(string? createdAt, DateTime? from, DateTime? to)
     {
-        return page
-            .Select(item => DateTimeOffset.TryParse(createdAtOf(item), out var dto) ? dto.UtcDateTime : (DateTime?)null)
-            .Where(dt => dt.HasValue)
-            .Max();
+        if (ParseCreatedAt(createdAt) is not { } parsed)
+            return true;
+
+        return (from is null || parsed.UtcDateTime >= from.Value)
+            && (to is null || parsed.UtcDateTime <= to.Value);
+    }
+
+    // Real-world UTC offsets span -12:00 to +14:00.
+    private static readonly TimeSpan MaxUtcOffset = TimeSpan.FromHours(14);
+
+    /// <summary>
+    ///     Pages a created_at collection. Legacy Nightscout stores created_at as a string and
+    ///     compares it as one, so a record an old uploader wrote with a local offset
+    ///     ("2020-06-15T20:00:00+10:00") orders by its wall clock rather than its instant — up to
+    ///     <see cref="MaxUtcOffset"/> away. The requested window is widened by that envelope so such
+    ///     records are returned at all, and each page is filtered back to the true window here.
+    ///     Only the opening bounds are widened: the page cursor is already a wall clock the source
+    ///     returned, so widening it again would step over records the source has yet to serve.
+    ///     The filter's ceiling is the anchor the fetch bound was widened from, so an unbounded
+    ///     backfill still stops at "now" rather than importing a future-dated device clock.
+    /// </summary>
+    private IAsyncEnumerable<T[]> FetchCreatedAtPagesAsync<T>(
+        DateTime? from,
+        DateTime? to,
+        string collection,
+        Func<T, string?> createdAtOf,
+        string operationName)
+    {
+        var anchoredTo = AnchorUnboundedFetch(from, to);
+
+        return FetchPagesAsync<T>(
+            from - MaxUtcOffset,
+            anchoredTo + MaxUtcOffset,
+            (pageFrom, pageTo) => BuildCreatedAtUrl(collection, pageFrom, pageTo),
+            page => OldestWrittenCreatedAt(page, createdAtOf),
+            operationName,
+            page => page.Where(item => WithinWindow(createdAtOf(item), from, anchoredTo)).ToArray());
     }
 
     private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)
@@ -694,8 +747,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     private async IAsyncEnumerable<Treatment[]> FetchTreatmentPagesAsync(DateTime? from, DateTime? to)
     {
-        await foreach (var page in FetchPagesAsync<Treatment>(
-            from, to, BuildTreatmentsUrl, p => OldestCreatedAt(p, t => t.CreatedAt), "FetchTreatments"))
+        await foreach (var page in FetchCreatedAtPagesAsync<Treatment>(
+            from, to, "treatments", t => t.CreatedAt, "FetchTreatments"))
         {
             foreach (var treatment in page)
                 treatment.DataSource = ConnectorSource;
@@ -756,8 +809,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     }
 
     private IAsyncEnumerable<DeviceStatus[]> FetchDeviceStatusPagesAsync(DateTime? from, DateTime? to) =>
-        FetchPagesAsync<DeviceStatus>(
-            from, to, BuildDeviceStatusUrl, p => OldestCreatedAt(p, d => d.CreatedAt), "FetchDeviceStatus");
+        FetchCreatedAtPagesAsync<DeviceStatus>(
+            from, to, "devicestatus", d => d.CreatedAt, "FetchDeviceStatus");
 
     private async Task<IEnumerable<Food>> FetchFoodAsync()
     {
@@ -782,8 +835,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     }
 
     private IAsyncEnumerable<Activity[]> FetchActivityPagesAsync(DateTime? from, DateTime? to) =>
-        FetchPagesAsync<Activity>(
-            from, to, BuildActivityUrl, p => OldestCreatedAt(p, a => a.CreatedAt), "FetchActivity");
+        FetchCreatedAtPagesAsync<Activity>(
+            from, to, "activity", a => a.CreatedAt, "FetchActivity");
 
     private async Task<T?> FetchDataAsync<T>(string url, string operationName) where T : class
     {
@@ -833,35 +886,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private string BuildTreatmentsUrl(DateTime? from, DateTime? to)
+    private string BuildCreatedAtUrl(string collection, DateTime? from, DateTime? to)
     {
-        var url = $"/api/v1/treatments.json?count={_currentConfig.MaxCount}";
-
-        if (from.HasValue)
-            url += $"&find[created_at][$gte]={from.Value.ToUniversalTime():o}";
-
-        if (to.HasValue)
-            url += $"&find[created_at][$lte]={to.Value.ToUniversalTime():o}";
-
-        return url;
-    }
-
-    private string BuildDeviceStatusUrl(DateTime? from, DateTime? to)
-    {
-        var url = $"/api/v1/devicestatus.json?count={_currentConfig.MaxCount}";
-
-        if (from.HasValue)
-            url += $"&find[created_at][$gte]={from.Value.ToUniversalTime():o}";
-
-        if (to.HasValue)
-            url += $"&find[created_at][$lte]={to.Value.ToUniversalTime():o}";
-
-        return url;
-    }
-
-    private string BuildActivityUrl(DateTime? from, DateTime? to)
-    {
-        var url = $"/api/v1/activity.json?count={_currentConfig.MaxCount}";
+        var url = $"/api/v1/{collection}.json?count={_currentConfig.MaxCount}";
 
         if (from.HasValue)
             url += $"&find[created_at][$gte]={from.Value.ToUniversalTime():o}";
