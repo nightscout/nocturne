@@ -4,6 +4,8 @@ export const LINKS = {
   donate: "https://www.nightscoutfoundation.org/donate",
   githubLabel: "https://github.com/nightscout/nocturne/labels/get-involved",
   github: "https://github.com/nightscout/nocturne",
+  translationFiles:
+    "https://github.com/nightscout/nocturne/tree/main/src/Web/locales",
   facebook: "https://www.facebook.com/groups/cgminthecloud",
   hackDiabetes: "https://hackdiabetes.io",
   testimonials: "mailto:testimonials@nocturne.run",

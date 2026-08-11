@@ -16,6 +16,7 @@
   } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { LINKS } from "$lib/data/links";
+  import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
 
   const ACCENT = "oklch(0.6 0.118 184.704)";
 
@@ -44,9 +45,10 @@
       icon: Globe,
       accent: "oklch(0.65 0.16 250)",
       title: "Translate Nocturne",
-      desc: "Help people read Nocturne in their own language. Pick a locale, translate the interface strings — no code, no build tools, just words.",
-      cta: "Start translating",
-      href: "#tasks",
+      desc: "Every interface string lives in a gettext .po file, one per language, and most languages are barely started. Edit one on GitHub and open a pull request — no build tools, just words.",
+      cta: "Open the translation files",
+      href: LINKS.translationFiles,
+      external: true,
     },
     {
       id: "support",
@@ -63,10 +65,9 @@
       icon: Heart,
       accent: "oklch(0.62 0.2 18)",
       title: "Donate",
-      desc: "Nocturne is free and always will be. Donations to the Nightscout Foundation cover servers, testing devices, and keep the project independent.",
-      cta: "Donate via the Foundation",
-      href: LINKS.donate,
-      external: true,
+      desc: "Nocturne is free and always will be. One-off gifts to the Nightscout Foundation and monthly subscriptions from US$10 both cover servers, testing devices, and keep the project independent.",
+      cta: "See the ways to give",
+      href: "#donate",
       highlight: true,
     },
     {
@@ -125,7 +126,7 @@
       fg: "oklch(0.62 0.118 184.7)",
       bg: "oklch(0.62 0.118 184.7 / 0.16)",
     },
-    translation: {
+    i18n: {
       fg: "oklch(0.65 0.16 250)",
       bg: "oklch(0.65 0.16 250 / 0.16)",
     },
@@ -494,7 +495,8 @@
         <p class="text-muted-foreground m-0 max-w-[52ch]">
           There is no company behind Nocturne — just volunteers and the
           Nightscout Foundation, a registered non-profit. Donations cover
-          servers, test devices, and the work that keeps your data yours.
+          servers, test devices, and the work that keeps your data yours. Give
+          once, or subscribe monthly.
         </p>
       </div>
       <div class="flex flex-col gap-2.5">
@@ -512,6 +514,8 @@
         >
       </div>
     </div>
+
+    <SupportNocturne />
   </section>
 </div>
 
