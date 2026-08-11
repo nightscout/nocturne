@@ -25,7 +25,10 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        if (context.HttpContext.GetAuthContext() is not { SubjectId: { } subjectId })
+        // EffectiveSubjectId rather than SubjectId: a guest session carries the data owner in
+        // ActingAsSubjectId and leaves SubjectId null, so keying on SubjectId alone would let an
+        // authenticated credential whose subject is the demo account past the gate unexamined.
+        if (context.HttpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
             return;
 
         var factory = context.HttpContext.RequestServices

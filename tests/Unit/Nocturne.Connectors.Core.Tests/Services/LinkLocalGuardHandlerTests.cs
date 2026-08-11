@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.Core.Services;
@@ -224,6 +225,65 @@ public class LinkLocalGuardHandlerTests
     }
 
     [Fact]
+    public async Task DropsACredentialContentHeader_WhenARedirectCrossesOrigin()
+    {
+        // Content headers travel on the reused HttpContent instance, so the request-header
+        // allowlist never sees them. A signature on one is still a credential: the webhook sender
+        // signs exactly this way, and a connector doing the same must not hand it to a host the
+        // tenant did not configure.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://ns.example/push"] =
+                    (HttpStatusCode.TemporaryRedirect, "https://elsewhere.example/push"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://ns.example/push")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        request.Content.Headers.TryAddWithoutValidation("X-Nocturne-Signature", "the-shared-secret");
+
+        await client.SendAsync(request);
+
+        var followUp = transport.ContentHeaders["https://elsewhere.example/push"];
+        followUp.Should().NotContainKey("X-Nocturne-Signature");
+        followUp.Should().ContainKey("Content-Type", "the body still has to describe itself");
+        transport.Bodies["https://elsewhere.example/push"].Should().Be(
+            "{}", "a 307 preserves the body");
+    }
+
+    [Fact]
+    public async Task KeepsACredentialContentHeader_WhenARedirectStaysOnTheSameOrigin()
+    {
+        // Positive control for the test above: same-origin is the ordinary trailing-slash or
+        // path-rewrite redirect, and stripping there would break signed posts to a configured host.
+        var transport = new ScriptedHandler
+        {
+            Redirects =
+            {
+                ["https://ns.example/push"] =
+                    (HttpStatusCode.TemporaryRedirect, "https://ns.example/api/push"),
+            },
+        };
+        var client = BuildClient(ResolvesTo("93.184.216.34"), transport);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://ns.example/push")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        request.Content.Headers.TryAddWithoutValidation("X-Nocturne-Signature", "the-shared-secret");
+
+        await client.SendAsync(request);
+
+        transport.ContentHeaders["https://ns.example/api/push"]
+            .Should().ContainKey("X-Nocturne-Signature");
+    }
+
+    [Fact]
     public async Task Follows_AnHttpsToHttpDowngrade()
     {
         // HttpClient refuses a secure-to-insecure auto-redirect; this deliberately does not, because
@@ -365,6 +425,12 @@ public class LinkLocalGuardHandlerTests
 
         public Dictionary<string, Dictionary<string, string>> Headers { get; } = [];
 
+        /// <summary>
+        /// Content headers per hop, captured separately because they ride on the
+        /// <see cref="HttpContent"/> instance rather than the request.
+        /// </summary>
+        public Dictionary<string, Dictionary<string, string>> ContentHeaders { get; } = [];
+
         /// <summary>Body as read off the wire per hop, so a disposed body shows up as a failure.</summary>
         public Dictionary<string, string> Bodies { get; } = [];
 
@@ -376,7 +442,11 @@ public class LinkLocalGuardHandlerTests
             Headers[uri] = request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value));
 
             if (request.Content is not null)
+            {
+                ContentHeaders[uri] = request.Content.Headers
+                    .ToDictionary(h => h.Key, h => string.Join(",", h.Value));
                 Bodies[uri] = await request.Content.ReadAsStringAsync(cancellationToken);
+            }
 
             if (RedirectEverythingTo is { } always)
             {

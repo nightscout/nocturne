@@ -10,7 +10,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Webhooks;
 
 /// <summary>
-/// <see cref="WebhookDestination"/> can only vet the URL it is handed, so the client that
+/// <see cref="OutboundDestination"/> can only vet the URL it is handed, so the client that
 /// sends the request must not follow a redirect off that URL — otherwise the allowlist is a
 /// pre-flight check the transport walks straight past into the deployment's own network.
 /// </summary>

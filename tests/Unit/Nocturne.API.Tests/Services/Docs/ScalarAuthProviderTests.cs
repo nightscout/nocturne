@@ -338,6 +338,9 @@ public class ScalarAuthProviderTests : IDisposable
                 Id = Guid.CreateVersion7(),
                 Name = DemoTenantService.DemoMemberName,
                 IsActive = true,
+                // As provisioning creates it. The lookup requires the flag, not just the
+                // membership, so seeding it false would model a state the provider refuses.
+                IsDemoSubject = true,
             };
             db.Subjects.Add(subject);
             db.TenantMembers.Add(new TenantMemberEntity

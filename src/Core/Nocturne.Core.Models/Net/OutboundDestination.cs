@@ -29,10 +29,14 @@ namespace Nocturne.Core.Models.Net;
 /// </list>
 /// <para>
 /// Every resolved address is checked, so a name pointing at a refused address is refused too.
-/// A name whose DNS answer changes between the check and the send could still slip through;
-/// closing that needs the send pinned to the address that was checked, which the shared
-/// <see cref="System.Net.Http.HttpClient"/> does not support. Resolution failure is refused
-/// rather than allowed: a name this process cannot resolve may still resolve for the HTTP stack.
+/// <b>A name whose DNS answer changes between the check and the send still slips through</b>: the
+/// addresses are resolved for the decision and then discarded, and the transport resolves the name
+/// again for the connect. Closing it means pinning the send to the address that was checked —
+/// <c>SocketsHttpHandler.ConnectCallback</c> can do this — which is a change to the shared
+/// connector transport rather than to this classifier, so it is not attempted here. Until then,
+/// treat these checks as covering a misconfigured or hostile <em>address</em>, not an attacker who
+/// controls a DNS zone. Resolution failure is refused rather than allowed: a name this process
+/// cannot resolve may still resolve for the HTTP stack.
 /// </para>
 /// </remarks>
 public static class OutboundDestination
@@ -106,15 +110,28 @@ public static class OutboundDestination
     }
 
     /// <summary>
+    /// AWS's IPv6 instance metadata address. Unique-local rather than link-local, so the
+    /// prefix checks below do not reach it.
+    /// </summary>
+    private static readonly IPAddress Ec2IPv6Metadata = IPAddress.Parse("fd00:ec2::254");
+
+    /// <summary>
     /// 169.254.0.0/16 and fe80::/10 — including the cloud instance metadata endpoint, which is
     /// the highest-value target reachable from inside a deployment.
     /// </summary>
+    /// <remarks>
+    /// Plus <see cref="Ec2IPv6Metadata"/>, which serves the same credentials over IPv6. Named
+    /// individually rather than by refusing fc00::/7, because a connector pointed at a
+    /// self-hosted Nightscout on an IPv6 ULA network is the same ordinary setup this check
+    /// deliberately allows over the IPv4 private ranges — refusing the whole prefix would break
+    /// it to reach one address.
+    /// </remarks>
     private static bool IsLinkLocal(IPAddress address)
     {
         address = Unwrap(address);
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
-            return address.IsIPv6LinkLocal;
+            return address.IsIPv6LinkLocal || address.Equals(Ec2IPv6Metadata);
 
         var octets = address.GetAddressBytes();
         return octets[0] == 169 && octets[1] == 254;

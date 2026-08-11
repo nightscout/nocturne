@@ -136,6 +136,37 @@ public class DemoSessionControllerTests : IDisposable
             "a shared account must not accumulate the addresses of the people using it");
     }
 
+    /// <summary>
+    /// The endpoint hands a session to any anonymous caller, so holding the demo membership must
+    /// not be enough on its own — the subject has to carry the flag too.
+    /// </summary>
+    /// <remarks>
+    /// The one downstream guard is <c>TrimSessionsAsync</c>, which reports its refusal only through
+    /// a return value this endpoint discards, so without the check on the lookup a real account
+    /// under that username would be issued a session to whoever asked.
+    /// </remarks>
+    [Fact]
+    public async Task CreateSession_ReturnsNotFound_WhenTheDemoMemberIsNotADemoSubject()
+    {
+        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
+
+        // Mutate only the flag: the membership still matches on username and is still unrevoked,
+        // so nothing but the flag can account for the 404.
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            var subject = await db.Subjects.SingleAsync(s => s.IsDemoSubject);
+            subject.IsDemoSubject = false;
+            await db.SaveChangesAsync();
+        }
+
+        var controller = BuildController(tenantId, isDemo: true);
+
+        var result = await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundResult>();
+        VerifyNoSessionIssued();
+    }
+
     [Fact]
     public async Task CreateSession_TrimsTheSubjectsSessionsBeforeIssuing()
     {
@@ -210,6 +241,9 @@ public class DemoSessionControllerTests : IDisposable
                 Id = Guid.CreateVersion7(),
                 Name = DemoTenantService.DemoMemberName,
                 IsActive = true,
+                // As provisioning creates it. The lookup requires the flag, not just the
+                // membership, so seeding it false would model a state the endpoint refuses.
+                IsDemoSubject = true,
             };
             db.Subjects.Add(subject);
             db.TenantMembers.Add(new TenantMemberEntity

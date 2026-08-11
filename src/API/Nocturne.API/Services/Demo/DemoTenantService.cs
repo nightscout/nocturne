@@ -115,6 +115,15 @@ public sealed class DemoTenantService
     /// Resolves the subject id behind the demo tenant's member membership, or
     /// <see langword="null"/> when the tenant has no demo member.
     /// </summary>
+    /// <remarks>
+    /// The subject must itself carry <see cref="SubjectEntity.IsDemoSubject"/>, not merely hold the
+    /// membership under the demo username. Both callers act on the result in ways that must never
+    /// reach a real account — one issues a session for it to any anonymous caller, the other
+    /// deletes it — and the membership alone does not establish that:
+    /// <see cref="EnsureDemoMemberAsync"/> adopts a pre-existing row under that username rather
+    /// than asserting it created it. Filtering here means the session endpoint fails closed by
+    /// returning 404 rather than depending on a later guard whose refusal a caller might drop.
+    /// </remarks>
     public async Task<Guid?> FindDemoMemberSubjectIdAsync(Guid tenantId, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
@@ -124,7 +133,8 @@ public sealed class DemoTenantService
             .AsNoTracking()
             .Where(m => m.TenantId == tenantId
                 && m.Username == DemoMemberUsername
-                && m.RevokedAt == null)
+                && m.RevokedAt == null
+                && m.Subject!.IsDemoSubject)
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
     }

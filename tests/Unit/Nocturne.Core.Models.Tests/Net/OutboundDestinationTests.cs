@@ -123,6 +123,30 @@ public class OutboundDestinationTests
             "http://[::ffff:169.254.169.254]/", resolver: Unresolvable))
             .Should().BeFalse();
 
+    /// <summary>
+    /// The pair is the point: AWS's IPv6 metadata address is unique-local, so refusing it cannot
+    /// be done by refusing fc00::/7 without also refusing the self-hosted-Nightscout-on-a-ULA-LAN
+    /// case this check exists to keep working.
+    /// </summary>
+    [Fact]
+    public async Task NotLinkLocal_RefusesTheIPv6MetadataEndpointButNotOtherUniqueLocalHosts()
+    {
+        (await OutboundDestination.IsNotLinkLocalAsync(
+            "http://[fd00:ec2::254]/latest/meta-data/iam/security-credentials/",
+            resolver: Unresolvable))
+            .Should().BeFalse("this serves the same cloud credentials as 169.254.169.254");
+
+        (await OutboundDestination.IsNotLinkLocalAsync(
+            "http://[fd12:3456:789a::1]:1337/api/v1/entries.json", resolver: Unresolvable))
+            .Should().BeTrue("an ordinary IPv6 ULA LAN host is a supported connector target");
+    }
+
+    [Fact]
+    public async Task NotLinkLocal_RefusesAHostnameResolvingToTheIPv6MetadataEndpoint() =>
+        (await OutboundDestination.IsNotLinkLocalAsync(
+            "http://metadata.example/", resolver: ResolvesTo("fd00:ec2::254")))
+            .Should().BeFalse();
+
     #endregion
 
     #region Shared shape

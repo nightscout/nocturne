@@ -397,6 +397,36 @@ public class DemoTenantServiceResetTests : IDisposable
             "anyone can obtain a session for it, so endpoints that assume a real user must refuse it");
     }
 
+    /// <summary>
+    /// The lookup is what the anonymous session endpoint decides on, so holding the membership
+    /// under the demo username must not be enough on its own.
+    /// </summary>
+    /// <remarks>
+    /// Provisioning adopts a pre-existing membership under that username rather than asserting it
+    /// created the subject behind it. Were the flag not checked here, a real account holding that
+    /// membership would be handed to any anonymous caller as a session — the one guard downstream
+    /// (<c>TrimSessionsAsync</c>) reports its refusal only through a return value the endpoint
+    /// discards.
+    /// </remarks>
+    [Fact]
+    public async Task FindDemoMemberSubjectIdAsync_IgnoresAMembershipHeldByANonDemoSubject()
+    {
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        // Mutation of the state, not of the assertion: the membership is untouched and still
+        // matches on username, so only the flag can be what makes this fail to resolve.
+        await using (var db = new NocturneDbContext(_dbOptions))
+        {
+            var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId);
+            subject.IsDemoSubject = false;
+            await db.SaveChangesAsync();
+        }
+
+        (await _service.FindDemoMemberSubjectIdAsync(tenantId)).Should().BeNull(
+            "a subject that is not flagged as the demo account must not be resolvable as one");
+    }
+
     [Fact]
     public async Task ResetAsync_RemovesMembershipsTheDemoSubjectAcquiredElsewhere()
     {

@@ -28,9 +28,9 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
     private static readonly TenantContext TestTenant =
-        new(TestTenantId, "test", "Test", true);
+        new(TestTenantId, "test", "Test", true, false);
     private static readonly TenantContext OtherTenant =
-        new(OtherTenantId, "other", "Other", true);
+        new(OtherTenantId, "other", "Other", true, false);
 
     private readonly DbConnection _connection;
     private readonly DbContextOptions<NocturneDbContext> _contextOptions;

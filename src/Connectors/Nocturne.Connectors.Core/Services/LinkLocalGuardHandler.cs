@@ -84,6 +84,22 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
         "User-Agent",
     ];
 
+    /// <summary>
+    /// The only <see cref="HttpContent"/> headers carried across a cross-origin redirect.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="SafeCrossOriginHeaders"/> because the two live on different
+    /// objects: these travel on the reused <see cref="HttpContent"/> instance rather than on the
+    /// request. Both describe the body rather than authorize it — a signature or a bearer placed
+    /// on a content header is stripped like any other unlisted name.
+    /// </remarks>
+    private static readonly string[] SafeCrossOriginContentHeaders =
+    [
+        "Content-Type",
+        "Content-Length",
+        "Content-Encoding",
+    ];
+
     private readonly ILogger<LinkLocalGuardHandler> _logger;
     private readonly OutboundDestination.AddressResolver? _resolver;
 
@@ -218,10 +234,27 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
             VersionPolicy = original.VersionPolicy,
         };
 
+        var crossOrigin = !IsSameOrigin(original.RequestUri!, target);
+
         if (!demoteToGet)
+        {
             clone.Content = original.Content;
 
-        var crossOrigin = !IsSameOrigin(original.RequestUri!, target);
+            // Content headers are a credential channel too — the webhook sender puts its
+            // signature on them — and they ride along on the HttpContent instance, so the
+            // request-header allowlist above never sees them. Reduce them to the same set.
+            // A body-less method redirected with 307/308 has no content to reduce.
+            if (crossOrigin && clone.Content is not null)
+            {
+                var carried = clone.Content.Headers
+                    .Where(h => !SafeCrossOriginContentHeaders.Contains(h.Key, StringComparer.OrdinalIgnoreCase))
+                    .Select(h => h.Key)
+                    .ToList();
+
+                foreach (var name in carried)
+                    clone.Content.Headers.Remove(name);
+            }
+        }
 
         foreach (var header in original.Headers)
         {
