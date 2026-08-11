@@ -1824,6 +1824,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_device_events_correlation_id");
 
+        // Latest-of-a-kind lookups (device age, alert enrichment) filter on tenant + event type
+        // and take the newest row. Without the event_type column the plan walks the whole
+        // tenant's history backwards and never terminates early for a type that was never logged.
+        modelBuilder
+            .Entity<DeviceEventEntity>()
+            .HasIndex(e => new { e.TenantId, e.EventType, e.Timestamp })
+            .HasDatabaseName("ix_device_events_tenant_event_type_timestamp")
+            .IsDescending(false, false, true);
+
         // BolusCalculations indexes
         modelBuilder
             .Entity<BolusCalculationEntity>()
