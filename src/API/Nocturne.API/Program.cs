@@ -389,6 +389,13 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // but we make it explicit for clarity.
 app.UseRouting();
 
+// Rate limiting. Ahead of the documentation branch below, which jumps straight to its
+// endpoint and would otherwise skip the limiter entirely; the policies are attached to
+// endpoints, so this needs UseRouting to have run. Everything without a policy passes
+// through untouched, and every policy that exists partitions on the remote address alone,
+// so none of their accounting depends on running after UseAuthorization.
+app.UseRateLimiter();
+
 // Documentation paths (/scalar, /openapi) bypass the entire tenant/auth
 // middleware stack — they're tenantless and publicly accessible.
 app.UseMiddleware<PublicDocsMiddleware>();
@@ -433,9 +440,6 @@ app.UseMiddleware<SiteSecurityMiddleware>();
 // directly.
 app.UseAuthorization();
 
-// Add rate limiting
-app.UseRateLimiter();
-
 // Add compatibility proxy middleware (background comparison against Nightscout for v1/v2/v3 GET requests)
 app.UseMiddleware<CompatibilityProxyMiddleware>();
 
@@ -450,7 +454,7 @@ app.MapHub<ConfigHub>("/hubs/config");
 app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
 
 // Serve OpenAPI specs at /openapi/{documentName}.json
-app.MapOpenApi();
+app.MapOpenApi().RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
 var scalarCss = app.Configuration["SCALAR_CUSTOM_CSS"];
 
@@ -500,7 +504,7 @@ app.MapScalarApiReference((options, httpContext) =>
             .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
             .WithHttpBearerAuthentication(bearer => bearer.Token = demoToken);
     }
-});
+}).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
 // Add root endpoint to serve a basic info page
 app.MapGet(

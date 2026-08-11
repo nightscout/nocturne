@@ -85,6 +85,12 @@ namespace Nocturne.API.Extensions;
 public static class ServiceRegistrationExtensions
 {
     /// <summary>
+    /// Rate-limiting policy applied to the documentation endpoints. Named here rather than
+    /// declared as an attribute because those endpoints are mapped, not controller actions.
+    /// </summary>
+    public const string DocsRateLimitPolicy = "docs";
+
+    /// <summary>
     /// Core API utility and calculation services (status, versioning, time queries,
     /// IOB/COB, predictions, statistics, etc.)
     /// </summary>
@@ -393,6 +399,31 @@ public static class ServiceRegistrationExtensions
                         {
                             PermitLimit = 5,
                             Window = TimeSpan.FromHours(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Documentation surface (/scalar, /openapi): 30 per IP per minute. These endpoints
+            // run before tenant resolution and authentication, and the reference reads the
+            // tenants table and may write that tenant's OAuth client, so they are the one
+            // unauthenticated path that reaches the database that early.
+            //
+            // As with demo-session, the partition key is not a hard ceiling: UseForwardedHeaders
+            // runs with KnownProxies/KnownIPNetworks cleared, so RemoteIpAddress comes from
+            // X-Forwarded-For and a caller rotating it gets a fresh partition every request. What
+            // does bound the damage is elsewhere: the row can hold at most
+            // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
+            // client id are cached, so a flood mostly costs the page render.
+            options.AddPolicy(
+                DocsRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 30,
+                            Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                         }
                     )
