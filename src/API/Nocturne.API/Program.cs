@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -368,8 +368,8 @@ app.UseStatusCodePages();
 // chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
-app.UseWhen(IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(context => !IsPublicDocsPath(context), branch => branch.UseCors());
+app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
+app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseForwardedHeaders();
 
@@ -391,27 +391,7 @@ app.UseRouting();
 
 // Documentation paths (/scalar, /openapi) bypass the entire tenant/auth
 // middleware stack — they're tenantless and publicly accessible.
-app.Use(async (context, next) =>
-{
-    if (IsPublicDocsPath(context))
-    {
-        // Jump straight to the endpoint (MapOpenApi / MapScalarApiReference)
-        var endpoint = context.GetEndpoint();
-        if (endpoint != null)
-        {
-            // Scalar's options delegate is synchronous, so the per-tenant auth context
-            // (OAuth client, demo bearer token) is resolved here and stashed on Items.
-            if (context.Request.Path.StartsWithSegments("/scalar", StringComparison.OrdinalIgnoreCase))
-            {
-                await context.RequestServices.GetRequiredService<ScalarAuthProvider>().PrepareAsync(context);
-            }
-
-            await endpoint.RequestDelegate!(context);
-            return;
-        }
-    }
-    await next();
-});
+app.UseMiddleware<PublicDocsMiddleware>();
 
 // Redirect OIDC callbacks from apex to the originating tenant subdomain
 app.UseMiddleware<OidcCallbackRedirectMiddleware>();
@@ -653,16 +633,6 @@ if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 }
 
 await app.RunAsync();
-
-// Documentation paths: the OpenAPI specs and the Scalar UI plus its wwwroot assets.
-// These are tenantless and publicly accessible, so they both bypass the tenant/auth
-// middleware stack and get the any-origin CORS policy.
-static bool IsPublicDocsPath(HttpContext context)
-{
-    var path = context.Request.Path.Value ?? "";
-    return path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase);
-}
 
 // Detects if the application is being run by NSwag for OpenAPI document generation.
 // NSwag uses its AspNetCore.Launcher to load and introspect the app without actually running it.

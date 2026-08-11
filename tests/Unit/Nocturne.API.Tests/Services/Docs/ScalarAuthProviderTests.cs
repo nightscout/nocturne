@@ -1,66 +1,34 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Moq;
-using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Docs;
-using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
-using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Cache.Abstractions;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Docs;
 
 /// <summary>
-/// The Scalar reference is served on every host without tenant resolution or
-/// authentication, so what it hands the browser is decided entirely here: an OAuth client
-/// for the host's tenant, and a bearer token only when that tenant is a demo.
+/// The documentation paths are served on every host without tenant resolution or
+/// authentication, so what they expose is decided entirely here: whether the host's tenant
+/// opted in at all, an OAuth client for that tenant, and a bearer token only when it is a demo.
 /// </summary>
 public class ScalarAuthProviderTests : IDisposable
 {
-    private const string BaseDomain = "nocturne.run";
+    private const string BaseDomain = DocsTenantFixture.BaseDomain;
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
-    private readonly Mock<ISessionService> _sessionService = new();
-
-    public ScalarAuthProviderTests()
-    {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var seed = new NocturneDbContext(_dbOptions);
-        seed.Database.EnsureCreated();
-
-        _sessionService
-            .Setup(s => s.IssueSessionAsync(
-                It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("demo-access-token", "refresh", 3600));
-    }
+    private readonly DocsTenantFixture _fixture = new();
 
     [Fact]
-    public async Task PrepareAsync_RegistersClientAndPrefillsToken_OnADemoHost()
+    public async Task TryPrepareAsync_RegistersClientAndPrefillsToken_OnADemoHost()
     {
-        var tenantId = SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var context = BuildContext("demo.nocturne.run");
+        var tenantId = _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
 
         var auth = Auth(context);
         auth.Should().NotBeNull();
@@ -68,7 +36,7 @@ public class ScalarAuthProviderTests : IDisposable
         auth.RedirectUri.Should().Be("https://demo.nocturne.run/scalar");
         auth.BearerToken.Should().Be("demo-access-token");
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId && c.SoftwareId == ScalarAuthProvider.ScalarSoftwareId);
         JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
@@ -76,91 +44,205 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PrepareAsync_RegistersClientWithoutAToken_OnARealTenantHost()
+    public async Task TryPrepareAsync_RegistersClientWithoutAToken_OnARealTenantHost()
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext("rhys.nocturne.run");
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
 
         var auth = Auth(context);
         auth.Should().NotBeNull();
         auth!.RedirectUri.Should().Be("https://rhys.nocturne.run/scalar");
         auth.BearerToken.Should().BeNull("only a demo tenant's account may be handed out");
-        _sessionService.Verify(
+        _fixture.SessionService.Verify(
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
-    [Fact]
-    public async Task PrepareAsync_DoesNothing_OnAShareHost()
+    /// <summary>
+    /// The opt-in is the whole point of the flag: a tenant that never asked for the reference
+    /// must not have one, and must not have an OAuth client written on it by the request that
+    /// asked for it.
+    /// </summary>
+    [Theory]
+    [InlineData("/scalar")]
+    [InlineData("/openapi/nocturne.json")]
+    public async Task TryPrepareAsync_RefusesATenantThatHasNotOptedIn(string path)
     {
-        SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var context = BuildContext("sometoken.share.nocturne.run");
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false, allowPublicDocs: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run", path: path);
 
-        await BuildProvider().PrepareAsync(context);
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeFalse();
+
+        Auth(context).Should().BeNull();
+        await using var db = _fixture.Db();
+        (await db.OAuthClients.IgnoreQueryFilters().AnyAsync())
+            .Should().BeFalse("nothing may be registered on a tenant with no documentation surface");
+    }
+
+    /// <summary>
+    /// The scheme and the port both come from headers the caller controls, so neither may decide
+    /// whether the docs are served — only whether an OAuth client is registered.
+    /// </summary>
+    [Theory]
+    [InlineData("https", "rhys.nocturne.run:8443")]
+    [InlineData("javascript", "rhys.nocturne.run")]
+    [InlineData("http", "rhys.nocturne.run")]
+    public async Task TryPrepareAsync_RefusesAnOptedOutTenant_WhateverTheSchemeOrPort(
+        string proto, string host)
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false, allowPublicDocs: false);
+        var context = DocsTenantFixture.BuildContext(host, proto);
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Positive control for the theory above: the same odd origins on a tenant that <em>has</em>
+    /// opted in are still served, so the refusals there come from the opt-in and not from the
+    /// origin being rejected outright.
+    /// </summary>
+    [Theory]
+    [InlineData("https", "rhys.nocturne.run:8443")]
+    [InlineData("javascript", "rhys.nocturne.run")]
+    [InlineData("http", "rhys.nocturne.run")]
+    public async Task TryPrepareAsync_ServesAnOptedInTenant_ButRegistersNoClient_OnAnOddOrigin(
+        string proto, string host)
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext(host, proto);
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull("a caller must not register origins of its own choosing");
+        await using var db = _fixture.Db();
+        (await db.OAuthClients.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The reference has to render on a fresh install, which is the whole reason these paths
+    /// run ahead of tenant resolution. Also the positive control for the gate: it can only be
+    /// trusted to refuse if it is shown letting something through.
+    /// </summary>
+    [Theory]
+    [InlineData(BaseDomain)]              // apex of an instance with no tenants
+    [InlineData("nope.nocturne.run")]     // a slug nobody has
+    public async Task TryPrepareAsync_ServesTheDocs_WhenNoTenantResolves(string host)
+    {
+        var context = DocsTenantFixture.BuildContext(host);
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_ServesTheSpecs_WithoutRegisteringAClient()
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run", path: "/openapi/nocturne.json");
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeTrue();
+
+        Auth(context).Should().BeNull("the specs are static — only the reference UI signs in");
+        await using var db = _fixture.Db();
+        (await db.OAuthClients.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The resolution is cached, so a toggle that did not evict it would leave the previous
+    /// answer standing for the cache lifetime.
+    /// </summary>
+    [Fact]
+    public async Task EvictTenant_LetsAToggleTakeEffectBeforeTheCacheExpires()
+    {
+        var tenantId = _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var cache = new MemoryCache(new MemoryCacheOptions());
+
+        (await _fixture.BuildProvider(cache).TryPrepareAsync(DocsTenantFixture.BuildContext("rhys.nocturne.run")))
+            .Should().BeTrue();
+
+        _fixture.SetAllowPublicDocs(tenantId, false);
+
+        (await _fixture.BuildProvider(cache).TryPrepareAsync(DocsTenantFixture.BuildContext("rhys.nocturne.run")))
+            .Should().BeTrue("the cached resolution still says the tenant opted in");
+
+        ScalarAuthProvider.EvictTenant(cache, "rhys");
+
+        (await _fixture.BuildProvider(cache).TryPrepareAsync(DocsTenantFixture.BuildContext("rhys.nocturne.run")))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TryPrepareAsync_DoesNothing_OnAShareHost()
+    {
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var context = DocsTenantFixture.BuildContext("sometoken.share.nocturne.run");
+
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull("a share link grants read-only anonymous access only");
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         (await db.OAuthClients.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task PrepareAsync_DoesNothing_ForAnUnknownSlug()
+    public async Task TryPrepareAsync_DoesNothing_ForAnUnknownSlug()
     {
-        SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var context = BuildContext("nope.nocturne.run");
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var context = DocsTenantFixture.BuildContext("nope.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
     }
 
     [Fact]
-    public async Task PrepareAsync_DoesNothing_ForAnInactiveTenant()
+    public async Task TryPrepareAsync_DoesNothing_ForAnInactiveTenant()
     {
-        SeedTenant("demo", isDemo: true, withDemoMember: true, isActive: false);
-        var context = BuildContext("demo.nocturne.run");
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true, isActive: false);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
     }
 
     [Fact]
-    public async Task PrepareAsync_MarksTheDemoResponseUncacheable()
+    public async Task TryPrepareAsync_MarksTheDemoResponseUncacheable()
     {
-        SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var context = BuildContext("demo.nocturne.run");
+        _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         context.Response.Headers.CacheControl.ToString()
             .Should().Contain("no-store", "the page carries a bearer token");
     }
 
     [Fact]
-    public async Task PrepareAsync_LeavesARealTenantResponseCacheable()
+    public async Task TryPrepareAsync_LeavesARealTenantResponseCacheable()
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext("rhys.nocturne.run");
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         context.Response.Headers.CacheControl.ToString().Should().BeEmpty();
     }
 
     [Fact]
-    public async Task PrepareAsync_DoesNotDuplicateARedirectUri()
+    public async Task TryPrepareAsync_DoesNotDuplicateARedirectUri()
     {
-        var tenantId = SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var tenantId = _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
 
         // A fresh provider per call so the in-memory client cache does not mask a
         // repeated registration.
-        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
-        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
+        await _fixture.BuildProvider().TryPrepareAsync(DocsTenantFixture.BuildContext("demo.nocturne.run"));
+        await _fixture.BuildProvider().TryPrepareAsync(DocsTenantFixture.BuildContext("demo.nocturne.run"));
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId);
         JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
@@ -168,17 +250,17 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PrepareAsync_StopsAddingRedirectUrisAtTheCap()
+    public async Task TryPrepareAsync_StopsAddingRedirectUrisAtTheCap()
     {
         // Unreachable by construction — the URI comes from configuration plus the stored slug,
         // and only https survives on a public host — but the row is written by an unauthenticated
         // request, so the bound must not rest on that argument staying true. Exercised directly
         // because nothing else can reach it.
-        var tenantId = SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var tenantId = _fixture.SeedTenant("demo", isDemo: true, withDemoMember: true);
 
-        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
+        await _fixture.BuildProvider().TryPrepareAsync(DocsTenantFixture.BuildContext("demo.nocturne.run"));
 
-        await using (var seed = new NocturneDbContext(_dbOptions))
+        await using (var seed = _fixture.Db())
         {
             var client = await seed.OAuthClients.IgnoreQueryFilters()
                 .SingleAsync(c => c.TenantId == tenantId);
@@ -189,13 +271,13 @@ public class ScalarAuthProviderTests : IDisposable
             await seed.SaveChangesAsync();
         }
 
-        var context = BuildContext("demo.nocturne.run");
-        await BuildProvider().PrepareAsync(context);
+        var context = DocsTenantFixture.BuildContext("demo.nocturne.run");
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         context.Items.Should().NotContainKey(ScalarAuthContext.HttpContextItemKey,
             "at the cap the provider declines rather than growing the row");
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         var after = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId);
         JsonSerializer.Deserialize<List<string>>(after.RedirectUris)
@@ -218,53 +300,66 @@ public class ScalarAuthProviderTests : IDisposable
     [InlineData("127.0.0.1")]
     [InlineData("0x7f.1")]                                  // parses as loopback
     [InlineData("[::1]")]
-    public async Task PrepareAsync_RejectsAHostThisDeploymentDoesNotServe(string host)
+    public async Task TryPrepareAsync_RejectsAHostThisDeploymentDoesNotServe(string host)
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext(host);
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext(host);
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         (await db.OAuthClients.IgnoreQueryFilters().AnyAsync())
             .Should().BeFalse("a foreign host must not register a redirect URI on any tenant");
     }
 
     [Fact]
-    public async Task PrepareAsync_RejectsAForeignHost_EvenOnASingleTenantInstall()
+    public async Task TryPrepareAsync_RejectsAForeignHost_EvenOnASingleTenantInstall()
     {
         // The apex branch serves single-tenant installs. It must not treat a host that is
         // not the configured apex as the apex, or the sole tenant absorbs any origin.
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext("attacker.example");
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("attacker.example");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
     }
 
     [Fact]
-    public async Task PrepareAsync_ResolvesTheSoleTenant_OnTheConfiguredApex()
+    public async Task TryPrepareAsync_ResolvesTheSoleTenant_OnTheConfiguredApex()
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext(BaseDomain);
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext(BaseDomain);
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context)!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar");
+    }
+
+    /// <summary>
+    /// The apex of a single-tenant install resolves to that tenant, so its opt-in governs the
+    /// apex too — otherwise turning the docs off would leave them served from the front door.
+    /// </summary>
+    [Fact]
+    public async Task TryPrepareAsync_RefusesTheApex_WhenTheSoleTenantHasNotOptedIn()
+    {
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false, allowPublicDocs: false);
+        var context = DocsTenantFixture.BuildContext(BaseDomain);
+
+        (await _fixture.BuildProvider().TryPrepareAsync(context)).Should().BeFalse();
     }
 
     [Theory]
     [InlineData("rhys.nocturne.run:8443")]
     [InlineData("rhys.nocturne.run:80")]
-    public async Task PrepareAsync_RejectsAPortTheDeploymentIsNotServedOn(string host)
+    public async Task TryPrepareAsync_RejectsAPortTheDeploymentIsNotServedOn(string host)
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext(host);
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext(host);
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull("a caller must not register origins differing by port");
     }
@@ -273,41 +368,41 @@ public class ScalarAuthProviderTests : IDisposable
     [InlineData("javascript")]
     [InlineData("file")]
     [InlineData("HTTPS evil")]
-    public async Task PrepareAsync_RejectsANonHttpForwardedProto(string proto)
+    public async Task TryPrepareAsync_RejectsANonHttpForwardedProto(string proto)
     {
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext("rhys.nocturne.run", proto);
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run", proto);
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
     }
 
     [Fact]
-    public async Task PrepareAsync_RejectsCleartextHttpOnAPublicHost()
+    public async Task TryPrepareAsync_RejectsCleartextHttpOnAPublicHost()
     {
         // RedirectUriValidator treats http on a non-loopback host as invalid for
         // registration; authorization codes must not be issued over plaintext.
-        SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext("rhys.nocturne.run", proto: "http");
+        _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = DocsTenantFixture.BuildContext("rhys.nocturne.run", proto: "http");
 
-        await BuildProvider().PrepareAsync(context);
+        await _fixture.BuildProvider().TryPrepareAsync(context);
 
         Auth(context).Should().BeNull();
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         (await db.OAuthClients.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task PrepareAsync_DoesNotBadgeTheClientAsKnown()
+    public async Task TryPrepareAsync_DoesNotBadgeTheClientAsKnown()
     {
         // The consent screen suppresses its "app not recognized" warning for known
         // clients. This row is created by an unauthenticated request.
-        var tenantId = SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var tenantId = _fixture.SeedTenant("rhys", isDemo: false, withDemoMember: false);
 
-        await BuildProvider().PrepareAsync(BuildContext("rhys.nocturne.run"));
+        await _fixture.BuildProvider().TryPrepareAsync(DocsTenantFixture.BuildContext("rhys.nocturne.run"));
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _fixture.Db();
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId);
         client.IsKnown.Should().BeFalse();
@@ -317,85 +412,9 @@ public class ScalarAuthProviderTests : IDisposable
     private static ScalarAuthContext? Auth(HttpContext context) =>
         context.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
 
-    private Guid SeedTenant(string slug, bool isDemo, bool withDemoMember, bool isActive = true)
-    {
-        using var db = new NocturneDbContext(_dbOptions);
-
-        var tenant = new TenantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Slug = slug,
-            DisplayName = slug,
-            IsActive = isActive,
-            IsDemo = isDemo,
-        };
-        db.Add(tenant);
-
-        if (withDemoMember)
-        {
-            var subject = new SubjectEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Name = DemoTenantService.DemoMemberName,
-                IsActive = true,
-                // As provisioning creates it. The lookup requires the flag, not just the
-                // membership, so seeding it false would model a state the provider refuses.
-                IsDemoSubject = true,
-            };
-            db.Subjects.Add(subject);
-            db.TenantMembers.Add(new TenantMemberEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenant.Id,
-                SubjectId = subject.Id,
-                Username = DemoTenantService.DemoMemberUsername,
-            });
-        }
-
-        db.SaveChanges();
-        return tenant.Id;
-    }
-
-    /// <summary>
-    /// Builds a request as the pipeline presents it to the provider: UseForwardedHeaders
-    /// has already applied X-Forwarded-Host/-Proto onto Request.Host and Request.Scheme,
-    /// so the provider reads those rather than the headers.
-    /// </summary>
-    private static HttpContext BuildContext(string host, string proto = "https")
-    {
-        var context = new DefaultHttpContext();
-        context.Request.Path = "/scalar";
-        context.Request.Host = new HostString(host);
-        context.Request.Scheme = proto;
-        return context;
-    }
-
-    private ScalarAuthProvider BuildProvider(IMemoryCache? cache = null)
-    {
-        var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
-
-        var demoTenantService = new DemoTenantService(
-            dbFactory.Object,
-            new Mock<ITenantService>().Object,
-            TestPublicAccessCache.Create(),
-            new Mock<ICacheService>().Object,
-            new Mock<ILogger<DemoTenantService>>().Object);
-
-        return new ScalarAuthProvider(
-            dbFactory.Object,
-            demoTenantService,
-            _sessionService.Object,
-            new RedirectUriValidator(),
-            cache ?? new MemoryCache(new MemoryCacheOptions()),
-            Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
-            new Mock<ILogger<ScalarAuthProvider>>().Object);
-    }
-
     public void Dispose()
     {
-        _connection.Dispose();
+        _fixture.Dispose();
         GC.SuppressFinalize(this);
     }
 }

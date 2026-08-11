@@ -32,9 +32,10 @@ public sealed record ScalarAuthContext(string ClientId, string RedirectUri, stri
 }
 
 /// <summary>
-/// Prepares the Scalar reference UI's authentication for the tenant whose host the docs
-/// were opened on: registers that tenant's Scalar OAuth client on demand and, for a demo
-/// tenant, hands Scalar a bearer token so requests work without any sign-in step.
+/// Decides whether the documentation paths may be served for a request, and prepares the
+/// Scalar reference UI's authentication for the tenant whose host they were opened on:
+/// registers that tenant's Scalar OAuth client on demand and, for a demo tenant, hands
+/// Scalar a bearer token so requests work without any sign-in step.
 /// </summary>
 /// <remarks>
 /// The docs paths deliberately bypass tenant resolution and authentication (they must
@@ -109,54 +110,43 @@ public sealed class ScalarAuthProvider
     }
 
     /// <summary>
-    /// Resolves the request's tenant and stashes a <see cref="ScalarAuthContext"/> on
-    /// <see cref="HttpContext.Items"/> for the Scalar options delegate to read. Does
-    /// nothing when the host resolves to no tenant, so the docs still render.
+    /// Decides whether the documentation paths may be served for this request and, on the
+    /// Scalar page, stashes a <see cref="ScalarAuthContext"/> on
+    /// <see cref="HttpContext.Items"/> for the Scalar options delegate to read.
     /// </summary>
-    public async Task PrepareAsync(HttpContext context)
+    /// <returns>
+    /// <see langword="false"/> when the host resolves to a tenant that has not opted in, which
+    /// the caller answers with 404. <see langword="true"/> when the host resolves to no tenant
+    /// at all, so a bare instance still renders the reference.
+    /// </returns>
+    public async Task<bool> TryPrepareAsync(HttpContext context)
     {
+        ResolvedDocsTenant? resolved;
         try
         {
-            var scheme = ParseScheme(context);
-            if (scheme is null)
-                return;
+            resolved = await ResolveAsync(context.Request.Host, context.RequestAborted);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The opt-in could not be read, and an unreadable opt-in is not an opt-in: a
+            // failed lookup must not serve the docs on a tenant that never turned them on.
+            _logger.LogWarning(ex, "Failed to resolve the tenant for a documentation request");
+            return false;
+        }
 
-            var resolved = await ResolveAsync(context.Request.Host, scheme, context.RequestAborted);
-            if (resolved is null)
-                return;
+        if (resolved is null)
+            return true;
 
-            var redirectUri = resolved.RedirectUri;
+        if (!resolved.AllowPublicDocs)
+            return false;
 
-            // Belt and braces: the URI is assembled from configuration and the tenant's
-            // own slug, so this should never fail. It is the same gate a redirect URI
-            // submitted through client registration passes, and it is what stops a
-            // cleartext http URI being registered for a public host.
-            if (!_redirectUriValidator.IsValidForRegistration(redirectUri))
-            {
-                _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", resolved.TenantId);
-                return;
-            }
+        // Only the reference UI needs an authentication context; the specs are static.
+        if (!context.Request.Path.StartsWithSegments("/scalar", StringComparison.OrdinalIgnoreCase))
+            return true;
 
-            var clientId = await EnsureScalarClientAsync(
-                resolved.TenantId, redirectUri, context.RequestAborted);
-            if (clientId is null)
-                return;
-
-            var bearerToken = resolved.IsDemo
-                ? await GetDemoBearerTokenAsync(resolved.TenantId, context)
-                : null;
-
-            if (bearerToken is not null)
-            {
-                // The token is embedded in the page, so this response is per-credential
-                // even though the URL is not. Keep it out of shared caches: a CDN with a
-                // blanket "cache everything" rule would otherwise serve it on past the
-                // reset that revokes it.
-                context.Response.Headers.CacheControl = "no-store, private";
-            }
-
-            context.Items[ScalarAuthContext.HttpContextItemKey] =
-                new ScalarAuthContext(clientId, redirectUri, bearerToken);
+        try
+        {
+            await PrepareScalarAuthAsync(resolved, context);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -164,53 +154,110 @@ public sealed class ScalarAuthProvider
             // static configuration rather than failing the page.
             _logger.LogWarning(ex, "Failed to prepare Scalar authentication context");
         }
+
+        return true;
+    }
+
+    private async Task PrepareScalarAuthAsync(ResolvedDocsTenant resolved, HttpContext context)
+    {
+        var redirectUri = BuildRedirectUri(resolved, context);
+        if (redirectUri is null)
+            return;
+
+        // Belt and braces: the URI is assembled from configuration and the tenant's
+        // own slug, so this should never fail. It is the same gate a redirect URI
+        // submitted through client registration passes, and it is what stops a
+        // cleartext http URI being registered for a public host.
+        if (!_redirectUriValidator.IsValidForRegistration(redirectUri))
+        {
+            _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", resolved.TenantId);
+            return;
+        }
+
+        var clientId = await EnsureScalarClientAsync(
+            resolved.TenantId, redirectUri, context.RequestAborted);
+        if (clientId is null)
+            return;
+
+        var bearerToken = resolved.IsDemo
+            ? await GetDemoBearerTokenAsync(resolved.TenantId, context)
+            : null;
+
+        if (bearerToken is not null)
+        {
+            // The token is embedded in the page, so this response is per-credential
+            // even though the URL is not. Keep it out of shared caches: a CDN with a
+            // blanket "cache everything" rule would otherwise serve it on past the
+            // reset that revokes it.
+            context.Response.Headers.CacheControl = "no-store, private";
+        }
+
+        context.Items[ScalarAuthContext.HttpContextItemKey] =
+            new ScalarAuthContext(clientId, redirectUri, bearerToken);
     }
 
     /// <summary>
-    /// Returns the request's scheme, or <see langword="null"/> when it is not http(s).
+    /// The redirect URI to register for <paramref name="resolved"/>, or
+    /// <see langword="null"/> when this request's origin is not one the deployment serves.
     /// </summary>
     /// <remarks>
-    /// Read from <see cref="HttpRequest.Scheme"/>, which <c>UseForwardedHeaders</c> has
-    /// already set from <c>X-Forwarded-Proto</c> — reading the header again here would
-    /// pick a different entry from the one the rest of the pipeline used.
+    /// Assembled from the configured base domain and the tenant's own slug as stored, so the
+    /// only byte of it a caller influences is the scheme, which
+    /// <see cref="RedirectUriValidator"/> then gates. The scheme and the port are read from
+    /// the request and are both caller-controlled (see <see cref="ResolveAsync"/>), so they
+    /// decide only whether a client is registered — never which tenant is resolved, and never
+    /// whether the docs are served.
     /// </remarks>
-    private static string? ParseScheme(HttpContext context)
+    private string? BuildRedirectUri(ResolvedDocsTenant resolved, HttpContext context)
     {
+        // Read from HttpRequest.Scheme, which UseForwardedHeaders has already set from
+        // X-Forwarded-Proto — reading the header again here would pick a different entry
+        // from the one the rest of the pipeline used.
         var scheme = context.Request.Scheme?.ToLowerInvariant();
-        return scheme is "http" or "https" ? scheme : null;
+        if (scheme is not ("http" or "https"))
+            return null;
+
+        var (_, basePort) = _baseDomain.SplitHostPort();
+
+        // The port has to be the one the deployment is served on, so a caller cannot
+        // register extra origins that differ only by port.
+        if (context.Request.Host.Port != basePort)
+            return null;
+
+        var authority = basePort is null
+            ? resolved.CanonicalHost
+            : $"{resolved.CanonicalHost}:{basePort}";
+
+        return $"{scheme}://{authority}/scalar";
     }
 
     /// <summary>
-    /// Resolves the tenant the docs were opened on and the redirect URI to register for
-    /// it, or <see langword="null"/> when <paramref name="requestHost"/> is not an origin
-    /// this deployment serves.
+    /// Resolves the tenant whose host the docs were opened on, or <see langword="null"/>
+    /// when <paramref name="requestHost"/> is not a host this deployment serves a tenant on.
     /// </summary>
     /// <remarks>
     /// The request host is client-controllable: the gateway forwards
     /// <c>X-Forwarded-Host</c> untouched and <c>UseForwardedHeaders</c> runs with no
     /// trusted-proxy list, so it decides <see cref="HttpRequest.Host"/>. It is therefore
-    /// used only to <em>select</em> a tenant, never to build the redirect URI — that is
-    /// assembled from the configured base domain and the tenant's own slug as stored, so
-    /// the only byte of it a caller influences is the scheme, which
-    /// <see cref="RedirectUriValidator"/> then gates. Without this, a host belonging to
-    /// nobody (<c>attacker.example</c>) fell through to the sole-tenant branch below and
-    /// registered an attacker-controlled OAuth redirect URI on that tenant.
+    /// used only to <em>select</em> a tenant, never to build the redirect URI. Without this,
+    /// a host belonging to nobody (<c>attacker.example</c>) fell through to the sole-tenant
+    /// branch below and registered an attacker-controlled OAuth redirect URI on that tenant.
+    /// <para>
+    /// Selection deliberately ignores the port and the scheme, which are caller-controlled
+    /// for the same reason: a tenant that has not opted into the docs must not get them back
+    /// by being asked for on a made-up port. Both are checked in
+    /// <see cref="BuildRedirectUri"/>, where getting them wrong costs only the OAuth client.
+    /// </para>
     /// <para>
     /// Returns <see langword="null"/> for the apex with more than one tenant, an unknown
     /// slug, an inactive tenant, and for a public share host — a share grants read-only
     /// anonymous access and must not be handed a client or a token.
     /// </para>
     /// </remarks>
-    private async Task<ResolvedDocsTenant?> ResolveAsync(
-        HostString requestHost, string scheme, CancellationToken ct)
+    private async Task<ResolvedDocsTenant?> ResolveAsync(HostString requestHost, CancellationToken ct)
     {
-        var (baseHost, basePort) = _baseDomain.SplitHostPort();
+        var (baseHost, _) = _baseDomain.SplitHostPort();
         if (baseHost is null || string.IsNullOrEmpty(requestHost.Host))
-            return null;
-
-        // The port has to be the one the deployment is served on, so a caller cannot
-        // register extra origins that differ only by port.
-        if (requestHost.Port != basePort)
             return null;
 
         var slug = SubdomainParser.Extract(requestHost.Host, baseHost);
@@ -220,12 +267,16 @@ public sealed class ScalarAuthProvider
         if (slug is not null && SubdomainParser.TryExtractShareToken(slug, out _))
             return null;
 
-        // Only resolutions that found a tenant are cached. The docs paths run before the rate
-        // limiter, so the host on an unauthenticated request decides this key — caching misses
-        // would let arbitrary hostnames each pin an entry. A miss costs one indexed lookup on
-        // tenants.slug; a hit is what repeated views of a real tenant's docs page would otherwise
-        // pay for on every request.
-        var cacheKey = $"scalar-tenant:{scheme}:{requestHost.Value}";
+        // Apex. Single-tenant installs serve everything from it; anything that is not the
+        // configured apex is not ours to resolve a tenant for. Checked before the cache so a
+        // foreign host never reaches the database or pins an entry.
+        if (slug is null && !requestHost.Host.Equals(baseHost, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Keyed on the slug rather than the request host so the entry is evictable when the
+        // opt-in is toggled, and so ports and schemes — both caller-supplied — collapse onto
+        // one entry instead of pinning one each.
+        var cacheKey = TenantCacheKey(slug);
         if (_cache.TryGetValue(cacheKey, out ResolvedDocsTenant? cached) && cached is not null)
             return cached;
 
@@ -234,11 +285,6 @@ public sealed class ScalarAuthProvider
         TenantEntity? tenant;
         if (slug is null)
         {
-            // Apex. Single-tenant installs serve everything from it; anything that is not
-            // the configured apex is not ours to register a redirect URI for.
-            if (!requestHost.Host.Equals(baseHost, StringComparison.OrdinalIgnoreCase))
-                return null;
-
             var soleTenants = await db.Set<TenantEntity>()
                 .AsNoTracking()
                 .Where(t => t.IsActive)
@@ -261,11 +307,11 @@ public sealed class ScalarAuthProvider
                 return null;
         }
 
-        var canonicalHost = slug is null ? baseHost : $"{tenant.Slug}.{baseHost}";
-        var authority = basePort is null ? canonicalHost : $"{canonicalHost}:{basePort}";
-
         var resolved = new ResolvedDocsTenant(
-            tenant.Id, tenant.IsDemo, $"{scheme}://{authority}/scalar");
+            tenant.Id,
+            tenant.IsDemo,
+            tenant.AllowPublicDocs,
+            slug is null ? baseHost : $"{tenant.Slug}.{baseHost}");
 
         // Same TTL as the client cache, so a demo reset — which clears the tenant's OAuth clients —
         // heals both within the same couple of minutes.
@@ -274,11 +320,38 @@ public sealed class ScalarAuthProvider
         return resolved;
     }
 
+    /// <summary>Cache key holding the resolved docs tenant for a slug, or for the apex.</summary>
+    private static string TenantCacheKey(string? slug) => $"scalar-tenant:{slug ?? "__apex__"}";
+
     /// <summary>
-    /// The parts of the resolved tenant the docs page needs. A record rather than the entity so
+    /// Drops the cached docs resolution for a tenant, so the next documentation request reads
+    /// the opt-in from the row instead of serving the previous answer for up to
+    /// <see cref="ClientCacheTtl"/>.
+    /// </summary>
+    /// <remarks>
+    /// Both keys go, for the reason <see cref="Multitenancy.TenantResolutionMiddleware.EvictTenant"/>
+    /// drops both of its own: a single-tenant install resolves the apex to the sole tenant, which
+    /// is cached under the apex key.
+    /// </remarks>
+    public static void EvictTenant(IMemoryCache cache, string slug)
+    {
+        cache.Remove(TenantCacheKey(slug));
+        cache.Remove(TenantCacheKey(null));
+    }
+
+    /// <summary>
+    /// The parts of the resolved tenant the docs paths need. A record rather than the entity so
     /// nothing tracked by a disposed context is held in the cache.
     /// </summary>
-    private sealed record ResolvedDocsTenant(Guid TenantId, bool IsDemo, string RedirectUri);
+    /// <param name="TenantId">The resolved tenant.</param>
+    /// <param name="IsDemo">Whether the tenant is the demo, whose Scalar page prefills a token.</param>
+    /// <param name="AllowPublicDocs">Whether the tenant serves the documentation paths at all.</param>
+    /// <param name="CanonicalHost">
+    /// The host this deployment serves the tenant on, assembled from the configured base domain
+    /// and the stored slug — never from the request.
+    /// </param>
+    private sealed record ResolvedDocsTenant(
+        Guid TenantId, bool IsDemo, bool AllowPublicDocs, string CanonicalHost);
 
     /// <summary>
     /// Registers the tenant's Scalar OAuth client if absent, and adds
