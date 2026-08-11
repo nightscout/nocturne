@@ -311,10 +311,11 @@ public class ConfigurationController : ControllerBase
     /// A scheme-less <c>host:port</c> cannot be told apart from an explicit scheme by an absolute
     /// parse alone: <c>Uri.TryCreate("mysite.example:1337", UriKind.Absolute, …)</c> succeeds with
     /// <c>Scheme == "mysite.example"</c> and an empty host, and <c>"localhost:1337"</c> the same way
-    /// — 1337 is Nightscout's default self-hosted port, so that form is common. A candidate
-    /// therefore counts as carrying its own scheme only when the absolute parse yields http/https,
-    /// or when it contains <c>"://"</c>. The second test is what keeps <c>file://</c> and friends
-    /// off the prepend path, where they would parse as a host named <c>file</c> and sail through.
+    /// — 1337 is Nightscout's default self-hosted port, so that form is common. So once http/https
+    /// has been accepted above, what is left has to look like a host: no leading slash, and no
+    /// colon except the one introducing a port. Testing for <c>"://"</c> instead let the
+    /// single-slash <c>file:/etc/passwd</c> onto the prepend path, where it parses as a host named
+    /// <c>file</c> and was stored.
     /// </para>
     /// <para>
     /// Embedded credentials are refused because this value is stored in the connector's runtime
@@ -336,13 +337,42 @@ public class ConfigurationController : ControllerBase
         }
 
         // Any other explicit scheme is out. Tested before the scheme-less fallback, because
-        // prepending https:// to "file:///etc/passwd" produces something that still parses.
-        if (candidate.Contains("://", StringComparison.Ordinal))
+        // prepending https:// to "file:/etc/passwd" produces something that still parses.
+        if (candidate.StartsWith('/') || !ColonIntroducesOnlyAPort(candidate))
             return false;
 
         // No scheme of its own: a host, optionally with a port, which the connectors read as https.
         return Uri.TryCreate($"https://{candidate}", UriKind.Absolute, out var implied)
             && string.IsNullOrEmpty(implied.UserInfo);
+    }
+
+    /// <summary>
+    /// True when the first colon outside a bracketed IPv6 literal is followed by a port: digits up
+    /// to the end of the value or the first path separator. Anything else in front of a colon is a
+    /// scheme, since a scheme may contain the dots and dashes a hostname does.
+    /// </summary>
+    private static bool ColonIntroducesOnlyAPort(string candidate)
+    {
+        var authority = candidate.AsSpan();
+
+        if (authority[0] == '[')
+        {
+            var close = authority.IndexOf(']');
+            if (close < 0)
+                return false;
+
+            authority = authority[(close + 1)..];
+        }
+
+        var colon = authority.IndexOf(':');
+        if (colon < 0)
+            return true;
+
+        var afterColon = authority[(colon + 1)..];
+        var slash = afterColon.IndexOf('/');
+        var port = slash < 0 ? afterColon : afterColon[..slash];
+
+        return port.Length > 0 && !port.ContainsAnyExcept("0123456789");
     }
 
     /// <summary>
