@@ -50,8 +50,8 @@ public sealed class PublicDocsMiddleware
         // (OAuth client, demo bearer token) is resolved here and stashed on Items.
         if (!await docs.TryPrepareAsync(context))
         {
-            // Same answer an unknown tenant slug gets: a tenant that has not opted in has no
-            // documentation surface, rather than one that exists and refuses.
+            // The answer an unknown slug gets elsewhere in the app: a tenant that has not opted
+            // in has no documentation surface, rather than one that exists and refuses.
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
