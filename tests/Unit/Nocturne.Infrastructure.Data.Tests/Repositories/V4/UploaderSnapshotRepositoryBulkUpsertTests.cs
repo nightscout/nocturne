@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -22,7 +23,7 @@ public class UploaderSnapshotRepositoryBulkUpsertTests : IDisposable
         var dbName = $"uploader_snapshot_upsert_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), NullLogger<UploaderSnapshotRepository>.Instance);
+        _repository = new UploaderSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
     }
 
     public void Dispose()

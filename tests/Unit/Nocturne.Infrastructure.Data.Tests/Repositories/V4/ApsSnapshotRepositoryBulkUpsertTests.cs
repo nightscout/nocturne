@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -22,7 +23,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
         var dbName = $"aps_snapshot_upsert_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new ApsSnapshotRepository(new TestTenantDbContextFactory(_context), NullLogger<ApsSnapshotRepository>.Instance);
+        _repository = new ApsSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
     }
 
     public void Dispose()
@@ -173,7 +174,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     {
         var broadcaster = new RecordingBroadcaster();
         var repository = new ApsSnapshotRepository(
-            new TestTenantDbContextFactory(_context), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
+            new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
 
         await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
         broadcaster.Created.Should().HaveCount(1);
