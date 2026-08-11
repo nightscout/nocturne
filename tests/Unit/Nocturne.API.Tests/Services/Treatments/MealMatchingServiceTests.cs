@@ -80,8 +80,8 @@ public class MealMatchingServiceTests
             .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ids.Select(Entry).ToList());
 
-        // The notification source's active cap throws; before this was guarded it abandoned the
-        // rest of the batch, so matching silently stopped partway through.
+        // Before this was guarded, one failed notification abandoned the rest of the batch, so
+        // matching silently stopped partway through.
         _notificationService
             .Setup(n => n.CreateNotificationAsync(
                 UserId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<NotificationCategory?>(),
@@ -89,7 +89,7 @@ public class MealMatchingServiceTests
                 It.IsAny<string?>(), ids[0].ToString(), It.IsAny<List<NotificationActionDto>?>(),
                 It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
                 It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Rate limit exceeded"));
+            .ThrowsAsync(new InvalidOperationException("notification write failed"));
 
         await NewService().ProcessNewFoodEntriesAsync(UserId, ids);
 

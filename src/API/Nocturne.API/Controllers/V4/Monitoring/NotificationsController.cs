@@ -71,7 +71,6 @@ public class NotificationsController : ControllerBase
     [ProducesResponseType(typeof(InAppNotificationDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> CreateNotification(
         [FromBody] CreateNotificationRequest request,
         CancellationToken cancellationToken)
@@ -101,10 +100,6 @@ public class NotificationsController : ControllerBase
                 cancellationToken: cancellationToken);
 
             return Created($"/api/v4/notifications/{notification.Id}", notification);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("Rate limit"))
-        {
-            return StatusCode(429, new { error = ex.Message });
         }
         catch (ArgumentException ex)
         {

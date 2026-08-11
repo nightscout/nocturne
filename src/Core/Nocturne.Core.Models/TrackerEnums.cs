@@ -255,7 +255,12 @@ public enum NotificationArchiveReason
     /// <summary>
     /// Notification expired based on its configured expiration time
     /// </summary>
-    Expired
+    Expired,
+
+    /// <summary>
+    /// Displaced by a newer notification once its source reached the per-source active cap
+    /// </summary>
+    Superseded
 }
 
 /// <summary>

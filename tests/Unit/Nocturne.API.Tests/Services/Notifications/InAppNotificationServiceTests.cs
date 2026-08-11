@@ -13,7 +13,8 @@ namespace Nocturne.API.Tests.Services.Notifications;
 /// Unit tests for the per-subject bookkeeping on <see cref="InAppNotificationService"/>: the
 /// single mark-read ownership/no-op guards, bulk mark-all-read broadcasting, the archive
 /// ownership guard that confines <c>DELETE /api/v4/notifications/{id}</c> to the caller's own rows,
-/// and the type accessor that <c>NotificationsController.ExecuteAction</c> authorizes on.
+/// the type accessor that <c>NotificationsController.ExecuteAction</c> authorizes on, and the
+/// per-source active cap that supersedes a source's oldest notifications.
 /// </summary>
 public class InAppNotificationServiceTests
 {
@@ -32,9 +33,13 @@ public class InAppNotificationServiceTests
         );
     }
 
+    private const string Source = "meal_matching";
+
     private static InAppNotificationEntity Notification(
         string userId,
-        DateTime? readAt = null
+        DateTime? readAt = null,
+        string? source = null,
+        DateTime createdAt = default
     ) => new()
     {
         Id = Guid.CreateVersion7(),
@@ -44,7 +49,118 @@ public class InAppNotificationServiceTests
         Urgency = NotificationUrgency.Info,
         Title = "compression_low_detected",
         ReadAt = readAt,
+        Source = source,
+        CreatedAt = createdAt,
     };
+
+    /// <summary>
+    /// Gives <see cref="Source"/> the requested number of active notifications, oldest first, and
+    /// has create and archive echo back the row they were handed.
+    /// </summary>
+    private List<InAppNotificationEntity> SeedActiveSource(int activeCount)
+    {
+        var active = Enumerable
+            .Range(0, activeCount)
+            .Select(i => Notification(
+                "user-1",
+                source: Source,
+                createdAt: new DateTime(2026, 1, 1, 0, i, 0, DateTimeKind.Utc)))
+            .ToList();
+
+        _repository
+            .Setup(r => r.GetActiveBySourceAsync("user-1", Source, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(active);
+        _repository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => active.FirstOrDefault(n => n.Id == id));
+        _repository
+            .Setup(r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, NotificationArchiveReason _, CancellationToken __) =>
+                active.First(n => n.Id == id));
+        _repository
+            .Setup(r => r.CreateAsync(
+                It.IsAny<InAppNotificationEntity>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InAppNotificationEntity entity, CancellationToken _) => entity);
+
+        return active;
+    }
+
+    private Task<InAppNotificationDto> CreateFromSourceAsync(string title) =>
+        _service.CreateNotificationAsync(
+            "user-1",
+            "meal_matching.suggested_match",
+            title,
+            category: NotificationCategory.ActionRequired,
+            source: Source);
+
+    /// <summary>
+    /// A source at its cap used to reject the create outright, so the newest notification was the
+    /// one lost and callers that swallow the failure never surfaced it.
+    /// </summary>
+    [Fact]
+    public async Task CreateNotificationAsync_WhenSourceIsAtCap_SupersedesTheOldestAndKeepsTheNewest()
+    {
+        var active = SeedActiveSource(InAppNotificationService.MaxActiveNotificationsPerSource);
+
+        var created = await CreateFromSourceAsync("eleventh");
+
+        Assert.Equal("eleventh", created.Title);
+        _repository.Verify(
+            r => r.CreateAsync(
+                It.Is<InAppNotificationEntity>(e => e.Title == "eleventh" && e.Source == Source),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                active[0].Id, NotificationArchiveReason.Superseded, It.IsAny<CancellationToken>()),
+            Times.Once);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _broadcast.Verify(
+            b => b.BroadcastNotificationArchivedAsync(
+                "user-1",
+                It.Is<InAppNotificationDto>(d => d.Id == active[0].Id),
+                NotificationArchiveReason.Superseded),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateNotificationAsync_WhenSourceIsOneBelowCap_SupersedesNothing()
+    {
+        SeedActiveSource(InAppNotificationService.MaxActiveNotificationsPerSource - 1);
+
+        var created = await CreateFromSourceAsync("tenth");
+
+        Assert.Equal("tenth", created.Title);
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateNotificationAsync_WhenSourceIsOverCap_SupersedesEnoughToLandOnTheCap()
+    {
+        var active = SeedActiveSource(InAppNotificationService.MaxActiveNotificationsPerSource + 2);
+
+        await CreateFromSourceAsync("newest");
+
+        foreach (var superseded in active.Take(3))
+        {
+            _repository.Verify(
+                r => r.ArchiveAsync(
+                    superseded.Id, NotificationArchiveReason.Superseded, It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        _repository.Verify(
+            r => r.ArchiveAsync(
+                It.IsAny<Guid>(), It.IsAny<NotificationArchiveReason>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(3));
+    }
 
     [Fact]
     public async Task MarkAsReadAsync_WhenNotFound_ReturnsFalseAndDoesNotBroadcast()
