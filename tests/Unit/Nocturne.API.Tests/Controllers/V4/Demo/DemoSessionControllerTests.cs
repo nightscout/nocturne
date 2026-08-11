@@ -141,9 +141,8 @@ public class DemoSessionControllerTests : IDisposable
     /// not be enough on its own — the subject has to carry the flag too.
     /// </summary>
     /// <remarks>
-    /// The one downstream guard is <c>TrimSessionsAsync</c>, which reports its refusal only through
-    /// a return value this endpoint discards, so without the check on the lookup a real account
-    /// under that username would be issued a session to whoever asked.
+    /// Nothing downstream of the lookup re-examines whose subject it resolved, so without the check
+    /// there a real account under that username would be issued a session to whoever asked.
     /// </remarks>
     [Fact]
     public async Task CreateSession_ReturnsNotFound_WhenTheDemoMemberIsNotADemoSubject()
@@ -165,46 +164,6 @@ public class DemoSessionControllerTests : IDisposable
 
         result.Should().BeOfType<NotFoundResult>();
         VerifyNoSessionIssued();
-    }
-
-    [Fact]
-    public async Task CreateSession_TrimsTheSubjectsSessionsBeforeIssuing()
-    {
-        // The endpoint is anonymous and each call writes a refresh_tokens row, and the per-IP
-        // rate limit partitions on a caller-supplied header, so the cap is the only ceiling.
-        var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
-        var subjectId = await new DemoTenantService(
-            BuildDbFactory(), new Mock<ITenantService>().Object, TestPublicAccessCache.Create(),
-            new Mock<ICacheService>().Object, new Mock<ILogger<DemoTenantService>>().Object)
-            .FindDemoMemberSubjectIdAsync(tenantId);
-
-        subjectId.Should().NotBeNull();
-
-        await using (var db = new NocturneDbContext(_dbOptions))
-        {
-            var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId!.Value);
-            subject.IsDemoSubject = true;
-            for (var i = 0; i < DemoTenantService.MaxLiveDemoSessions + 5; i++)
-            {
-                db.RefreshTokens.Add(new RefreshTokenEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    SubjectId = subjectId!.Value,
-                    TokenHash = $"h{i}",
-                    IssuedAt = DateTime.UtcNow.AddMinutes(-100 + i),
-                    ExpiresAt = DateTime.UtcNow.AddDays(30),
-                });
-            }
-            await db.SaveChangesAsync();
-        }
-
-        var controller = BuildController(tenantId, isDemo: true);
-        await controller.CreateSession(redirect: null, format: null, CancellationToken.None);
-
-        await using var check = new NocturneDbContext(_dbOptions);
-        (await check.RefreshTokens.CountAsync(t => t.SubjectId == subjectId!.Value))
-            .Should().Be(DemoTenantService.MaxLiveDemoSessions - 1,
-                "the controller trims before issuing; the issue itself is mocked here");
     }
 
     [Fact]

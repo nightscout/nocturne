@@ -4,7 +4,6 @@ using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Keys;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -48,28 +47,6 @@ public sealed class DemoTenantService
     /// <see cref="EnsureDemoRoleAsync"/>.
     /// </summary>
     public const string DemoRoleSlug = "demo-visitor";
-
-    /// <summary>
-    /// Ceiling on live <c>refresh_tokens</c> rows for the demo subject.
-    /// </summary>
-    /// <remarks>
-    /// The per-IP rate limit on the sign-in endpoint does not bound this. That partition key
-    /// comes from <c>Connection.RemoteIpAddress</c>, which <c>UseForwardedHeaders</c> — running
-    /// before the rate limiter, with <c>KnownProxies</c> and <c>KnownIPNetworks</c> cleared
-    /// because the API is only meant to be reachable through the gateway — takes from
-    /// <c>X-Forwarded-For</c>. The gateway does not strip that header, so a caller rotating it
-    /// gets a fresh partition per request and the limit bounds nothing. The limit is kept for
-    /// the friction it adds to naive abuse; this cap is the actual ceiling, and it is enforced
-    /// on a value no caller supplies.
-    /// <para>
-    /// Rotation is bounded by it too, but not here: <c>POST /api/auth/oidc/refresh</c> is
-    /// anonymous and carries no rate limit of its own, and each call writes a replacement row
-    /// without passing through any demo code. The cap is applied at the row-creating sink in the
-    /// data layer, so <see cref="TrimSessionsAsync"/> is the issue-path convenience rather than
-    /// the only enforcement.
-    /// </para>
-    /// </remarks>
-    public const int MaxLiveDemoSessions = DemoSessionLimits.MaxLiveSessions;
 
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ITenantService _tenantService;
@@ -129,71 +106,6 @@ public sealed class DemoTenantService
                 && m.Subject!.IsDemoSubject)
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
-    }
-
-    /// <summary>
-    /// Deletes the demo subject's oldest sessions so that at most
-    /// <see cref="MaxLiveDemoSessions"/> - 1 remain, leaving room for the caller to issue one.
-    /// Call immediately before issuing a demo session.
-    /// </summary>
-    /// <remarks>
-    /// Deletes rather than revokes: a revoked row still occupies the table, and the point of the
-    /// cap is that an endpoint anyone can call cannot grow it without bound. Expired and revoked
-    /// rows are dropped first, so a live session is only ever displaced once there is nothing
-    /// dead left to clear.
-    /// </remarks>
-    /// <param name="subjectId">
-    /// The demo member's subject. Verified to carry <see cref="SubjectEntity.IsDemoSubject"/>
-    /// before anything is deleted — this removes credential rows, so it must never be pointed at
-    /// a real account.
-    /// </param>
-    /// <returns>The number of session rows deleted.</returns>
-    public async Task<int> TrimSessionsAsync(Guid subjectId, CancellationToken ct = default)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var isDemoSubject = await db.Subjects
-            .AsNoTracking()
-            .Where(s => s.Id == subjectId)
-            .Select(s => (bool?)s.IsDemoSubject)
-            .FirstOrDefaultAsync(ct);
-
-        if (isDemoSubject is not true)
-        {
-            _logger.LogWarning(
-                "Refusing to trim sessions for subject {SubjectId}: not a demo subject", subjectId);
-            return 0;
-        }
-
-        var now = DateTime.UtcNow;
-
-        // Age out the dead rows first; they are nobody's session.
-        var deleted = await db.RefreshTokens
-            .Where(t => t.SubjectId == subjectId && (t.RevokedAt != null || t.ExpiresAt <= now))
-            .ExecuteDeleteAsync(ct);
-
-        var keep = MaxLiveDemoSessions - 1;
-        var surplus = await db.RefreshTokens
-            .Where(t => t.SubjectId == subjectId)
-            .OrderByDescending(t => t.IssuedAt)
-            .Skip(keep)
-            .Select(t => t.Id)
-            .ToListAsync(ct);
-
-        if (surplus.Count > 0)
-        {
-            deleted += await db.RefreshTokens
-                .Where(t => surplus.Contains(t.Id))
-                .ExecuteDeleteAsync(ct);
-        }
-
-        if (deleted > 0)
-        {
-            _logger.LogInformation(
-                "Trimmed {Count} demo session row(s) for subject {SubjectId}", deleted, subjectId);
-        }
-
-        return deleted;
     }
 
     /// <summary>
