@@ -88,12 +88,18 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (tracker.Visibility == TrackerVisibility.Public)
             return true;
 
-        // Private trackers only visible to owner
+        // The owner sees their own tracker at every visibility, not just Private, so that a
+        // visibility value with no view rule of its own can never hide a tracker from the person
+        // who set it. RoleRestricted is rejected on write and migrated to Private, so this is
+        // belt-and-braces rather than the only thing standing between an owner and their data.
+        // An unattributed tracker (UserId defaulted to "") must not match a caller carrying no
+        // subject, so an empty id matches nothing.
         var currentUserId = HttpContext.GetSubjectIdString();
-        if (tracker.Visibility == TrackerVisibility.Private && tracker.UserId == currentUserId)
+        if (!string.IsNullOrEmpty(currentUserId) && tracker.UserId == currentUserId)
             return true;
 
-        // TODO: RoleRestricted visibility check
+        // RoleRestricted has no check yet, so it falls through to hidden — including from
+        // the tracker's own owner.
         return false;
     }
 
@@ -486,17 +492,20 @@ public class TrackersController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// Get completed tracker instances (history)
+    /// Get completed tracker instances (history). Matches <see cref="GetActiveInstances"/> and
+    /// <see cref="GetUpcomingInstances"/>: a caller carrying no subject reads the public-visibility
+    /// instances only. <c>[Authorize]</c> here instead 401'd the calendar for every public share,
+    /// which renders history alongside the active and upcoming instances.
     /// </summary>
     [HttpGet("instances/history")]
-    [Authorize]
+    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
         [FromQuery] int limit = 100
     )
     {
-        var userId = HttpContext.GetSubjectIdString()!;
+        var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetCompletedInstancesAsync(
             userId,
             limit,
@@ -901,7 +910,7 @@ public class TrackerDefinitionDto
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
 
@@ -1052,7 +1061,7 @@ public class CreateTrackerDefinitionRequest
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
 
@@ -1105,7 +1114,7 @@ public class UpdateTrackerDefinitionRequest
     public DashboardVisibility? DashboardVisibility { get; set; }
 
     /// <summary>
-    /// Visibility level for this tracker (Public, Private, RoleRestricted)
+    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
 

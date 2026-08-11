@@ -664,14 +664,6 @@ public class EntriesController : BaseV3Controller<Entry>
         return DateTimeOffset.FromUnixTimeMilliseconds(latestMills);
     }
 
-    private string GetUserId()
-    {
-        var authContext = HttpContext.GetAuthContext();
-        return authContext?.SubjectId?.ToString()
-            ?? HttpContext.GetSubjectIdString()
-            ?? "00000000-0000-0000-0000-000000000001";
-    }
-
     private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
     {
         // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing

@@ -151,9 +151,17 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
     /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    /// Gated on the write scope although it reads: the recycle bin exists to feed
+    /// <see cref="Restore"/>, and records the owner deleted must not be enumerable by
+    /// read-only credentials — in particular the anonymous public-share principal, which
+    /// satisfies the class-level category read gate.
+    /// </remarks>
     [HttpGet("deleted")]
     [RemoteQuery]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public virtual async Task<ActionResult<PaginatedResponse<TModel>>> ListDeleted(
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         CancellationToken ct = default)

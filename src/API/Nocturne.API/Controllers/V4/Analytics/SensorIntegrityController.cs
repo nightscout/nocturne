@@ -1,5 +1,6 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models.Analytics;
 using OpenApi.Remote.Attributes;
@@ -20,7 +21,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/sensor-integrity")]
 [Produces("application/json")]
-[Authorize]
+[RequireScope(OAuthScopes.ReportsRead)]
 public class SensorIntegrityController : ControllerBase
 {
     private readonly ISensorIntegrityService _sensorIntegrityService;

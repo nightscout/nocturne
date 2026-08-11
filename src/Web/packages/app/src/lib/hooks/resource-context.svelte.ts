@@ -270,14 +270,18 @@ export function contextResource<T>(
 
   if (!dateParams) return base;
 
-  return {
-    ...base,
-    get date(): DateInfo {
-      return {
-        from: dateParams.startDate,
-        to: dateParams.endDate,
-        dayCount: dateParams.dayCount,
-      };
-    },
-  };
+  // `date` is defined on `base` rather than built with `{ ...base, get date() }`:
+  // spreading invokes each getter once and copies the results as plain values, so
+  // the caller receives `current` frozen at undefined and `loading` frozen at true
+  // for the life of the component. Every report that asked for `date` therefore
+  // rendered its empty state forever while the layout's ResourceGuard — which reads
+  // the query through its own closure — saw the data arrive and showed content.
+  return Object.defineProperty(base, "date", {
+    enumerable: true,
+    get: (): DateInfo => ({
+      from: dateParams.startDate,
+      to: dateParams.endDate,
+      dayCount: dateParams.dayCount,
+    }),
+  }) as ContextResourceWithDate<T>;
 }

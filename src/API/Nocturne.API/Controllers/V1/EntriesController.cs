@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -289,7 +290,7 @@ public class EntriesController : ControllerBase
     /// Get entries with optional query parameters
     /// Supports advanced query features including find filters, date ranges, and pagination
     /// </summary>
-    /// <param name="count">Maximum number of entries to return (if not specified, returns all matching entries)</param>
+    /// <param name="count">Maximum number of entries to return (default 10, capped at <see cref="LegacyReadLimits.MaxCount"/>)</param>
     /// <param name="type">Entry type filter (default: "sgv")</param>
     /// <param name="find">MongoDB-style find query filters (JSON format) - for unit tests</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -374,8 +375,8 @@ public class EntriesController : ControllerBase
                 // Nightscout returns empty array for count=0 or negative values
                 return Ok(Array.Empty<Entry>());
             }
-            // Nightscout defaults to 10 when count is not specified
-            var limitedCount = count ?? 10;
+            // Nightscout defaults to 10 when count is not specified; the upper bound is ours.
+            var limitedCount = LegacyReadLimits.ClampCount(count ?? 10);
 
             // Use advanced filtering if any advanced parameters are provided
             // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
@@ -592,8 +593,14 @@ public class EntriesController : ControllerBase
             var processedEntries = _documentProcessingService.ProcessDocuments(validEntries);
             var processedArray = processedEntries.ToArray();
 
-            // Filter out duplicates using database-backed detection
+            // Filter out duplicates using database-backed detection. Duplicates are
+            // excluded from the write but must still be echoed in the response: v1
+            // uploaders (Loop's NightscoutKit) require one response object per
+            // submitted entry, and treat a shorter array as a failed upload — the
+            // batch is then retried forever and the client never uploads anything
+            // newer. Legacy cgm-remote-monitor echoed dedup hits back with their _id.
             var uniqueEntries = new List<Entry>();
+            var responseEntries = new List<Entry>();
             foreach (var entry in processedArray)
             {
                 var duplicate = await _entryService.CheckForDuplicateEntryAsync(
@@ -614,10 +621,12 @@ public class EntriesController : ControllerBase
                         entry.Sgv,
                         entry.Mills
                     );
+                    responseEntries.Add(duplicate);
                     continue;
                 }
 
                 uniqueEntries.Add(entry);
+                responseEntries.Add(entry);
             }
 
             _logger.LogDebug(
@@ -638,7 +647,7 @@ public class EntriesController : ControllerBase
             // Evaluate alert rules against the latest created entry
             await EvaluateAlertsAsync(createdArray, cancellationToken);
 
-            return StatusCode(201, createdArray.ToV1Responses());
+            return StatusCode(201, responseEntries.ToV1Responses());
         }
         catch (JsonException ex)
         {
@@ -1247,14 +1256,6 @@ public class EntriesController : ControllerBase
                 }
             );
         }
-    }
-
-    private string GetUserId()
-    {
-        var authContext = HttpContext.GetAuthContext();
-        return authContext?.SubjectId?.ToString()
-            ?? HttpContext.GetSubjectIdString()
-            ?? "00000000-0000-0000-0000-000000000001";
     }
 
     private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)

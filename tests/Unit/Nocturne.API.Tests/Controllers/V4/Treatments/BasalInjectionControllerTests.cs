@@ -267,4 +267,114 @@ public class BasalInjectionControllerTests
         captured.InsulinContext.Concentration.Should().Be(100);
         captured.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
     }
+
+    [Fact]
+    public async Task Create_without_PatientInsulinId_creates_row_with_null_InsulinContext()
+    {
+        BasalInjection? captured = null;
+        SetupCreatePassthrough(b => captured = b);
+
+        var controller = CreateController();
+        var request = new CreateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Units = 22,
+        };
+
+        var result = await controller.Create(request);
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        captured.Should().NotBeNull();
+        captured!.Units.Should().Be(22);
+        captured.InsulinContext.Should().BeNull(
+            "an uploader that knows nothing about the insulin catalog stores no snapshot");
+
+        // No reference to resolve, so the insulin catalog is never consulted.
+        _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_without_PatientInsulinId_clears_InsulinContext()
+    {
+        var id = Guid.NewGuid();
+        var existing = new BasalInjection
+        {
+            Id = id,
+            Timestamp = DateTime.UtcNow.AddHours(-2),
+            Units = 10,
+            InsulinContext = new TreatmentInsulinContext
+            {
+                PatientInsulinId = Guid.NewGuid(),
+                InsulinName = "Tresiba",
+            },
+        };
+        _repoMock.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        BasalInjection? captured = null;
+        _repoMock
+            .Setup(r => r.UpdateAsync(id, It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, BasalInjection, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, BasalInjection b, WriteOrigin _, CancellationToken _) => b);
+
+        var controller = CreateController();
+        var request = new UpdateBasalInjectionRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Units = 11,
+        };
+
+        var result = await controller.Update(id, request);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        captured.Should().NotBeNull();
+        captured!.InsulinContext.Should().BeNull();
+        _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifier_returns_204_when_a_row_was_deleted()
+    {
+        _repoMock
+            .Setup(r => r.DeleteBySyncIdentifierAsync("loop", "abc-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var controller = CreateController();
+
+        var result = await controller.DeleteBySyncIdentifier("loop", "abc-123");
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifier_returns_404_when_nothing_matched()
+    {
+        _repoMock
+            .Setup(r => r.DeleteBySyncIdentifierAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+
+        var controller = CreateController();
+
+        var result = await controller.DeleteBySyncIdentifier("loop", "does-not-exist");
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Theory]
+    [InlineData("", "abc-123")]
+    [InlineData("loop", "")]
+    [InlineData("", "")]
+    public async Task DeleteBySyncIdentifier_returns_400_when_a_parameter_is_missing(
+        string dataSource, string syncIdentifier)
+    {
+        var controller = CreateController();
+
+        var result = await controller.DeleteBySyncIdentifier(dataSource, syncIdentifier);
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.StatusCode.Should().Be(400);
+        _repoMock.Verify(
+            r => r.DeleteBySyncIdentifierAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

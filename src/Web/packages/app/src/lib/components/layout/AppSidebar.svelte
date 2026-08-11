@@ -199,7 +199,7 @@
       icon: BarChart3,
       children: [
         { title: "Overview", href: "/reports", icon: PieChart, strict: true },
-        ...getSidebarReportItems(),
+        ...getSidebarReportItems(!user),
       ],
     },
     {

@@ -21,7 +21,10 @@ public enum TrackerVisibility
     Private = 1,
 
     /// <summary>
-    /// Requires specific roles to view (future extension)
+    /// Requires specific roles to view. Not implemented and not accepted: a tracker carries no
+    /// roles to match a viewer against. Rejected on create and update, and stored rows were
+    /// migrated to <see cref="Private"/>. Retained only so the wire values of
+    /// <see cref="Public"/> and <see cref="Private"/> do not shift.
     /// </summary>
     RoleRestricted = 2
 }

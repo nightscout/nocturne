@@ -11,12 +11,6 @@ public class OidcOptions
     public const string SectionName = "Oidc";
 
     /// <summary>
-    /// Base URL of this application (used for redirect URIs).
-    /// If not set, will be auto-detected from the request.
-    /// </summary>
-    public string? BaseUrl { get; set; }
-
-    /// <summary>
     /// Session configuration
     /// </summary>
     public SessionOptions Session { get; set; } = new();

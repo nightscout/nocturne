@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -43,7 +44,7 @@ public class OidcController : ControllerBase
     private readonly IAuthAuditService _auditService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _options;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
 
     /// <summary>
@@ -56,7 +57,7 @@ public class OidcController : ControllerBase
         IAuthAuditService auditService,
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcController> logger
     )
     {
@@ -66,7 +67,7 @@ public class OidcController : ControllerBase
         _auditService = auditService;
         _tenantMemberService = tenantMemberService;
         _options = options.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -662,18 +663,23 @@ public class OidcController : ControllerBase
     /// </summary>
     private bool IsValidReturnUrl(string returnUrl)
     {
-        if (Uri.TryCreate(returnUrl, UriKind.Relative, out _))
+        // Site-local path: starts with "/" but not "//" or "/\", which browsers
+        // resolve as scheme-relative — "Location: //evil.com" leaves the site.
+        if (returnUrl.StartsWith('/'))
         {
-            return true;
+            return returnUrl.Length == 1 || (returnUrl[1] != '/' && returnUrl[1] != '\\');
         }
 
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl];
-        if (!string.IsNullOrEmpty(baseUrl))
-        {
-            return returnUrl.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return false;
+        // Absolute URL: parse and compare scheme + authority against the public
+        // origin, so neither "https://example.com.evil.com" (prefix) nor
+        // "https://example.com@evil.com" (userinfo) can pass a string match.
+        var origin = _baseDomain.PublicOrigin;
+        return !string.IsNullOrEmpty(origin)
+            && Uri.TryCreate(returnUrl, UriKind.Absolute, out var target)
+            && Uri.TryCreate(origin, UriKind.Absolute, out var expected)
+            && target.Scheme == expected.Scheme
+            && string.Equals(target.Authority, expected.Authority, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrEmpty(target.UserInfo);
     }
 
     /// <summary>

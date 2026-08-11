@@ -851,6 +851,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
+        // Connector resume watermark: MAX(timestamp) for one data source, every sync cycle. A
+        // source with no rows yet would otherwise scan the tenant's whole table.
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => new { s.TenantId, s.DataSource, s.Timestamp })
+            .HasDatabaseName("ix_step_counts_tenant_source_timestamp")
+            .IsDescending(false, false, true);
+
         // HeartRate indexes - optimized for time-range graph queries
         modelBuilder
             .Entity<HeartRateEntity>()
@@ -875,6 +883,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_heart_rates_tenant_source_sync_id")
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // Connector resume watermark, as on step_counts. Heart rate arrives at up to 1 Hz, so this
+        // is the largest table an unindexed source filter would scan.
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => new { h.TenantId, h.DataSource, h.Timestamp })
+            .HasDatabaseName("ix_heart_rates_tenant_source_timestamp")
+            .IsDescending(false, false, true);
 
         // BodyWeight indexes - optimized for time-range graph queries
         modelBuilder
@@ -1184,6 +1200,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<StateSpanEntity>()
             .HasIndex(s => s.Source)
             .HasDatabaseName("ix_state_spans_source");
+
+        // Connector resume watermark: MAX(start_timestamp) over the activity categories for one
+        // data source. Tenant leads because a source id is the same string installation-wide, so
+        // ix_state_spans_source would walk every tenant's spans for that source.
+        modelBuilder
+            .Entity<StateSpanEntity>()
+            .HasIndex(s => new { s.TenantId, s.Source, s.Category, s.StartTimestamp })
+            .HasDatabaseName("ix_state_spans_tenant_source_category_start")
+            .IsDescending(false, false, false, true);
 
         modelBuilder
             .Entity<StateSpanEntity>()
@@ -2184,9 +2209,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_tenant");
 
-            // TODO(Task 1.5): ChatIdentityDirectoryService.CreateLinkAsync must
-            // auto-suffix label collisions within a (platform, platform_user_id)
-            // set before insert — this unique index will throw otherwise.
+            // Labels route bot commands, so they must be unambiguous within a platform user's set
+            // of links. ChatIdentityDirectoryService.CreateLinkAsync auto-suffixes a colliding
+            // label before insert and retries against this index when it loses a race.
             b.HasIndex(e => new { e.Platform, e.PlatformUserId, e.Label })
                 .IsUnique()
                 .HasDatabaseName("ux_directory_user_label");

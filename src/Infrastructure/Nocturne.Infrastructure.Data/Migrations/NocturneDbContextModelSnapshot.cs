@@ -1971,6 +1971,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_heart_rates_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
+                    b.HasIndex("TenantId", "DataSource", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_heart_rates_tenant_source_timestamp");
+
                     b.ToTable("heart_rates");
                 });
 
@@ -3898,11 +3902,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SupersededById")
                         .HasDatabaseName("ix_state_spans_superseded_by_id");
 
-                    b.HasIndex("TenantId");
-
                     b.HasIndex("Category", "StartTimestamp")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_state_spans_category_start");
+
+                    b.HasIndex("TenantId", "Source", "Category", "StartTimestamp")
+                        .IsDescending(false, false, false, true)
+                        .HasDatabaseName("ix_state_spans_tenant_source_category_start");
 
                     b.ToTable("state_spans");
                 });
@@ -3995,6 +4001,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_step_counts_tenant_source_sync_id")
                         .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "DataSource", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_step_counts_tenant_source_timestamp");
 
                     b.ToTable("step_counts");
                 });
@@ -4910,10 +4920,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
-                    b.Property<string>("RequiredRoles")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("required_roles");
-
                     b.Property<string>("StartEventType")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -5632,7 +5638,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("device");
 
                     b.Property<string>("InsulinContextJson")
-                        .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("insulin_context");
 

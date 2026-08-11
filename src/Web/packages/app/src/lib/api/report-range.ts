@@ -37,11 +37,23 @@ export interface ReportRange {
 }
 
 /**
- * The patient's configured IANA timezone, or null when it is unset or is a value
- * this runtime does not recognise. Null means the day boundaries fall back to UTC.
+ * The patient's configured IANA timezone, or null when it is unset, is a value this runtime
+ * does not recognise, or the caller may not read it. Null means the day boundaries fall back
+ * to UTC.
+ *
+ * Therapy settings are not a shareable data category, so an anonymous public-share viewer
+ * gets 401/403 here; reports must still render for them (nightscout/nocturne#635), just with
+ * UTC day boundaries.
  */
 export async function getPatientTimeZone(): Promise<string | null> {
-  const profile = await getProfileSummary(undefined);
+  let profile: Awaited<ReturnType<typeof getProfileSummary>>;
+  try {
+    profile = await getProfileSummary(undefined);
+  } catch (err) {
+    const status = (err as { status?: number })?.status;
+    if (status === 401 || status === 403) return null;
+    throw err;
+  }
   const timeZone = profile?.therapySettings?.[0]?.timezone;
   return isTimeZone(timeZone) ? timeZone : null;
 }

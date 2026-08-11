@@ -48,6 +48,34 @@ public class DeviceStatus : ProcessableDocumentBase
         DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
     /// <summary>
+    /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
+    /// Falls back to Mills, matching the V3 REST projection: NS v3 socket clients (AAPS)
+    /// read it unconditionally from realtime storage events and drop docs without it.
+    /// </summary>
+    private long? _srvModified;
+
+    [JsonPropertyName("srvModified")]
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvModified
+    {
+        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        set => _srvModified = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the server-created timestamp (Unix milliseconds). V3 compatibility field.
+    /// </summary>
+    private long? _srvCreated;
+
+    [JsonPropertyName("srvCreated")]
+    [JsonConverter(typeof(FlexibleNullableLongConverter))]
+    public long? SrvCreated
+    {
+        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        set => _srvCreated = value;
+    }
+
+    /// <summary>
     /// Gets or sets the UTC offset in minutes
     /// </summary>
     [JsonPropertyName("utcOffset")]

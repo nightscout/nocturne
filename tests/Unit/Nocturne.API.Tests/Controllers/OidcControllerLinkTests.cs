@@ -1,11 +1,11 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -38,8 +38,6 @@ public class OidcControllerLinkTests
                 Path = "/",
             },
         };
-        var configuration = new ConfigurationBuilder().Build();
-
         _controller = new OidcController(
             _authService.Object,
             _providerService.Object,
@@ -47,7 +45,7 @@ public class OidcControllerLinkTests
             _auditService.Object,
             _tenantMemberService.Object,
             Options.Create(_options),
-            configuration,
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
             NullLogger<OidcController>.Instance);
 
         _controller.ControllerContext = new ControllerContext

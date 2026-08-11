@@ -78,9 +78,6 @@
 
 	const handleCopyToClipboard = () => {
 		editor.chain().setMeta('hideDragHandle', true).setNodeSelection(currentNodePos).run();
-		/**
-		 * !FIXME: document.execCommand is deprecated, use navigator.clipboard.writeText instead
-		 */
 		document.execCommand('copy');
 	};
 

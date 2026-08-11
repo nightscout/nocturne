@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
@@ -28,7 +27,6 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/temp-basals")]
-[Authorize]
 [Produces("application/json")]
 public class TempBasalController(
     ITempBasalRepository repo,

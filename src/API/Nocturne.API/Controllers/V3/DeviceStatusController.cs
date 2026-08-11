@@ -717,8 +717,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             ["utcOffset"] = status.UtcOffset,
             // 24-hex ObjectId so AAPS's isObjectId() passes; resolved back via GetByIdAsync.
             ["identifier"] = MongoObjectId.Coerce(status.Id),
-            ["srvModified"] = status.Mills,
-            ["srvCreated"] = status.Mills,
+            ["srvModified"] = status.SrvModified,
+            ["srvCreated"] = status.SrvCreated,
         };
 
         // Only include optional complex fields if they have values (Nightscout omits nulls)

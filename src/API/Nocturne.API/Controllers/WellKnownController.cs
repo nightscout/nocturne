@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Constants;
@@ -32,18 +33,18 @@ namespace Nocturne.API.Controllers;
 public class WellKnownController : ControllerBase
 {
     private readonly JwtOptions _jwtOptions;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
 
     /// <summary>
     /// Creates a new instance of WellKnownController
     /// </summary>
     public WellKnownController(
         IOptions<JwtOptions> jwtOptions,
-        IConfiguration configuration
+        IOptions<BaseDomainOptions> baseDomainOptions
     )
     {
         _jwtOptions = jwtOptions.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
     }
 
     /// <summary>
@@ -149,7 +150,11 @@ public class WellKnownController : ControllerBase
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
                 RevocationEndpoint = $"{baseUrl}/api/oauth/revoke",
-                IntrospectionEndpoint = $"{baseUrl}/api/oauth/introspect",
+                // Introspection is first-party self-introspection: the caller authenticates with
+                // its own session or bearer credential, not a client secret, and there is no
+                // registered token_endpoint_auth_method that describes that. It is left out of the
+                // advertised metadata so an external resource server reading discovery does not
+                // treat it as a client-authenticated RFC 7662 endpoint and get an undocumented 401.
                 RegistrationEndpoint = $"{baseUrl}/api/oauth/register",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
                 ResponseTypesSupported = new[] { "code" },
@@ -169,13 +174,7 @@ public class WellKnownController : ControllerBase
 
     private string GetBaseUrl()
     {
-        var configuredUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl];
-        if (!string.IsNullOrEmpty(configuredUrl))
-        {
-            return configuredUrl.TrimEnd('/');
-        }
-
-        return $"{Request.Scheme}://{Request.Host}";
+        return _baseDomain.PublicOrigin ?? $"{Request.Scheme}://{Request.Host}";
     }
 }
 

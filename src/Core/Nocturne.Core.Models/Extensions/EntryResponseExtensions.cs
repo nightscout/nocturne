@@ -237,11 +237,11 @@ public class EntryV3Response
 
     [JsonPropertyName("srvModified")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? SrvModified => _entry.SrvModified ?? (_entry.Mills > 0 ? _entry.Mills : null);
+    public long? SrvModified => _entry.SrvModified;
 
     [JsonPropertyName("srvCreated")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? SrvCreated => _entry.SrvCreated ?? (_entry.Mills > 0 ? _entry.Mills : null);
+    public long? SrvCreated => _entry.SrvCreated;
 
     [JsonPropertyName("subject")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

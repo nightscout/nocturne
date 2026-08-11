@@ -40,7 +40,7 @@ public class ChatBotProviderTests
     private static ChatBotProvider CreateProvider(
         MockHttpMessageHandler handler,
         string? webUrl = "https://web.example.com",
-        string? baseUrl = null,
+        string? baseDomain = null,
         string? instanceKey = TestInstanceKey,
         string? tenantSlug = TestTenantSlug)
     {
@@ -53,7 +53,7 @@ public class ChatBotProviderTests
 
         var configMock = new Mock<IConfiguration>();
         configMock.Setup(c => c["WEB_URL"]).Returns(webUrl);
-        configMock.Setup(c => c["BaseUrl"]).Returns(baseUrl);
+        configMock.Setup(c => c["BASE_DOMAIN"]).Returns(baseDomain);
         configMock.Setup(c => c["INSTANCE_KEY"]).Returns(instanceKey);
 
         var tenantAccessorMock = new Mock<ITenantAccessor>();
@@ -206,11 +206,11 @@ public class ChatBotProviderTests
     [Fact]
     public async Task SendAsync_DoesNotFallBackToThePublicBaseUrl()
     {
-        // Arrange -- only the public base URL is configured. Dispatching there would hairpin an
-        // intra-cluster call out through the CDN and edge and back in, carrying the instance-key
-        // service credential across the public internet.
+        // Arrange -- only the public base domain is configured. Dispatching to the public
+        // origin would hairpin an intra-cluster call out through the CDN and edge and back
+        // in, carrying the instance-key service credential across the public internet.
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
-        var provider = CreateProvider(handler, webUrl: "", baseUrl: "https://nocturne.run");
+        var provider = CreateProvider(handler, webUrl: "", baseDomain: "nocturne.run");
 
         // Act
         var act = () => provider.SendAsync(
@@ -226,7 +226,7 @@ public class ChatBotProviderTests
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
-        var provider = CreateProvider(handler, webUrl: "", baseUrl: "");
+        var provider = CreateProvider(handler, webUrl: "", baseDomain: "");
 
         // Act
         var act = () => provider.SendAsync(

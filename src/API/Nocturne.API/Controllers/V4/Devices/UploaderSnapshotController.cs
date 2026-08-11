@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -26,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/device-status/uploader")]
-[Authorize]
+[RequireScope(OAuthScopes.DevicesRead)]
 [Produces("application/json")]
 public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
     : V4ReadOnlyControllerBase<UploaderSnapshot, IUploaderSnapshotRepository>(repo)

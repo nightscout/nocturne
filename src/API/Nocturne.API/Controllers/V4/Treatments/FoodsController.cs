@@ -22,8 +22,26 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <b>Food catalog</b> (<c>/api/v4/foods</c>) — CRUD for <see cref="Food"/> records via <see cref="IFoodService"/>.
 /// The catalog is shared and not user-scoped.
 ///
-/// <b>Favorites / recents</b> — user-scoped via <see cref="IUserFoodFavoriteService"/>, keyed by
-/// the authenticated subject ID (falls back to a default system ID when the claim is absent).
+/// <b>Favorites / recents</b> — keyed by the authenticated subject ID via
+/// <see cref="IUserFoodFavoriteService"/>, resolved through
+/// <see cref="HttpContextExtensions.GetSubjectIdString"/>. Several principals authenticate with no
+/// subject: a guest session (<c>SubjectId = null</c>, owner in <c>ActingAsSubjectId</c>), the
+/// instance key, and the Development-mode auto-auth context. Keying a per-subject list on a shared
+/// stand-in identity lets all of them read and mutate one another's rows, so none of these actions
+/// accepts a stand-in.
+///
+/// Reads and writes diverge in how they refuse. The writes return 401. The reads must not: remote
+/// codegen turns a 401 on a query into <c>redirect(302, /auth/login)</c> with only a share-host
+/// exemption (<c>src/Web/remote-codegen.config.ts</c>), which would throw a guest onto a passkey
+/// login it cannot complete. So <c>GetFavorites</c> returns an empty list — a subject-less caller
+/// has no favorites of its own — and <c>GetRecentFoods</c> returns the full list, since recents are
+/// tenant-wide and the subject only subtracts the caller's own favorites.
+///
+/// <c>GetFavorites</c> deliberately departs from the <see cref="AuthContext.EffectiveSubjectId"/>
+/// convention, which would serve a guest the data owner's favorites. That choice is unresolved:
+/// a default guest link holds <c>health.read</c>, which
+/// <see cref="OAuthScopes.Normalize"/> expands to include <c>food.read</c>, so the scope gate does
+/// not settle it either way.
 ///
 /// <b>Attribution count</b> (<c>/{foodId}/attribution-count</c>) — reports how many carb intake
 /// records reference a food, surfaced by <see cref="ITreatmentFoodService"/>. This count is used
@@ -46,12 +64,10 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <summary>
     /// The OAuth scope every write action on this controller requires. The food catalog
     /// (<c>foods</c>) is the food category, and the V1 and V3 food write endpoints are gated with
-    /// <c>food.readwrite</c>; the per-subject favourite list is the same category. The per-action
+    /// <c>food.readwrite</c>; the per-subject favorites list is the same category. The per-action
     /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
     /// </summary>
     public string WriteScope => OAuthScopes.FoodReadWrite;
-
-    private const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
 
     private readonly NocturneDbContext _context;
     private readonly IUserFoodFavoriteService _favoriteService;
@@ -153,9 +169,14 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [HttpGet("favorites")]
     [RemoteQuery]
     [Authorize]
+    [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<Food[]>> GetFavorites()
     {
-        var userId = ResolveUserId();
+        var userId = HttpContext.GetSubjectIdString();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Ok(Array.Empty<Food>());
+        }
 
         var favorites = await _favoriteService.GetFavoritesAsync(
             userId,
@@ -172,9 +193,16 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> AddFavorite(string foodId)
     {
-        var userId = ResolveUserId();
+        var userId = HttpContext.GetSubjectIdString();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
 
         var food = await ResolveFoodEntityAsync(foodId, HttpContext.RequestAborted);
         if (food == null)
@@ -198,9 +226,16 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> RemoveFavorite(string foodId)
     {
-        var userId = ResolveUserId();
+        var userId = HttpContext.GetSubjectIdString();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
 
         var food = await ResolveFoodEntityAsync(foodId, HttpContext.RequestAborted);
         if (food == null)
@@ -223,12 +258,13 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [HttpGet("recent")]
     [RemoteQuery]
     [Authorize]
+    [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<Food[]>> GetRecentFoods([FromQuery] int limit = 20)
     {
-        var userId = ResolveUserId();
-
+        // Recents are tenant-wide; the subject only subtracts the caller's own favorites, so a
+        // subject-less caller gets the same list with nothing subtracted.
         var foods = await _favoriteService.GetRecentFoodsAsync(
-            userId,
+            HttpContext.GetSubjectIdString(),
             limit,
             HttpContext.RequestAborted
         );
@@ -306,11 +342,6 @@ public class FoodsController : ControllerBase, IWriteScopedController
         await _foodService.DeleteFoodAsync(id, HttpContext.RequestAborted);
 
         return NoContent();
-    }
-
-    private string ResolveUserId()
-    {
-        return HttpContext.GetSubjectIdString() ?? DefaultUserId;
     }
 
     private async Task<FoodEntity?> ResolveFoodEntityAsync(

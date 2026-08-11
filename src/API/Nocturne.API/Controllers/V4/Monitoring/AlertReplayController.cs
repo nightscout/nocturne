@@ -30,12 +30,20 @@ public class AlertReplayController : ControllerBase
     [HttpPost]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertReplayResult>> Replay(
         [FromBody] AlertReplayRequest request, CancellationToken ct)
     {
-        var result = await _replayService.ReplayAsync(
-            request.Date, request.Timezone, request.From, request.To, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _replayService.ReplayAsync(
+                request.Date, request.Timezone, request.From, request.To, ct);
+            return Ok(result);
+        }
+        catch (ReplayWindowTooLargeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -46,6 +54,7 @@ public class AlertReplayController : ControllerBase
     [HttpPost("dry-run")]
     [RemoteCommand]
     [ProducesResponseType(typeof(AlertReplayResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AlertReplayResult>> ReplayDryRun(
         [FromBody] AlertReplayDryRunRequest request, CancellationToken ct)
     {
@@ -59,9 +68,16 @@ public class AlertReplayController : ControllerBase
             AutoResolveEnabled: request.Rule.AutoResolveEnabled,
             AutoResolveParams: request.Rule.AutoResolveParams);
 
-        var result = await _replayService.ReplayDryRunAsync(
-            request.Date, request.Timezone, request.From, request.To, ruleOverride, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _replayService.ReplayDryRunAsync(
+                request.Date, request.Timezone, request.From, request.To, ruleOverride, ct);
+            return Ok(result);
+        }
+        catch (ReplayWindowTooLargeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
 

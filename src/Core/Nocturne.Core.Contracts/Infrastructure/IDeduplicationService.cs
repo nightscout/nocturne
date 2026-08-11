@@ -15,12 +15,18 @@ public interface IDeduplicationService
     /// <param name="recordType">The type of record being deduplicated</param>
     /// <param name="mills">The timestamp of the record in milliseconds</param>
     /// <param name="criteria">Matching criteria for finding duplicates</param>
+    /// <param name="dataSource">
+    /// The data source identifier of the record being matched. Required for the wide matching
+    /// window, which only merges records from different sources; when omitted the record is
+    /// matched on the tight window alone.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The canonical ID for the matching group (existing or newly created)</returns>
     Task<Guid> GetOrCreateCanonicalIdAsync(
         RecordType recordType,
         long mills,
         MatchCriteria criteria,
+        string? dataSource = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

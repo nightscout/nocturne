@@ -168,6 +168,12 @@ public class MemberInviteController : ControllerBase
     /// is reported in <see cref="MemberInviteInfo.Viewer"/> so the join page can offer acceptance
     /// instead of a second registration — including when they are signed in as a member of some
     /// other tenant on this instance, whose session cookie is domain-wide.
+    /// <para>
+    /// The token is the whole of the authorization, so an invite that can no longer be accepted
+    /// answers with the reason alone, as the sibling alert-invite lookup does. The record it would
+    /// otherwise return names the tenant, the inviter, the roles and permissions being granted and
+    /// every subject that has already joined through it.
+    /// </para>
     /// </remarks>
     [HttpGet("{token}/info")]
     [AllowAnonymous]
@@ -175,12 +181,27 @@ public class MemberInviteController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
         if (invite == null)
             return NotFound();
+
+        if (!invite.IsValid)
+        {
+            // 400 rather than 410, matching AcceptInvite below: the generated client passes a 400
+            // ProblemDetails through to the caller, and describeSubmitError surfaces the reason,
+            // whereas other 4xx statuses collapse to the generic message. The reason is carried in
+            // the title as well as the detail because openapi-remote-codegen 0.2.0 resolves a
+            // ProblemDetails to `title` first. Wording and order match the acceptance refusal.
+            var reason = invite.IsExpired ? "This invite has expired."
+                : invite.IsRevoked ? "This invite has been revoked."
+                : "This invite has reached its maximum uses.";
+
+            return Problem(detail: reason, statusCode: StatusCodes.Status400BadRequest, title: reason);
+        }
 
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)

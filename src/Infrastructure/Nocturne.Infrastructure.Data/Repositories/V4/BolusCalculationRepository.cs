@@ -140,7 +140,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: new MatchCriteria { Carbs = e.CarbInput ?? 0, CarbsTolerance = 1.0 }
             )).ToList();
 

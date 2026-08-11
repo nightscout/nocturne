@@ -1,7 +1,7 @@
 # Managed Postgres (RDS / Cloud SQL / Neon) — bootstrap Job disabled.
 # User runs bootstrap-roles.sql out of band.
 
-baseUrl: https://nocturne.example.com
+baseDomain: nocturne.example.com
 
 instanceKey:
   existingSecret: nocturne-instance-key

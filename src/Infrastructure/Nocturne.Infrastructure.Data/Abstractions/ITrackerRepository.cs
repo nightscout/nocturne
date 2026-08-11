@@ -104,10 +104,10 @@ public interface ITrackerRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets completed tracker instances for a user, with an optional limit
+    /// Gets completed tracker instances, optionally filtered by user, with an optional limit
     /// </summary>
     Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string userId,
+        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default);
 

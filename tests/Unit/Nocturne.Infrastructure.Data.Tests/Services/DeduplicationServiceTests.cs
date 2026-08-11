@@ -331,7 +331,7 @@ public class DeduplicationServiceTests : IDisposable
             dataSource: "glooko-connector"
         );
         var tempBasal2 = CreateTestTempBasalEntity(
-            startTimestamp: timestamp.AddMinutes(2), // 2 minutes later, well outside 30s window
+            startTimestamp: timestamp.AddMinutes(15), // well outside the 10-minute wide window
             rate: 1.2,
             origin: "Scheduled",
             dataSource: "mylife-connector"
@@ -557,7 +557,7 @@ public class DeduplicationServiceTests : IDisposable
             RecordType = "tempbasal",
             RecordId = tb.Id,
             SourceTimestamp = new DateTimeOffset(tb.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            DataSource = tb.DataSource,
+            DataSource = tb.DataSource ?? DeduplicationInput.UnknownDataSource,
             IsPrimary = true,
             SysCreatedAt = DateTime.UtcNow
         });
@@ -758,7 +758,761 @@ public class DeduplicationServiceTests : IDisposable
 
     #endregion
 
+    #region Wide Matching Window Tests
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesCrossSourceBolus_PastTheTightWindow()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Two connectors reporting the same pump whose clocks have drifted 64 seconds apart.
+        var mylife = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var glooko = CreateBolus(WideBase + 64_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylife)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(2);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "the same dose reported by two connectors is one event even after the clocks drift apart");
+        links.Count(lr => lr.IsPrimary).Should().Be(1, "exactly one record in the group is primary");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesCrossSourceDeviceEvent_PastTheTightWindow()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var mylife = CreateDeviceEvent(WideBase, "SiteChange", "mylife-connector");
+        var glooko = CreateDeviceEvent(WideBase + 64_000, "SiteChange", "glooko-connector");
+        context.DeviceEvents.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.DeviceEvent, [ToInput(mylife)]);
+        await service.DeduplicateBatchAsync(RecordType.DeviceEvent, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(2);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesCrossSourceCarbIntake_PastTheTightWindow()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var mylife = CreateCarbIntake(WideBase, 45, "mylife-connector");
+        var glooko = CreateCarbIntake(WideBase + 64_000, 45, "glooko-connector");
+        context.CarbIntakes.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.CarbIntake, [ToInput(mylife)]);
+        await service.DeduplicateBatchAsync(RecordType.CarbIntake, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(2);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(30_000, false, 1)]
+    [InlineData(30_001, false, 2)]
+    [InlineData(30_000, true, 1)]
+    [InlineData(30_001, true, 2)]
+    public async Task DeduplicateBatchAsync_PinsTightWindowEdge(long offsetMillis, bool laterFirst, int expectedGroups)
+    {
+        // Both records carry the same source, so the wide window can never rescue the just-past
+        // case: only the tight window's inclusive bound decides the outcome. Separate batches so
+        // the second record matches through the persisted link rather than intra-batch state.
+        // laterFirst flips which end of the window the second record has to reach across.
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var earlier = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var later = CreateBolus(WideBase + offsetMillis, 2.0, "mylife-connector");
+        context.Boluses.AddRange(earlier, later);
+        await context.SaveChangesAsync();
+
+        var (first, second) = laterFirst ? (later, earlier) : (earlier, later);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(first)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(second)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(expectedGroups);
+    }
+
+    [Theory]
+    [InlineData(600_000, false, 1)]
+    [InlineData(600_001, false, 2)]
+    [InlineData(600_000, true, 1)]
+    [InlineData(600_001, true, 2)]
+    public async Task DeduplicateBatchAsync_PinsWideWindowEdge_AcrossBatches(long offsetMillis, bool laterFirst, int expectedGroups)
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var earlier = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var later = CreateBolus(WideBase + offsetMillis, 2.0, "glooko-connector");
+        context.Boluses.AddRange(earlier, later);
+        await context.SaveChangesAsync();
+
+        var (first, second) = laterFirst ? (later, earlier) : (earlier, later);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(first)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(second)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(expectedGroups);
+    }
+
+    [Theory]
+    [InlineData(600_000, 1)]
+    [InlineData(600_001, 2)]
+    public async Task DeduplicateBatchAsync_PinsWideWindowEdge_WithinOneBatch(long offsetMillis, int expectedGroups)
+    {
+        // The intra-batch arm of the wide path: the second record matches a canonical minted
+        // earlier in the same batch rather than a persisted link.
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var mylife = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var glooko = CreateBolus(WideBase + offsetMillis, 2.0, "glooko-connector");
+        context.Boluses.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylife), ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(expectedGroups);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenTwoGroupsShareTheValue()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Two same-source doses of 2.0U four minutes apart stay separate groups, and both sit
+        // inside the incoming record's wide window.
+        var first = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var second = CreateBolus(WideBase + 240_000, 2.0, "mylife-connector");
+        var incoming = CreateBolus(WideBase + 120_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(first, second, incoming);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(first), ToInput(second)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(incoming)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(3);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(3,
+            "two candidate groups mean the dose cannot be attributed to one of them, so it stays separate");
+        var incomingCanonical = links.Single(lr => lr.RecordId == incoming.Id).CanonicalId;
+        incomingCanonical.Should().NotBe(links.Single(lr => lr.RecordId == first.Id).CanonicalId);
+        incomingCanonical.Should().NotBe(links.Single(lr => lr.RecordId == second.Id).CanonicalId);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_ForSameSourcePair()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // One connector reporting 2.0U twice, 64 seconds apart, is two real doses.
+        var first = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var second = CreateBolus(WideBase + 64_000, 2.0, "mylife-connector");
+        context.Boluses.AddRange(first, second);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(first)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(second)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenInsulinDiffersWithinTheTightTolerance()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // 0.04U apart is inside the tight path's +/-0.05U tolerance; the wide path is exact.
+        var mylife = CreateBolus(WideBase, 2.00, "mylife-connector");
+        var glooko = CreateBolus(WideBase + 64_000, 2.04, "glooko-connector");
+        context.Boluses.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylife)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_ForSensorGlucose()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Sensor glucose repeats the same value all day, so it is excluded from the wide window.
+        var mylife = CreateSensorGlucose(WideBase, 120, "mylife-connector");
+        var glooko = CreateSensorGlucose(WideBase + 64_000, 120, "glooko-connector");
+        context.SensorGlucose.AddRange(mylife, glooko);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.SensorGlucose, [ToInput(mylife)]);
+        await service.DeduplicateBatchAsync(RecordType.SensorGlucose, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData(DeduplicationInput.UnknownDataSource)]
+    [InlineData("")]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenTheIncomingDataSourceIsUnknown(string dataSource)
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Every repository substitutes the unknown sentinel for a record with no source — a
+        // manually entered dose, typically. It names no connector, so it cannot show that this is
+        // a second connector's copy rather than a second real dose.
+        var known = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var sourceless = CreateBolus(WideBase + 64_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(known, sourceless);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(known)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(sourceless, dataSource: dataSource)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenTheCandidateGroupHasNoKnownSource()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // The sentinel is equally uninformative on the group's side of the comparison: it is not
+        // "a different connector", so it cannot be treated as disjoint from a named one.
+        var sourceless = CreateBolus(WideBase, 2.0, DeduplicationInput.UnknownDataSource);
+        var glooko = CreateBolus(WideBase + 64_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(sourceless, glooko);
+        AddPrimaryLink(context, RecordType.Bolus, sourceless.Id, WideBase, DeduplicationInput.UnknownDataSource);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenTheOnlyCandidateIsSoftDeleted()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // A soft-deleted record is hidden from reads, so joining its group would hide the incoming
+        // record behind it.
+        var deleted = CreateBolus(WideBase, 2.0, "mylife-connector");
+        deleted.DeletedAt = DateTime.UtcNow;
+        var glooko = CreateBolus(WideBase + 64_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(deleted, glooko);
+        AddPrimaryLink(context, RecordType.Bolus, deleted.Id, WideBase, "mylife-connector");
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeduplicateBatchAsync_WideCandidateCount_IsIndependentOfBatching(bool singleBatch)
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Two existing groups 20 minutes apart, and two incoming records between them. The first
+        // incoming record can only see the earlier group and joins it; the second sees the later
+        // group AND the group the first record just joined, which makes it ambiguous. That must
+        // hold whether the two arrive together or in sequence — the ambiguity guard counts
+        // candidates in the data, not in the batch.
+        var glookoSeed = CreateBolus(WideBase, 2.0, "glooko-connector");
+        var mylifeSeed = CreateBolus(WideBase + 1_200_000, 2.0, "mylife-connector");
+        var mylifeIncoming = CreateBolus(WideBase + 540_000, 2.0, "mylife-connector");
+        var glookoIncoming = CreateBolus(WideBase + 1_080_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(glookoSeed, mylifeSeed, mylifeIncoming, glookoIncoming);
+        AddPrimaryLink(context, RecordType.Bolus, glookoSeed.Id, WideBase, "glooko-connector");
+        AddPrimaryLink(context, RecordType.Bolus, mylifeSeed.Id, WideBase + 1_200_000, "mylife-connector");
+        await context.SaveChangesAsync();
+
+        if (singleBatch)
+        {
+            await service.DeduplicateBatchAsync(
+                RecordType.Bolus, [ToInput(mylifeIncoming), ToInput(glookoIncoming)]);
+        }
+        else
+        {
+            await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylifeIncoming)]);
+            await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glookoIncoming)]);
+        }
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(4);
+
+        var glookoSeedCanonical = links.Single(lr => lr.RecordId == glookoSeed.Id).CanonicalId;
+        var mylifeSeedCanonical = links.Single(lr => lr.RecordId == mylifeSeed.Id).CanonicalId;
+        links.Single(lr => lr.RecordId == mylifeIncoming.Id).CanonicalId.Should().Be(glookoSeedCanonical,
+            "the first incoming record has exactly one candidate group");
+
+        var ambiguous = links.Single(lr => lr.RecordId == glookoIncoming.Id).CanonicalId;
+        ambiguous.Should().NotBe(glookoSeedCanonical);
+        ambiguous.Should().NotBe(mylifeSeedCanonical);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideJoin_PromotesAnEarlierRecordToPrimary()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // The wide window reaches backwards as well as forwards, so a joining record can predate
+        // the group's primary. The group's event time must not depend on which connector synced
+        // first.
+        var glooko = CreateBolus(WideBase + 120_000, 2.0, "glooko-connector");
+        var mylife = CreateBolus(WideBase, 2.0, "mylife-connector");
+        context.Boluses.AddRange(glooko, mylife);
+        AddPrimaryLink(context, RecordType.Bolus, glooko.Id, WideBase + 120_000, "glooko-connector");
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1, "exactly one record in the group is primary");
+        links.Single(lr => lr.IsPrimary).RecordId.Should().Be(mylife.Id,
+            "the earlier record is the group's event time");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideJoin_LeavesPrimaryAloneWhenTheJoinerIsLater()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var glooko = CreateBolus(WideBase, 2.0, "glooko-connector");
+        var mylife = CreateBolus(WideBase + 120_000, 2.0, "mylife-connector");
+        context.Boluses.AddRange(glooko, mylife);
+        AddPrimaryLink(context, RecordType.Bolus, glooko.Id, WideBase, "glooko-connector");
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+        links.Single(lr => lr.IsPrimary).RecordId.Should().Be(glooko.Id);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideJoin_KeepsALiveRecordPrimaryOverASoftDeletedEarlierOne()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // Reads hide soft-deleted records and non-primary links alike, so promoting the deleted
+        // record would leave the group rendering nothing at all — a real dose invisible for good.
+        var deleted = CreateBolus(WideBase, 2.0, "mylife-connector");
+        deleted.DeletedAt = DateTime.UtcNow;
+        var live = CreateBolus(WideBase + 60_000, 2.0, "glooko-connector");
+        var joiner = CreateBolus(WideBase + 120_000, 2.0, "libre-connector");
+        context.Boluses.AddRange(deleted, live, joiner);
+
+        var canonicalId = AddPrimaryLink(context, RecordType.Bolus, live.Id, WideBase + 60_000, "glooko-connector");
+        AddLink(context, RecordType.Bolus, deleted.Id, WideBase, "mylife-connector", canonicalId, isPrimary: false);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(joiner)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(3);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+        links.Single(lr => lr.IsPrimary).RecordId.Should().Be(live.Id,
+            "the earliest record that reads can actually show stays primary");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideJoin_KeepsALiveRecordPrimaryOverAnOrphanedEarlierLink()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // An orphaned link points at a record that no longer exists, so promoting it would hide
+        // the group for the same reason a deleted record would.
+        var live = CreateBolus(WideBase + 60_000, 2.0, "glooko-connector");
+        var joiner = CreateBolus(WideBase + 120_000, 2.0, "libre-connector");
+        context.Boluses.AddRange(live, joiner);
+
+        var canonicalId = AddPrimaryLink(context, RecordType.Bolus, live.Id, WideBase + 60_000, "glooko-connector");
+        AddLink(context, RecordType.Bolus, Guid.CreateVersion7(), WideBase, "mylife-connector", canonicalId, isPrimary: false);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(joiner)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+        links.Single(lr => lr.IsPrimary).RecordId.Should().Be(live.Id);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideJoin_PromotesTheEarlierRecordOfAChunkMintedGroup()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // A batch of 500 or fewer records is not sorted, so a bulk upload carrying two sources can
+        // mint the group on its later record and join the earlier one to it.
+        var glooko = CreateBolus(WideBase + 1_080_000, 2.0, "glooko-connector");
+        var mylife = CreateBolus(WideBase + 540_000, 2.0, "mylife-connector");
+        context.Boluses.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko), ToInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+        links.Single(lr => lr.IsPrimary).RecordId.Should().Be(mylife.Id,
+            "the group's event time does not depend on the order records arrived in the batch");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesCrossSourceTempBasal_WithEqualDurations()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var start = ToUtc(WideBase);
+        var glooko = CreateTestTempBasalEntity(
+            startTimestamp: start, rate: 1.2, origin: "Scheduled", dataSource: "glooko-connector",
+            duration: TimeSpan.FromMinutes(30));
+        var mylife = CreateTestTempBasalEntity(
+            startTimestamp: start.AddSeconds(64), rate: 1.2, origin: "Scheduled", dataSource: "mylife-connector",
+            duration: TimeSpan.FromMinutes(30));
+        context.TempBasals.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_ForOpenEndedTempBasals()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // A running temp basal has no end yet, so rate alone would be the whole comparison.
+        var start = ToUtc(WideBase);
+        var glooko = CreateTestTempBasalEntity(
+            startTimestamp: start, rate: 1.2, origin: "Scheduled", dataSource: "glooko-connector");
+        var mylife = CreateTestTempBasalEntity(
+            startTimestamp: start.AddSeconds(64), rate: 1.2, origin: "Scheduled", dataSource: "mylife-connector");
+        context.TempBasals.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_WhenTempBasalDurationsDiffer()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var start = ToUtc(WideBase);
+        var glooko = CreateTestTempBasalEntity(
+            startTimestamp: start, rate: 1.2, origin: "Scheduled", dataSource: "glooko-connector",
+            duration: TimeSpan.FromMinutes(30));
+        var mylife = CreateTestTempBasalEntity(
+            startTimestamp: start.AddSeconds(64), rate: 1.2, origin: "Scheduled", dataSource: "mylife-connector",
+            duration: TimeSpan.FromMinutes(45));
+        context.TempBasals.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, [ToDeduplicationInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_RefusesWideMatch_ForCorrectionOnlyBolusCalculations()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // A correction-only calculation carries no carb input, which the criteria report as 0.
+        // Every such calculation would otherwise look exactly equal to every other.
+        var glooko = CreateBolusCalculation(WideBase, carbInput: null, "glooko-connector");
+        var mylife = CreateBolusCalculation(WideBase + 64_000, carbInput: null, "mylife-connector");
+        context.BolusCalculations.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.BolusCalculation, [ToInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.BolusCalculation, [ToInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesCrossSourceBolusCalculation_WhenCarbsArePresent()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var glooko = CreateBolusCalculation(WideBase, carbInput: 45, "glooko-connector");
+        var mylife = CreateBolusCalculation(WideBase + 64_000, carbInput: 45, "mylife-connector");
+        context.BolusCalculations.AddRange(glooko, mylife);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.BolusCalculation, [ToInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.BolusCalculation, [ToInput(mylife)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void CriteriaMatch_ExactMode_RejectsTypesOutsideTheWideWindow(bool exact, bool expected)
+    {
+        // Every production caller checks WideMatchableTypes before reaching exact mode, so this
+        // guard is unreachable through the batch and reconcile paths and can only be pinned here.
+        var a = new MatchCriteria { GlucoseValue = 120, GlucoseTolerance = 1.0 };
+        var b = new MatchCriteria { GlucoseValue = 120, GlucoseTolerance = 1.0 };
+
+        DeduplicationService.CriteriaMatch(RecordType.SensorGlucose, a, b, exact).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_WideMatch_AdmitsOnlyTheFirstSameSourceRecordOfABatch()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // An existing glooko group at 12:02 and a mylife batch holding 12:00 and 12:04. The first
+        // mylife record joins; the second must see mylife already in the group and refuse.
+        var glooko = CreateBolus(WideBase + 120_000, 2.0, "glooko-connector");
+        var mylifeEarly = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var mylifeLate = CreateBolus(WideBase + 240_000, 2.0, "mylife-connector");
+        context.Boluses.AddRange(glooko, mylifeEarly, mylifeLate);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(glooko)]);
+        await service.DeduplicateBatchAsync(RecordType.Bolus, [ToInput(mylifeEarly), ToInput(mylifeLate)]);
+
+        var links = await context.LinkedRecords.ToListAsync();
+        links.Should().HaveCount(3);
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2);
+
+        var glookoCanonical = links.Single(lr => lr.RecordId == glooko.Id).CanonicalId;
+        links.Single(lr => lr.RecordId == mylifeEarly.Id).CanonicalId.Should().Be(glookoCanonical,
+            "the first mylife record joins the glooko group");
+        links.Single(lr => lr.RecordId == mylifeLate.Id).CanonicalId.Should().NotBe(glookoCanonical,
+            "the group already holds a mylife record, so the second one stays separate");
+    }
+
+    [Fact]
+    public async Task DeduplicateAllAsync_HealsPreExistingCrossSourceGroups()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // History ingested while the connectors' clocks were drifting: the same dose landed in two
+        // canonical groups. Both records are already linked, so a re-run creates no links at all
+        // and only the job's merge pass can collapse them.
+        var mylife = CreateBolus(WideBase, 2.0, "mylife-connector");
+        var glooko = CreateBolus(WideBase + 64_000, 2.0, "glooko-connector");
+        context.Boluses.AddRange(mylife, glooko);
+        AddPrimaryLink(context, RecordType.Bolus, mylife.Id, WideBase, "mylife-connector");
+        AddPrimaryLink(context, RecordType.Bolus, glooko.Id, WideBase + 64_000, "glooko-connector");
+        await context.SaveChangesAsync();
+
+        var result = await service.DeduplicateAllAsync();
+
+        result.Success.Should().BeTrue();
+        var links = await context.LinkedRecords.Where(lr => lr.RecordType == "bolus").ToListAsync();
+        links.Should().HaveCount(2, "the full run links nothing new");
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "a full re-dedup run heals groups split by clock drift");
+        links.Count(lr => lr.IsPrimary).Should().Be(1);
+    }
+
+    #endregion
+
     #region Test Helper Methods
+
+    /// <summary>
+    /// Event time the wide-window tests are anchored on, in Unix milliseconds.
+    /// </summary>
+    private static readonly long WideBase =
+        new DateTimeOffset(new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc), TimeSpan.Zero)
+            .ToUnixTimeMilliseconds();
+
+    private NocturneDbContext NewContext()
+    {
+        var context = new NocturneDbContext(_contextOptions) { TenantId = TestTenantId };
+        return context;
+    }
+
+    private DeduplicationService CreateService(NocturneDbContext context) =>
+        new(context,
+            _serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            new Mock<ILogger<DeduplicationService>>().Object);
+
+    private static DateTime ToUtc(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+
+    private static long ToMills(DateTime timestamp) =>
+        new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private static BolusEntity CreateBolus(long mills, double insulin, string dataSource) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = ToUtc(mills),
+            Insulin = insulin,
+            DataSource = dataSource
+        };
+
+    private static CarbIntakeEntity CreateCarbIntake(long mills, double carbs, string dataSource) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = ToUtc(mills),
+            Carbs = carbs,
+            DataSource = dataSource
+        };
+
+    private static DeviceEventEntity CreateDeviceEvent(long mills, string eventType, string dataSource) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = ToUtc(mills),
+            EventType = eventType,
+            DataSource = dataSource
+        };
+
+    /// <summary>
+    /// Seeds a primary link in its own canonical group, standing in for history linked by an
+    /// earlier ingest run, and returns that canonical id.
+    /// </summary>
+    private static Guid AddPrimaryLink(
+        NocturneDbContext context, RecordType recordType, Guid recordId, long mills, string dataSource)
+    {
+        var canonicalId = Guid.CreateVersion7();
+        AddLink(context, recordType, recordId, mills, dataSource, canonicalId, isPrimary: true);
+        return canonicalId;
+    }
+
+    /// <summary>
+    /// Seeds a link into an existing canonical group, standing in for a group an earlier run
+    /// already collapsed.
+    /// </summary>
+    private static void AddLink(
+        NocturneDbContext context,
+        RecordType recordType,
+        Guid recordId,
+        long mills,
+        string dataSource,
+        Guid canonicalId,
+        bool isPrimary) =>
+        context.LinkedRecords.Add(new LinkedRecordEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            CanonicalId = canonicalId,
+            RecordType = recordType.ToString().ToLowerInvariant(),
+            RecordId = recordId,
+            SourceTimestamp = mills,
+            DataSource = dataSource,
+            IsPrimary = isPrimary,
+            SysCreatedAt = DateTime.UtcNow
+        });
+
+    private static BolusCalculationEntity CreateBolusCalculation(long mills, double? carbInput, string dataSource) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = ToUtc(mills),
+            CarbInput = carbInput,
+            DataSource = dataSource
+        };
+
+    private static SensorGlucoseEntity CreateSensorGlucose(long mills, double mgdl, string dataSource) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = ToUtc(mills),
+            Mgdl = mgdl,
+            DataSource = dataSource
+        };
+
+    // Criteria mirror the repositories' own DeduplicationInput construction.
+    private static DeduplicationInput ToInput(BolusEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            new MatchCriteria { Insulin = e.Insulin, InsulinTolerance = 0.05 });
+
+    private static DeduplicationInput ToInput(CarbIntakeEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            new MatchCriteria { Carbs = e.Carbs, CarbsTolerance = 1.0 });
+
+    private static DeduplicationInput ToInput(DeviceEventEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            new MatchCriteria { EventType = e.EventType });
+
+    private static DeduplicationInput ToInput(SensorGlucoseEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 });
+
+    private static DeduplicationInput ToInput(BolusCalculationEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            new MatchCriteria { Carbs = e.CarbInput ?? 0, CarbsTolerance = 1.0 });
 
     private static StateSpan CreateTestStateSpan(
         StateSpanCategory category,
@@ -785,13 +1539,21 @@ public class DeduplicationServiceTests : IDisposable
         };
     }
 
+    // Mirrors TempBasalRepository, including the duration the exact comparison reads.
     private static DeduplicationInput ToDeduplicationInput(TempBasalEntity entity)
     {
         return new DeduplicationInput(
             RecordId: entity.Id,
             Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            DataSource: entity.DataSource ?? "unknown",
-            Criteria: new MatchCriteria { Rate = entity.Rate, RateTolerance = 0.05 });
+            DataSource: entity.DataSource ?? DeduplicationInput.UnknownDataSource,
+            Criteria: new MatchCriteria
+            {
+                Rate = entity.Rate,
+                RateTolerance = 0.05,
+                Duration = entity.EndTimestamp.HasValue
+                    ? entity.EndTimestamp.Value - entity.StartTimestamp
+                    : null
+            });
     }
 
     private static TempBasalEntity CreateTestTempBasalEntity(
@@ -799,17 +1561,20 @@ public class DeduplicationServiceTests : IDisposable
         double rate,
         string origin,
         string dataSource,
-        string? legacyId = null
+        string? legacyId = null,
+        TimeSpan? duration = null
     )
     {
         return new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
             StartTimestamp = startTimestamp,
+            EndTimestamp = duration.HasValue ? startTimestamp + duration.Value : null,
             Rate = rate,
             Origin = origin,
             DataSource = dataSource,
-            LegacyId = legacyId ?? $"{dataSource}_{startTimestamp.Ticks}",
+            LegacyId = legacyId ?? $"{dataSource}_{startTimestamp.Ticks}_{Guid.NewGuid():N}",
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow
         };

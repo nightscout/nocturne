@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -35,7 +34,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="DeviceAgeController"/>
 [ApiController]
 [Route("api/v4/observations/device-events")]
-[Authorize]
+[RequireScope(OAuthScopes.DevicesRead)]
 [Produces("application/json")]
 public class DeviceEventController(
     IDeviceEventRepository repo,

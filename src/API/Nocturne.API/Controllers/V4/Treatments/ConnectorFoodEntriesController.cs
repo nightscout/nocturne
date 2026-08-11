@@ -49,7 +49,10 @@ public class ConnectorFoodEntriesController : ControllerBase
             return Ok(Array.Empty<ConnectorFoodEntry>());
         }
 
-        var userId = HttpContext.GetSubjectIdString() ?? "default";
+        // Import is tenant-scoped; the subject only targets the meal-match suggestions raised off
+        // the imported entries. A subject-less caller raises none rather than filing them under a
+        // shared stand-in identity that every other subject-less caller also resolves to.
+        var userId = HttpContext.GetSubjectIdString();
 
         var results = await _connectorFoodEntryService.ImportAsync(
             userId,

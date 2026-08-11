@@ -320,12 +320,12 @@ public class TrackerRepository : ITrackerRepository
     /// <summary>
     /// Get completed tracker instances for history
     /// </summary>
-    /// <param name="userId">The user ID.</param>
+    /// <param name="userId">Optional user ID filter.</param>
     /// <param name="limit">The maximum number of instances to return.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>An array of completed tracker instances.</returns>
     public virtual async Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string userId,
+        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default
     )
@@ -333,7 +333,7 @@ public class TrackerRepository : ITrackerRepository
         return await _context
             .TrackerInstances.AsNoTracking()
             .Include(i => i.Definition)
-            .Where(i => i.UserId == userId && i.CompletedAt != null)
+            .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
             .ToArrayAsync(cancellationToken);

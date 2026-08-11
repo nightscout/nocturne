@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
@@ -29,7 +28,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/sensor")]
-[Authorize]
+[RequireScope(OAuthScopes.GlucoseRead)]
 [Produces("application/json")]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,

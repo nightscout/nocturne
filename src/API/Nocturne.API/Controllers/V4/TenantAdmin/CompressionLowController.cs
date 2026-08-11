@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -17,15 +16,24 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// (<c>CompressionLowService.AcceptSuggestionAsync</c>), which decides whether the flagged readings
 /// count towards analytics and reports — the same category-to-scope mapping
 /// <c>StateSpanWriteScopeGuard</c> applies — and dismiss, delete and detection all write the
-/// suggestions that propose one. The class-level <c>[Authorize]</c> alone is satisfied by read-only
-/// credentials such as a guest-link session, which holds <c>glucose.read</c>.
+/// suggestions that propose one. Each write therefore carries its own
+/// <see cref="OAuthScopes.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
+/// the matching <see cref="OAuthScopes.GlucoseRead"/>.
+/// <para>
+/// The gate is <see cref="RequireScopeAttribute"/> and not <c>[Authorize]</c> because the data
+/// quality report reads these suggestions: a public share is deliberately
+/// <c>IsAuthenticated: false</c>, so <c>[Authorize]</c> 401s the report for every share whatever
+/// the tenant granted. The <c>compression_low_suggestions</c> table has no
+/// <see cref="ShareDataCategories"/> entry, so a share's rows are hidden by RLS and it reads an
+/// empty list rather than an error.
+/// </para>
 /// </remarks>
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
-[Authorize]
+[RequireScope(OAuthScopes.GlucoseRead)]
 public class CompressionLowController : ControllerBase
 {
     private readonly ICompressionLowService _compressionLowService;

@@ -1,8 +1,70 @@
-import { Server as SocketIOServerClass, Socket } from 'socket.io';
+import { Server as SocketIOServerClass, Socket, Namespace } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
 import { verifyHandshakeTicket, normalizeHandshakeHost } from './handshake-ticket.js';
+
+/**
+ * The six collection names the Nightscout v3 `/storage` namespace lets a client
+ * subscribe to (AndroidAPS sends exactly these, lowercase). Not all of them are
+ * broadcast by the API today — `settings` has no realtime path — but the client
+ * is allowed to ask for any of them.
+ */
+const KNOWN_STORAGE_COLLECTIONS = [
+  'devicestatus',
+  'entries',
+  'profile',
+  'treatments',
+  'foods',
+  'settings',
+] as const;
+
+/**
+ * The API broadcasts storage events under its own collection names, which don't
+ * all match the names v3 clients subscribe with: the API uses the singular
+ * `food` and the plural `profiles`, while AAPS subscribes to `foods` and
+ * `profile`. To route a broadcast to the sockets that asked for it we have to
+ * translate the broadcast's collection name into the name those sockets joined
+ * their room under. `clientCollectionName` returns the v3-client spelling for a
+ * given broadcast collection; anything not in the map is returned unchanged.
+ */
+const BROADCAST_TO_CLIENT_COLLECTION: Record<string, string> = {
+  food: 'foods',
+  foods: 'foods',
+  profiles: 'profile',
+  profile: 'profile',
+};
+
+/** Translate an API broadcast collection name to the v3-client spelling. */
+function clientCollectionName(broadcastCollection: string): string {
+  return BROADCAST_TO_CLIENT_COLLECTION[broadcastCollection] ?? broadcastCollection;
+}
+
+/** Room a `/storage` socket joins for a tenant + collection (client spelling). */
+function storageRoom(tenantSlug: string, clientCollection: string): string {
+  return `storage:${tenantSlug}:${clientCollection}`;
+}
+
+/** Room a `/alarm` socket joins for a tenant. */
+function alarmRoom(tenantSlug: string): string {
+  return `alarm:${tenantSlug}`;
+}
+
+/**
+ * Map each v3-client collection name to the API v3 endpoint path it reads from.
+ * The API's controller names don't always match the client collection names
+ * (`foods` → `/api/v3/food`, singular), so this is used to probe per-collection
+ * read authorization: a token that can read `/api/v3/entries` is authorized for
+ * the `entries` room, but not necessarily for `treatments` or `settings`.
+ */
+const COLLECTION_READ_ENDPOINT: Record<string, string> = {
+  entries: '/api/v3/entries',
+  treatments: '/api/v3/treatments',
+  devicestatus: '/api/v3/devicestatus',
+  profile: '/api/v3/profile',
+  foods: '/api/v3/food',
+  settings: '/api/v3/settings',
+};
 
 interface SocketIOConfig {
   cors?: {
@@ -78,6 +140,10 @@ class SocketIOServer {
   private tenantSlugs: string[];
   private signingSecret: string;
   private apiBaseUrl: string;
+  /** Nightscout v3 namespaces for uploaders (AAPS, xDrip+, ...). null until
+   *  start() attaches them to the same httpServer as the default namespace. */
+  private storageNsp: Namespace | null = null;
+  private alarmNsp: Namespace | null = null;
 
   constructor(
     httpServer: HttpServer,
@@ -117,6 +183,8 @@ class SocketIOServer {
 
         this.setupHandshakeAuth();
         this.setupEventHandlers();
+        this.setupStorageNamespace();
+        this.setupAlarmNamespace();
 
         logger.info('Socket.IO server attached to HTTP server');
         resolve();
@@ -345,6 +413,10 @@ class SocketIOServer {
 
     logger.debug(`Broadcasting announcement${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit('announcement', message);
+
+    if (this.alarmNsp && tenantSlug) {
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('announcement', message);
+    }
   }
 
   broadcastAlarm(alarm: AlarmData, tenantSlug?: string): void {
@@ -354,6 +426,10 @@ class SocketIOServer {
     const eventName = alarm.level === 'urgent' ? 'urgent_alarm' : 'alarm';
     logger.debug(`Broadcasting ${eventName}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit(eventName, alarm);
+
+    if (this.alarmNsp && tenantSlug) {
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit(eventName, alarm);
+    }
   }
 
   broadcastClearAlarm(tenantSlug?: string): void {
@@ -362,6 +438,10 @@ class SocketIOServer {
 
     logger.debug(`Broadcasting clear_alarm${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit('clear_alarm');
+
+    if (this.alarmNsp && tenantSlug) {
+      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('clear_alarm');
+    }
   }
 
   broadcastNotification(notification: any, tenantSlug?: string): void {
@@ -392,6 +472,26 @@ class SocketIOServer {
     }
 
     target.emit(eventType, data);
+
+    // Fan out to v3 `/storage` namespace clients (AAPS, xDrip+, ...). The event
+    // is delivered only to sockets subscribed to the matching collection room,
+    // translating the API's collection spelling (e.g. `profiles`, `food`) to the
+    // v3-client spelling (`profile`, `foods`) so a socket that subscribed to
+    // `profile` receives broadcasts the API emits as `profiles`. The payload's
+    // `colName` is amended to the client spelling too, since AAPS routes the
+    // event by reading `colName` from the payload.
+    if (this.storageNsp && tenantSlug) {
+      const broadcastCollection =
+        typeof data?.colName === 'string' ? data.colName
+        : typeof data?.collection === 'string' ? data.collection
+        : null;
+      if (broadcastCollection) {
+        const clientCollection = clientCollectionName(broadcastCollection);
+        this.storageNsp
+          .to(storageRoom(tenantSlug, clientCollection))
+          .emit(eventType, { ...data, colName: clientCollection });
+      }
+    }
   }
 
   broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: any, tenantSlug?: string): void {
@@ -439,6 +539,277 @@ class SocketIOServer {
 
   getIO(): SocketIOServerClass | null {
     return this.io;
+  }
+
+  /**
+   * Resolve the tenant for a v3-namespace connection (AAPS, xDrip+, ...) from
+   * the handshake Host. Unlike browser connections on the default namespace,
+   * these clients carry no signed handshake ticket — they authenticate in-band
+   * via the `subscribe` event — so the handshake only resolves the tenant and
+   * admits the socket unauthorized, exactly like the legacy `authorize` path.
+   * Returns the slug, or null when the host resolves to no tenant. Exposed for
+   * unit testing.
+   */
+  resolveNamespaceTenant(socket: Socket): string | null {
+    const host = pickHandshakeHost(socket.handshake.headers);
+    return resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+  }
+
+  /**
+   * Replay an AAPS access token against the API to authorize a v3-namespace
+   * `subscribe`. This mirrors the legacy `handleAuthorize` probe (#547): the
+   * token is sent to the API scoped to the connection's own tenant via
+   * X-Forwarded-Host, and the API applies its per-tenant, per-collection read
+   * policy (each v3 endpoint carries its own `RequireScope`). The probe carries
+   * the client's credential and nothing else — never the bridge's instance key,
+   * which would authenticate any anonymous caller as a service.
+   *
+   * Returns true when the API accepts the token for that tenant + endpoint.
+   */
+  async probeAccessToken(
+    accessToken: string,
+    tenantSlug: string,
+    endpointPath: string,
+  ): Promise<boolean> {
+    if (!this.apiBaseUrl) {
+      logger.warn('v3 namespace auth probe has no API base URL configured');
+      return false;
+    }
+    try {
+      const url = new URL(`${this.apiBaseUrl}${endpointPath}`);
+      url.searchParams.set('count', '1');
+      const probe = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'X-Forwarded-Host': `${tenantSlug}.${this.baseDomain}`,
+          // The API's response cache runs before auth and keys on the internal
+          // Host, so a cached authenticated 200 could authorize an
+          // unauthenticated probe.
+          'Cache-Control': 'no-cache, no-store',
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      return probe.ok;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.warn(`v3 namespace auth probe failed: ${reason}`);
+      return false;
+    }
+  }
+
+  /**
+   * Nightscout v3 `/storage` namespace. AAPS connects to `<url>/storage` and,
+   * on connect, emits `subscribe` with its access token and the collections it
+   * wants. On a successful auth the socket joins a per-collection room and
+   * subsequently receives `create` / `update` / `delete` events fanned out by
+   * {@link broadcastStorageEvent}.
+   *
+   * Auth is in-band (the `subscribe` event), not at the handshake, because
+   * AAPS sends the token as a JSON field — there is no signed ticket path for
+   * native uploaders.
+   */
+  private setupStorageNamespace(): void {
+    if (!this.io) return;
+    this.storageNsp = this.io.of('/storage');
+
+    // Admit the socket unauthorized; the tenant is resolved for room routing
+    // but no room is joined until `subscribe` succeeds.
+    this.storageNsp.use(async (socket, next) => {
+      const tenantSlug = this.resolveNamespaceTenant(socket);
+      if (!tenantSlug) {
+        logger.warn(`Rejecting /storage connection ${socket.id}: no resolvable tenant`);
+        return next(new Error('tenant_unresolved'));
+      }
+      socket.data.pendingTenantSlug = tenantSlug;
+      next();
+    });
+
+    this.storageNsp.on('connection', (socket: Socket) => {
+      logger.info(`v3 /storage client connected: ${socket.id}`);
+
+      socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
+        await this.handleStorageSubscribe(socket, payload, ack);
+      });
+
+      socket.on('disconnect', (reason: string) => {
+        logger.info(`v3 /storage client disconnected: ${socket.id}, reason: ${reason}`);
+      });
+    });
+  }
+
+  /**
+   * Handle the v3 `/storage` `subscribe` event. Exposed for unit testing.
+   *
+   * Each requested collection is probed independently against its own v3 read
+   * endpoint, so a token with read access to `entries` but not `treatments`
+   * only joins the `entries` room. A token denied for every collection is
+   * rejected outright — and the socket is disconnected so the client has to
+   * re-establish the connection (going back through TLS/transport) rather than
+   * immediately retrying `subscribe` as a credential-guessing oracle.
+   */
+  async handleStorageSubscribe(
+    socket: Socket,
+    payload: unknown,
+    ack?: (result: unknown) => void,
+  ): Promise<void> {
+    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    if (!tenantSlug) {
+      ack?.({ success: false, message: 'no resolvable tenant' });
+      socket.disconnect(true);
+      return;
+    }
+
+    const message = (payload ?? {}) as { accessToken?: unknown; collections?: unknown };
+    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    if (!accessToken) {
+      ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
+      return;
+    }
+
+    // Normalize the requested collections to the known v3 set, preserving order
+    // and dropping anything unrecognized.
+    const requested = Array.isArray(message.collections)
+      ? message.collections.filter((c): c is string => typeof c === 'string')
+      : [];
+    const candidateCollections = requested.length > 0
+      ? requested.filter((c) => (KNOWN_STORAGE_COLLECTIONS as readonly string[]).includes(c))
+      : [...KNOWN_STORAGE_COLLECTIONS];
+
+    // Probe each collection's read endpoint independently so authorization is
+    // per-collection, matching the API's per-endpoint RequireScope.
+    const authorized: string[] = [];
+    for (const collection of candidateCollections) {
+      const endpoint = COLLECTION_READ_ENDPOINT[collection];
+      const ok = await this.probeAccessToken(accessToken, tenantSlug, endpoint);
+      if (ok) authorized.push(collection);
+    }
+
+    if (authorized.length === 0) {
+      logger.warn(
+        `/storage subscribe denied for ${socket.id} (tenant ${tenantSlug}): token not authorized for any collection`,
+      );
+      ack?.({ success: false, message: 'Unauthorized to receive any collection' });
+      socket.disconnect(true);
+      return;
+    }
+
+    for (const collection of authorized) {
+      socket.join(storageRoom(tenantSlug, collection));
+    }
+    socket.data.tenantSlug = tenantSlug;
+    socket.data.pendingTenantSlug = undefined;
+    logger.info(
+      `/storage client ${socket.id} subscribed for tenant ${tenantSlug}: ${authorized.join(', ')}`,
+    );
+    ack?.({ success: true, collections: authorized });
+  }
+
+  /**
+   * Nightscout v3 `/alarm` namespace. AAPS connects to `<url>/alarm` and emits
+   * `subscribe` with its access token; thereafter it receives `alarm`,
+   * `urgent_alarm`, `announcement`, and `clear_alarm` events. It may also emit a
+   * positional `ack` (level, group, silenceTime) to silence an alarm.
+   *
+   * `onAlarmAck` is invoked when a client acks an alarm; it defaults to a no-op
+   * log because forwarding to the API's AlarmHub requires the per-tenant
+   * SignalR client, which the server doesn't hold a reference to. Callers (the
+   * bridge setup) can override it to wire up the forward.
+   */
+  onAlarmAck: (tenantSlug: string, level: number, group: string, silenceTime: number) => void =
+    (tenantSlug, level, group, silenceTime) => {
+      logger.info(
+        `/alarm ack received (tenant ${tenantSlug}): level=${level} group=${group} silence=${silenceTime}ms (not forwarded)`,
+      );
+    };
+
+  private setupAlarmNamespace(): void {
+    if (!this.io) return;
+    this.alarmNsp = this.io.of('/alarm');
+
+    this.alarmNsp.use(async (socket, next) => {
+      const tenantSlug = this.resolveNamespaceTenant(socket);
+      if (!tenantSlug) {
+        logger.warn(`Rejecting /alarm connection ${socket.id}: no resolvable tenant`);
+        return next(new Error('tenant_unresolved'));
+      }
+      socket.data.pendingTenantSlug = tenantSlug;
+      next();
+    });
+
+    this.alarmNsp.on('connection', (socket: Socket) => {
+      logger.info(`v3 /alarm client connected: ${socket.id}`);
+
+      socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
+        await this.handleAlarmSubscribe(socket, payload, ack);
+      });
+
+      // Positional ack: AAPS emits ("ack", level, group, silenceTime) — three
+      // separate arguments, not a JSON object (matches cgm-remote-monitor).
+      socket.on('ack', (level: unknown, group: unknown, silenceTime: unknown) => {
+        const tenantSlug = socket.data.tenantSlug as string | undefined;
+        if (!tenantSlug) return;
+        this.onAlarmAck(
+          tenantSlug,
+          typeof level === 'number' ? level : Number(level) || 0,
+          typeof group === 'string' ? group : String(group ?? ''),
+          typeof silenceTime === 'number' ? silenceTime : Number(silenceTime) || 0,
+        );
+      });
+
+      socket.on('disconnect', (reason: string) => {
+        logger.info(`v3 /alarm client disconnected: ${socket.id}, reason: ${reason}`);
+      });
+    });
+  }
+
+  /**
+   * Handle the v3 `/alarm` `subscribe` event. Exposed for unit testing.
+   *
+   * On failure the socket is disconnected so the client has to re-establish the
+   * connection rather than immediately retrying `subscribe` as a
+   * credential-guessing oracle.
+   */
+  async handleAlarmSubscribe(
+    socket: Socket,
+    payload: unknown,
+    ack?: (result: unknown) => void,
+  ): Promise<void> {
+    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    if (!tenantSlug) {
+      ack?.({ success: false, message: 'no resolvable tenant' });
+      socket.disconnect(true);
+      return;
+    }
+
+    const message = (payload ?? {}) as { accessToken?: unknown };
+    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    if (!accessToken) {
+      ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
+      return;
+    }
+
+    // Probe the entries read endpoint — alarm subscription requires the same
+    // tenant read access as a storage subscription.
+    const authorized = await this.probeAccessToken(
+      accessToken,
+      tenantSlug,
+      COLLECTION_READ_ENDPOINT.entries,
+    );
+    if (!authorized) {
+      logger.warn(`/alarm subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
+      ack?.({ success: false, message: 'Missing or bad accessToken' });
+      socket.disconnect(true);
+      return;
+    }
+
+    socket.join(alarmRoom(tenantSlug));
+    socket.data.tenantSlug = tenantSlug;
+    socket.data.pendingTenantSlug = undefined;
+    logger.info(`/alarm client ${socket.id} subscribed for tenant ${tenantSlug}`);
+    ack?.({ success: true, message: 'Subscribed for alarms' });
   }
 
   async stop(): Promise<void> {

@@ -58,6 +58,7 @@ public class BolusRepositoryTests : IDisposable
                 It.IsAny<RecordType>(),
                 It.IsAny<long>(),
                 It.IsAny<MatchCriteria>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Guid.NewGuid());
         _mockDeduplicationService

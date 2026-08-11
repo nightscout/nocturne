@@ -399,6 +399,16 @@ public class BasalInjectionRepository : IBasalInjectionRepository
         });
     }
 
+    /// <summary>
+    /// Soft-deletes every live basal injection matching the given (data source, sync identifier)
+    /// pair. The global query filter scopes the lookup to the current tenant and skips rows already
+    /// soft-deleted, so a repeat call for the same key returns 0.
+    /// </summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier.</param>
+    /// <param name="origin">Write origin; only <see cref="WriteOrigin.Live"/> broadcasts.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The number of records soft-deleted.</returns>
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
     {
         var entities = await _context.BasalInjections

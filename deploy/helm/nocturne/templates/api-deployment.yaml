@@ -1,3 +1,6 @@
+{{- if .Values.baseUrl }}
+{{- fail "baseUrl has been replaced by baseDomain: set a bare host (e.g. nocturne.example.com, no scheme). The public origin is derived as https://{baseDomain}." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -86,9 +89,9 @@ spec:
               value: {{ .Values.api.containerPort | quote }}
             - name: ASPNETCORE_URLS
               value: "http://+:{{ .Values.api.containerPort }}"
-            {{- if .Values.baseUrl }}
-            - name: BaseUrl
-              value: {{ .Values.baseUrl | quote }}
+            {{- if .Values.baseDomain }}
+            - name: BASE_DOMAIN
+              value: {{ .Values.baseDomain | quote }}
             {{- end }}
             - name: INSTANCE_KEY
               valueFrom:

@@ -80,6 +80,15 @@ public class HeartRateService
         return entities.Select(ToDomainModel);
     }
 
+    public Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    ) =>
+        EntitySet
+            .AsNoTracking()
+            .Where(h => h.DataSource == source)
+            .MaxAsync(h => (DateTime?)h.Timestamp, cancellationToken);
+
     public Task<HeartRate?> GetHeartRateByIdAsync(
         string id,
         CancellationToken cancellationToken = default

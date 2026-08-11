@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -21,7 +23,7 @@ public class MemberInviteService : IMemberInviteService
     private readonly IJwtService _jwtService;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<MemberInviteService> _logger;
 
     public MemberInviteService(
@@ -29,14 +31,14 @@ public class MemberInviteService : IMemberInviteService
         IJwtService jwtService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<MemberInviteService> logger)
     {
         _dbContext = dbContext;
         _jwtService = jwtService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -101,7 +103,7 @@ public class MemberInviteService : IMemberInviteService
         // The join page is served per tenant, so the invite has to point at the tenant's own host.
         // The configured base URL is the instance apex, which in a multi-tenant deployment serves a
         // different site entirely — only the caller knows the host the invite was minted on.
-        var origin = (baseUrl ?? _configuration[ServiceNames.ConfigKeys.BaseUrl])?.TrimEnd('/') ?? "";
+        var origin = (baseUrl ?? _baseDomain.PublicOrigin)?.TrimEnd('/') ?? "";
         var inviteUrl =
             $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 

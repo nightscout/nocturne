@@ -30,7 +30,6 @@ public class ServicesController : ControllerBase
     private readonly IConnectorHealthService _connectorHealthService;
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
-    private readonly IConfiguration _configuration;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly BaseDomainOptions _baseDomain;
 
@@ -41,7 +40,6 @@ public class ServicesController : ControllerBase
     /// <param name="connectorHealthService">Service for connector health state queries.</param>
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="configuration">Application configuration for base URL resolution.</param>
     /// <param name="tenantAccessor">Resolved tenant context, used to build the tenant's subdomain base URL.</param>
     /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
     public ServicesController(
@@ -49,7 +47,6 @@ public class ServicesController : ControllerBase
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
-        IConfiguration configuration,
         ITenantAccessor tenantAccessor,
         IOptions<BaseDomainOptions> baseDomain
     )
@@ -58,7 +55,6 @@ public class ServicesController : ControllerBase
         _connectorHealthService = connectorHealthService;
         _connectorSyncService = connectorSyncService;
         _logger = logger;
-        _configuration = configuration;
         _tenantAccessor = tenantAccessor;
         _baseDomain = baseDomain.Value;
     }
@@ -627,7 +623,7 @@ public class ServicesController : ControllerBase
     {
         // Prefer the tenant's own subdomain ({slug}.{base-domain}). This is the URL
         // external uploaders (xDrip+, Loop, AAPS) must target, and it differs per
-        // tenant — unlike the configured BaseUrl (apex) or the internal request host
+        // tenant — unlike the apex origin or the internal request host
         // seen when the web app calls this endpoint server-side.
         var slug = _tenantAccessor.Context?.Slug;
         var baseDomain = _baseDomain.BaseDomain;
@@ -636,11 +632,10 @@ public class ServicesController : ControllerBase
             return $"https://{slug}.{baseDomain.TrimEnd('/')}";
         }
 
-        // Self-host / single-instance fallback: configured base URL, then request host.
-        var configuredUrl = _configuration["BaseUrl"];
-        if (!string.IsNullOrEmpty(configuredUrl))
+        // Self-host / single-instance fallback: apex origin, then request host.
+        if (!string.IsNullOrEmpty(_baseDomain.PublicOrigin))
         {
-            return configuredUrl.TrimEnd('/');
+            return _baseDomain.PublicOrigin;
         }
 
         var request = HttpContext.Request;

@@ -181,7 +181,13 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     {
         try
         {
-            await _activityService.CreateActivitiesAsync(activities, cancellationToken);
+            // Stamp the publishing connector so every decomposed destination (state spans, heart
+            // rates, step counts) resolves to this connector's watermark.
+            var activityList = activities.ToList();
+            foreach (var activity in activityList)
+                activity.DataSource = source;
+
+            await _activityService.CreateActivitiesAsync(activityList, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -201,6 +207,17 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         {
             foreach (var span in stateSpans)
             {
+                // Source is the connector writing the row here, not one carried in the payload:
+                // NocturneRemote replays another instance's spans verbatim, and honouring their
+                // Source would advance a watermark the named connector never earned. A displaced
+                // value is stashed so the remote origin stays recoverable.
+                if (!string.IsNullOrEmpty(span.Source) && span.Source != source)
+                {
+                    span.Metadata ??= [];
+                    span.Metadata["originSource"] = span.Source;
+                }
+
+                span.Source = source;
                 await _stateSpanService.UpsertStateSpanAsync(span, cancellationToken);
             }
             return true;
@@ -253,36 +270,11 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         }
     }
 
-    /// <summary>
-    /// Returns the timestamp of the most recent activity record for the current tenant,
-    /// or <c>null</c> if none exist. Activities are stored across decomposed sources (StateSpans,
-    /// HeartRate, StepCount); <see cref="IActivityService.GetActivitiesAsync"/> merges them and
-    /// orders newest-first, so requesting a single record yields the global latest. Like
-    /// <see cref="ITreatmentPublisher.GetLatestTreatmentTimestampAsync"/>, this is not source-filtered.
-    /// </summary>
-    public async Task<DateTime?> GetLatestActivityTimestampAsync(
+    /// <inheritdoc />
+    public Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default)
-    {
-        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
-        var latest = (await _activityService.GetActivitiesAsync(
-                count: 1,
-                skip: 0,
-                cancellationToken: cancellationToken))
-            .FirstOrDefault();
-
-        if (latest == null)
-            return null;
-
-        if (!string.IsNullOrEmpty(latest.CreatedAt)
-            && DateTime.TryParse(latest.CreatedAt, out var createdAt))
-            return createdAt;
-
-        if (latest.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime;
-
-        return null;
-    }
+        => _activityService.GetLatestTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
     public async Task<DateTime?> GetBackfillLowWaterMarkAsync(

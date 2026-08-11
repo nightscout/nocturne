@@ -26,6 +26,23 @@ public interface IActivityService
     );
 
     /// <summary>
+    /// Returns the latest activity timestamp written by <paramref name="source"/> across the
+    /// decomposed destinations (StateSpans, HeartRate, StepCount) — a connector's resume
+    /// watermark — or <c>null</c> when that source has written no activity record.
+    /// </summary>
+    /// <remarks>
+    /// Sleep sessions are excluded: their <c>Source</c> is a device vendor (Apple, Oura, …), not a
+    /// connector, so they cannot be scoped. That can only under-report the watermark, costing an
+    /// idempotent re-fetch; over-reporting would skip a window outright.
+    /// </remarks>
+    /// <param name="source">The data source to scope to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get a specific <see cref="Activity"/> record by ID.
     /// </summary>
     /// <param name="id">Activity ID (legacy MongoDB ObjectId or UUID v7 string).</param>

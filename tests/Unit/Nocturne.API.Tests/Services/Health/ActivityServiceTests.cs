@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Health;
@@ -1123,5 +1124,34 @@ public class ActivityServiceTests
 
         // Assert
         Assert.Equal(5, count);
+    }
+
+    /// <summary>
+    /// The over-fetch is <c>count + skip</c>, which overflows int for a large skip and hands every
+    /// source a negative fetch count. Clamping keeps it inside the service's own over-fetch bound;
+    /// paging past the end of the merged set then yields nothing, which is correct. The expected
+    /// value mirrors the service's private <c>MaxOverFetch</c>, which is deliberately not shared
+    /// with the controller-level ceilings.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetActivitiesAsync_SaturatesTheOverFetchInsteadOfOverflowing()
+    {
+        int observedFetchCount = 0;
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback((int count, int _, CancellationToken _) => observedFetchCount = count)
+            .ReturnsAsync(Enumerable.Empty<HeartRate>());
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<Activity>());
+
+        var result = await _activityService.GetActivitiesAsync(
+            count: 1, skip: int.MaxValue, cancellationToken: CancellationToken.None);
+
+        observedFetchCount.Should().Be(100_000);
+        result.Should().BeEmpty();
     }
 }

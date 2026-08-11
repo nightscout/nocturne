@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Helpers;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -33,7 +34,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IMemberInviteService _memberInviteService;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
-    private readonly IConfiguration _configuration;
+    private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcAuthService> _logger;
 
     /// <summary>
@@ -49,7 +50,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
-    /// <param name="configuration">Application configuration for reading the base URL.</param>
+    /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
     /// <param name="logger">Logger instance.</param>
     public OidcAuthService(
         IOidcProviderService providerService,
@@ -62,7 +63,7 @@ public class OidcAuthService : IOidcAuthService
         IMemberInviteService memberInviteService,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
-        IConfiguration configuration,
+        IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<OidcAuthService> logger
     )
     {
@@ -76,7 +77,7 @@ public class OidcAuthService : IOidcAuthService
         _memberInviteService = memberInviteService;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
-        _configuration = configuration;
+        _baseDomain = baseDomainOptions.Value;
         _logger = logger;
     }
 
@@ -571,7 +572,7 @@ public class OidcAuthService : IOidcAuthService
                     var logoutUrl = new UriBuilder(discoveryDoc.EndSessionEndpoint);
                     var query = System.Web.HttpUtility.ParseQueryString(string.Empty);
                     query["client_id"] = provider.ClientId;
-                    query["post_logout_redirect_uri"] = _configuration[ServiceNames.ConfigKeys.BaseUrl] ?? "";
+                    query["post_logout_redirect_uri"] = _baseDomain.PublicOrigin ?? "";
                     logoutUrl.Query = query.ToString();
                     providerLogoutUrl = logoutUrl.ToString();
                 }
@@ -813,14 +814,19 @@ public class OidcAuthService : IOidcAuthService
     private const string SetupCallbackPath = "/api/v4/setup/oidc/callback";
 
     /// <summary>
-    /// Builds the absolute redirect URI by combining the configured base URL with the specified callback path.
+    /// Builds the absolute redirect URI by combining the deployment's public origin
+    /// (derived from <c>BASE_DOMAIN</c>) with the specified callback path.
     /// </summary>
     /// <param name="callbackPath">The server-relative callback path (default: <see cref="LoginCallbackPath"/>).</param>
     /// <returns>The fully qualified redirect URI.</returns>
     private string GetRedirectUri(string callbackPath = LoginCallbackPath)
     {
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl]?.TrimEnd('/') ?? "http://localhost:5000";
-        return $"{baseUrl}{callbackPath}";
+        var origin =
+            _baseDomain.PublicOrigin
+            ?? throw new InvalidOperationException(
+                $"Cannot build an OIDC redirect URI: {BaseDomainOptions.ConfigKey} is not configured"
+            );
+        return $"{origin}{callbackPath}";
     }
 
     /// <summary>

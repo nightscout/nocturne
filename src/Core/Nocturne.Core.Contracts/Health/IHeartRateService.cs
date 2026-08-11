@@ -34,6 +34,17 @@ public interface IHeartRateService
     );
 
     /// <summary>
+    /// Returns the latest heart rate timestamp written by <paramref name="source"/> (a connector's
+    /// resume watermark), or <c>null</c> when that source has written none.
+    /// </summary>
+    /// <param name="source">The data source to scope to.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<DateTime?> GetLatestTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get a specific heart rate record by ID
     /// </summary>
     /// <param name="id">Record ID</param>

@@ -428,7 +428,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
             )).ToList();
 

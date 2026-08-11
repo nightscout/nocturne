@@ -430,30 +430,17 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:else if trackersError}
-      <div class="flex-1 p-3 sm:p-4">
-        <Card.Root class="h-full">
-          <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
-            <div class="grid grid-cols-7 gap-1 mb-2">
-              {#each DAY_NAMES as dayName}
-                <div
-                  class="text-center text-sm font-medium text-muted-foreground py-2"
-                >
-                  {dayName}
-                </div>
-              {/each}
-            </div>
-            <div class="text-center text-muted-foreground py-8">
-              <p>Could not load tracker data</p>
-              <p class="text-sm">Calendar view is still available</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      </div>
     {:else}
       <div class="flex-1 p-3 sm:p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
+            {#if trackersError}
+              <!-- Trackers overlay the calendar; losing them must not take the glucose
+                   calendar with them, which is served by a separate query. -->
+              <p class="text-sm text-muted-foreground pb-2">
+                Tracker data is unavailable, so site and sensor changes are not shown.
+              </p>
+            {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
               <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
                 {#each DAY_NAMES as dayName}
