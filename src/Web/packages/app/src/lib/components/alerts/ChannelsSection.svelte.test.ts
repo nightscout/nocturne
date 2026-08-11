@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
-import { AlertRuleSeverity } from "$api-clients";
+import { AlertRuleSeverity, ChannelType } from "$api-clients";
 import type { DeviceCapabilityCatalog } from "$api-clients";
 import type { ChannelDef } from "./types";
 
@@ -84,6 +84,41 @@ describe("ChannelsSection", () => {
 			page.getByText("Loading", { exact: true }).elements(),
 		).toHaveLength(0);
 		expect(channels).toHaveLength(0);
+	});
+
+	it("flags a Discord channel destination that is not a channel ID", async () => {
+		const channels = $state<ChannelDef[]>([
+			{
+				_uid: "discord",
+				channelType: ChannelType.DiscordChannel,
+				destination: "https://discord.com/api/webhooks/1/abc",
+				destinationLabel: "",
+			},
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect
+			.element(page.getByText("A channel ID is 17-20 digits."))
+			.toBeVisible();
+	});
+
+	it("shows the channel-ID hint once the Discord destination is a snowflake", async () => {
+		const channels = $state<ChannelDef[]>([
+			{
+				_uid: "discord",
+				channelType: ChannelType.DiscordChannel,
+				destination: "1234567890123456789",
+				destinationLabel: "",
+			},
+		]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await expect
+			.element(page.getByText(/Copy Channel ID/))
+			.toBeVisible();
+		expect(
+			page.getByText("A channel ID is 17-20 digits.").elements(),
+		).toHaveLength(0);
 	});
 
 	it("adds a device channel seeded from the catalog once it has loaded", async () => {

@@ -28,6 +28,10 @@ export interface ChannelMetaEntry {
   destinationPlaceholder?: string;
   destinationHelper?: string;
   destinationRequired?: boolean;
+  /** Shape the destination must match. Mirrors the server-side check. */
+  destinationPattern?: RegExp;
+  /** Shown when the destination does not match `destinationPattern`. */
+  destinationPatternMessage?: string;
   /**
    * When true, this channel is authored by the dedicated device-action editor
    * (kind selector + capability checkboxes) rather than the generic
@@ -74,6 +78,7 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     description: "Direct message via the linked Discord identity",
     logo: "/logos/discord.png",
     platform: "discord",
+    destinationHelper: "Sent to the Discord account you linked.",
     destinationLabel: "",
     destinationPlaceholder: "",
     destinationRequired: false,
@@ -81,12 +86,16 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
   {
     type: ChannelType.DiscordChannel,
     label: "Discord channel",
-    description: "Post to a Discord channel via webhook",
+    description: "Post to a Discord channel the Nocturne bot has joined",
     logo: "/logos/discord.png",
-    destinationInput: "url",
-    destinationLabel: "Webhook URL",
-    destinationPlaceholder: "https://discord.com/api/webhooks/…",
+    destinationInput: "text",
+    destinationLabel: "Channel ID",
+    destinationPlaceholder: "1234567890123456789",
+    destinationHelper:
+      "In Discord, turn on Settings → Advanced → Developer Mode, then right-click the channel and choose Copy Channel ID.",
     destinationRequired: true,
+    destinationPattern: /^\d{17,20}$/,
+    destinationPatternMessage: "A channel ID is 17-20 digits.",
   },
   {
     type: ChannelType.SlackDm,
@@ -180,6 +189,23 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
 const CHANNEL_META_BY_TYPE: Map<string, ChannelMetaEntry> = new Map(
   CHANNEL_META.map((m) => [m.type as string, m]),
 );
+
+/**
+ * Validation message for a channel's destination, or null when it is acceptable. The API
+ * runs the same checks and is authoritative; this only shortens the feedback loop.
+ */
+export function destinationError(
+  meta: ChannelMetaEntry | undefined,
+  destination: string | undefined,
+): string | null {
+  if (!meta?.destinationRequired) return null;
+  const value = (destination ?? "").trim();
+  if (value === "") return `${meta.destinationLabel} is required.`;
+  if (meta.destinationPattern && !meta.destinationPattern.test(value)) {
+    return meta.destinationPatternMessage ?? null;
+  }
+  return null;
+}
 
 /** Fast lookup by ChannelType. Returns undefined for unknown values. */
 export function findChannelMeta(

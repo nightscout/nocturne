@@ -12,6 +12,7 @@
   import type { ChannelDef } from "./types";
   import {
     CHANNEL_META,
+    destinationError,
     findChannelMeta,
     type ChannelMetaEntry,
   } from "./channelMeta";
@@ -129,6 +130,7 @@
           />
         {:else}
           {#if opt?.destinationRequired}
+            {@const error = destinationError(opt, ch.destination)}
             <div class="space-y-1.5">
               <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
               <Input
@@ -136,12 +138,29 @@
                 type="text"
                 class="h-8 text-sm"
                 placeholder={opt.destinationPlaceholder}
+                aria-invalid={error != null}
+                aria-describedby={error != null
+                  ? `channel-dest-error-${i}`
+                  : opt.destinationHelper
+                    ? `channel-dest-helper-${i}`
+                    : undefined}
                 value={ch.destination}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                   channels[i].destination = e.currentTarget.value;
                 }}
               />
+              {#if error}
+                <p id="channel-dest-error-{i}" class="text-xs text-status-warning">
+                  {error}
+                </p>
+              {:else if opt.destinationHelper}
+                <p id="channel-dest-helper-{i}" class="text-xs text-muted-foreground">
+                  {opt.destinationHelper}
+                </p>
+              {/if}
             </div>
+          {:else if opt?.destinationHelper}
+            <p class="text-xs text-muted-foreground">{opt.destinationHelper}</p>
           {/if}
           <div class="space-y-1.5">
             <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>

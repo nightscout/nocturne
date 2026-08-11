@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
@@ -46,6 +47,9 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase
 {
+    /// <summary>Chat-identity-directory key for Discord links.</summary>
+    private const string DiscordPlatform = "discord";
+
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
@@ -124,12 +128,12 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
-        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
-            return badChannel;
-
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
             return badTracker;
@@ -199,10 +203,10 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
-        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
-            return badChannel;
-
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
             return badTracker;
@@ -438,13 +442,16 @@ public class AlertRulesController : ControllerBase
     #region Helpers
 
     /// <summary>
-    /// Rejects a channel list that contains a <c>device_action</c> channel whose destination is not
-    /// a valid device kind, or whose metadata requests a capability that is unknown or not allowed
-    /// for that kind — otherwise a typo'd kind/capability would silently never actuate. Returns a
-    /// 400 <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels
-    /// are valid.
+    /// Fills in a Discord DM channel's destination from the caller's linked Discord identity and
+    /// rejects a channel list whose destinations cannot deliver: a <c>device_action</c> channel
+    /// naming an unknown kind or capability, a channel type that needs a destination and was given
+    /// none, or a Discord channel/DM destination that is not a snowflake ID. Nothing downstream
+    /// inspects a destination, so an unrejected one becomes a channel that stores fine and never
+    /// delivers. Returns a 400 <see cref="BadRequestObjectResult"/> on the first offender, or null
+    /// when all channels are valid.
     /// </summary>
-    private ActionResult? RejectInvalidDeviceActionChannels(List<CreateAlertRuleChannelRequest>? channels)
+    private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
+        List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, CancellationToken ct)
     {
         if (channels is null)
         {
@@ -453,45 +460,116 @@ public class AlertRulesController : ControllerBase
 
         foreach (var ch in channels)
         {
-            if (ch.ChannelType != ChannelType.DeviceAction)
+            if (ch.ChannelType == ChannelType.DeviceAction)
             {
+                if (RejectInvalidDeviceActionChannel(ch) is { } badDevice)
+                {
+                    return badDevice;
+                }
+
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
+            if (ch.ChannelType == ChannelType.DiscordDm && string.IsNullOrWhiteSpace(ch.Destination))
+            {
+                ch.Destination = await ResolveLinkedDiscordUserIdAsync(db, ct);
+                if (ch.Destination is null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "No linked Discord account for this user. Link Discord under "
+                            + "Connectors & Apps, or enter a Discord user ID as the destination.",
+                    });
+                }
+            }
+
+            if (ChannelDestinations.RequiresDestination(ch.ChannelType)
+                && string.IsNullOrWhiteSpace(ch.Destination))
             {
                 return BadRequest(new
                 {
-                    message = $"A device_action channel's destination must be a device kind "
-                        + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
+                    message = $"A {WireName(ch.ChannelType)} channel requires a destination.",
                 });
             }
 
-            var requested = DeviceCapabilities.ParseRequestedCapabilities(
-                ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
-            foreach (var capability in requested)
+            if (ChannelDestinations.RequiresSnowflake(ch.ChannelType)
+                && !ChannelDestinations.IsSnowflake(ch.Destination))
             {
-                if (!DeviceCapabilities.IsKnown(capability))
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        message = $"Unknown device capability '{capability}'.",
-                    });
-                }
-
-                if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
-                {
-                    return BadRequest(new
-                    {
-                        message = $"Capability '{capability}' is not available on "
-                            + $"device kind '{ch.Destination}'.",
-                    });
-                }
+                    message = $"A {WireName(ch.ChannelType)} channel's destination must be a Discord "
+                        + $"ID (17-20 digits); got '{ch.Destination}'.",
+                });
             }
         }
 
         return null;
     }
+
+    private ActionResult? RejectInvalidDeviceActionChannel(CreateAlertRuleChannelRequest ch)
+    {
+        if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
+        {
+            return BadRequest(new
+            {
+                message = $"A device_action channel's destination must be a device kind "
+                    + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
+            });
+        }
+
+        var requested = DeviceCapabilities.ParseRequestedCapabilities(
+            ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
+        foreach (var capability in requested)
+        {
+            if (!DeviceCapabilities.IsKnown(capability))
+            {
+                return BadRequest(new
+                {
+                    message = $"Unknown device capability '{capability}'.",
+                });
+            }
+
+            if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
+            {
+                return BadRequest(new
+                {
+                    message = $"Capability '{capability}' is not available on "
+                        + $"device kind '{ch.Destination}'.",
+                });
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the Discord user ID linked to the calling subject within this tenant, or null when
+    /// the subject has no active Discord link. Resolution happens here rather than at delivery
+    /// because a dispatch runs from the background orchestrator, where there is no caller to
+    /// attribute a DM to — and a rule carries no owner of its own.
+    /// </summary>
+    private async Task<string?> ResolveLinkedDiscordUserIdAsync(NocturneDbContext db, CancellationToken ct)
+    {
+        var subjectId = HttpContext?.GetSubjectId();
+        if (subjectId is null)
+        {
+            return null;
+        }
+
+        var tenantId = db.TenantId;
+        return await db.ChatIdentityDirectory
+            .Where(d => d.TenantId == tenantId
+                        && d.NocturneUserId == subjectId.Value
+                        && d.Platform == DiscordPlatform
+                        && d.IsActive)
+            .OrderBy(d => d.CreatedAt)
+            .Select(d => d.PlatformUserId)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
+    private static string WireName(ChannelType channelType) =>
+        JsonSerializer.Serialize(channelType).Trim('"');
 
     private static AlertRuleChannelEntity BuildChannel(
         CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder) => new()
