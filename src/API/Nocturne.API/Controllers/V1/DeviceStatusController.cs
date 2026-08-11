@@ -435,27 +435,4 @@ public class DeviceStatusController : ControllerBase
             return StatusCode(500);
         }
     }
-
-    /// <summary>
-    /// Alternative endpoint for device status - supports .json extension
-    /// </summary>
-    /// <param name="count">Maximum number of device status entries to return (default: 10)</param>
-    /// <param name="skip">Number of device status entries to skip for pagination (default: 0)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Array of device status entries ordered by most recent first</returns>
-    [HttpGet("~/api/v1/devicestatus.json")]
-    [NightscoutEndpoint("/api/v1/devicestatus.json")]
-    [ProducesResponseType(typeof(DeviceStatus[]), 200)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
-    public async Task<ActionResult<DeviceStatus[]>> GetDeviceStatusJson(
-        [FromQuery] int count = 10,
-        [FromQuery] int skip = 0,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Delegate to the main endpoint
-        return await GetDeviceStatus(count, skip, "json", cancellationToken);
-    }
 }
