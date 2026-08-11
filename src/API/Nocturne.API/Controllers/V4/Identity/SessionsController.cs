@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
@@ -76,8 +77,15 @@ public class SessionsController : ControllerBase
     /// Revoke a login session, logging that device out. Revoking the current
     /// session is allowed and acts as a logout.
     /// </summary>
+    /// <remarks>
+    /// Refused for the demo tenant's shared visitor: every visitor is signed in as that one
+    /// subject, so the sessions here belong to the other people using the demo and revoking one
+    /// logs a stranger out. A visitor ending their own session signs out through
+    /// <c>POST /api/auth/oidc/logout</c>, which is untouched by this.
+    /// </remarks>
     /// <inheritdoc cref="IRefreshTokenService.RevokeSessionForSubjectAsync"/>
     [HttpDelete("{sessionId}")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["List"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -109,8 +117,13 @@ public class SessionsController : ControllerBase
     /// <summary>
     /// Revoke every session except the current one (log out everywhere else).
     /// </summary>
+    /// <remarks>
+    /// Refused for the demo tenant's shared visitor: "everything else" on that subject is every
+    /// other visitor currently using the demo.
+    /// </remarks>
     /// <inheritdoc cref="IRefreshTokenService.RevokeOtherSessionsForSubjectAsync"/>
     [HttpPost("revoke-others")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["List"])]
     [ProducesResponseType(typeof(RevokeOthersResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

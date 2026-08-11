@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.Core.Models.Configuration;
@@ -63,7 +64,16 @@ public class WebhookSettingsController(
     }
 
     /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
+    /// <remarks>
+    /// Refused for the demo tenant's shared visitor, which any anonymous caller can obtain a
+    /// session for. The destination is caller-chosen, so this is the server making an outbound
+    /// POST from the deployment's address on the caller's behalf.
+    /// <c>OutboundDestination</c> already keeps it off private networks; what remains is a
+    /// relay to public hosts. The other two actions carry no such capability, so the gate is on
+    /// this one and the demo's notification settings screen still renders.
+    /// </remarks>
     [HttpPost("test")]
+    [DenyDemoSubject]
     [ProducesResponseType(typeof(WebhookTestResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
