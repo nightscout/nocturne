@@ -819,7 +819,9 @@ public static class ServiceRegistrationExtensions
         // Sustained-condition timer store
         services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
 
-        // Excursion tracker
+        // Excursion tracker. Its per-rule serialisation gate is a singleton: the sweep and the
+        // per-reading path evaluate the same rule from different scopes.
+        services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<IExcursionTracker, ExcursionTracker>();
 
         // Alert evaluation engine seam (Alerts:Engine = managed | shadow | rust)

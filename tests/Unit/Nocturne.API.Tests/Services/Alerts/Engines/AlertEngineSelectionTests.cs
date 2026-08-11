@@ -108,6 +108,7 @@ public class AlertEngineSelectionTests
         services.AddSingleton(Mock.Of<IConditionTimerStore>());
         services.AddSingleton(Mock.Of<IAlertTrackerRepository>());
         services.AddSingleton(Mock.Of<IExcursionTracker>());
+        services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
         services.AddAlertEvaluationEngine(configuration, nativeProbe);
