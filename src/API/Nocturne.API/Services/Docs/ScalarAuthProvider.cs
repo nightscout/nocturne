@@ -125,7 +125,7 @@ public sealed class ScalarAuthProvider
             if (resolved is null)
                 return;
 
-            var (tenant, redirectUri) = resolved.Value;
+            var redirectUri = resolved.RedirectUri;
 
             // Belt and braces: the URI is assembled from configuration and the tenant's
             // own slug, so this should never fail. It is the same gate a redirect URI
@@ -133,16 +133,17 @@ public sealed class ScalarAuthProvider
             // cleartext http URI being registered for a public host.
             if (!_redirectUriValidator.IsValidForRegistration(redirectUri))
             {
-                _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", tenant.Id);
+                _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", resolved.TenantId);
                 return;
             }
 
-            var clientId = await EnsureScalarClientAsync(tenant.Id, redirectUri, context.RequestAborted);
+            var clientId = await EnsureScalarClientAsync(
+                resolved.TenantId, redirectUri, context.RequestAborted);
             if (clientId is null)
                 return;
 
-            var bearerToken = tenant.IsDemo
-                ? await GetDemoBearerTokenAsync(tenant.Id, context)
+            var bearerToken = resolved.IsDemo
+                ? await GetDemoBearerTokenAsync(resolved.TenantId, context)
                 : null;
 
             if (bearerToken is not null)
@@ -200,7 +201,7 @@ public sealed class ScalarAuthProvider
     /// anonymous access and must not be handed a client or a token.
     /// </para>
     /// </remarks>
-    private async Task<(TenantEntity Tenant, string RedirectUri)?> ResolveAsync(
+    private async Task<ResolvedDocsTenant?> ResolveAsync(
         HostString requestHost, string scheme, CancellationToken ct)
     {
         var (baseHost, basePort) = _baseDomain.SplitHostPort();
@@ -218,6 +219,15 @@ public sealed class ScalarAuthProvider
         // or a token. Shared with TenantResolutionMiddleware so both agree what a share host is.
         if (slug is not null && SubdomainParser.TryExtractShareToken(slug, out _))
             return null;
+
+        // Only resolutions that found a tenant are cached. The docs paths run before the rate
+        // limiter, so the host on an unauthenticated request decides this key — caching misses
+        // would let arbitrary hostnames each pin an entry. A miss costs one indexed lookup on
+        // tenants.slug; a hit is what repeated views of a real tenant's docs page would otherwise
+        // pay for on every request.
+        var cacheKey = $"scalar-tenant:{scheme}:{requestHost.Value}";
+        if (_cache.TryGetValue(cacheKey, out ResolvedDocsTenant? cached) && cached is not null)
+            return cached;
 
         await using var db = await _factory.CreateDbContextAsync(ct);
 
@@ -254,8 +264,21 @@ public sealed class ScalarAuthProvider
         var canonicalHost = slug is null ? baseHost : $"{tenant.Slug}.{baseHost}";
         var authority = basePort is null ? canonicalHost : $"{canonicalHost}:{basePort}";
 
-        return (tenant, $"{scheme}://{authority}/scalar");
+        var resolved = new ResolvedDocsTenant(
+            tenant.Id, tenant.IsDemo, $"{scheme}://{authority}/scalar");
+
+        // Same TTL as the client cache, so a demo reset — which clears the tenant's OAuth clients —
+        // heals both within the same couple of minutes.
+        _cache.Set(cacheKey, resolved, ClientCacheTtl);
+
+        return resolved;
     }
+
+    /// <summary>
+    /// The parts of the resolved tenant the docs page needs. A record rather than the entity so
+    /// nothing tracked by a disposed context is held in the cache.
+    /// </summary>
+    private sealed record ResolvedDocsTenant(Guid TenantId, bool IsDemo, string RedirectUri);
 
     /// <summary>
     /// Registers the tenant's Scalar OAuth client if absent, and adds

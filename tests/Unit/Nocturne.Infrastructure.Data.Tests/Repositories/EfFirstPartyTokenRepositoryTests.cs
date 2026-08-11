@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Demo;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -211,6 +213,57 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         var stored = _context.RefreshTokens.Single(t => t.SubjectId == _otherSubjectId);
         stored.IpAddress.Should().Be("203.0.113.7");
         stored.UserAgent.Should().Be("cli");
+    }
+
+    /// <summary>
+    /// Rotation is the path the sign-in-time cap never sees, and it is driven by an anonymous
+    /// endpoint with no rate limit of its own, so the cap has to hold here or it holds nowhere.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_caps_a_demo_subjects_live_sessions_across_rotation()
+    {
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+
+        // Far more rotations than the cap, none of them going near the sign-in path.
+        for (var i = 0; i < DemoSessionLimits.MaxLiveSessions + 40; i++)
+        {
+            await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
+        }
+
+        _context.RefreshTokens.Count(t => t.SubjectId == demoSubjectId)
+            .Should().Be(DemoSessionLimits.MaxLiveSessions,
+                "an anonymous account anyone can obtain must not be able to grow the table without bound");
+    }
+
+    [Fact]
+    public async Task CreateAsync_leaves_an_ordinary_subjects_sessions_alone()
+    {
+        // Positive control: a real member accumulating sessions across many devices must not have
+        // the oldest silently deleted, which is what makes the trim safe to run at this sink.
+        var subjectId = await AddSubjectAsync(isDemoSubject: false);
+
+        for (var i = 0; i < DemoSessionLimits.MaxLiveSessions + 5; i++)
+        {
+            await _repository.CreateAsync(NewRecord(subjectId, ipAddress: null, userAgent: null));
+        }
+
+        _context.RefreshTokens.Count(t => t.SubjectId == subjectId)
+            .Should().Be(DemoSessionLimits.MaxLiveSessions + 5);
+    }
+
+    [Fact]
+    public async Task CreateAsync_clears_a_demo_subjects_dead_rows_before_displacing_live_ones()
+    {
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+        var live = AddToken(demoSubjectId, "live-session", issuedAt: DateTime.UtcNow.AddDays(-30));
+        AddToken(demoSubjectId, "revoked", revokedAt: DateTime.UtcNow.AddMinutes(-1));
+        AddToken(demoSubjectId, "expired", expiresAt: DateTime.UtcNow.AddMinutes(-1));
+
+        await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
+
+        _context.RefreshTokens.Count(t => t.SubjectId == demoSubjectId).Should().Be(2);
+        _context.RefreshTokens.Any(t => t.Id == live.Id).Should().BeTrue(
+            "the oldest live session is only displaced once nothing dead is left to clear");
     }
 
     private async Task<Guid> AddSubjectAsync(bool isDemoSubject)

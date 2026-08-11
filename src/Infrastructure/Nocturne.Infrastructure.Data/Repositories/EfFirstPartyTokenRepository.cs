@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
@@ -43,6 +44,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 
         var scrub = isDemoSubject is true;
 
+        if (scrub)
+            await TrimDemoSessionsAsync(record.SubjectId, ct);
+
         var entity = new RefreshTokenEntity
         {
             Id = record.Id,
@@ -60,6 +64,60 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 
         _context.RefreshTokens.Add(entity);
         await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Drops the demo subject's dead and surplus session rows, leaving room for the caller to add
+    /// one without exceeding <see cref="DemoSessionLimits.MaxLiveSessions"/>.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than only on the sign-in path because the sign-in path is not the only one that
+    /// writes a row. <c>POST /api/auth/oidc/refresh</c> is anonymous, carries no rate limit, and
+    /// rotates a row per call — so a visitor who signs in once and then loops refresh never touches
+    /// the sign-in trim again, and the table grows without bound on an account anyone can obtain
+    /// without signing up. Deletes rather than revokes: a revoked row still occupies the table.
+    /// <para>
+    /// Expired and revoked rows go first, so a live session is only displaced once there is nothing
+    /// dead left to clear. Concurrent callers can each observe a count under the cap and each
+    /// insert, so the true ceiling is the cap plus the number of simultaneous writers — bounded,
+    /// which is the property being bought here.
+    /// </para>
+    /// </remarks>
+    private async Task TrimDemoSessionsAsync(Guid subjectId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+
+        // Ordered newest-first with a tiebreaker, so "which rows are surplus" does not depend on
+        // how the provider breaks ties between rows issued in the same instant — which visitors
+        // arriving together routinely are.
+        var rows = await _context.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .OrderByDescending(t => t.IssuedAt)
+            .ThenByDescending(t => t.Id)
+            .Select(t => new { t.Id, IsDead = t.RevokedAt != null || t.ExpiresAt <= now })
+            .ToListAsync(ct);
+
+        var doomed = rows.Where(r => r.IsDead).Select(r => r.Id).ToList();
+
+        // Only what is still live counts against the cap, and one slot is left for the row the
+        // caller is about to add.
+        doomed.AddRange(rows
+            .Where(r => !r.IsDead)
+            .Skip(DemoSessionLimits.MaxLiveSessions - 1)
+            .Select(r => r.Id));
+
+        if (doomed.Count == 0)
+            return;
+
+        // Loaded and removed through the change tracker rather than with ExecuteDelete: this runs
+        // inside the same SaveChanges as the insert, so the trim and the new row commit together,
+        // and it does not depend on a provider that implements bulk delete. The set it loads is
+        // bounded by the cap.
+        var entities = await _context.RefreshTokens
+            .Where(t => doomed.Contains(t.Id))
+            .ToListAsync(ct);
+
+        _context.RefreshTokens.RemoveRange(entities);
     }
 
     /// <inheritdoc />

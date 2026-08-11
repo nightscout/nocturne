@@ -4,6 +4,7 @@ using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Keys;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -49,9 +50,7 @@ public sealed class DemoTenantService
     public const string DemoRoleSlug = "demo-visitor";
 
     /// <summary>
-    /// Ceiling on live <c>refresh_tokens</c> rows for the demo subject. Enforced by
-    /// <see cref="TrimSessionsAsync"/> before every issue, so the table cannot grow past this
-    /// however many sessions are <em>issued</em>.
+    /// Ceiling on live <c>refresh_tokens</c> rows for the demo subject.
     /// </summary>
     /// <remarks>
     /// The per-IP rate limit on the sign-in endpoint does not bound this. That partition key
@@ -63,21 +62,14 @@ public sealed class DemoTenantService
     /// the friction it adds to naive abuse; this cap is the actual ceiling, and it is enforced
     /// on a value no caller supplies.
     /// <para>
-    /// Rotation is not bounded by this. Each refresh writes a replacement row and nothing trims
-    /// until an issue path is next hit, so the table can sit above the cap between sign-ins; what
-    /// the cap removes is unbounded growth driven by an anonymous endpoint.
-    /// </para>
-    /// <para>
-    /// Sized for concurrent real visitors, not for one visitor: the account is shared, so a
-    /// trimmed session belongs to someone who has almost certainly left. Reaching the cap
-    /// displaces the oldest rather than refusing the newest, because refusing would make the demo
-    /// unusable for everyone as soon as it filled — and displacing costs little, because the
-    /// access token is a self-contained JWT with no revocation check. A visitor whose refresh row
-    /// is trimmed is not signed out mid-page; they lose only their next refresh, at which point
-    /// the login page signs them straight back in.
+    /// Rotation is bounded by it too, but not here: <c>POST /api/auth/oidc/refresh</c> is
+    /// anonymous and carries no rate limit of its own, and each call writes a replacement row
+    /// without passing through any demo code. The cap is applied at the row-creating sink in the
+    /// data layer, so <see cref="TrimSessionsAsync"/> is the issue-path convenience rather than
+    /// the only enforcement.
     /// </para>
     /// </remarks>
-    public const int MaxLiveDemoSessions = 50;
+    public const int MaxLiveDemoSessions = DemoSessionLimits.MaxLiveSessions;
 
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ITenantService _tenantService;
