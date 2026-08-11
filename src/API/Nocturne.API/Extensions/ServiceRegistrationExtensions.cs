@@ -368,7 +368,7 @@ public static class ServiceRegistrationExtensions
             // Connection.RemoteIpAddress, which UseForwardedHeaders sets from X-Forwarded-For
             // with no trusted-proxy list, and the gateway does not strip that header, so a
             // caller rotating it gets a fresh partition every request. The real ceiling is
-            // DemoTenantService.MaxLiveDemoSessions, enforced on the subject id.
+            // DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
             options.AddPolicy(
                 "demo-session",
                 context =>
