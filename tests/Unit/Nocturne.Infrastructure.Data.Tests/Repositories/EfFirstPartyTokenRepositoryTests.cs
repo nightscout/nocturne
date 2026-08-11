@@ -38,12 +38,14 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         string? oidcSessionId,
         DateTime? revokedAt = null,
         DateTime? expiresAt = null,
-        DateTime? issuedAt = null)
+        DateTime? issuedAt = null,
+        string? tokenHash = null,
+        Guid? id = null)
     {
         var entity = new RefreshTokenEntity
         {
-            Id = Guid.CreateVersion7(),
-            TokenHash = Guid.NewGuid().ToString("N"),
+            Id = id ?? Guid.CreateVersion7(),
+            TokenHash = tokenHash ?? Guid.NewGuid().ToString("N"),
             SubjectId = subjectId,
             OidcSessionId = oidcSessionId,
             IssuedAt = issuedAt ?? DateTime.UtcNow,
@@ -233,6 +235,85 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         _context.RefreshTokens.Count(t => t.SubjectId == demoSubjectId)
             .Should().Be(DemoSessionLimits.MaxLiveSessions,
                 "an anonymous account anyone can obtain must not be able to grow the table without bound");
+    }
+
+    /// <summary>
+    /// Which rows the cap displaces, not just how many survive it. Reaching the cap has to cost
+    /// the visitors who have already gone, so the oldest rows are the ones that go — the inverse
+    /// evicts whoever just signed in, on every subsequent sign-in, while the oldest rows never
+    /// leave.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_displaces_a_demo_subjects_oldest_sessions_and_keeps_the_newest()
+    {
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+
+        // Distinct IssuedAt values, oldest first, so the expected retention is total order rather
+        // than anything the tiebreaker settles.
+        const int seeded = DemoSessionLimits.MaxLiveSessions + 5;
+        var issuedAt = DateTime.UtcNow.AddMinutes(-seeded);
+        for (var i = 0; i < seeded; i++)
+        {
+            AddToken(demoSubjectId, $"session-{i}", issuedAt: issuedAt.AddMinutes(i), tokenHash: $"seed-{i}");
+        }
+
+        await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
+
+        var surviving = _context.RefreshTokens
+            .Where(t => t.SubjectId == demoSubjectId && t.TokenHash.StartsWith("seed-"))
+            .Select(t => t.TokenHash)
+            .ToList();
+
+        // 5 + 1 seeded rows go: the cap, less the slot the new row takes.
+        var expected = Enumerable
+            .Range(seeded - (DemoSessionLimits.MaxLiveSessions - 1), DemoSessionLimits.MaxLiveSessions - 1)
+            .Select(i => $"seed-{i}");
+
+        surviving.Should().BeEquivalentTo(expected,
+            "the cap displaces the oldest sessions and keeps the newest");
+        surviving.Should().NotContain("seed-0", "the oldest session is the first to go");
+        surviving.Should().Contain($"seed-{seeded - 1}", "the newest session is the last to go");
+    }
+
+    /// <summary>
+    /// Visitors arriving together are issued rows in the same instant, so the order the cap
+    /// applies must not be left to the provider. The token id settles it.
+    /// </summary>
+    /// <remarks>
+    /// The two ids differ only in their final byte, which .NET's <see cref="Guid"/> comparison and
+    /// PostgreSQL's bytewise <c>uuid</c> comparison order the same way — so the row this expects to
+    /// survive does not depend on which of them is running the sort.
+    /// </remarks>
+    [Fact]
+    public async Task CreateAsync_breaks_a_demo_subjects_issued_at_tie_by_token_id()
+    {
+        var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
+
+        var tied = DateTime.UtcNow.AddHours(-1);
+        var lowerId = Guid.Parse("11111111-1111-1111-1111-111111111110");
+        var higherId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        // Seeded lower id first: without the tiebreaker a stable sort leaves them in this order and
+        // displaces the wrong one of the pair.
+        AddToken(demoSubjectId, "tie-low", issuedAt: tied, tokenHash: "tie-low", id: lowerId);
+        AddToken(demoSubjectId, "tie-high", issuedAt: tied, tokenHash: "tie-high", id: higherId);
+
+        // Fill the rest of the cap with strictly newer rows, so the tied pair is the boundary and
+        // exactly one of the two has to go.
+        for (var i = 0; i < DemoSessionLimits.MaxLiveSessions - 2; i++)
+        {
+            AddToken(demoSubjectId, $"newer-{i}", issuedAt: tied.AddMinutes(i + 1), tokenHash: $"newer-{i}");
+        }
+
+        await _repository.CreateAsync(NewRecord(demoSubjectId, ipAddress: null, userAgent: null));
+
+        var surviving = _context.RefreshTokens
+            .Where(t => t.SubjectId == demoSubjectId)
+            .Select(t => t.TokenHash)
+            .ToList();
+
+        surviving.Should().Contain("tie-high", "the higher id sorts first and is kept");
+        surviving.Should().NotContain("tie-low", "the lower id is the one the tiebreaker displaces");
     }
 
     [Fact]
