@@ -166,6 +166,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
         CancellationToken ct = default)
     {
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var data = await Repository.GetDeletedAsync(limit, offset, ct);
         var total = await Repository.CountDeletedAsync(ct);
         return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });

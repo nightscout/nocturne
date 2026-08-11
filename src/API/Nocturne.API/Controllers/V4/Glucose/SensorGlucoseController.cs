@@ -61,14 +61,13 @@ public class SensorGlucoseController(
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
     {
-        if (sort is not "timestamp_desc" and not "timestamp_asc")
-            return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+        if (PrepareListQuery(from, to, sort, ref limit, ref offset, out var descending) is { } error)
+            return error;
 
         Guid? patientDeviceId = null;
         if (Request.Query.TryGetValue("patientDeviceId", out var raw) && Guid.TryParse(raw, out var parsed))
             patientDeviceId = parsed;
 
-        var descending = sort == "timestamp_desc";
         var data = await Repository.GetAsync(from, to, device, source, limit, offset, descending,
             nativeOnly: false, afterTimestamp: null, afterId: null, patientDeviceId: patientDeviceId, ct: ct);
         var total = await Repository.CountAsync(from, to, ct);

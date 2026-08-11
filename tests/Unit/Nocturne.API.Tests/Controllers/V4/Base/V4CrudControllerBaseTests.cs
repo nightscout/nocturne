@@ -106,6 +106,28 @@ public class V4CrudControllerBaseTests
     }
 
     [Fact]
+    public async Task ListDeleted_LimitAtCeiling_ReachesRepositoryUnchanged()
+    {
+        _repo.Setup(r => r.GetDeletedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _controller.ListDeleted(V4ReadLimits.MaxPageSize, 0);
+
+        _repo.Verify(r => r.GetDeletedAsync(V4ReadLimits.MaxPageSize, 0, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListDeleted_LimitAboveCeiling_IsClamped()
+    {
+        _repo.Setup(r => r.GetDeletedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _controller.ListDeleted(V4ReadLimits.MaxPageSize + 1, -1);
+
+        _repo.Verify(r => r.GetDeletedAsync(V4ReadLimits.MaxPageSize, 0, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetAll_InvalidSort_ReturnsBadRequest()
     {
         var result = await _controller.GetAll(null, null, 100, 0, "invalid", null, null);
