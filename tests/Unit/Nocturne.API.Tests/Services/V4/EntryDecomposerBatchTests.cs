@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -20,6 +21,7 @@ public class EntryDecomposerBatchTests : IDisposable
     private readonly Mock<ISensorGlucoseRepository> _sgRepoMock;
     private readonly Mock<IMeterGlucoseRepository> _mgRepoMock;
     private readonly Mock<ICalibrationRepository> _calRepoMock;
+    private readonly IGlucoseProcessingResolver _glucoseResolver;
     private readonly EntryDecomposer _decomposer;
 
     public EntryDecomposerBatchTests()
@@ -47,18 +49,21 @@ public class EntryDecomposerBatchTests : IDisposable
             .ReturnsAsync(new List<GlucoseProcessingSourceDefault>());
         mockConfigProvider.Setup(x => x.GetPreferredProcessingAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((GlucoseProcessing?)null);
-        var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
+        _glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
 
-        _decomposer = new EntryDecomposer(
+        _decomposer = CreateDecomposer(Mock.Of<IAuditContext>());
+    }
+
+    private EntryDecomposer CreateDecomposer(IAuditContext auditContext) =>
+        new(
             _context,
             _sgRepoMock.Object,
             _mgRepoMock.Object,
             _calRepoMock.Object,
-            glucoseResolver,
+            _glucoseResolver,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IAuditContext>(),
+            auditContext,
             NullLogger<EntryDecomposer>.Instance);
-    }
 
     public void Dispose()
     {
@@ -143,6 +148,56 @@ public class EntryDecomposerBatchTests : IDisposable
         result.CreatedRecords.OfType<IV4Record>()
             .Should().NotBeEmpty()
             .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
+    }
+
+    /// <summary>
+    /// Every entry <em>create</em> reaches this method — v1 and v3 normalize a lone entry object
+    /// into a one-element array before calling <c>EntryService.CreateEntriesAsync</c> — so it
+    /// carries uploader ingestion (Loop, AAPS, xDrip, connectors, the demo/dev seeder) at CGM
+    /// sample rate. Those writes are deliberately not a human mutation trail: the audit
+    /// interceptor drops system-attributed saves, and their provenance lives on the records'
+    /// own <c>data_source</c>. Only <c>DecomposeAsync</c> — reached solely from
+    /// <c>EntryService.UpdateEntryAsync</c>, a genuine per-entry edit — keeps caller attribution.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_WritesUnderSystemAttribution()
+    {
+        var auditContext = new AuditContext
+        {
+            SubjectId = Guid.NewGuid(), AuthType = "ApiKey", SubjectName = "uploader",
+        };
+        var decomposer = CreateDecomposer(auditContext);
+
+        var attributionDuringBulkCreate = new List<(bool IsSystem, Guid? SubjectId)>();
+        void Capture() => attributionDuringBulkCreate.Add((auditContext.IsSystem, auditContext.SubjectId));
+
+        _sgRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(Capture)
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => records);
+        _mgRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(Capture)
+            .ReturnsAsync((IEnumerable<MeterGlucose> records, WriteOrigin _, CancellationToken _) => records);
+        _calRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(Capture)
+            .ReturnsAsync((IEnumerable<Calibration> records, WriteOrigin _, CancellationToken _) => records);
+
+        var entries = new List<Entry>
+        {
+            new() { Id = "sgv1", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 },
+            new() { Id = "mbg1", Type = "mbg", Mills = 1700000002000, Mbg = 140.0 },
+            new() { Id = "cal1", Type = "cal", Mills = 1700000003000, Slope = 850.0 },
+        };
+
+        await decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
+
+        attributionDuringBulkCreate.Should().HaveCount(3)
+            .And.OnlyContain(a => a.IsSystem && a.SubjectId == null);
+
+        auditContext.IsSystem.Should().BeFalse();
+        auditContext.SubjectName.Should().Be("uploader");
     }
 
     [Fact]
