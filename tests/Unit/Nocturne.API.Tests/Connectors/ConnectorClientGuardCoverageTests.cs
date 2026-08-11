@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Models.Net;
 using Xunit;
 
 namespace Nocturne.API.Tests.Connectors;
@@ -109,6 +110,19 @@ public class ConnectorClientGuardCoverageTests
                 "unwatched. An unrecognised handler type fails here too — a connector's primary " +
                 "handler has to be one whose redirect behaviour this test can verify",
                 connectorName, clientName, primary.GetType().Name);
+
+            var pin = (primary as SocketsHttpHandler)?.ConnectCallback?.Target as PinnedConnector;
+
+            pin.Should().NotBeNull(
+                "{0}'s '{1}' client must connect through a PinnedConnector; without it the guard's " +
+                "verdict binds the host name and the transport resolves it again for the socket, " +
+                "so a name that answers differently the second time is reached anyway",
+                connectorName, clientName);
+
+            pin!.Policy.Should().Be(OutboundAddressPolicy.NotLinkLocal,
+                "{0}'s '{1}' client is a connector: private and LAN targets are supported and only " +
+                "link-local is refused",
+                connectorName, clientName);
         }
     }
 

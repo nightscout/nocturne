@@ -41,13 +41,7 @@ public class TandemAuthTokenProvider(
 
         // A dedicated handler/CookieContainer isolates the multi-step cookie flow per login attempt,
         // matching tconnectsync's fresh requests.Session and avoiding cross-tenant cookie bleed.
-        using var handler = new HttpClientHandler
-        {
-            UseCookies = true,
-            CookieContainer = new System.Net.CookieContainer(),
-            AllowAutoRedirect = true,
-        };
-        using var client = new HttpClient(handler);
+        using var client = OutboundHttpClient.CreateIsolated(followRedirects: true);
         client.DefaultRequestHeaders.UserAgent.ParseAdd(TandemConstants.UserAgent);
 
         try

@@ -5,13 +5,14 @@ using Nocturne.Core.Models.Net;
 namespace Nocturne.Connectors.Core.Services;
 
 /// <summary>
-/// Refuses a connector request whose target resolves to a link-local address, on every hop.
+/// Refuses an outbound request whose target resolves to a link-local address, on every hop.
 /// </summary>
 /// <remarks>
 /// Connector base URLs come from tenant configuration — a value someone signed in supplied
 /// through <c>PUT /api/v4/connectors/config/{connectorName}</c> — and the request is sent from
 /// inside the deployment's network, with the outcome reported back through connector status. That
-/// makes the connector fetch a request-forgery primitive.
+/// makes the connector fetch a request-forgery primitive. The Nightscout migration URL is the same
+/// shape and carries the same guard.
 /// <para>
 /// Only link-local is refused, not every private range. A self-hosted deployment legitimately
 /// points a connector with a member-supplied base URL — Nightscout, remote Nocturne, MyLife — at a
@@ -50,9 +51,13 @@ namespace Nocturne.Connectors.Core.Services;
 /// goes through that extension automatically — an installer calling <c>AddHttpClient</c> without
 /// it gets no guard and transport-level redirects, which is how the MyLife connector was left
 /// outside this for a while. <c>ConnectorClientGuardCoverageTests</c> walks every installer and
-/// fails if one registers a client without it. See the note on
-/// <see cref="OutboundDestination"/> about the residual gap between resolving a name and
-/// connecting to it.
+/// fails if one registers a client without it.
+/// </para>
+/// <para>
+/// This handler decides; <see cref="PinnedConnector"/> on the same client's transport is what the
+/// socket obeys. The check here happens before a body is sent and produces the message the caller
+/// reads, but it judges a name — the pinned connect judges the address it is about to open, which
+/// is what closes the gap between the two resolutions.
 /// </para>
 /// </remarks>
 public sealed class LinkLocalGuardHandler : DelegatingHandler
@@ -142,7 +147,7 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
             {
                 response.Dispose();
                 throw new HttpRequestException(
-                    $"Connector request exceeded {MaxRedirects} redirects.");
+                    $"Outbound request exceeded {MaxRedirects} redirects.");
             }
 
             var next = CloneForRedirect(current, response.StatusCode, target!);
@@ -168,7 +173,7 @@ public sealed class LinkLocalGuardHandler : DelegatingHandler
             return;
 
         _logger.LogWarning(
-            "Refusing connector request to {Host}: resolves to a link-local address", uri.Host);
+            "Refusing outbound request to {Host}: resolves to a link-local address", uri.Host);
 
         throw new HttpRequestException(
             $"Refusing to reach '{uri.Host}': the address is link-local, which no connector " +

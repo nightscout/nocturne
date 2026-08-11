@@ -6,6 +6,7 @@ using System.Web;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
+using Nocturne.Connectors.Core.Services;
 
 namespace Nocturne.Connectors.CareLink.Services;
 
@@ -31,10 +32,7 @@ public partial class CareLinkAuthFlowService : IDisposable
         // Auth0 PKCE flows require manual redirect inspection to capture the ?code= parameter
         // before the final redirect lands on a custom scheme URI the HttpClient cannot follow.
         // AllowAutoRedirect = false ensures we see every 302 response.
-        _httpClient = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
-        {
-            Timeout = TimeSpan.FromMinutes(2)
-        };
+        _httpClient = OutboundHttpClient.CreateIsolated(followRedirects: false, transport: handler);
 
         // CareLink's Auth0 tenant sits behind CloudFront, whose WAF rejects any request that carries
         // no User-Agent with a 403 "Request blocked" HTML page. HttpClient sends none by default, so

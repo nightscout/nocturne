@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Models.Net;
 using Polly;
 
 namespace Nocturne.Connectors.Core.Extensions;
@@ -79,7 +80,13 @@ public static class HttpClientExtensions
                         // would be fetched from inside the network with the guard none the
                         // wiser. Disabling redirects outright would instead break a
                         // Nightscout sitting behind an http-to-https redirect.
-                        AllowAutoRedirect = false
+                        AllowAutoRedirect = false,
+                        // Resolve the host once and open the socket to the address that was
+                        // judged. Without this the guard's verdict binds a name rather than a
+                        // destination, and a name that answers differently for the connect than
+                        // it did for the check reaches whatever it likes.
+                        ConnectCallback =
+                            new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync
                     }
                 );
 
