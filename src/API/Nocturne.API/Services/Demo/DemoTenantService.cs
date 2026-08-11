@@ -367,13 +367,20 @@ public sealed class DemoTenantService
         };
     }
 
-    private static void ApplyTenantDefaults(TenantEntity tenant)
+    /// <summary>
+    /// The tenant-row state a demo tenant is expected to hold. Applied at provisioning and
+    /// re-applied by every reset, so a demo that predates one of these defaults picks it up.
+    /// </summary>
+    internal static void ApplyTenantDefaults(TenantEntity tenant)
     {
         // The web app's authenticated layout bounces a tenant whose onboarding is
         // incomplete to /setup, which would strand a signed-in demo visitor.
         tenant.OnboardingCompletedAt ??= DateTime.UtcNow;
         // A demo tenant has no owner to review access requests.
         tenant.AllowAccessRequests = false;
+        // The demo exists to be poked at: its Scalar page prefills a working token, which
+        // needs the docs surface served on the demo's own host.
+        tenant.AllowPublicDocs = true;
     }
 
     /// <summary>

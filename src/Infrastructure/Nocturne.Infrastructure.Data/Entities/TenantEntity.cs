@@ -60,6 +60,14 @@ public class TenantEntity : ISystemTimestamped
     public bool IsDemo { get; set; }
 
     /// <summary>
+    /// Whether this tenant's hosts serve the public API documentation (the Scalar reference and
+    /// the OpenAPI specs behind it). Off unless the tenant opts in: the reference registers an
+    /// OAuth client on the tenant from an unauthenticated request, and most tenants never open it.
+    /// </summary>
+    [Column("allow_public_docs")]
+    public bool AllowPublicDocs { get; set; }
+
+    /// <summary>
     /// SHA-256 hex digest (<see cref="Security.CredentialHash.ShareToken"/>) of the unguessable
     /// token for the tenant's public read-only dashboard, served at {token}.share.{baseDomain}.
     /// Null when public sharing is disabled. The token itself is never stored: it is returned once

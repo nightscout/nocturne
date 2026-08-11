@@ -78,6 +78,22 @@ public class DemoTenantServiceResetTests : IDisposable
         tenant.OnboardingCompletedAt.Should().NotBeNull("a demo visitor must not be sent to /setup");
     }
 
+    /// <summary>
+    /// The demo's Scalar page prefills a working token, which needs the documentation surface
+    /// served on the demo's own host — and the column defaults to off for everyone else.
+    /// </summary>
+    [Fact]
+    public async Task ResetAsync_LeavesTheDocumentationSurfaceOn()
+    {
+        var tenantId = SeedDemoTenant();
+
+        await _service.ResetAsync();
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var tenant = await db.Tenants.SingleAsync(t => t.Id == tenantId);
+        tenant.AllowPublicDocs.Should().BeTrue();
+    }
+
     [Fact]
     public async Task ResetAsync_CarriesDemoScheduleAcross()
     {
