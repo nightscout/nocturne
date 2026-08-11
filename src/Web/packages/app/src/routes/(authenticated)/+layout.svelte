@@ -219,7 +219,6 @@
       <MembershipRequestAutoSubmit
         isAuthenticated={!!data.user}
         isGuestSession={data.isGuestSession}
-        tenantSlug={data.tenantSlug}
       />
       <AlertBanner />
       <FiringToast />

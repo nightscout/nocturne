@@ -540,7 +540,6 @@
           {user}
           {isPlatformAdmin}
           {isGuestSession}
-          tenantSlug={currentSlug}
           collapsed={sidebar.state === "collapsed"}
           class="flex-1 min-w-0"
         />

@@ -72,8 +72,14 @@ describe("extractTenantSlug", () => {
     );
   });
 
-  it("is case insensitive and normalises to lower case", () => {
-    expect(extractTenantSlug("RHYS.Nocturne.Run", "nocturne.run")).toBe("rhys");
+  // Matches SubdomainParser: the suffix compares case-insensitively, but the
+  // slug keeps the host's casing because the tenant lookup is case-sensitive.
+  it("matches the suffix case-insensitively and preserves the slug's case", () => {
+    expect(extractTenantSlug("RHYS.Nocturne.Run", "nocturne.run")).toBe("RHYS");
+  });
+
+  it("returns the share host's token-and-label rather than a tenant", () => {
+    expect(extractTenantSlug("tok.share.nocturne.run", "nocturne.run")).toBe("tok.share");
   });
 
   it("returns null when the base domain is missing", () => {

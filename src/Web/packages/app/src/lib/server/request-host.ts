@@ -35,7 +35,11 @@ export function getOriginalProto(request: Request): string {
  * number of labels carries no meaning — only the suffix does.
  *
  * Returns null on the apex, on an unrelated host, or when BASE_DOMAIN is unset.
- * Ports are ignored on both sides.
+ * Ports are ignored on both sides, and the slug keeps the host's own casing
+ * because tenant slugs are looked up case-sensitively.
+ *
+ * A share host ({token}.share.{baseDomain}) yields "{token}.share" rather than a
+ * tenant, so callers that can be reached on one must filter it with isShareHost.
  */
 export function extractTenantSlug(
   host: string | null | undefined,
@@ -43,12 +47,12 @@ export function extractTenantSlug(
 ): string | null {
   if (!host || !baseDomain) return null;
 
-  const hostname = host.split(":")[0]!.toLowerCase();
-  const baseHostname = baseDomain.split(":")[0]!.toLowerCase();
+  const hostname = host.split(":")[0]!;
+  const baseHostname = baseDomain.split(":")[0]!;
   if (!baseHostname) return null;
 
   const suffix = `.${baseHostname}`;
-  if (!hostname.endsWith(suffix)) return null;
+  if (!hostname.toLowerCase().endsWith(suffix.toLowerCase())) return null;
 
   return hostname.slice(0, -suffix.length) || null;
 }

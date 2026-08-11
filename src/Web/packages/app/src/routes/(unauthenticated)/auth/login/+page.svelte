@@ -18,8 +18,6 @@
 
   let showRequestDialog = $state(false);
 
-  const tenantSlug = $derived(page.data.tenantSlug);
-
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
@@ -88,4 +86,4 @@
   </Card.Root>
 </div>
 
-<RequestMembershipDialog bind:open={showRequestDialog} {tenantSlug} />
+<RequestMembershipDialog bind:open={showRequestDialog} />

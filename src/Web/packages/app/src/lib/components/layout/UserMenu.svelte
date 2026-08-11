@@ -17,11 +17,9 @@
     isPlatformAdmin?: boolean;
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
-    /** Slug of the tenant this host resolves to, or null on the apex (from layout data) */
-    tenantSlug?: string | null;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantSlug = null }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
 
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
@@ -149,7 +147,7 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
   {#if isGuestSession}
-    <RequestMembershipDialog bind:open={showRequestDialog} {tenantSlug} />
+    <RequestMembershipDialog bind:open={showRequestDialog} />
   {/if}
 {:else}
   <!-- Not logged in - show login button -->
