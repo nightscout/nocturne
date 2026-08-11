@@ -1,6 +1,7 @@
 <script lang="ts">
   import { KeyRound } from "lucide-svelte";
   import ActiveSessions from "$lib/components/settings/ActiveSessions.svelte";
+  import ApiReference from "$lib/components/settings/ApiReference.svelte";
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
   import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
 </script>
@@ -28,5 +29,6 @@
     <ActiveSessions />
     <GuestLinksSection />
     <ConnectedApps />
+    <ApiReference />
   </div>
 </div>

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Docs;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -236,6 +237,35 @@ public partial class TenantService : ITenantService
         TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
 
         return ToDto(tenant);
+    }
+
+    public async Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var settings = await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => new TenantSettingsDto(t.AllowPublicDocs))
+            .FirstOrDefaultAsync(ct);
+
+        return settings ?? throw new KeyNotFoundException($"Tenant {id} not found");
+    }
+
+    public async Task<TenantSettingsDto> SetAllowPublicDocsAsync(
+        Guid id, bool allowPublicDocs, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.AllowPublicDocs = allowPublicDocs;
+        await context.SaveChangesAsync(ct);
+
+        // The documentation paths resolve the tenant through their own cache, which holds the
+        // opt-in; without this the previous answer stands for the cache lifetime.
+        ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
+
+        return new TenantSettingsDto(tenant.AllowPublicDocs);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)

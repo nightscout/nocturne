@@ -205,6 +205,7 @@ public class V4WriteScopeGatingTests
             ["AuditController"] = NotDataCategory.TenantOperationalConfig,
             ["GlucoseProcessingSettingsController"] = NotDataCategory.TenantOperationalConfig,
             ["SystemEventsController"] = NotDataCategory.TenantOperationalConfig,
+            ["TenantSettingsController"] = NotDataCategory.TenantOperationalConfig,
 
             ["SupportController"] = NotDataCategory.OutboundOnly,
             ["SystemController"] = NotDataCategory.OutboundOnly,
