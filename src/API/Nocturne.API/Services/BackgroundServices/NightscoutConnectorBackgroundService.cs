@@ -69,8 +69,8 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
             .Select(t => new { t.Id, t.Slug, t.DisplayName })
             .ToListAsync(cancellationToken);
 
-        // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll loop
-        // does not start until this returns, so connecting them in sequence would delay the first
+        // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll cycle
+        // does not continue until this returns, so connecting them in sequence would delay the first
         // sync of every tenant by the sum of all unreachable instances' timeouts.
         await Parallel.ForEachAsync(
             tenants,
@@ -101,6 +101,10 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         string displayName,
         CancellationToken cancellationToken)
     {
+        if (!await ListenerNeedsStartAsync(
+                _socketClients, tenantId, tenantSlug, c => c.Connected, DisconnectAndDisposeAsync))
+            return;
+
         using var tenantScope = ServiceProvider.CreateScope();
 
         var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
@@ -171,11 +175,21 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
             return;
         }
 
-        _socketClients.TryAdd(tenantId, client);
+        if (!_socketClients.TryAdd(tenantId, client))
+        {
+            await DisconnectAndDisposeAsync(client);
+            return;
+        }
 
         Logger.LogInformation(
             "Started real-time listener for Nightscout tenant {TenantSlug}",
             tenantSlug);
+    }
+
+    private static async Task DisconnectAndDisposeAsync(SocketIO client)
+    {
+        await client.DisconnectAsync();
+        client.Dispose();
     }
 
     /// <inheritdoc />
@@ -185,8 +199,7 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         {
             try
             {
-                await client.DisconnectAsync();
-                client.Dispose();
+                await DisconnectAndDisposeAsync(client);
             }
             catch (Exception ex)
             {

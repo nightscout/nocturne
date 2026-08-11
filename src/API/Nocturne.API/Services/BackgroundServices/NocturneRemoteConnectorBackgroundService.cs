@@ -53,6 +53,12 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         {
             try
             {
+                // Reconnection is infinite, so anything short of Disconnected is still a live listener.
+                if (!await ListenerNeedsStartAsync(
+                        _hubConnections, tenant.Id, tenant.Slug,
+                        c => c.State != HubConnectionState.Disconnected, StopAndDisposeAsync))
+                    continue;
+
                 using var tenantScope = ServiceProvider.CreateScope();
 
                 var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
@@ -107,7 +113,11 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
                     continue;
                 }
 
-                _hubConnections.TryAdd(tenantId, connection);
+                if (!_hubConnections.TryAdd(tenantId, connection))
+                {
+                    await StopAndDisposeAsync(connection);
+                    continue;
+                }
 
                 Logger.LogInformation(
                     "Started real-time listener for NocturneRemote tenant {TenantSlug}",
@@ -123,6 +133,12 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         }
     }
 
+    private static async Task StopAndDisposeAsync(HubConnection connection)
+    {
+        await connection.StopAsync();
+        await connection.DisposeAsync();
+    }
+
     /// <inheritdoc />
     protected override async Task StopRealtimeListenersAsync()
     {
@@ -130,8 +146,7 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         {
             try
             {
-                await connection.StopAsync();
-                await connection.DisposeAsync();
+                await StopAndDisposeAsync(connection);
             }
             catch (Exception ex)
             {

@@ -100,11 +100,82 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     protected abstract string ConnectorName { get; }
 
     /// <summary>
-    /// Called once after the initial startup delay, before the poll loop begins.
+    /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
     /// Override to start real-time listeners (e.g. webhooks, SSE, WebSocket connections).
+    /// Implementations must be idempotent — a tenant that already has a live listener must be left
+    /// untouched — and should use <see cref="ListenerNeedsStartAsync{TClient}"/> to enforce that.
     /// The default implementation is a no-op.
     /// </summary>
     protected virtual Task StartRealtimeListenersAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// How often the poll loop re-runs <see cref="StartRealtimeListenersAsync"/> to replace listeners
+    /// that have died. Deliberately coarser than the poll tick so a permanently unreachable upstream is
+    /// not reconnected every minute. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
+
+    private DateTime _lastRealtimeSupervision = DateTime.MinValue;
+
+    private async Task SuperviseRealtimeListenersAsync(CancellationToken stoppingToken)
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastRealtimeSupervision < RealtimeSupervisionInterval)
+            return;
+
+        _lastRealtimeSupervision = now;
+
+        try
+        {
+            await StartRealtimeListenersAsync(stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(
+                ex,
+                "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
+                ConnectorName);
+        }
+    }
+
+    /// <summary>
+    /// Reports whether a real-time listener must be started for a tenant, evicting and disposing a
+    /// tracked client that <paramref name="isAlive"/> rejects so the caller can replace it. The loss of
+    /// real-time delivery is logged at the point of eviction.
+    /// </summary>
+    protected async Task<bool> ListenerNeedsStartAsync<TClient>(
+        ConcurrentDictionary<Guid, TClient> clients,
+        Guid tenantId,
+        string tenantSlug,
+        Func<TClient, bool> isAlive,
+        Func<TClient, Task> disposeAsync)
+    {
+        if (!clients.TryGetValue(tenantId, out var existing))
+            return true;
+
+        if (isAlive(existing))
+            return false;
+
+        clients.TryRemove(tenantId, out _);
+
+        Logger.LogWarning(
+            "{ConnectorName} real-time listener for tenant {TenantSlug} is no longer connected; polling only until it is re-established",
+            ConnectorName, tenantSlug);
+
+        try
+        {
+            await disposeAsync(existing);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Error disposing dead {ConnectorName} real-time listener for tenant {TenantSlug}",
+                ConnectorName, tenantSlug);
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Called when the service is shutting down, after the poll loop exits.
@@ -178,18 +249,6 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         try
         {
-            try
-            {
-                await StartRealtimeListenersAsync(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Logger.LogWarning(
-                    ex,
-                    "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
-                    ConnectorName);
-            }
-
             // Poll every minute; each tenant is only synced when its own
             // SyncIntervalMinutes has elapsed since its last sync.
             using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -198,6 +257,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             {
                 try
                 {
+                    await SuperviseRealtimeListenersAsync(stoppingToken);
                     await SyncAllTenantsAsync(stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
