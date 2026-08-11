@@ -211,15 +211,24 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
     /// Gets the latest device event from a set of event types.
     /// </summary>
     /// <param name="eventTypes">The types of device events to search for.</param>
+    /// <param name="patientDeviceId">Optional filter restricting the search to a single registered patient device.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The latest device event, or null if none found.</returns>
-    public async Task<DeviceEvent?> GetLatestByEventTypesAsync(DeviceEventType[] eventTypes, CancellationToken ct = default)
+    public async Task<DeviceEvent?> GetLatestByEventTypesAsync(
+        DeviceEventType[] eventTypes,
+        Guid? patientDeviceId = null,
+        CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
-        var entity = await ctx.DeviceEvents
+        var query = ctx.DeviceEvents
             .AsNoTracking()
-            .Where(e => eventTypeStrings.Contains(e.EventType))
+            .Where(e => eventTypeStrings.Contains(e.EventType));
+
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
+
+        var entity = await query
             .OrderByDescending(e => e.Timestamp)
             .FirstOrDefaultAsync(ct);
 

@@ -142,7 +142,13 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     /// Retrieve the most recent <see cref="DeviceEvent"/> matching any of the specified <see cref="DeviceEventType"/> values.
     /// </summary>
     /// <param name="eventTypes">Array of <see cref="DeviceEventType"/> values to search for.</param>
+    /// <param name="patientDeviceId">Optional filter restricting the search to events linked to a single
+    /// registered patient device. Pass <c>null</c> to search tenant-wide.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
-    Task<DeviceEvent?> GetLatestByEventTypesAsync(DeviceEventType[] eventTypes, CancellationToken ct = default);
+    Task<DeviceEvent?> GetLatestByEventTypesAsync(
+        DeviceEventType[] eventTypes,
+        Guid? patientDeviceId = null,
+        CancellationToken ct = default
+    );
 }

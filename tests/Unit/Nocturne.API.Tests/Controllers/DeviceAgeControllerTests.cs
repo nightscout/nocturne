@@ -45,6 +45,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetCannulaAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -65,6 +66,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetSensorAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -88,6 +90,7 @@ public class DeviceAgeControllerTests
                         && p.Display == "days"
                         && p.EnableAlerts
                     ),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once
@@ -103,6 +106,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetBatteryAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -128,6 +132,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetCannulaAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -137,6 +142,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetSensorAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -146,6 +152,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetInsulinAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -155,6 +162,7 @@ public class DeviceAgeControllerTests
             .Setup(x =>
                 x.GetBatteryAgeAsync(
                     It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
                     It.IsAny<CancellationToken>()
                 )
             )
@@ -171,5 +179,83 @@ public class DeviceAgeControllerTests
         Assert.Same(sensorAge, valueType.GetProperty("sage")?.GetValue(value));
         Assert.Same(insulinAge, valueType.GetProperty("iage")?.GetValue(value));
         Assert.Same(batteryAge, valueType.GetProperty("bage")?.GetValue(value));
+    }
+
+    [Fact]
+    public async Task GetCannulaAge_WithPatientDeviceId_ForwardsItToTheService()
+    {
+        var pumpId = Guid.NewGuid();
+
+        _deviceAgeServiceMock
+            .Setup(x =>
+                x.GetCannulaAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new DeviceAgeInfo());
+
+        await _controller.GetCannulaAge(patientDeviceId: pumpId);
+
+        _deviceAgeServiceMock.Verify(
+            x =>
+                x.GetCannulaAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    pumpId,
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task GetAllDeviceAges_WithPatientDeviceId_ScopesEveryAge()
+    {
+        var deviceId = Guid.NewGuid();
+
+        _deviceAgeServiceMock
+            .Setup(x =>
+                x.GetCannulaAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new DeviceAgeInfo());
+        _deviceAgeServiceMock
+            .Setup(x =>
+                x.GetSensorAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new SensorAgeInfo());
+        _deviceAgeServiceMock
+            .Setup(x =>
+                x.GetInsulinAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new DeviceAgeInfo());
+        _deviceAgeServiceMock
+            .Setup(x =>
+                x.GetBatteryAgeAsync(
+                    It.IsAny<DeviceAgePreferences>(),
+                    It.IsAny<Guid?>(),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync(new DeviceAgeInfo());
+
+        await _controller.GetAllDeviceAges(deviceId);
+
+        _deviceAgeServiceMock.Verify(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), deviceId, It.IsAny<CancellationToken>()), Times.Once);
+        _deviceAgeServiceMock.Verify(x => x.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), deviceId, It.IsAny<CancellationToken>()), Times.Once);
+        _deviceAgeServiceMock.Verify(x => x.GetInsulinAgeAsync(It.IsAny<DeviceAgePreferences>(), deviceId, It.IsAny<CancellationToken>()), Times.Once);
+        _deviceAgeServiceMock.Verify(x => x.GetBatteryAgeAsync(It.IsAny<DeviceAgePreferences>(), deviceId, It.IsAny<CancellationToken>()), Times.Once);
     }
 }
