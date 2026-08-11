@@ -261,8 +261,8 @@ public partial class TenantService : ITenantService
         tenant.AllowPublicDocs = allowPublicDocs;
         await context.SaveChangesAsync(ct);
 
-        // The documentation paths resolve the tenant through their own cache, which holds the
-        // opt-in; without this the previous answer stands for the cache lifetime.
+        // The documentation paths resolve the tenant through a cache of their own, which holds
+        // the opt-in.
         ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
 
         return new TenantSettingsDto(tenant.AllowPublicDocs);

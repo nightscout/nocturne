@@ -79,8 +79,7 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     /// <summary>
-    /// The demo's Scalar page prefills a working token, which needs the documentation surface
-    /// served on the demo's own host — and the column defaults to off for everyone else.
+    /// The column defaults to off, so the demo's own reference depends on the reset re-applying it.
     /// </summary>
     [Fact]
     public async Task ResetAsync_LeavesTheDocumentationSurfaceOn()

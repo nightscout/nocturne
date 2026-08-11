@@ -67,13 +67,8 @@ public sealed class ScalarAuthProvider
     /// domain and the tenant's stored slug, and the only part a caller influences is the scheme,
     /// which <see cref="RedirectUriValidator"/> narrows to https on a public host and http on
     /// loopback. So one tenant can accumulate at most one entry per deployment origin, and a
-    /// deployment has one.
-    /// <para>
-    /// Kept rather than deleted because the row is written by an unauthenticated request, so the
-    /// bound should not depend on the URI-construction argument staying true. An earlier commit
-    /// message on this branch claimed a test covered this cap; none did. <see
-    /// cref="Docs.ScalarAuthProviderTests"/> now exercises it directly.
-    /// </para>
+    /// deployment has one. Kept rather than deleted because the row is written by an
+    /// unauthenticated request, so the bound must not rest on that argument staying true.
     /// </remarks>
     internal const int MaxRedirectUris = 5;
 
@@ -109,11 +104,6 @@ public sealed class ScalarAuthProvider
         _logger = logger;
     }
 
-    /// <summary>
-    /// Decides whether the documentation paths may be served for this request and, on the
-    /// Scalar page, stashes a <see cref="ScalarAuthContext"/> on
-    /// <see cref="HttpContext.Items"/> for the Scalar options delegate to read.
-    /// </summary>
     /// <returns>
     /// <see langword="false"/> when the host resolves to a tenant that has not opted in, which
     /// the caller answers with 404. <see langword="true"/> when the host resolves to no tenant
@@ -128,8 +118,8 @@ public sealed class ScalarAuthProvider
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The opt-in could not be read, and an unreadable opt-in is not an opt-in: a
-            // failed lookup must not serve the docs on a tenant that never turned them on.
+            // An unreadable opt-in is not an opt-in: a failed lookup must not serve the docs
+            // on a tenant that never turned them on.
             _logger.LogWarning(ex, "Failed to resolve the tenant for a documentation request");
             return false;
         }
@@ -201,12 +191,9 @@ public sealed class ScalarAuthProvider
     /// <see langword="null"/> when this request's origin is not one the deployment serves.
     /// </summary>
     /// <remarks>
-    /// Assembled from the configured base domain and the tenant's own slug as stored, so the
-    /// only byte of it a caller influences is the scheme, which
-    /// <see cref="RedirectUriValidator"/> then gates. The scheme and the port are read from
-    /// the request and are both caller-controlled (see <see cref="ResolveAsync"/>), so they
-    /// decide only whether a client is registered — never which tenant is resolved, and never
-    /// whether the docs are served.
+    /// Assembled from the configured base domain and the tenant's own slug as stored. The scheme
+    /// and the port are the only parts a caller influences, and they decide nothing beyond whether
+    /// a client is registered — see <see cref="ResolveAsync"/>.
     /// </remarks>
     private string? BuildRedirectUri(ResolvedDocsTenant resolved, HttpContext context)
     {
@@ -320,19 +307,13 @@ public sealed class ScalarAuthProvider
         return resolved;
     }
 
-    /// <summary>Cache key holding the resolved docs tenant for a slug, or for the apex.</summary>
     private static string TenantCacheKey(string? slug) => $"scalar-tenant:{slug ?? "__apex__"}";
 
     /// <summary>
-    /// Drops the cached docs resolution for a tenant, so the next documentation request reads
-    /// the opt-in from the row instead of serving the previous answer for up to
-    /// <see cref="ClientCacheTtl"/>.
-    /// </summary>
-    /// <remarks>
     /// Both keys go, for the reason <see cref="Multitenancy.TenantResolutionMiddleware.EvictTenant"/>
     /// drops both of its own: a single-tenant install resolves the apex to the sole tenant, which
     /// is cached under the apex key.
-    /// </remarks>
+    /// </summary>
     public static void EvictTenant(IMemoryCache cache, string slug)
     {
         cache.Remove(TenantCacheKey(slug));
@@ -341,15 +322,10 @@ public sealed class ScalarAuthProvider
 
     /// <summary>
     /// The parts of the resolved tenant the docs paths need. A record rather than the entity so
-    /// nothing tracked by a disposed context is held in the cache.
+    /// nothing tracked by a disposed context is held in the cache. <c>CanonicalHost</c> is the host
+    /// this deployment serves the tenant on, assembled from the configured base domain and the
+    /// stored slug — never from the request.
     /// </summary>
-    /// <param name="TenantId">The resolved tenant.</param>
-    /// <param name="IsDemo">Whether the tenant is the demo, whose Scalar page prefills a token.</param>
-    /// <param name="AllowPublicDocs">Whether the tenant serves the documentation paths at all.</param>
-    /// <param name="CanonicalHost">
-    /// The host this deployment serves the tenant on, assembled from the configured base domain
-    /// and the stored slug — never from the request.
-    /// </param>
     private sealed record ResolvedDocsTenant(
         Guid TenantId, bool IsDemo, bool AllowPublicDocs, string CanonicalHost);
 

@@ -378,8 +378,8 @@ public sealed class DemoTenantService
         tenant.OnboardingCompletedAt ??= DateTime.UtcNow;
         // A demo tenant has no owner to review access requests.
         tenant.AllowAccessRequests = false;
-        // The demo exists to be poked at: its Scalar page prefills a working token, which
-        // needs the docs surface served on the demo's own host.
+        // The demo's Scalar page prefills a working token, which needs the docs served on the
+        // demo's own host.
         tenant.AllowPublicDocs = true;
     }
 

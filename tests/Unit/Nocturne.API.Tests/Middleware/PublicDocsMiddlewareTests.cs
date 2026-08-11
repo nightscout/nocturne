@@ -8,8 +8,7 @@ namespace Nocturne.API.Tests.Middleware;
 
 /// <summary>
 /// The documentation branch answers before tenant resolution and authentication, so it is the
-/// only thing standing between an anonymous request and the reference. Both paths it covers —
-/// the Scalar UI and the OpenAPI specs behind it — hang off the same tenant opt-in.
+/// only thing standing between an anonymous request and the reference.
 /// </summary>
 public class PublicDocsMiddlewareTests : IDisposable
 {
@@ -46,8 +45,8 @@ public class PublicDocsMiddlewareTests : IDisposable
     }
 
     /// <summary>
-    /// The reason this branch runs ahead of tenant resolution at all: a fresh install has no
-    /// tenants, and its apex would otherwise answer 503 setup_required.
+    /// A fresh install has no tenants, and its apex answers 503 setup_required — so the reference
+    /// has to be served without one.
     /// </summary>
     [Theory]
     [InlineData("/scalar")]
@@ -76,10 +75,6 @@ public class PublicDocsMiddlewareTests : IDisposable
         context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 
-    /// <summary>
-    /// A documentation path with no endpoint is not one of ours; it keeps going rather than
-    /// being answered here.
-    /// </summary>
     [Fact]
     public async Task InvokeAsync_PassesADocumentationPathWithNoEndpointDownThePipeline()
     {
@@ -94,10 +89,6 @@ public class PublicDocsMiddlewareTests : IDisposable
         continued.Should().BeTrue();
     }
 
-    /// <summary>
-    /// Runs the middleware over a request that has an endpoint mapped, reporting whether that
-    /// endpoint was reached.
-    /// </summary>
     private async Task<(HttpContext Context, bool Served)> InvokeAsync(string path, string host)
     {
         var context = DocsTenantFixture.BuildContext(host, path: path);

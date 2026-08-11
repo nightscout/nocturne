@@ -55,8 +55,8 @@ internal sealed class DocsTenantFixture : IDisposable
     public NocturneDbContext Db() => new(_dbOptions);
 
     /// <summary>
-    /// Seeds a tenant. <paramref name="allowPublicDocs"/> defaults to on so a test that is not
-    /// about the opt-in reaches the behaviour it is testing; the column itself defaults to off.
+    /// <paramref name="allowPublicDocs"/> defaults to on so a test that is not about the opt-in
+    /// reaches the behaviour it is testing; the column itself defaults to off.
     /// </summary>
     public Guid SeedTenant(
         string slug,
@@ -103,7 +103,7 @@ internal sealed class DocsTenantFixture : IDisposable
         return tenant.Id;
     }
 
-    /// <summary>Flips a seeded tenant's documentation opt-in, leaving every cache untouched.</summary>
+    /// <summary>Flips the opt-in in the database only, leaving every cache untouched.</summary>
     public void SetAllowPublicDocs(Guid tenantId, bool allow)
     {
         using var db = Db();

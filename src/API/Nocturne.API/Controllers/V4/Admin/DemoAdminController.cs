@@ -62,8 +62,7 @@ public class DemoAdminController : ControllerBase
         {
             // Re-apply the tenant defaults and the access grants: this runs on every demo
             // service start, so it repairs a tenant left without roles or a demo member by a
-            // reset that failed between wiping and re-seeding, and picks up a default added
-            // since the tenant was provisioned.
+            // reset that failed between wiping and re-seeding.
             DemoTenantService.ApplyTenantDefaults(existing);
             await db.SaveChangesAsync(ct);
             await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);

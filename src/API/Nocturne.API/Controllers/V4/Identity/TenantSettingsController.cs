@@ -10,8 +10,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
 /// Tenant-level settings a tenant's own administrators control, as opposed to the platform-admin
-/// surface in <c>PlatformAdmin.TenantController</c>. All operations require the
-/// <c>tenant.settings</c> permission.
+/// surface in <c>PlatformAdmin.TenantController</c>.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
@@ -29,7 +28,6 @@ public class TenantSettingsController : ControllerBase
         _tenantAccessor = tenantAccessor;
     }
 
-    /// <summary>Get this tenant's settings.</summary>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
@@ -42,9 +40,6 @@ public class TenantSettingsController : ControllerBase
         return Ok(await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct));
     }
 
-    /// <summary>
-    /// Choose whether this tenant's hosts serve the API reference and the OpenAPI specs behind it.
-    /// </summary>
     // The demo's account is shared and obtainable without signing up, and it holds
     // tenant.settings — so a permission gate alone would let any visitor take the demo's own
     // reference down for everyone until the next reset.

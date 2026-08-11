@@ -61,9 +61,8 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The opt-in is the whole point of the flag: a tenant that never asked for the reference
-    /// must not have one, and must not have an OAuth client written on it by the request that
-    /// asked for it.
+    /// A tenant that never asked for the reference must not have one — and must not have an
+    /// OAuth client written on it by the request that asked.
     /// </summary>
     [Theory]
     [InlineData("/scalar")]
@@ -121,9 +120,8 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The reference has to render on a fresh install, which is the whole reason these paths
-    /// run ahead of tenant resolution. Also the positive control for the gate: it can only be
-    /// trusted to refuse if it is shown letting something through.
+    /// Positive control for the gate: it can only be trusted to refuse if it is shown letting
+    /// something through.
     /// </summary>
     [Theory]
     [InlineData(BaseDomain)]              // apex of an instance with no tenants

@@ -29,10 +29,8 @@ public interface ITenantService
     /// <summary>Updates a tenant's display name, active state, and access-request policy.</summary>
     Task<TenantDto> UpdateAsync(Guid id, string displayName, bool isActive, bool? allowAccessRequests = null, CancellationToken ct = default);
 
-    /// <summary>Returns the tenant-level settings a tenant's own administrators control.</summary>
     Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Turns the tenant's public API documentation on or off.</summary>
     Task<TenantSettingsDto> SetAllowPublicDocsAsync(Guid id, bool allowPublicDocs, CancellationToken ct = default);
 
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
@@ -63,13 +61,6 @@ public interface ITenantService
 
 public record TenantDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
-/// <summary>
-/// Tenant-level settings a tenant's own administrators control, as opposed to the platform-admin
-/// fields on <see cref="TenantDto"/>.
-/// </summary>
-/// <param name="AllowPublicDocs">
-/// Whether this tenant's hosts serve the API reference and the OpenAPI specs behind it.
-/// </param>
 public record TenantSettingsDto(bool AllowPublicDocs);
 
 public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);

@@ -389,15 +389,13 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // but we make it explicit for clarity.
 app.UseRouting();
 
-// Rate limiting. Ahead of the documentation branch below, which jumps straight to its
-// endpoint and would otherwise skip the limiter entirely; the policies are attached to
-// endpoints, so this needs UseRouting to have run. Everything without a policy passes
-// through untouched, and every policy that exists partitions on the remote address alone,
-// so none of their accounting depends on running after UseAuthorization.
+// Ahead of the documentation branch below, which jumps straight to its endpoint and would
+// otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
+// UseRouting to have run. Everything without a policy passes through untouched, and every
+// policy that exists partitions on the remote address alone, so none of their accounting
+// depends on running after UseAuthorization.
 app.UseRateLimiter();
 
-// Documentation paths (/scalar, /openapi) bypass the entire tenant/auth
-// middleware stack — they're tenantless and publicly accessible.
 app.UseMiddleware<PublicDocsMiddleware>();
 
 // Redirect OIDC callbacks from apex to the originating tenant subdomain

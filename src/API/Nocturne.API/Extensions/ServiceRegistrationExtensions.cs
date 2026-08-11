@@ -85,8 +85,8 @@ namespace Nocturne.API.Extensions;
 public static class ServiceRegistrationExtensions
 {
     /// <summary>
-    /// Rate-limiting policy applied to the documentation endpoints. Named here rather than
-    /// declared as an attribute because those endpoints are mapped, not controller actions.
+    /// Rate-limiting policy for the documentation endpoints, which are mapped rather than
+    /// controller actions and so cannot carry the attribute.
     /// </summary>
     public const string DocsRateLimitPolicy = "docs";
 
@@ -404,17 +404,13 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
-            // Documentation surface (/scalar, /openapi): 30 per IP per minute. These endpoints
-            // run before tenant resolution and authentication, and the reference reads the
-            // tenants table and may write that tenant's OAuth client, so they are the one
-            // unauthenticated path that reaches the database that early.
-            //
-            // As with demo-session, the partition key is not a hard ceiling: UseForwardedHeaders
-            // runs with KnownProxies/KnownIPNetworks cleared, so RemoteIpAddress comes from
-            // X-Forwarded-For and a caller rotating it gets a fresh partition every request. What
-            // does bound the damage is elsewhere: the row can hold at most
-            // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
-            // client id are cached, so a flood mostly costs the page render.
+            // Documentation surface (/scalar, /openapi): 30 per IP per minute. These endpoints run
+            // before tenant resolution and authentication, and the reference reads the tenants
+            // table and may write that tenant's OAuth client, so they are the one unauthenticated
+            // path that reaches the database that early. As with demo-session the partition key is
+            // no hard ceiling — it comes from X-Forwarded-For. What bounds the damage is elsewhere:
+            // the row holds at most ScalarAuthProvider.MaxRedirectUris entries, and both the tenant
+            // resolution and the client id are cached, so a flood mostly costs the page render.
             options.AddPolicy(
                 DocsRateLimitPolicy,
                 context =>
