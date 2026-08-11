@@ -137,13 +137,10 @@ public class DemoSessionControllerTests : IDisposable
     }
 
     /// <summary>
-    /// The endpoint hands a session to any anonymous caller, so holding the demo membership must
-    /// not be enough on its own — the subject has to carry the flag too.
+    /// Holding the demo membership must not be enough on its own — the subject has to carry the flag
+    /// too. Nothing downstream of the lookup re-examines whose subject it resolved, so without the
+    /// check a real account under that username would be handed a session to whoever asked.
     /// </summary>
-    /// <remarks>
-    /// Nothing downstream of the lookup re-examines whose subject it resolved, so without the check
-    /// there a real account under that username would be issued a session to whoever asked.
-    /// </remarks>
     [Fact]
     public async Task CreateSession_ReturnsNotFound_WhenTheDemoMemberIsNotADemoSubject()
     {

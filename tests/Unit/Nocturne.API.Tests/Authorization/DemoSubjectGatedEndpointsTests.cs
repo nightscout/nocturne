@@ -14,11 +14,10 @@ namespace Nocturne.API.Tests.Authorization;
 /// Pins which endpoints refuse the demo tenant's shared visitor account.
 /// </summary>
 /// <remarks>
-/// A demo session is handed to any anonymous caller, so the subject behind it is
-/// authenticated but stands for no one, and every visitor is the <em>same</em> subject.
-/// Two classes of endpoint must refuse it, and neither is protected by a tenant permission
-/// check — one because there is no tenant in the request to check against, the other
-/// because the demo member legitimately holds the permission involved:
+/// The premise is in <see cref="DenyDemoSubjectAttribute"/>. Two classes of endpoint must refuse
+/// that subject, and neither is protected by a tenant permission check — one because there is no
+/// tenant in the request to check against, the other because the demo member legitimately holds
+/// the permission involved:
 /// <list type="bullet">
 /// <item><b>Acting as a platform user</b> — creating a tenant, accepting an invite,
 /// requesting membership, minting a subject. Covered by
@@ -81,15 +80,11 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(CareLinkConnectController), nameof(CareLinkConnectController.Start) },
 
         // The webhook tester posts to a caller-named destination from inside the deployment's
-        // network. OutboundDestination keeps it off private addresses, so what is left is an
-        // outbound POST to a public host sourced from the deployment's own address, available to
-        // anyone who asks for a demo session. The endpoint carries no permission attribute at all,
-        // so [Authorize] is the whole gate.
+        // network. It carries no permission attribute at all, so [Authorize] is the whole gate.
         { typeof(WebhookSettingsController), nameof(WebhookSettingsController.TestWebhookSettings) },
 
         // Session management on a shared subject acts on other visitors' sessions, not the
-        // caller's. List stays open: the rows carry no address (the repository scrubs them) and
-        // name no device beyond "demo-visitor".
+        // caller's. List stays open — see TheSessionListStaysOpenWhileRevocationDoesNot.
         { typeof(SessionsController), nameof(SessionsController.Revoke) },
         { typeof(SessionsController), nameof(SessionsController.RevokeOthers) },
     };
@@ -131,10 +126,9 @@ public class DemoSubjectGatedEndpointsTests
     }
 
     /// <summary>
-    /// Listing sessions stays reachable with a demo session while revoking them does not. The
-    /// rows carry no address — the repository scrubs them for a demo subject — and no device
-    /// beyond <c>demo-visitor</c>, so the list shows a visitor how many people are on the demo
-    /// and nothing about them. Pinned so the split is a recorded decision rather than a gap.
+    /// Listing sessions stays open while revoking them does not: the rows carry no address — the
+    /// repository scrubs them for a demo subject — and no device beyond <c>demo-visitor</c>, so the
+    /// list tells a visitor only how many people are on the demo.
     /// </summary>
     [Fact]
     public void TheSessionListStaysOpenWhileRevocationDoesNot()

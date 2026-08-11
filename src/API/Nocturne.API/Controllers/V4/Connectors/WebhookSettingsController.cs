@@ -65,12 +65,10 @@ public class WebhookSettingsController(
 
     /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
     /// <remarks>
-    /// Refused for the demo tenant's shared visitor, which any anonymous caller can obtain a
-    /// session for. The destination is caller-chosen, so this is the server making an outbound
-    /// POST from the deployment's address on the caller's behalf.
-    /// <c>OutboundDestination</c> already keeps it off private networks; what remains is a
-    /// relay to public hosts. The other two actions carry no such capability, so the gate is on
-    /// this one and the demo's notification settings screen still renders.
+    /// Gated for the demo's shared visitor because the destination is caller-chosen: the server
+    /// makes an outbound POST from its own address. <c>OutboundDestination</c> keeps it off private
+    /// networks, so what remains is a relay to public hosts. The GET and PUT above are a stub and a
+    /// logged no-op, so gating them would only break the demo's notification settings screen.
     /// </remarks>
     [HttpPost("test")]
     [DenyDemoSubject]

@@ -11,22 +11,18 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// Shared reflection over the API's MVC controllers, used by the authorization guard tests to
-/// enumerate actions, their routes and the gates in front of them.
+/// Reflection over the API's MVC controllers, shared by the authorization guard tests.
 /// </summary>
 internal static class ControllerActionReflection
 {
-    /// <summary>The API assembly under audit.</summary>
     public static Assembly ApiAssembly => typeof(AuthorizationConfiguration).Assembly;
 
-    /// <summary>Every controller MVC would discover in the API assembly.</summary>
     public static IEnumerable<Type> GetControllers() =>
         ApiAssembly.GetTypes()
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t)
                         && t is { IsClass: true, IsAbstract: false, IsPublic: true }
                         && t.GetCustomAttribute<NonControllerAttribute>() is null);
 
-    /// <summary>Every action method on a controller.</summary>
     public static IEnumerable<MethodInfo> GetActionMethods(Type controller) =>
         controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where(m => !m.IsSpecialName
@@ -35,10 +31,7 @@ internal static class ControllerActionReflection
     /// <summary>
     /// The absolute routes an action answers on, with a leading slash and no trailing one.
     /// </summary>
-    /// <remarks>
-    /// One action can carry several method attributes and therefore several routes, so this
-    /// returns them all. Attribute routing only; the API declares no conventional routes.
-    /// </remarks>
+    /// <remarks>Attribute routing only; the API declares no conventional routes.</remarks>
     public static IEnumerable<string> GetRoutes(Type controller, MethodInfo action)
     {
         var prefix = controller.GetCustomAttributes<RouteAttribute>(inherit: true)
@@ -66,23 +59,14 @@ internal static class ControllerActionReflection
         return templates.Select(t => Combine(prefix, t)).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Whether the action is explicitly anonymous, itself or through its controller.</summary>
     public static bool HasAnonymous(MethodInfo action, Type controller) =>
         action.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any()
         || controller.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any();
 
-    /// <summary>
-    /// Whether the action declares an authorization gate — <c>[Authorize]</c> and friends, or one
-    /// of the Nocturne <c>[Require*]</c> filters — itself or through its controller.
-    /// </summary>
     public static bool HasAuthorizationGate(MethodInfo action, Type controller) =>
         HasGate(action.GetCustomAttributes(inherit: true))
         || HasGate(controller.GetCustomAttributes(inherit: true));
 
-    /// <summary>
-    /// Whether the action refuses the demo tenant's shared visitor account, itself or through
-    /// its controller.
-    /// </summary>
     public static bool DeniesTheDemoSubject(MethodInfo action, Type controller) =>
         action.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null
         || controller.GetCustomAttribute<DenyDemoSubjectAttribute>() is not null;

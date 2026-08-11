@@ -75,8 +75,7 @@ public class DemoSessionController : ControllerBase
         if (subjectId is null)
             return NotFound();
 
-        // The endpoint is anonymous and each call writes a refresh_tokens row, so the table needs
-        // a ceiling that does not depend on the per-IP rate limit. It has one, applied where the
+        // Anonymous, and each call writes a refresh_tokens row; the ceiling is applied where the
         // row is created rather than here — see DemoSessionLimits.
         //
         // No IP or user-agent: every visitor shares this subject, and the session list at

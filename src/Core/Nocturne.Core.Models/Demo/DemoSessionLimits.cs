@@ -9,13 +9,9 @@ namespace Nocturne.Core.Models.Demo;
 /// of the paths that reaches it, and the anonymous, unrate-limited refresh endpoint rotates rows
 /// through the same sink without passing through any demo code.
 /// <para>
-/// The per-IP rate limit on the sign-in endpoint is not a substitute. That partition key comes from
-/// <c>Connection.RemoteIpAddress</c>, which <c>UseForwardedHeaders</c> — running before the rate
-/// limiter, with <c>KnownProxies</c> and <c>KnownIPNetworks</c> cleared because the API is only
-/// meant to be reachable through the gateway — takes from <c>X-Forwarded-For</c>. The gateway does
-/// not strip that header, so a caller rotating it gets a fresh partition per request and the limit
-/// bounds nothing. It is kept for the friction it adds to naive abuse; this cap is the actual
-/// ceiling, and it is enforced on a value no caller supplies.
+/// The sign-in endpoint's per-IP rate limit is not a substitute: it partitions on a caller-supplied
+/// header (see the <c>demo-session</c> policy in <c>ServiceRegistrationExtensions</c>), while this
+/// cap keys on the subject id.
 /// </para>
 /// </remarks>
 public static class DemoSessionLimits

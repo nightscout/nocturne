@@ -19,40 +19,37 @@ namespace Nocturne.API.Tests.Authorization;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The surface is the tenantless one — the paths
-/// <see cref="TenantResolutionMiddleware.IsTenantlessAllowed"/> admits with no resolved tenant —
-/// intersected with the endpoints whose only gate is authentication. Both halves matter. Off a
-/// tenant, a tenant's permission check has nothing to check against; and the fallback policy
-/// (<see cref="HasPermissionsRequirement"/>) that gates every attribute-less endpoint is not
-/// satisfiable there by the demo subject, whose permissions come from a tenant membership and
-/// whose global role set is empty. A bare <c>[Authorize]</c> drops that to the framework's
-/// "is authenticated", which every demo session is.
+/// The surface is the paths <see cref="TenantResolutionMiddleware.IsTenantlessAllowed"/> admits
+/// with no resolved tenant, intersected with the endpoints whose only gate is <em>bare</em>
+/// <c>[Authorize]</c> — not "endpoints with no attribute". An attribute-less endpoint falls to the
+/// fallback policy (<see cref="HasPermissionsRequirement"/>), which the demo subject fails off a
+/// tenant: its permissions come from a tenant membership while the fallback reads only global
+/// <c>subject_roles</c>, which is empty for it. A bare <c>[Authorize]</c> drops that to the
+/// framework's "is authenticated", which every demo session is. Widening the predicate would
+/// pull in endpoints the demo subject cannot reach anyway.
 /// </para>
 /// <para>
 /// An endpoint gated by roles, a policy, or a Nocturne <c>[Require*]</c> filter asks for more than
-/// authentication and is out of scope; one carrying <c>[AllowAnonymous]</c> was never gated by a
-/// session in the first place. Anything else added to this surface later has to be classified here
-/// before it ships, which is the point — <see cref="DemoSubjectGatedEndpointsTests"/> pins the
-/// endpoints already decided on and cannot see a new one.
+/// authentication; one carrying <c>[AllowAnonymous]</c> was never gated by a session at all. This
+/// discovers, so anything added to the surface later must be classified before it ships —
+/// <see cref="DemoSubjectGatedEndpointsTests"/> pins what is already decided and cannot see a new
+/// endpoint.
 /// </para>
 /// </remarks>
 public class TenantlessDemoSubjectCoverageTests
 {
     /// <summary>
-    /// Tenantless authentication-only endpoints deliberately left reachable by a demo visitor,
-    /// keyed by <c>Controller.Action</c> with the reason.
+    /// Endpoints on this surface deliberately left reachable by a demo visitor, keyed by
+    /// <c>Controller.Action</c> with the reason.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Exempt =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // Both list the tenants the calling subject belongs to. A demo subject belongs to the
-            // demo tenant and nothing else — the reset deletes any membership it picked up
-            // elsewhere — so each returns the tenant the visitor is already looking at.
+            // A demo subject holds the demo tenant's membership and nothing else — the reset
+            // deletes any it picked up elsewhere — so both return the tenant already on screen.
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
 
-            // Deployment-wide configuration echoed to the login and setup screens: the base domain
-            // and whether multitenancy is on. Carries nothing subject-scoped.
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
         };
 
@@ -74,8 +71,8 @@ public class TenantlessDemoSubjectCoverageTests
     }
 
     /// <summary>
-    /// Positive control on the discovery: a guard that enumerates nothing passes while checking
-    /// nothing, so pin both that the surface is found and that a known member of it is on it.
+    /// Non-vacuity: a discovery that enumerates nothing passes the guard above while checking
+    /// nothing, so pin that the surface is found and that a known member of it is on it.
     /// </summary>
     [Fact]
     public void TheDiscoveryFindsTheTenantlessSurface()
@@ -93,9 +90,9 @@ public class TenantlessDemoSubjectCoverageTests
     }
 
     /// <summary>
-    /// Positive control on the gate check: every exemption must name an endpoint that is both
-    /// discovered and genuinely ungated, so the check cannot be passing because it reports
-    /// everything as gated, and the list cannot go stale.
+    /// Non-vacuity on the gate check, and staleness on the list: an exemption must name an endpoint
+    /// that is still discovered and still ungated, so the guard above cannot be passing because
+    /// everything reads as gated.
     /// </summary>
     [Fact]
     public void EveryExemptionNamesADiscoveredUngatedEndpoint()
@@ -118,10 +115,6 @@ public class TenantlessDemoSubjectCoverageTests
 
     private static string Key(Type controller, MethodInfo action) => $"{controller.Name}.{action.Name}";
 
-    /// <summary>
-    /// Endpoints served without a resolved tenant whose only gate is that the caller is
-    /// authenticated.
-    /// </summary>
     private static IEnumerable<(Type Controller, MethodInfo Action)> Discover()
     {
         foreach (var controller in ControllerActionReflection.GetControllers())
@@ -149,8 +142,7 @@ public class TenantlessDemoSubjectCoverageTests
             .Concat(controller.GetCustomAttributes(inherit: true))
             .ToList();
 
-        // A permission, scope or instance-key filter asks for more than a session, and no demo
-        // grant satisfies one off a tenant.
+        // No demo grant satisfies one of these off a tenant.
         if (attributes.Any(a => a is RequirePermissionAttribute
                                 or RequireScopeAttribute
                                 or RequireInstanceKeyAuthAttribute))
@@ -160,8 +152,8 @@ public class TenantlessDemoSubjectCoverageTests
 
         var authorize = attributes.OfType<IAuthorizeData>().ToList();
 
-        // Roles and policies are evaluated on top of authentication, so an endpoint naming one is
-        // asking for something the demo subject — which holds no global role — does not have.
+        // A named role or policy asks for something the demo subject, which holds no global role,
+        // does not have.
         if (authorize.Any(a => !string.IsNullOrEmpty(a.Roles) || !string.IsNullOrEmpty(a.Policy)))
         {
             return false;

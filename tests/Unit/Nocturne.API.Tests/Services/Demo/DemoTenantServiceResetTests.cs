@@ -277,9 +277,9 @@ public class DemoTenantServiceResetTests : IDisposable
     /// </summary>
     /// <remarks>
     /// Provisioning adopts a pre-existing membership under that username rather than asserting it
-    /// created the subject behind it. Were the flag not checked here, a real account holding that
-    /// membership would be handed to any anonymous caller as a session — nothing downstream of the
-    /// lookup re-examines whose subject it is.
+    /// created the subject behind it, and nothing downstream of the lookup re-examines whose subject
+    /// it is — so without the flag check here a real account holding that membership would be handed
+    /// out as a session.
     /// </remarks>
     [Fact]
     public async Task FindDemoMemberSubjectIdAsync_IgnoresAMembershipHeldByANonDemoSubject()

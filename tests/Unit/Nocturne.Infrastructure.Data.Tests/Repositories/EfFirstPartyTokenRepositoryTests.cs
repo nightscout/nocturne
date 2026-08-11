@@ -238,18 +238,16 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
     }
 
     /// <summary>
-    /// Which rows the cap displaces, not just how many survive it. Reaching the cap has to cost
-    /// the visitors who have already gone, so the oldest rows are the ones that go — the inverse
-    /// evicts whoever just signed in, on every subsequent sign-in, while the oldest rows never
-    /// leave.
+    /// Which rows the cap displaces, not just how many survive it. The inverse ordering evicts
+    /// whoever just signed in, on every subsequent sign-in, while the oldest rows never leave.
     /// </summary>
     [Fact]
     public async Task CreateAsync_displaces_a_demo_subjects_oldest_sessions_and_keeps_the_newest()
     {
         var demoSubjectId = await AddSubjectAsync(isDemoSubject: true);
 
-        // Distinct IssuedAt values, oldest first, so the expected retention is total order rather
-        // than anything the tiebreaker settles.
+        // Distinct IssuedAt values, so the expected retention is a total order and nothing here
+        // rests on the tiebreaker.
         const int seeded = DemoSessionLimits.MaxLiveSessions + 5;
         var issuedAt = DateTime.UtcNow.AddMinutes(-seeded);
         for (var i = 0; i < seeded; i++)
@@ -276,13 +274,13 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
     }
 
     /// <summary>
-    /// Visitors arriving together are issued rows in the same instant, so the order the cap
-    /// applies must not be left to the provider. The token id settles it.
+    /// Visitors arriving together are issued rows in the same instant, so which of them the cap
+    /// displaces must not be left to the provider. The token id settles it.
     /// </summary>
     /// <remarks>
     /// The two ids differ only in their final byte, which .NET's <see cref="Guid"/> comparison and
-    /// PostgreSQL's bytewise <c>uuid</c> comparison order the same way — so the row this expects to
-    /// survive does not depend on which of them is running the sort.
+    /// PostgreSQL's bytewise <c>uuid</c> comparison order the same way, so the row expected to
+    /// survive does not depend on which of them runs the sort.
     /// </remarks>
     [Fact]
     public async Task CreateAsync_breaks_a_demo_subjects_issued_at_tie_by_token_id()
@@ -293,8 +291,9 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
         var lowerId = Guid.Parse("11111111-1111-1111-1111-111111111110");
         var higherId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        // Seeded lower id first: without the tiebreaker a stable sort leaves them in this order and
-        // displaces the wrong one of the pair.
+        // Seeded lower id first: without the tiebreaker, the InMemory provider's stable sort leaves
+        // them in this order and displaces the wrong one, so dropping it fails here. Against real
+        // PostgreSQL an untied order is unspecified, so this pins the tiebreaker, not its absence.
         AddToken(demoSubjectId, "tie-low", issuedAt: tied, tokenHash: "tie-low", id: lowerId);
         AddToken(demoSubjectId, "tie-high", issuedAt: tied, tokenHash: "tie-high", id: higherId);
 

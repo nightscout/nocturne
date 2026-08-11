@@ -78,10 +78,9 @@ public class SessionsController : ControllerBase
     /// session is allowed and acts as a logout.
     /// </summary>
     /// <remarks>
-    /// Refused for the demo tenant's shared visitor: every visitor is signed in as that one
-    /// subject, so the sessions here belong to the other people using the demo and revoking one
-    /// logs a stranger out. A visitor ending their own session signs out through
-    /// <c>POST /api/auth/oidc/logout</c>, which is untouched by this.
+    /// The demo's subject is shared, so these sessions belong to other visitors and revoking one
+    /// logs a stranger out. A visitor ending their own session uses
+    /// <c>POST /api/auth/oidc/logout</c>, which stays open.
     /// </remarks>
     /// <inheritdoc cref="IRefreshTokenService.RevokeSessionForSubjectAsync"/>
     [HttpDelete("{sessionId}")]
@@ -118,8 +117,7 @@ public class SessionsController : ControllerBase
     /// Revoke every session except the current one (log out everywhere else).
     /// </summary>
     /// <remarks>
-    /// Refused for the demo tenant's shared visitor: "everything else" on that subject is every
-    /// other visitor currently using the demo.
+    /// On the shared demo subject, "everything else" is every other visitor currently using it.
     /// </remarks>
     /// <inheritdoc cref="IRefreshTokenService.RevokeOtherSessionsForSubjectAsync"/>
     [HttpPost("revoke-others")]

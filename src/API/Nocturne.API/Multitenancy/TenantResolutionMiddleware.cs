@@ -91,12 +91,9 @@ public class TenantResolutionMiddleware
     ];
 
     /// <summary>
-    /// Whether a request path is served without a resolved tenant.
+    /// Whether a request path is served without a resolved tenant. Public so the authorization
+    /// guard tests can enumerate the same surface rather than restating these lists.
     /// </summary>
-    /// <remarks>
-    /// Exposed so the authorization guards can enumerate the same surface this middleware admits,
-    /// rather than restating the lists and drifting from them.
-    /// </remarks>
     public static bool IsTenantlessAllowed(string path) =>
         TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
         TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
