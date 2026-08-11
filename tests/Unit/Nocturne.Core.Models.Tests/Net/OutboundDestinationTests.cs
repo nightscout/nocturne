@@ -57,6 +57,8 @@ public class OutboundDestinationTests
     [InlineData("http://[::ffff:10.0.0.5]/")]          // IPv4-mapped
     [InlineData("http://[2002:0a00:0005::]/")]         // 6to4 wrapping 10.0.0.5
     [InlineData("http://[2001:0:0:0:0:0:f5ff:fffa]/")] // Teredo wrapping 10.0.0.5 (inverted)
+    [InlineData("http://[::10.0.0.5]/")]               // IPv4-compatible, the ::/96 form
+    [InlineData("http://[64:ff9b::10.0.0.5]/")]        // NAT64
     public async Task PubliclyRoutable_RefusesAPrivateIPv4WrappedInIPv6(string url) =>
         (await OutboundDestination.IsPubliclyRoutableAsync(url, resolver: Unresolvable))
             .Should().BeFalse("an embedded IPv4 address reaches the same host");
@@ -117,11 +119,23 @@ public class OutboundDestinationTests
             "http://metadata.example/", resolver: ResolvesTo("169.254.169.254")))
             .Should().BeFalse();
 
-    [Fact]
-    public async Task NotLinkLocal_RefusesLinkLocalWrappedInIPv6() =>
-        (await OutboundDestination.IsNotLinkLocalAsync(
-            "http://[::ffff:169.254.169.254]/", resolver: Unresolvable))
+    [Theory]
+    [InlineData("http://[::ffff:169.254.169.254]/")]   // IPv4-mapped
+    [InlineData("http://[::169.254.169.254]/")]        // IPv4-compatible, the ::/96 form
+    [InlineData("http://[64:ff9b::169.254.169.254]/")] // NAT64
+    [InlineData("http://[2002:a9fe:a9fe::]/")]         // 6to4
+    public async Task NotLinkLocal_RefusesLinkLocalWrappedInIPv6(string url) =>
+        (await OutboundDestination.IsNotLinkLocalAsync(url, resolver: Unresolvable))
             .Should().BeFalse();
+
+    [Theory]
+    [InlineData("http://[::1]:1337/")]
+    [InlineData("http://[::]:1337/")]
+    public async Task NotLinkLocal_LeavesTheUnspecifiedAndLoopbackAddressesAlone(string url) =>
+        // ::1 and :: sit inside ::/96 but are not a wrapped IPv4 address, and unwrapping them to
+        // 0.0.0.1 and 0.0.0.0 would judge something nobody wrote.
+        (await OutboundDestination.IsNotLinkLocalAsync(url, resolver: Unresolvable))
+            .Should().BeTrue();
 
     /// <summary>
     /// The pair is the point: AWS's IPv6 metadata address is unique-local, so refusing it cannot
