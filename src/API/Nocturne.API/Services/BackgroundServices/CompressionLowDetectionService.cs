@@ -35,6 +35,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<CompressionLowDetectionService> _logger;
 
+    public const string NotificationType = "glucose.compression_low_review";
+
+    public static string NotificationSourceId(DateOnly nightOf) => nightOf.ToString("yyyy-MM-dd");
+
     // Detection configuration - sleep hours are now read from settings
     private const int DetectionDelayMinutes = 15;
     internal const double MinDropRateMgDlPerMin = 2.0;
@@ -575,10 +579,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         // The metadata contains the count and nightOf for interpolation.
         await notificationService.CreateNotificationAsync(
             userId: userId,
-            type: "glucose.compression_low_review",
+            type: NotificationType,
             title: "compression_low_detected",
             subtitle: "compression_low_detected_subtitle",
-            sourceId: nightOf.ToString("yyyy-MM-dd"),
+            sourceId: NotificationSourceId(nightOf),
             actions: new List<NotificationActionDto>
             {
                 new()
