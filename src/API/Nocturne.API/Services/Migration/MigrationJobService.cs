@@ -53,6 +53,13 @@ public interface IMigrationJobService
 /// <seealso cref="IMigrationJobService"/>
 public class MigrationJobService : IMigrationJobService
 {
+    /// <summary>
+    /// Name of the HTTP client used to reach the Nightscout being migrated from. Registered by
+    /// <c>AddMigrationServices</c> with the connector guard, because the URL is supplied by a
+    /// tenant admin and fetched from inside the deployment's network.
+    /// </summary>
+    public const string HttpClientName = "NightscoutMigration";
+
     private readonly ILogger<MigrationJobService> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
@@ -235,7 +242,7 @@ public class MigrationJobService : IMigrationJobService
 
         using var scope = _serviceProvider.CreateScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient();
+        var httpClient = httpClientFactory.CreateClient(HttpClientName);
         httpClient.BaseAddress = new Uri(request.NightscoutUrl.TrimEnd('/'));
 
         // Add API secret header if provided (Nightscout expects the SHA1 hash)
@@ -713,7 +720,7 @@ internal class MigrationJob
 
         using var scope = CreateTenantScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient();
+        var httpClient = httpClientFactory.CreateClient(MigrationJobService.HttpClientName);
         httpClient.BaseAddress = new Uri(_request.NightscoutUrl!.TrimEnd('/'));
 
         // Add API secret header if provided (Nightscout expects the SHA1 hash)

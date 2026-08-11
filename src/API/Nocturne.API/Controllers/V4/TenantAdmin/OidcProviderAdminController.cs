@@ -189,7 +189,11 @@ public class OidcProviderAdminController : ControllerBase
         try
         {
             var discoveryUrl = request.IssuerUrl.TrimEnd('/') + "/.well-known/openid-configuration";
-            var httpClient = _httpClientFactory.CreateClient();
+
+            // The same guarded client the saved-provider path fetches discovery on. The default
+            // client is unguarded, and this endpoint hands the caller the status code for whatever
+            // it reached.
+            var httpClient = _httpClientFactory.CreateClient("OidcProvider");
             httpClient.Timeout = TimeSpan.FromSeconds(10);
 
             var response = await httpClient.GetAsync(discoveryUrl);

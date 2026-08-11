@@ -67,6 +67,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.Net;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -265,14 +266,24 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAuthHandler, AccessTokenHandler>(); // Priority 300
         services.AddSingleton<IAuthHandler, ApiKeyHandler>(); // Priority 400
 
-        // OIDC provider discovery HTTP client
+        // OIDC provider discovery HTTP client. The issuer URL is tenant configuration, so every
+        // fetch on it — discovery, token exchange, userinfo, and the unsaved-provider test button,
+        // which reports the status back to the caller — leaves the deployment's network aimed at a
+        // member-supplied host. Link-local is refused rather than the whole private range: a
+        // self-hosted Nocturne pointing at a Keycloak or Authentik on the same Docker network is an
+        // ordinary configuration, and refusing it would break the login path, not just the test.
+        // Redirects stay on, since an issuer that redirects its discovery path is ordinary; the pin
+        // applies to every hop's connect, so a 3xx cannot walk the check past a refused address.
         services.AddHttpClient(
             "OidcProvider",
             client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
             }
-        );
+        ).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
+        });
 
         // Rate limiting for OAuth endpoints
         services.AddRateLimiter(options =>
@@ -768,11 +779,14 @@ public static class ServiceRegistrationExtensions
         // only vet the URL it is given. Following redirects would walk straight past that
         // check — a target answering 307 with http://169.254.169.254/ or an internal
         // service name reaches it from inside the deployment network — so this client does
-        // not follow them.
+        // not follow them. The pinned connect opens the socket to the address the URL check
+        // judged, so the name cannot resolve to something else for the connect.
         services.AddHttpClient(WebhookRequestSender.HttpClientName)
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
+                ConnectCallback =
+                    new PinnedConnector(OutboundAddressPolicy.PubliclyRoutable).ConnectAsync,
             });
 
         // Condition evaluators. Scoped because SustainedEvaluator depends on the scoped
@@ -981,6 +995,15 @@ public static class ServiceRegistrationExtensions
             Nocturne.API.Services.Migration.MigrationJobService
         >();
         services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
+
+        // The Nightscout to migrate from is a URL a tenant admin posts, fetched from inside the
+        // deployment's network with the status code handed back and the body ingested. Same shape
+        // as a connector base URL, and a Nightscout on the LAN is the ordinary case, so it gets the
+        // same treatment: link-local refused at the socket, and redirects followed by the guard so
+        // the tenant's api-secret is dropped when a hop crosses origin. .NET's own redirect
+        // handling strips Authorization but not api-secret.
+        services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
+            .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");
 
         return services;
     }
