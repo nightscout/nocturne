@@ -62,8 +62,8 @@ public class MeterGlucoseController(IMeterGlucoseRepository repo)
 
     /// <summary>
     /// Maps a <see cref="UpsertMeterGlucoseRequest"/> to an updated <see cref="MeterGlucose"/>, preserving
-    /// immutable fields (<c>CorrelationId</c>, <c>LegacyId</c>, <c>CreatedAt</c>, and <c>AdditionalProperties</c>)
-    /// from the <paramref name="existing"/> record.
+    /// immutable fields (<c>CorrelationId</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PatientDeviceId</c>, and
+    /// <c>AdditionalProperties</c>) from the <paramref name="existing"/> record.
     /// </summary>
     /// <param name="id">The record ID being updated.</param>
     /// <param name="request">The update request.</param>
@@ -81,6 +81,7 @@ public class MeterGlucoseController(IMeterGlucoseRepository repo)
         CorrelationId = existing.CorrelationId,
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
+        PatientDeviceId = existing.PatientDeviceId,
         AdditionalProperties = existing.AdditionalProperties,
     };
 }

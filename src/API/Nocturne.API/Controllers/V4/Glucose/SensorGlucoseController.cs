@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
@@ -24,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
 /// <seealso cref="ICanonicalAlertEvaluator"/>
+/// <seealso cref="PatientDeviceAttribution"/>
 /// <seealso cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>
 [ApiController]
 [Tags("Glucose")]
@@ -34,6 +36,7 @@ public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
     ICanonicalAlertEvaluator alertEvaluator,
+    IPatientDeviceRepository patientDevices,
     IPatientDeviceStamper deviceStamper,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
@@ -84,9 +87,10 @@ public class SensorGlucoseController(
         await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
         // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped and only ever surface as pseudo-devices. Fills only when
-        // the record is unattributed; the canonical stream still governs reads.
-        await deviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
+        // direct API records stay unstamped and only ever surface as pseudo-devices. The canonical
+        // stream still governs reads.
+        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
+            return error;
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
@@ -128,9 +132,6 @@ public class SensorGlucoseController(
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
         AdditionalProperties = existing.AdditionalProperties,
-        // Preserve attribution across edits; the update DTO carries no device identity, so rebuilding
-        // the model without this would silently drop the record to a pseudo-device.
-        PatientDeviceId = existing.PatientDeviceId,
     };
 
     public override async Task<ActionResult<SensorGlucose>> Update(Guid id, [FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
@@ -146,8 +147,8 @@ public class SensorGlucoseController(
 
         await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
-        // No-op when attribution was preserved above; re-attributes only records still unstamped.
-        await deviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
+        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
+            return error;
 
         try
         {
@@ -186,7 +187,11 @@ public class SensorGlucoseController(
 
         // Attribute the batch before persisting (see Create). Per-record DataSource drives matching,
         // so no batch-level source is needed for a mixed-source bulk upload.
-        await deviceStamper.StampAsync(models, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
+        var attributionError = await PatientDeviceAttribution.ApplyManyAsync(
+            [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
+            patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
+        if (attributionError is not null)
+            return Problem(detail: attributionError, statusCode: 400, title: "Bad Request");
 
         var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         var createdArray = created.ToArray();
@@ -196,6 +201,19 @@ public class SensorGlucoseController(
             await alertEvaluator.EvaluateAsync(ct);
 
         return StatusCode(201, createdArray);
+    }
+
+    /// <summary>
+    /// Settles the reading's device attribution from the request. Returns a 400 result when an explicit
+    /// id doesn't resolve (tenant scoping makes a cross-tenant id indistinguishable from a nonexistent
+    /// one), or <c>null</c> on success.
+    /// </summary>
+    private async Task<ObjectResult?> ApplyAttributionAsync(SensorGlucose model, UpsertSensorGlucoseRequest request, Guid? existing, CancellationToken ct)
+    {
+        var error = await PatientDeviceAttribution.ApplyAsync(
+            model, request.PatientDeviceId, existing, patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, ct);
+
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     protected override async Task<SensorGlucose> OnAfterCreateAsync(SensorGlucose created, CancellationToken ct)

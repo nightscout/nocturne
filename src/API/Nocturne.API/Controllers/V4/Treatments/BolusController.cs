@@ -18,8 +18,8 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 ///
 /// On update, immutable fields (<see cref="Bolus.BolusType"/>, <see cref="Bolus.Kind"/>,
 /// <see cref="Bolus.LegacyId"/>, <see cref="Bolus.CreatedAt"/>, <see cref="Bolus.PumpRecordId"/>,
-/// <see cref="Bolus.DeviceId"/>, and <see cref="Bolus.AdditionalProperties"/>) are preserved from the
-/// existing record. <see cref="Bolus.CorrelationId"/> falls back to the existing value if the request
+/// <see cref="Bolus.DeviceId"/>, <see cref="Bolus.PatientDeviceId"/>, and
+/// <see cref="Bolus.AdditionalProperties"/>) are preserved from the existing record. <see cref="Bolus.CorrelationId"/> falls back to the existing value if the request
 /// does not supply one.
 /// </remarks>
 /// <seealso cref="IBolusRepository"/>
@@ -117,7 +117,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
     /// <summary>Maps an <see cref="UpdateBolusRequest"/> onto a <see cref="Bolus"/> domain model, preserving immutable fields from the existing record.</summary>
     /// <param name="id">The bolus ID to carry forward.</param>
     /// <param name="request">The inbound update request.</param>
-    /// <param name="existing">The existing <see cref="Bolus"/> record; immutable fields (<c>BolusType</c>, <c>Kind</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PumpRecordId</c>, <c>DeviceId</c>, <c>AdditionalProperties</c>) are copied from here.</param>
+    /// <param name="existing">The existing <see cref="Bolus"/> record; immutable fields (<c>BolusType</c>, <c>Kind</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PumpRecordId</c>, <c>DeviceId</c>, <c>PatientDeviceId</c>, <c>AdditionalProperties</c>) are copied from here.</param>
     /// <returns>A fully-populated <see cref="Bolus"/> ready for persistence.</returns>
     protected override Bolus MapUpdateToModel(Guid id, UpdateBolusRequest request, Bolus existing) => new()
     {
@@ -144,6 +144,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         CreatedAt = existing.CreatedAt,
         PumpRecordId = existing.PumpRecordId,
         DeviceId = existing.DeviceId,
+        PatientDeviceId = existing.PatientDeviceId,
         AdditionalProperties = existing.AdditionalProperties,
     };
 

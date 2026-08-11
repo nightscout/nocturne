@@ -193,6 +193,53 @@ public class DeviceEventControllerTests
     }
 
     [Fact]
+    public async Task Create_ClearsAttribution_AndSkipsStamping_WhenRequestSendsTheClearSentinel()
+    {
+        DeviceEvent? persisted = null;
+        SetupCreatePassthrough(m => persisted = m);
+
+        var result = await CreateController().Create(ValidRequest(Guid.Empty));
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        persisted.Should().NotBeNull();
+        persisted!.PatientDeviceId.Should().BeNull();
+        VerifyStamperNeverRan();
+    }
+
+    [Fact]
+    public async Task Update_ClearsAttribution_AndSkipsStamping_WhenRequestSendsTheClearSentinel()
+    {
+        var id = Guid.NewGuid();
+        var existing = new DeviceEvent
+        {
+            Id = id,
+            Timestamp = DateTime.UtcNow,
+            EventType = DeviceEventType.SiteChange,
+            PatientDeviceId = Guid.NewGuid(),
+        };
+        _repoMock.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        DeviceEvent? updated = null;
+        _repoMock
+            .Setup(r => r.UpdateAsync(id, It.IsAny<DeviceEvent>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, DeviceEvent, WriteOrigin, CancellationToken>((_, m, _, _) => updated = m)
+            .ReturnsAsync((Guid _, DeviceEvent m, WriteOrigin _, CancellationToken _) => m);
+
+        var result = await CreateController().Update(id, ValidRequest(Guid.Empty));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        updated.Should().NotBeNull();
+        updated!.PatientDeviceId.Should().BeNull();
+        VerifyStamperNeverRan();
+    }
+
+    private void VerifyStamperNeverRan() =>
+        _deviceStamperMock.Verify(s => s.StampAsync(
+            It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+            It.IsAny<IReadOnlyList<DeviceCategory>>(),
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+
+    [Fact]
     public async Task GetAll_PassesPatientDeviceIdFilter_ToRepository()
     {
         var patientDeviceId = Guid.NewGuid();

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -28,6 +29,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// as are <see cref="DeviceEvent.DeviceId"/> and <see cref="DeviceEvent.PatientDeviceId"/>
 /// when the request carries no explicit <c>patientDeviceId</c>.
 /// </remarks>
+/// <seealso cref="PatientDeviceAttribution"/>
 /// <seealso cref="IDeviceEventRepository"/>
 /// <seealso cref="DeviceEvent"/>
 /// <seealso cref="UpsertDeviceEventRequest"/>
@@ -87,12 +89,10 @@ public class DeviceEventController(
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        if (await ResolveExplicitPatientDeviceAsync(request, ct) is { } error)
-            return error;
-
         // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped. No-op when the request carried an explicit patientDeviceId.
-        await deviceStamper.StampAsync([model], DeviceAttributionCategories.DeviceEvent(model.EventType), model.DataSource, ct);
+        // direct API records stay unstamped.
+        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
+            return error;
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
@@ -110,11 +110,8 @@ public class DeviceEventController(
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        if (await ResolveExplicitPatientDeviceAsync(request, ct) is { } error)
+        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
             return error;
-
-        // No-op when attribution was preserved or explicitly set above; re-attributes only records still unstamped.
-        await deviceStamper.StampAsync([model], DeviceAttributionCategories.DeviceEvent(model.EventType), model.DataSource, ct);
 
         try
         {
@@ -132,7 +129,6 @@ public class DeviceEventController(
         Timestamp = request.Timestamp.UtcDateTime,
         UtcOffset = request.UtcOffset,
         Device = request.Device,
-        PatientDeviceId = request.PatientDeviceId,
         App = request.App,
         DataSource = request.DataSource,
         EventType = request.EventType,
@@ -146,10 +142,9 @@ public class DeviceEventController(
         Timestamp = request.Timestamp.UtcDateTime,
         UtcOffset = request.UtcOffset,
         Device = request.Device,
-        // Preserve attribution across edits unless the request explicitly re-links the event; rebuilding
-        // the model without this would silently drop the stamped device link.
+        // Preserve the legacy device link across edits; rebuilding the model without this would
+        // silently drop it. PatientDeviceId is settled by ApplyAttributionAsync.
         DeviceId = existing.DeviceId,
-        PatientDeviceId = request.PatientDeviceId ?? existing.PatientDeviceId,
         App = request.App,
         DataSource = request.DataSource,
         EventType = request.EventType,
@@ -162,19 +157,16 @@ public class DeviceEventController(
     };
 
     /// <summary>
-    /// Validates an explicit <see cref="UpsertDeviceEventRequest.PatientDeviceId"/> against the caller's
-    /// registered devices. Returns a 400 result when the id doesn't resolve (tenant scoping makes a
-    /// cross-tenant id indistinguishable from a nonexistent one), or <c>null</c> when valid or absent.
+    /// Settles the event's device attribution from the request. Returns a 400 result when an explicit
+    /// id doesn't resolve (tenant scoping makes a cross-tenant id indistinguishable from a nonexistent
+    /// one), or <c>null</c> on success.
     /// </summary>
-    private async Task<ObjectResult?> ResolveExplicitPatientDeviceAsync(UpsertDeviceEventRequest request, CancellationToken ct)
+    private async Task<ObjectResult?> ApplyAttributionAsync(DeviceEvent model, UpsertDeviceEventRequest request, Guid? existing, CancellationToken ct)
     {
-        if (request.PatientDeviceId is not { } patientDeviceId)
-            return null;
+        var error = await PatientDeviceAttribution.ApplyAsync(
+            model, request.PatientDeviceId, existing, patientDevices, deviceStamper, DeviceAttributionCategories.DeviceEvent(model.EventType), ct);
 
-        var device = await patientDevices.GetByIdAsync(patientDeviceId, ct);
-        return device is null
-            ? Problem(detail: $"patientDeviceId '{patientDeviceId}' does not resolve to a registered patient device", statusCode: 400, title: "Bad Request")
-            : null;
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     /// <summary>

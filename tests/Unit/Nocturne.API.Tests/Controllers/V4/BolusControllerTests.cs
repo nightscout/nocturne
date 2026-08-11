@@ -150,6 +150,27 @@ public class BolusControllerTests
     }
 
     [Fact]
+    public async Task Update_PreservesExistingPatientDeviceId()
+    {
+        var patientDeviceId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        Bolus? captured = null;
+
+        _repoMock
+            .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Bolus { Id = id, Timestamp = DateTime.UtcNow, Insulin = 2.0, PatientDeviceId = patientDeviceId });
+        _repoMock
+            .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Bolus, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, Bolus b, WriteOrigin origin, CancellationToken _) => b);
+
+        await CreateController().Update(id, new UpdateBolusRequest { Timestamp = DateTimeOffset.UtcNow, Insulin = 3.0 });
+
+        captured.Should().NotBeNull();
+        captured!.PatientDeviceId.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
     public async Task Create_WithPatientInsulinId_EnrichesInsulinContext()
     {
         var insulinId = Guid.NewGuid();
