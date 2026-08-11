@@ -14,7 +14,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Services;
 
 /// <summary>
-/// Integration tests for Phase 3 calculation caching features
+/// Tests for Phase 3 calculation caching features
 /// Tests expensive IOB and profile calculations with in-memory caching
 /// </summary>
 public class Phase3CalculationCacheTests
@@ -62,7 +62,7 @@ public class Phase3CalculationCacheTests
     #region IOB Calculation Caching Tests
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     [Trait("Category", "IOB")]
     public async Task CachedIobService_CalculateTotalAsync_CacheHit_ReturnsCachedResult()
@@ -135,7 +135,7 @@ public class Phase3CalculationCacheTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     [Trait("Category", "IOB")]
     public async Task CachedIobService_InvalidateIobCache_RemovesCorrectPattern()
@@ -167,7 +167,7 @@ public class Phase3CalculationCacheTests
     #region Profile Calculation Caching Tests
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     [Trait("Category", "Profile")]
     public async Task CachedProfileService_GetProfileCalculationsAsync_CacheHit_ReturnsCachedResult()
@@ -243,7 +243,7 @@ public class Phase3CalculationCacheTests
     #region Cache Invalidation Tests
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     [Trait("Category", "Invalidation")]
     public async Task CacheInvalidationService_InvalidateForNewInsulinTreatment_InvalidatesCorrectPatterns()
@@ -289,7 +289,7 @@ public class Phase3CalculationCacheTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     [Trait("Category", "Invalidation")]
     public async Task CacheInvalidationService_InvalidateForNewGlucoseEntry_InvalidatesCorrectPatterns()

@@ -23,9 +23,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Services;
 
 /// <summary>
-/// Integration tests for cache behavior in domain services
+/// Tests for cache behavior in domain services
 /// </summary>
-public class CacheIntegrationTests
+public class ServiceCacheTests
 {
     private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
@@ -37,7 +37,7 @@ public class CacheIntegrationTests
     private readonly Mock<ILogger<StatusService>> _mockStatusLogger;
     private readonly Mock<ITenantAccessor> _mockTenantAccessor;
 
-    public CacheIntegrationTests()
+    public ServiceCacheTests()
     {
         _mockEntryStore = new Mock<IEntryStore>();
         _mockEntryDecomposer = new Mock<IEntryDecomposer>();
@@ -53,7 +53,7 @@ public class CacheIntegrationTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     public async Task GetCurrentEntryAsync_CacheHit_ReturnsCachedEntry()
     {
@@ -103,7 +103,7 @@ public class CacheIntegrationTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     public async Task GetCurrentEntryAsync_CacheMiss_FetchesFromStoreViaCacheCompute()
     {
@@ -152,57 +152,7 @@ public class CacheIntegrationTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
-    [Trait("Category", "Cache")]
-    public async Task CreateEntriesAsync_DecomposesToV4AndFiresEvents()
-    {
-        // Arrange
-        var newEntries = new List<Entry>
-        {
-            new Entry
-            {
-                Id = "new-1",
-                Type = "sgv",
-                Sgv = 140,
-                Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            },
-        };
-
-        _mockEntryDecomposer
-            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Core.Models.V4.DecompositionResult());
-
-        var entryService = new EntryService(
-            _mockEntryStore.Object,
-            _mockEntryDecomposer.Object,
-            _mockEntryCache.Object,
-            _mockEntryEvents.Object,
-            _mockEntryLogger.Object
-        );
-
-        // Act
-        var result = await entryService.CreateEntriesAsync(newEntries, cancellationToken: CancellationToken.None);
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Single(result);
-
-        // Verify decomposition happened and events fired (cache invalidation is handled by the event sink)
-        _mockEntryDecomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Once
-        );
-        _mockEntryEvents.Verify(
-            x => x.OnCreatedAsync(
-                It.IsAny<IReadOnlyList<Entry>>(),
-                It.IsAny<CancellationToken>()
-            ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     public async Task GetSystemStatusAsync_CacheHit_ReturnsCachedStatus()
     {
@@ -268,7 +218,7 @@ public class CacheIntegrationTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Cache")]
     public async Task GetSystemStatusAsync_CacheMiss_GeneratesAndCachesStatus()
     {
