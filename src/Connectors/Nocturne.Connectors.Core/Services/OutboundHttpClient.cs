@@ -9,29 +9,24 @@ namespace Nocturne.Connectors.Core.Services;
 /// <see cref="PinnedConnector"/>.
 /// </summary>
 /// <remarks>
-/// Nearly every connector client comes from <see cref="IHttpClientFactory"/> via
-/// <c>ConfigureConnectorClient</c>, and <c>ConnectorClientGuardCoverageTests</c> holds that line.
-/// The vendor login flows are the exception: CareLink's Auth0 and Tandem's OIDC sign-in both carry
-/// session cookies across a multi-step redirect chain, and a factory client shares its handler —
-/// and therefore its <see cref="CookieContainer"/> — between every caller for the handler's
-/// lifetime, so two tenants signing in at once would trade session cookies. They get an instance
-/// per attempt instead, from here, so that "constructs its own client" still means "is pinned".
+/// Why the vendor login flows are exempt from <see cref="IHttpClientFactory"/>: CareLink's Auth0 and
+/// Tandem's OIDC sign-in carry session cookies across a multi-step redirect chain, and a factory
+/// client shares its handler — and therefore its <see cref="CookieContainer"/> — between every
+/// caller for the handler's lifetime, so two tenants signing in at once would trade session cookies.
+/// They get an instance per attempt from here instead, so that "constructs its own client" still
+/// means "is pinned".
 /// <para>
-/// No <see cref="LinkLocalGuardHandler"/>: these clients walk their own redirect chains, and the
-/// address policy is applied by the transport on each hop's connect rather than by a handler that
-/// only sees the first URI.
+/// No <see cref="LinkLocalGuardHandler"/>: these clients walk their own redirect chains, so the
+/// policy is applied by the transport on each hop's connect rather than by a handler that only sees
+/// the first URI.
 /// </para>
 /// </remarks>
 public static class OutboundHttpClient
 {
     /// <summary>
-    /// A client with a private cookie jar, refusing link-local destinations at the socket.
+    /// A client with a private cookie jar, refusing link-local destinations at the socket. Pass
+    /// <paramref name="transport"/> to substitute a fake; production leaves it null.
     /// </summary>
-    /// <param name="followRedirects">Whether the transport follows 3xx itself.</param>
-    /// <param name="timeout">Request timeout. Defaults to 2 minutes.</param>
-    /// <param name="transport">
-    /// Overrides the pinned transport. Tests pass a fake; production leaves it null.
-    /// </param>
     public static HttpClient CreateIsolated(
         bool followRedirects,
         TimeSpan? timeout = null,

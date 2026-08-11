@@ -266,14 +266,10 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAuthHandler, AccessTokenHandler>(); // Priority 300
         services.AddSingleton<IAuthHandler, ApiKeyHandler>(); // Priority 400
 
-        // OIDC provider discovery HTTP client. The issuer URL is tenant configuration, so every
-        // fetch on it — discovery, token exchange, userinfo, and the unsaved-provider test button,
-        // which reports the status back to the caller — leaves the deployment's network aimed at a
-        // member-supplied host. Link-local is refused rather than the whole private range: a
-        // self-hosted Nocturne pointing at a Keycloak or Authentik on the same Docker network is an
-        // ordinary configuration, and refusing it would break the login path, not just the test.
-        // Redirects stay on, since an issuer that redirects its discovery path is ordinary; the pin
-        // applies to every hop's connect, so a 3xx cannot walk the check past a refused address.
+        // OIDC provider discovery HTTP client. The issuer URL is tenant configuration, and the
+        // unsaved-provider test button hands the caller the status of whatever it reached. Redirects
+        // stay on — an issuer that redirects its discovery path is ordinary, and the pin applies to
+        // every hop's connect anyway.
         services.AddHttpClient(
             "OidcProvider",
             client =>
@@ -775,12 +771,10 @@ public static class ServiceRegistrationExtensions
         // Webhook infrastructure (reused by new alert engine)
         services.AddScoped<WebhookRequestSender>();
 
-        // Webhook targets are supplied by whoever is signed in, and OutboundDestination can
-        // only vet the URL it is given. Following redirects would walk straight past that
-        // check — a target answering 307 with http://169.254.169.254/ or an internal
-        // service name reaches it from inside the deployment network — so this client does
-        // not follow them. The pinned connect opens the socket to the address the URL check
-        // judged, so the name cannot resolve to something else for the connect.
+        // Webhook targets are supplied by whoever is signed in. Nothing re-checks a hop here, so
+        // redirects are off outright rather than followed by a guard — a target answering 307 with
+        // http://169.254.169.254/ or an internal service name would otherwise be fetched from
+        // inside the deployment network.
         services.AddHttpClient(WebhookRequestSender.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
@@ -996,11 +990,9 @@ public static class ServiceRegistrationExtensions
         >();
         services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
 
-        // The Nightscout to migrate from is a URL a tenant admin posts, fetched from inside the
-        // deployment's network with the status code handed back and the body ingested. Same shape
-        // as a connector base URL, and a Nightscout on the LAN is the ordinary case, so it gets the
-        // same treatment: link-local refused at the socket, and redirects followed by the guard so
-        // the tenant's api-secret is dropped when a hop crosses origin. .NET's own redirect
+        // The Nightscout to migrate from is a tenant-admin-supplied URL, the same shape as a
+        // connector base URL, so it takes the connector client. That also puts redirects under the
+        // guard, which drops the tenant's api-secret when a hop crosses origin — .NET's own redirect
         // handling strips Authorization but not api-secret.
         services.AddHttpClient(Nocturne.API.Services.Migration.MigrationJobService.HttpClientName)
             .ConfigureConnectorClient(baseUrl: null, userAgent: "Nocturne-Migration/1.0");

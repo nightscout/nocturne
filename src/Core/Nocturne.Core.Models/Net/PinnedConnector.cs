@@ -12,8 +12,7 @@ namespace Nocturne.Core.Models.Net;
 /// once for the decision, once for the connect. A short-TTL name that answers with an allowed
 /// address for the first lookup and <c>169.254.169.254</c> for the second is reached, and neither
 /// resolution is wrong — the check simply did not constrain the socket. Here the resolution and the
-/// decision are the same one, and the socket is opened to the address that was judged, so the
-/// destination cannot change in between.
+/// decision are the same one.
 /// <para>
 /// The whole connect is refused when <em>any</em> resolved address fails the policy, matching
 /// <see cref="OutboundDestination.IsAllowedAsync"/>: a name answering with one allowed and one
@@ -29,12 +28,8 @@ public sealed class PinnedConnector(
     OutboundAddressPolicy policy,
     OutboundDestination.AddressResolver? resolver = null)
 {
-    /// <summary>The rule every address is held to before a socket is opened to it.</summary>
     public OutboundAddressPolicy Policy { get; } = policy;
 
-    /// <summary>
-    /// Resolves the host, applies <see cref="Policy"/>, and connects to a surviving address.
-    /// </summary>
     public async ValueTask<Stream> ConnectAsync(
         SocketsHttpConnectionContext context, CancellationToken cancellationToken)
     {
@@ -62,9 +57,9 @@ public sealed class PinnedConnector(
     }
 
     /// <summary>
-    /// Tries each address in turn, as the transport's own connect does for a multi-homed or
-    /// dual-stack host — a v6 answer that nothing on the path can reach must not take the whole
-    /// connection down when a v4 answer would have worked.
+    /// Each address is tried in turn, as the transport's own connect would: a v6 answer that
+    /// nothing on the path can reach must not take the connection down when a v4 answer beside it
+    /// would have worked.
     /// </summary>
     private static async ValueTask<Stream> ConnectToFirstReachableAsync(
         IReadOnlyList<IPAddress> addresses, int port, CancellationToken cancellationToken)

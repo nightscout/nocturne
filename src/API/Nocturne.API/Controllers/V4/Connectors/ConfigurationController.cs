@@ -313,9 +313,7 @@ public class ConfigurationController : ControllerBase
     /// <c>Scheme == "mysite.example"</c> and an empty host, and <c>"localhost:1337"</c> the same way
     /// — 1337 is Nightscout's default self-hosted port, so that form is common. So once http/https
     /// has been accepted above, what is left has to look like a host: no leading slash, and no
-    /// colon except the one introducing a port. Testing for <c>"://"</c> instead let the
-    /// single-slash <c>file:/etc/passwd</c> onto the prepend path, where it parses as a host named
-    /// <c>file</c> and was stored.
+    /// colon except the one introducing a port.
     /// </para>
     /// <para>
     /// Embedded credentials are refused because this value is stored in the connector's runtime
@@ -347,9 +345,9 @@ public class ConfigurationController : ControllerBase
     }
 
     /// <summary>
-    /// True when the first colon outside a bracketed IPv6 literal is followed by a port: digits up
-    /// to the end of the value or the first path separator. Anything else in front of a colon is a
-    /// scheme, since a scheme may contain the dots and dashes a hostname does.
+    /// A scheme and a <c>host:port</c> cannot be told apart by charset — a scheme may contain the
+    /// dots and dashes a hostname does — so what follows the first colon decides: digits to the end
+    /// of the value or to the first path separator, and it is a port.
     /// </summary>
     private static bool ColonIntroducesOnlyAPort(string candidate)
     {

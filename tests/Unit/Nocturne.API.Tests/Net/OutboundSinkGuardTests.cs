@@ -116,9 +116,9 @@ public class OutboundSinkGuardTests
     }
 
     /// <summary>
-    /// Hands out clients that answer everything with an empty 200, recording the name each was
-    /// asked for. The unnamed default arrives as <see cref="Options.DefaultName"/>, so a call site
-    /// that never named a client is distinguishable from one that did.
+    /// Answers everything with an empty 200, recording the name each client was asked for. The
+    /// unnamed default arrives as <see cref="Options.DefaultName"/>, so a call site that never named
+    /// a client is distinguishable from one that did.
     /// </summary>
     private sealed class RecordingClientFactory : IHttpClientFactory
     {
@@ -141,7 +141,6 @@ public class OutboundSinkGuardTests
         }
     }
 
-    /// <summary>What a registered client's handler pipeline turned out to be.</summary>
     private sealed record ClientPipeline(
         IList<DelegatingHandler> AdditionalHandlers,
         HttpMessageHandler Primary)

@@ -54,9 +54,8 @@ public interface IMigrationJobService
 public class MigrationJobService : IMigrationJobService
 {
     /// <summary>
-    /// Name of the HTTP client used to reach the Nightscout being migrated from. Registered by
-    /// <c>AddMigrationServices</c> with the connector guard, because the URL is supplied by a
-    /// tenant admin and fetched from inside the deployment's network.
+    /// Registered by <c>AddMigrationServices</c> as a connector client — guarded and pinned. Asking
+    /// the factory for the unnamed default instead gets neither.
     /// </summary>
     public const string HttpClientName = "NightscoutMigration";
 

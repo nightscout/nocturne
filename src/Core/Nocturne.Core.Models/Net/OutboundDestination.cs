@@ -13,29 +13,14 @@ namespace Nocturne.Core.Models.Net;
 /// learns the outcome — a webhook test reports per-URL success, a connector reports its sync
 /// status. That makes a user-supplied URL a request-forgery primitive.
 /// <para>
-/// Two different properties are needed, because the two sinks have different legitimate ranges:
+/// Two different properties are needed, because the sinks have different legitimate ranges; which
+/// range belongs to which sink is on <see cref="OutboundAddressPolicy"/>.
 /// </para>
-/// <list type="bullet">
-/// <item><see cref="IsPubliclyRoutableAsync"/> — for alert webhooks, which notify a third-party
-/// service on the internet. Nothing private is a legitimate target.</item>
-/// <item><see cref="IsNotLinkLocalAsync"/> — for connector base URLs. A self-hosted deployment
-/// legitimately points a connector with a member-supplied base URL (Nightscout, remote Nocturne,
-/// MyLife) at a private address: a Nightscout on the same Docker network or LAN is an ordinary
-/// migration setup, so requiring public routability there would break real installs. Link-local is
-/// refused regardless, because no connector has any reason to reach <c>169.254.169.254</c> and that
-/// address is where cloud credentials live. Applied by
-/// <c>Nocturne.Connectors.Core.Services.LinkLocalGuardHandler</c>, which is installed per connector
-/// HTTP client — see the coverage note there.</item>
-/// </list>
 /// <para>
-/// Every resolved address is checked, so a name pointing at a refused address is refused too.
-/// Checking a URL here and then handing the same URL to the transport would leave the name free to
-/// resolve differently for the connect than it did for the check, so the connect is pinned to a
-/// checked address by <see cref="PinnedConnector"/>, installed as the
-/// <c>SocketsHttpHandler.ConnectCallback</c> on each of these clients. The check these methods
-/// perform is therefore the early, legible refusal; the pin is what the socket obeys. Resolution
-/// failure is refused rather than allowed: a name this process cannot resolve may still resolve for
-/// the HTTP stack.
+/// Every resolved address is checked, so a name pointing at a refused address is refused too; the
+/// socket the request then opens is pinned to a checked address by <see cref="PinnedConnector"/>.
+/// Resolution failure is refused rather than allowed: a name this process cannot resolve may still
+/// resolve for the HTTP stack.
 /// </para>
 /// </remarks>
 public static class OutboundDestination
@@ -75,7 +60,8 @@ public static class OutboundDestination
 
     /// <summary>
     /// True when <paramref name="url"/> is an absolute http(s) URL and no resolved address is
-    /// link-local. Private and loopback addresses are permitted — see the type remarks.
+    /// link-local. Private and loopback addresses are permitted — see
+    /// <see cref="OutboundAddressPolicy.NotLinkLocal"/>.
     /// </summary>
     public static Task<bool> IsNotLinkLocalAsync(
         string url, CancellationToken ct = default, AddressResolver? resolver = null) =>
@@ -107,9 +93,8 @@ public static class OutboundDestination
     }
 
     /// <summary>
-    /// True when <paramref name="address"/> satisfies <paramref name="policy"/>. The single place
-    /// an address is judged, shared by the URL checks above and by <see cref="PinnedConnector"/>,
-    /// which applies the same rule to the address it is about to open a socket to.
+    /// The single place an address is judged, shared by the URL checks above and by
+    /// <see cref="PinnedConnector"/>.
     /// </summary>
     public static bool IsAllowed(IPAddress address, OutboundAddressPolicy policy) => policy switch
     {

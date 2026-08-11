@@ -31,7 +31,6 @@ public partial class CareLinkAuthFlowService : IDisposable
 
         // Auth0 PKCE flows require manual redirect inspection to capture the ?code= parameter
         // before the final redirect lands on a custom scheme URI the HttpClient cannot follow.
-        // AllowAutoRedirect = false ensures we see every 302 response.
         _httpClient = OutboundHttpClient.CreateIsolated(followRedirects: false, transport: handler);
 
         // CareLink's Auth0 tenant sits behind CloudFront, whose WAF rejects any request that carries

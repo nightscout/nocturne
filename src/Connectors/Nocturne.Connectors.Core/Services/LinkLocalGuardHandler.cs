@@ -11,16 +11,8 @@ namespace Nocturne.Connectors.Core.Services;
 /// Connector base URLs come from tenant configuration — a value someone signed in supplied
 /// through <c>PUT /api/v4/connectors/config/{connectorName}</c> — and the request is sent from
 /// inside the deployment's network, with the outcome reported back through connector status. That
-/// makes the connector fetch a request-forgery primitive. The Nightscout migration URL is the same
-/// shape and carries the same guard.
-/// <para>
-/// Only link-local is refused, not every private range. A self-hosted deployment legitimately
-/// points a connector with a member-supplied base URL — Nightscout, remote Nocturne, MyLife — at a
-/// private address, and a Nightscout on the same Docker network or LAN is the ordinary migration
-/// setup, so requiring public routability would break real installs. <c>169.254.169.254</c> and
-/// its neighbours have no legitimate connector use and are where cloud instance credentials live,
-/// so that range is refused for every tenant regardless of what was configured.
-/// </para>
+/// makes the connector fetch a request-forgery primitive. Why the rule is link-local rather than
+/// the whole private range is on <see cref="OutboundAddressPolicy.NotLinkLocal"/>.
 /// <para>
 /// <b>Redirects are followed here, not by the transport.</b> Checking only
 /// <see cref="HttpRequestMessage.RequestUri"/> and letting the primary handler follow 3xx would
@@ -54,10 +46,8 @@ namespace Nocturne.Connectors.Core.Services;
 /// fails if one registers a client without it.
 /// </para>
 /// <para>
-/// This handler decides; <see cref="PinnedConnector"/> on the same client's transport is what the
-/// socket obeys. The check here happens before a body is sent and produces the message the caller
-/// reads, but it judges a name — the pinned connect judges the address it is about to open, which
-/// is what closes the gap between the two resolutions.
+/// Refuses early and legibly, before a body is sent; <see cref="PinnedConnector"/> on the same
+/// client's transport is what the socket obeys.
 /// </para>
 /// </remarks>
 public sealed class LinkLocalGuardHandler : DelegatingHandler

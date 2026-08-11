@@ -1,8 +1,7 @@
 namespace Nocturne.Core.Models.Net;
 
 /// <summary>
-/// The address rules an outbound destination is held to. The two sinks have different legitimate
-/// ranges — see <see cref="OutboundDestination"/>.
+/// The address rules an outbound destination is held to.
 /// </summary>
 public enum OutboundAddressPolicy
 {
@@ -13,8 +12,11 @@ public enum OutboundAddressPolicy
     PubliclyRoutable,
 
     /// <summary>
-    /// No address may be link-local. For connector base URLs and other member-supplied endpoints
-    /// that a self-hosted deployment legitimately puts on its own network.
+    /// No address may be link-local. For member-supplied endpoints — a connector base URL, a
+    /// Nightscout to migrate from, an OIDC issuer — that a self-hosted deployment legitimately puts
+    /// on its own LAN or Docker network, so refusing the whole private range would break ordinary
+    /// setups. Link-local is where the cloud metadata endpoints live, and nothing a member supplies
+    /// has a reason to be there.
     /// </summary>
     NotLinkLocal,
 }
