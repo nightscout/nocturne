@@ -34,6 +34,11 @@ public class ConnectorExecutionService(
     // Optional dependency
 
     /// <summary>
+    /// Lower bound of a sync window when the caller supplies no explicit start.
+    /// </summary>
+    private static readonly TimeSpan DefaultSyncWindow = TimeSpan.FromHours(3);
+
+    /// <summary>
     /// Executes the connector synchronization operation
     /// </summary>
     /// <param name="config">Connect configuration</param>
@@ -41,6 +46,7 @@ public class ConnectorExecutionService(
     /// <param name="once">Whether to run only once</param>
     /// <param name="interval">Sync interval in minutes for daemon mode</param>
     /// <param name="dryRun">Whether this is a dry run</param>
+    /// <param name="since">Start of the sync window; defaults to a rolling three-hour lookback</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if successful, false otherwise</returns>
     public async Task<bool> ExecuteConnectorAsync(
@@ -49,6 +55,7 @@ public class ConnectorExecutionService(
         bool once = false,
         int interval = 5,
         bool dryRun = false,
+        DateTime? since = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -111,6 +118,7 @@ public class ConnectorExecutionService(
                     connectorConfig,
                     interval,
                     dryRun,
+                    since,
                     cancellationToken
                 );
             }
@@ -120,6 +128,7 @@ public class ConnectorExecutionService(
                     connector,
                     connectorConfig,
                     dryRun,
+                    since,
                     cancellationToken
                 );
             }
@@ -143,6 +152,7 @@ public class ConnectorExecutionService(
         IConnectorConfiguration config,
         int intervalMinutes,
         bool dryRun,
+        DateTime? since,
         CancellationToken cancellationToken
     )
     {
@@ -163,23 +173,10 @@ public class ConnectorExecutionService(
                 _logger.LogInformation("Starting sync operation #{SyncCount}", syncCount);
 
                 var syncStartTime = DateTime.UtcNow;
-                bool syncResult;
 
-                if (dryRun)
-                {
-                    _logger.LogInformation("Dry run mode - fetching data without uploading");
-                    var entries = await connector.FetchGlucoseDataAsync();
-                    var entryCount = System.Linq.Enumerable.Count(entries);
-                    _logger.LogInformation(
-                        "Dry run: Would have uploaded {Count} entries",
-                        entryCount
-                    );
-                    syncResult = true;
-                }
-                else
-                {
-                    syncResult = await PerformSyncAsync(connector, config);
-                }
+                var syncResult = dryRun
+                    ? await RunDryRunAsync(connector, since)
+                    : await PerformSyncAsync(connector, config, since);
 
                 var syncDuration = DateTime.UtcNow - syncStartTime;
                 lastSyncTime = DateTime.UtcNow;
@@ -283,6 +280,7 @@ public class ConnectorExecutionService(
         IConnectorService<IConnectorConfiguration> connector,
         IConnectorConfiguration config,
         bool dryRun,
+        DateTime? since,
         CancellationToken cancellationToken
     )
     {
@@ -290,18 +288,9 @@ public class ConnectorExecutionService(
 
         try
         {
-            if (dryRun)
-            {
-                _logger.LogInformation("Dry run mode - fetching data without uploading");
-                var entries = await connector.FetchGlucoseDataAsync();
-                var entryCount = System.Linq.Enumerable.Count(entries);
-                _logger.LogInformation("Dry run: Would have uploaded {Count} entries", entryCount);
-                return true;
-            }
-            else
-            {
-                return await PerformSyncAsync(connector, config);
-            }
+            return dryRun
+                ? await RunDryRunAsync(connector, since)
+                : await PerformSyncAsync(connector, config, since);
         }
         catch (Exception ex)
         {
@@ -311,11 +300,42 @@ public class ConnectorExecutionService(
     }
 
     /// <summary>
+    /// Fetches over the sync window and reports what a real sync would have uploaded.
+    /// </summary>
+    private async Task<bool> RunDryRunAsync(
+        IConnectorService<IConnectorConfiguration> connector,
+        DateTime? since
+    )
+    {
+        var windowStart = ResolveWindowStart(since);
+        _logger.LogInformation(
+            "Dry run mode - fetching data since {Since:o} without uploading",
+            windowStart
+        );
+
+        var entries = await connector.FetchGlucoseDataAsync(windowStart);
+        _logger.LogInformation(
+            "Dry run: Would have uploaded {Count} entries since {Since:o}",
+            entries.Count(),
+            windowStart
+        );
+        return true;
+    }
+
+    /// <summary>
+    /// Resolved per cycle so that, absent an explicit start, daemon mode keeps a rolling
+    /// window rather than one that grows for the lifetime of the process.
+    /// </summary>
+    private static DateTime ResolveWindowStart(DateTime? since) =>
+        since ?? DateTime.UtcNow - DefaultSyncWindow;
+
+    /// <summary>
     /// Performs the actual sync operation using the connector's SyncDataAsync method
     /// </summary>
     private async Task<bool> PerformSyncAsync(
         IConnectorService<IConnectorConfiguration> connector,
-        IConnectorConfiguration config
+        IConnectorConfiguration config,
+        DateTime? since
     )
     {
         try
@@ -327,7 +347,7 @@ public class ConnectorExecutionService(
             var request = new SyncRequest
             {
                 DataTypes = connector.SupportedDataTypes,
-                From = DateTime.UtcNow.AddHours(-3), // Default 3-hour lookback
+                From = ResolveWindowStart(since),
                 To = DateTime.UtcNow,
             };
 
@@ -404,7 +424,7 @@ public class ConnectorExecutionService(
     /// <summary>
     /// Creates the appropriate connector service based on the configuration
     /// </summary>
-    private IConnectorService<IConnectorConfiguration>? CreateConnectorService(
+    protected virtual IConnectorService<IConnectorConfiguration>? CreateConnectorService(
         IConnectorConfiguration config
     )
     {

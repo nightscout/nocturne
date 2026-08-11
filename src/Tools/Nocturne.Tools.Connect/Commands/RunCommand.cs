@@ -32,6 +32,10 @@ public sealed class RunSettings : CommandSettings
     [Description("Test run without uploading data to Nightscout")]
     public bool DryRun { get; init; }
 
+    [CommandOption("-s|--since <TIMESTAMP>")]
+    [Description("Start of the sync window; defaults to a rolling three-hour lookback")]
+    public DateTime? Since { get; init; }
+
     [CommandOption("-v|--verbose")]
     [Description("Enable verbose logging")]
     public bool Verbose { get; init; }
@@ -109,6 +113,7 @@ public class RunCommand : AsyncCommand<RunSettings>
                 once: settings.Once,
                 interval: settings.Interval,
                 dryRun: settings.DryRun,
+                since: settings.Since?.ToUniversalTime(),
                 cancellationToken: CancellationToken.None
             );
 
