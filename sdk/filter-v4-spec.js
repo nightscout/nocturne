@@ -143,15 +143,28 @@ const output = {
   },
 };
 
-// Remove security schemes not relevant to SDK consumers (keep Bearer)
+// Keep only the schemes SDK consumers can present — an OAuth access token or a
+// pasted bearer token — and drop the requirements that name a removed scheme so
+// no operation references a scheme the spec no longer defines.
+const sdkSchemes = new Set();
 if (output.components.securitySchemes) {
   const kept = {};
   for (const [name, scheme] of Object.entries(output.components.securitySchemes)) {
-    if (scheme.type === 'http' && scheme.scheme === 'bearer') {
+    if (scheme.type === 'oauth2' || (scheme.type === 'http' && scheme.scheme === 'bearer')) {
       kept[name] = scheme;
+      sdkSchemes.add(name);
     }
   }
   output.components.securitySchemes = kept;
+}
+
+for (const operations of Object.values(filteredPaths)) {
+  for (const operation of Object.values(operations)) {
+    if (!Array.isArray(operation?.security)) continue;
+    operation.security = operation.security.filter(
+      requirement => Object.keys(requirement).every(name => sdkSchemes.has(name)));
+    if (operation.security.length === 0) delete operation.security;
+  }
 }
 
 writeFileSync(outputPath, JSON.stringify(output, null, 2));

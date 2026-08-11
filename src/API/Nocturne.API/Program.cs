@@ -193,6 +193,7 @@ builder.Services.AddOpenApiDocument(config =>
     config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
     config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
     config.OperationProcessors.Add(new SummaryToDescriptionOperationProcessor());
+    config.AddNocturneSecurity();
 
     config.PostProcess = document =>
     {
@@ -707,6 +708,7 @@ internal class NSwagStartup
             config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
             config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
             config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
+            config.AddNocturneSecurity();
         });
     }
 
