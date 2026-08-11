@@ -305,8 +305,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
                         AudioEnabled = threshold.AudioEnabled,
                         AudioSound = threshold.AudioSound,
                         VibrateEnabled = threshold.VibrateEnabled,
-                        RepeatIntervalMins = threshold.RepeatIntervalMins,
-                        MaxRepeats = threshold.MaxRepeats,
                         RespectQuietHours = threshold.RespectQuietHours,
                     }
                 );
@@ -415,8 +413,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
                         AudioEnabled = t.AudioEnabled,
                         AudioSound = t.AudioSound,
                         VibrateEnabled = t.VibrateEnabled,
-                        RepeatIntervalMins = t.RepeatIntervalMins,
-                        MaxRepeats = t.MaxRepeats,
                         RespectQuietHours = t.RespectQuietHours,
                     })
                     .ToList(),
@@ -854,8 +850,6 @@ public class NotificationThresholdDto
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; }
     public bool RespectQuietHours { get; set; }
 
     public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
@@ -871,8 +865,6 @@ public class NotificationThresholdDto
             AudioEnabled = entity.AudioEnabled,
             AudioSound = entity.AudioSound,
             VibrateEnabled = entity.VibrateEnabled,
-            RepeatIntervalMins = entity.RepeatIntervalMins,
-            MaxRepeats = entity.MaxRepeats,
             RespectQuietHours = entity.RespectQuietHours,
         };
 }
@@ -1146,8 +1138,6 @@ public class CreateNotificationThresholdRequest
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; } = 3;
     public bool RespectQuietHours { get; set; } = true;
 }
 
