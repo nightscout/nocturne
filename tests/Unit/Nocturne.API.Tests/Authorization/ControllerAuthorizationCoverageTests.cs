@@ -40,7 +40,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// </remarks>
 public class ControllerAuthorizationCoverageTests
 {
-    private static Assembly ApiAssembly => typeof(AuthorizationConfiguration).Assembly;
+    private static Assembly ApiAssembly => ControllerActionReflection.ApiAssembly;
 
     /// <summary>
     /// Controllers whose actions are intentionally gated only by the <see cref="HasPermissionsRequirement"/>
@@ -93,11 +93,7 @@ public class ControllerAuthorizationCoverageTests
     [Fact]
     public void EveryControllerAction_HasAnExplicitAuthorizationDecision()
     {
-        var controllers = ApiAssembly.GetTypes()
-            .Where(t => typeof(ControllerBase).IsAssignableFrom(t)
-                        && t is { IsClass: true, IsAbstract: false, IsPublic: true }
-                        && t.GetCustomAttribute<NonControllerAttribute>() is null)
-            .ToList();
+        var controllers = ControllerActionReflection.GetControllers().ToList();
 
         controllers.Should().NotBeEmpty("the API assembly must expose controllers to audit");
 
@@ -156,22 +152,11 @@ public class ControllerAuthorizationCoverageTests
     }
 
     private static IEnumerable<MethodInfo> GetActionMethods(Type controller) =>
-        controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Where(m => !m.IsSpecialName
-                        && m.GetCustomAttributes().OfType<IActionHttpMethodProvider>().Any());
+        ControllerActionReflection.GetActionMethods(controller);
 
     private static bool HasAnonymous(MethodInfo action, Type controller) =>
-        action.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any()
-        || controller.GetCustomAttributes(inherit: true).OfType<IAllowAnonymous>().Any();
+        ControllerActionReflection.HasAnonymous(action, controller);
 
     private static bool HasAuthorizationGate(MethodInfo action, Type controller) =>
-        HasGate(action.GetCustomAttributes(inherit: true))
-        || HasGate(controller.GetCustomAttributes(inherit: true));
-
-    private static bool HasGate(IEnumerable<object> attributes) =>
-        attributes.Any(a => a is IAuthorizeData
-                            or RequirePermissionAttribute // covers [RequireAdmin]/[RequireRead]/[RequireWrite]
-                            or RequireScopeAttribute
-                            or RequireInstanceKeyAuthAttribute
-                            or RequireAuthenticationAttribute);
+        ControllerActionReflection.HasAuthorizationGate(action, controller);
 }
