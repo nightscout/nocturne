@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { browser } from "$app/environment";
 
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -59,9 +58,20 @@
     isPlatformAccessGrant?: boolean;
     /** Whether the current session is a guest link session (read-only) */
     isGuestSession?: boolean;
+    /** Slug of the tenant this host resolves to, or null on the apex (from layout data) */
+    currentSlug?: string | null;
+    /** Public base domain tenant subdomains hang off (from layout data) */
+    baseDomain?: string | null;
   }
 
-  const { user = null, isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
+  const {
+    user = null,
+    isPlatformAdmin = false,
+    isPlatformAccessGrant = false,
+    isGuestSession = false,
+    currentSlug = null,
+    baseDomain = null,
+  }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
 
@@ -84,8 +94,6 @@
   let totalTenantCount = $state(0);
   let selectedTenantSlug = $state<string | null>(null);
   let defaultTenantSlug = $state<string | null>(null);
-  let baseDomain = $state<string | null>(null);
-  let currentSlug = $state<string | null>(null);
 
   /**
    * Platform-admin "access" mode: the session is a short-lived platform-access grant on a
@@ -103,16 +111,6 @@
         )
       : null,
   );
-
-  // Derive subdomain info from hostname
-  $effect(() => {
-    if (!browser) return;
-    const parts = window.location.hostname.split(".");
-    if (parts.length > 2 && window.location.hostname !== "localhost") {
-      currentSlug = parts[0];
-      baseDomain = parts.slice(1).join(".");
-    }
-  });
 
   // Available tenants for the subdomain switcher.
   const myTenantsQuery = getMyTenants();
@@ -542,6 +540,7 @@
           {user}
           {isPlatformAdmin}
           {isGuestSession}
+          tenantSlug={currentSlug}
           collapsed={sidebar.state === "collapsed"}
           class="flex-1 min-w-0"
         />

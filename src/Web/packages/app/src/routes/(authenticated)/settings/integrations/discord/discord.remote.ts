@@ -8,6 +8,7 @@
 import { getRequestEvent, query, command } from "$app/server";
 import { signOAuthLinkState } from "$lib/server/bot/oauth-state";
 import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
+import { extractTenantSlug } from "$lib/server/request-host";
 
 /**
  * Get Discord integration configuration. Credentials resolve from the
@@ -41,14 +42,7 @@ export const initiateDiscordLink = command(async () => {
     return { error: "Discord OAuth2 is not configured on this server." };
   }
 
-  // Extract tenant slug from host
-  const baseHost = baseDomain.split(":")[0] ?? baseDomain;
-  const currentHost = url.host.split(":")[0] ?? url.host;
-  let slug: string | null = null;
-  if (currentHost.endsWith(`.${baseHost}`)) {
-    slug = currentHost.slice(0, currentHost.length - baseHost.length - 1) || null;
-  }
-
+  const slug = extractTenantSlug(url.host, baseDomain);
   if (!slug) {
     return { error: "Could not determine tenant slug from current host." };
   }

@@ -7,7 +7,7 @@
 
   interface Props {
     open: boolean;
-    tenantSlug?: string;
+    tenantSlug?: string | null;
   }
 
   let { open = $bindable(false), tenantSlug }: Props = $props();

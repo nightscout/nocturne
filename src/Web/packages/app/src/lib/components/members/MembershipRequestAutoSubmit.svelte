@@ -6,7 +6,7 @@
   interface Props {
     isAuthenticated: boolean;
     isGuestSession: boolean;
-    tenantSlug: string | undefined;
+    tenantSlug: string | null;
   }
 
   const { isAuthenticated, isGuestSession, tenantSlug }: Props = $props();

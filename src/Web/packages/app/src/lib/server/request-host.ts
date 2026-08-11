@@ -29,6 +29,31 @@ export function getOriginalProto(request: Request): string {
 }
 
 /**
+ * Extract the tenant slug from a request host, mirroring the API's
+ * SubdomainParser: strip the base domain suffix, whatever its label count.
+ * `nocturne.example.com` is as valid a base domain as `example.com`, so the
+ * number of labels carries no meaning — only the suffix does.
+ *
+ * Returns null on the apex, on an unrelated host, or when BASE_DOMAIN is unset.
+ * Ports are ignored on both sides.
+ */
+export function extractTenantSlug(
+  host: string | null | undefined,
+  baseDomain: string | null | undefined,
+): string | null {
+  if (!host || !baseDomain) return null;
+
+  const hostname = host.split(":")[0]!.toLowerCase();
+  const baseHostname = baseDomain.split(":")[0]!.toLowerCase();
+  if (!baseHostname) return null;
+
+  const suffix = `.${baseHostname}`;
+  if (!hostname.endsWith(suffix)) return null;
+
+  return hostname.slice(0, -suffix.length) || null;
+}
+
+/**
  * Cookie set during setup to carry the tenant slug while the user is still
  * on the apex domain. httpOnly, 1-hour TTL, cleaned up by markSetupComplete.
  * Read by hooks that create API clients so they can prepend the slug to

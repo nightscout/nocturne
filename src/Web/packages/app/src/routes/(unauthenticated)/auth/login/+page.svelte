@@ -6,7 +6,6 @@
   import { getAuthStatus } from "$lib/api/generated";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { browser } from "$app/environment";
   import LoginForm from "$lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
 
@@ -19,11 +18,7 @@
 
   let showRequestDialog = $state(false);
 
-  const tenantSlug = $derived.by(() => {
-    if (!browser) return undefined;
-    const parts = window.location.hostname.split(".");
-    return parts.length > 2 ? parts[0] : undefined;
-  });
+  const tenantSlug = $derived(page.data.tenantSlug);
 
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");

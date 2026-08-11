@@ -4,7 +4,6 @@
   import { Button } from "$lib/components/ui/button";
   import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
-  import { browser } from "$app/environment";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
   import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
 
@@ -18,19 +17,14 @@
     isPlatformAdmin?: boolean;
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
+    /** Slug of the tenant this host resolves to, or null on the apex (from layout data) */
+    tenantSlug?: string | null;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantSlug = null }: Props = $props();
 
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
-
-  let tenantSlug = $state<string | undefined>(undefined);
-  $effect(() => {
-    if (!browser) return;
-    const parts = window.location.hostname.split(".");
-    if (parts.length > 2) tenantSlug = parts[0];
-  });
 
   /** Get initials from user name */
   function getInitials(name: string): string {

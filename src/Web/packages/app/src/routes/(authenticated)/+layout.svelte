@@ -61,13 +61,6 @@
 
   let commandPaletteOpen = $state(false);
 
-  let tenantSlug = $state<string | undefined>(undefined);
-  $effect(() => {
-    if (!browser) return;
-    const parts = window.location.hostname.split(".");
-    if (parts.length > 2) tenantSlug = parts[0];
-  });
-
   // One poll for the alert surfaces this layout mounts (AlertBanner and
   // FiringToast both read the same query).
   pollActiveAlerts();
@@ -214,7 +207,7 @@
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
+    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} />
     <Sidebar.Inset>
       <MobileHeader />
       {#if data.isDemo}
@@ -226,7 +219,7 @@
       <MembershipRequestAutoSubmit
         isAuthenticated={!!data.user}
         isGuestSession={data.isGuestSession}
-        {tenantSlug}
+        tenantSlug={data.tenantSlug}
       />
       <AlertBanner />
       <FiringToast />

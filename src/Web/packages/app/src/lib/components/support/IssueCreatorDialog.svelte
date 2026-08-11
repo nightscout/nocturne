@@ -22,6 +22,7 @@
     Copy,
   } from "lucide-svelte";
   import { submitIssue, getFallbackUrl } from "$lib/api/support.remote";
+  import { page } from "$app/state";
   import type { CreateIssueResponse } from "$api-clients";
   import { copyToClipboard } from "$lib/utils";
   import { toast } from "svelte-sonner";
@@ -101,10 +102,7 @@
     };
 
     if (includeTenantSlug) {
-      info.tenantSlug =
-        typeof window !== "undefined"
-          ? window.location.hostname.split(".")[0]
-          : "unknown";
+      info.tenantSlug = page.data.tenantSlug ?? "unknown";
     }
     if (includeCgmSource) {
       info.cgmSource = cgmSource || "not specified";
