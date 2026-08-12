@@ -29,6 +29,10 @@
         <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.Data.Sqlite" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+        <!-- The central 4.8.0 pin is for the source generators, which must load in Visual Studio's
+             Roslyn. Here the parser only reads test sources, and EF Core's design-time package
+             already pulls 5.0.0 in transitively, so anything older is a version conflict. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="5.0.0" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\API\Nocturne.API\Nocturne.API.csproj" />
