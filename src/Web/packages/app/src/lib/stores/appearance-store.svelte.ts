@@ -13,15 +13,16 @@
  *
  * SSR note: this module's `$state` is shared across requests on the server, so it
  * is NEVER mutated server-side — the cookie is read and applied only in the browser
- * (`if (browser)` at module load). SSR therefore renders defaults and the client
- * corrects on hydration; server-side rendering of preference-dependent text is a
- * known limitation of the synchronous `bg()`-style accessors.
+ * (`if (browser)` at module load). Server-side reads instead resolve from the
+ * per-request preference context the root layout provides (see
+ * `setPreferencesContext`), so SSR emits the same units/formats hydration will.
  *
  * Language keeps its own dedicated cookie + backend path (used by SSR locale
  * resolution).
  */
 
 import { browser } from "$app/environment";
+import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
@@ -77,6 +78,31 @@ const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
 /** Registry of synced prefs by their localStorage key — powers cross-tab sync. */
 const syncedRegistry = new Map<string, SyncedPref<unknown>>();
 
+const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
+
+/**
+ * Publish this request's preference payloads, highest precedence first, for the
+ * duration of one server render. The store's `$state` is module-scoped and so
+ * shared by every concurrent SSR request; reading preferences from component
+ * context instead is what keeps one user's units out of another's HTML.
+ * Layers mirror the browser's own resolution order (backend blob over cookie),
+ * each contributing only the fields it defines.
+ */
+export function setPreferencesContext(layers: () => UserDisplayPreferences[]): void {
+  setContext(PREFERENCES_CONTEXT_KEY, layers);
+}
+
+function requestPreferences(): UserDisplayPreferences[] {
+  try {
+    return getContext<(() => UserDisplayPreferences[]) | undefined>(
+      PREFERENCES_CONTEXT_KEY
+    )?.() ?? [];
+  } catch {
+    // getContext throws outside a component — server loads and module scope have no request.
+    return [];
+  }
+}
+
 /**
  * Backend write-through callback, injected by the app (kept out of this module so
  * the store never imports a server remote directly — mirrors setLanguage's design).
@@ -129,18 +155,32 @@ function persistLocal<T>(key: string, value: T): void {
  * PersistedState, so no consumer changes. Writes propagate to localStorage (cache),
  * the shared cookie, and the backend. `hydrate` sets the value without a
  * backend/cookie echo (used when applying server- or cross-tab-sourced values).
+ * `read` locates this preference inside a `UserDisplayPreferences` payload, and is
+ * the single mapping used for both hydration and server-side resolution.
  */
 class SyncedPref<T> {
   private _value = $state<T>(undefined as T);
   private _key: string;
+  private _read: (prefs: UserDisplayPreferences) => T | undefined;
 
-  constructor(key: string, initial: T) {
+  constructor(
+    key: string,
+    initial: T,
+    read: (prefs: UserDisplayPreferences) => T | undefined
+  ) {
     this._key = key;
+    this._read = read;
     this._value = readInitial(key, initial);
     syncedRegistry.set(key, this as SyncedPref<unknown>);
   }
 
   get current(): T {
+    if (!browser) {
+      for (const prefs of requestPreferences()) {
+        const value = this._read(prefs);
+        if (value !== undefined && value !== null) return value;
+      }
+    }
     return this._value;
   }
 
@@ -160,6 +200,12 @@ class SyncedPref<T> {
     this._value = value;
     persistLocal(this._key, value);
   }
+
+  /** Hydrate from a preference payload, leaving the current value alone when unset. */
+  hydrateFrom(prefs: UserDisplayPreferences): void {
+    const value = this._read(prefs);
+    if (value !== undefined && value !== null) this.hydrate(value);
+  }
 }
 
 // ==========================================
@@ -170,17 +216,29 @@ class SyncedPref<T> {
  * Color theme preference (Nocturne vs Trio)
  * Controls the CSS class applied to the document root
  */
-export const colorTheme = new SyncedPref<ColorTheme>("nocturne-color-theme", "nocturne");
+export const colorTheme = new SyncedPref<ColorTheme>(
+  "nocturne-color-theme",
+  "nocturne",
+  (p) => p.colorTheme as ColorTheme | undefined
+);
 
 /**
  * Blood glucose units preference. Per-user: syncs across devices/tenants.
  */
-export const glucoseUnits = new SyncedPref<GlucoseUnits>("nocturne-glucose-units", "mg/dl");
+export const glucoseUnits = new SyncedPref<GlucoseUnits>(
+  "nocturne-glucose-units",
+  "mg/dl",
+  (p) => p.glucoseUnits as GlucoseUnits | undefined
+);
 
 /**
  * Time format preference (12-hour or 24-hour)
  */
-export const timeFormat = new SyncedPref<TimeFormat>("nocturne-time-format", "12");
+export const timeFormat = new SyncedPref<TimeFormat>(
+  "nocturne-time-format",
+  "12",
+  (p) => p.timeFormat as TimeFormat | undefined
+);
 
 /**
  * Regional format preference. Empty (the default) means "follow the display language",
@@ -188,23 +246,31 @@ export const timeFormat = new SyncedPref<TimeFormat>("nocturne-time-format", "12
  * "de-DE" for European date ordering and Monday-first calendars while keeping the
  * interface in another language.
  */
-export const regionFormat = new SyncedPref<RegionFormat>("nocturne-region-format", "");
+export const regionFormat = new SyncedPref<RegionFormat>(
+  "nocturne-region-format",
+  "",
+  (p) => p.regionFormat as RegionFormat | undefined
+);
 
 /**
  * Night mode schedule toggle
  * When enabled, automatically switches to dark mode at night
  */
-export const nightModeSchedule = new SyncedPref<boolean>("nocturne-night-mode-schedule", false);
+export const nightModeSchedule = new SyncedPref<boolean>(
+  "nocturne-night-mode-schedule",
+  false,
+  (p) => p.nightModeSchedule
+);
 
 /**
  * Dashboard top widgets configuration
  * Stores the ordered list of widget IDs displayed in the top widget grid
  */
-export const dashboardTopWidgets = new SyncedPref<WidgetId[]>("nocturne-dashboard-top-widgets", [
-  WidgetId.BgDelta,
-  WidgetId.TirChart,
-  WidgetId.Tdd,
-]);
+export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
+  "nocturne-dashboard-top-widgets",
+  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd],
+  (p) => p.dashboardTopWidgets
+);
 
 // ==========================================
 // Color Theme Management (Nocturne/Trio)
@@ -319,13 +385,21 @@ export function setGlucoseUnits(units: GlucoseUnits): void {
  * Prediction time horizon in minutes
  * Controls how far into the future predictions are shown
  */
-export const predictionMinutes = new SyncedPref<number>("nocturne-prediction-minutes", 30);
+export const predictionMinutes = new SyncedPref<number>(
+  "nocturne-prediction-minutes",
+  30,
+  (p) => p.prediction?.minutes
+);
 
 /**
  * Prediction enabled state
  * Controls whether prediction lines are shown on charts
  */
-export const predictionEnabled = new SyncedPref<boolean>("nocturne-prediction-enabled", true);
+export const predictionEnabled = new SyncedPref<boolean>(
+  "nocturne-prediction-enabled",
+  true,
+  (p) => p.prediction?.enabled
+);
 
 /**
  * Get current prediction minutes
@@ -376,7 +450,8 @@ export type AreaMode = "off" | "baseline" | "deviation";
  */
 export const predictionDisplayMode = new SyncedPref<PredictionDisplayMode>(
   "nocturne-prediction-display-mode",
-  "cone"
+  "cone",
+  (p) => p.prediction?.displayMode as PredictionDisplayMode | undefined
 );
 
 // ==========================================
@@ -390,7 +465,11 @@ export type TimeRangeOption = "2" | "4" | "6" | "12" | "24" | "48";
  * This controls the span of time shown, always ending at "now"
  * Can be a preset value or a custom number from brush selection
  */
-export const glucoseChartLookback = new SyncedPref<number>("nocturne-glucose-chart-lookback", 12);
+export const glucoseChartLookback = new SyncedPref<number>(
+  "nocturne-glucose-chart-lookback",
+  12,
+  (p) => p.chart?.lookback
+);
 
 /**
  * Default fetch range in hours for glucose chart data
@@ -404,23 +483,45 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 
 export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
-  "threshold"
+  "threshold",
+  (p) => p.chart?.lineColorMode as LineColorMode | undefined
 );
 
-export const chartLineColor = new SyncedPref<string>("nocturne-chart-line-color", "#22c55e");
+export const chartLineColor = new SyncedPref<string>(
+  "nocturne-chart-line-color",
+  "#22c55e",
+  (p) => p.chart?.lineColor
+);
 
 export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
-  "threshold"
+  "threshold",
+  (p) => p.chart?.pointColorMode as LineColorMode | undefined
 );
 
-export const chartPointColor = new SyncedPref<string>("nocturne-chart-point-color", "#22c55e");
+export const chartPointColor = new SyncedPref<string>(
+  "nocturne-chart-point-color",
+  "#22c55e",
+  (p) => p.chart?.pointColor
+);
 
-export const chartShowPoints = new SyncedPref<boolean>("nocturne-chart-show-points", true);
+export const chartShowPoints = new SyncedPref<boolean>(
+  "nocturne-chart-show-points",
+  true,
+  (p) => p.chart?.showPoints
+);
 
-export const chartAreaMode = new SyncedPref<AreaMode>("nocturne-chart-area-mode", "off");
+export const chartAreaMode = new SyncedPref<AreaMode>(
+  "nocturne-chart-area-mode",
+  "off",
+  (p) => p.chart?.areaMode as AreaMode | undefined
+);
 
-export const chartAreaOpacity = new SyncedPref<number>("nocturne-chart-area-opacity", 0.5);
+export const chartAreaOpacity = new SyncedPref<number>(
+  "nocturne-chart-area-opacity",
+  0.5,
+  (p) => p.chart?.areaOpacity
+);
 
 /**
  * Always render chart range/category patterns on screen, not just in print.
@@ -429,7 +530,8 @@ export const chartAreaOpacity = new SyncedPref<number>("nocturne-chart-area-opac
  */
 export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
   "nocturne-chart-always-show-patterns",
-  false
+  false,
+  (p) => p.chart?.alwaysShowPatterns
 );
 
 // ==========================================
@@ -478,40 +580,10 @@ export function applyPreferences(
 ): void {
   if (!prefs) return;
 
-  hydrateIfPresent(glucoseUnits, prefs.glucoseUnits as GlucoseUnits | undefined);
-  hydrateIfPresent(timeFormat, prefs.timeFormat as TimeFormat | undefined);
-  hydrateIfPresent(regionFormat, prefs.regionFormat as RegionFormat | undefined);
-  hydrateIfPresent(colorTheme, prefs.colorTheme as ColorTheme | undefined);
-  hydrateIfPresent(nightModeSchedule, prefs.nightModeSchedule ?? undefined);
-  hydrateIfPresent(dashboardTopWidgets, prefs.dashboardTopWidgets ?? undefined);
-
-  if (prefs.prediction) {
-    hydrateIfPresent(predictionEnabled, prefs.prediction.enabled ?? undefined);
-    hydrateIfPresent(predictionMinutes, prefs.prediction.minutes ?? undefined);
-    hydrateIfPresent(
-      predictionDisplayMode,
-      prefs.prediction.displayMode as PredictionDisplayMode | undefined
-    );
-  }
-
-  if (prefs.chart) {
-    hydrateIfPresent(chartLineColorMode, prefs.chart.lineColorMode as LineColorMode | undefined);
-    hydrateIfPresent(chartLineColor, prefs.chart.lineColor ?? undefined);
-    hydrateIfPresent(chartPointColorMode, prefs.chart.pointColorMode as LineColorMode | undefined);
-    hydrateIfPresent(chartPointColor, prefs.chart.pointColor ?? undefined);
-    hydrateIfPresent(chartShowPoints, prefs.chart.showPoints ?? undefined);
-    hydrateIfPresent(chartAreaMode, prefs.chart.areaMode as AreaMode | undefined);
-    hydrateIfPresent(chartAreaOpacity, prefs.chart.areaOpacity ?? undefined);
-    hydrateIfPresent(chartAlwaysShowPatterns, prefs.chart.alwaysShowPatterns ?? undefined);
-    hydrateIfPresent(glucoseChartLookback, prefs.chart.lookback ?? undefined);
-  }
+  for (const pref of syncedRegistry.values()) pref.hydrateFrom(prefs);
 
   if (browser) applyColorTheme(colorTheme.current);
   if (options.refreshCookie) writePrefsCookie(collectPreferences());
-}
-
-function hydrateIfPresent<T>(pref: SyncedPref<T>, value: T | undefined): void {
-  if (value !== undefined && value !== null) pref.hydrate(value);
 }
 
 /** True when a server preference payload carries at least one saved value. */
@@ -569,17 +641,26 @@ function writePrefsCookie(prefs: UserDisplayPreferences): void {
   document.cookie = `${PREFS_COOKIE_NAME}=${value};path=/;max-age=${PREFS_COOKIE_MAX_AGE};SameSite=Lax`;
 }
 
+/** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
+export function parsePrefsCookie(
+  value: string | null | undefined
+): UserDisplayPreferences | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(value));
+    return parsed && typeof parsed === "object" ? (parsed as UserDisplayPreferences) : null;
+  } catch {
+    return null;
+  }
+}
+
 function readPrefsCookie(): UserDisplayPreferences | null {
   if (!browser) return null;
   const match = document.cookie
     .split("; ")
     .find((row) => row.startsWith(`${PREFS_COOKIE_NAME}=`));
   if (!match) return null;
-  try {
-    return JSON.parse(decodeURIComponent(match.slice(PREFS_COOKIE_NAME.length + 1)));
-  } catch {
-    return null;
-  }
+  return parsePrefsCookie(match.slice(PREFS_COOKIE_NAME.length + 1));
 }
 
 // Hydrate synchronously from the cookie on load (before first paint) so a known
