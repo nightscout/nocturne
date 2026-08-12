@@ -2,9 +2,11 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 
@@ -41,6 +43,10 @@ public class ConnectorSyncServiceTests
             return mock.Object;
         });
 
+        // Mirrors the production registration (Program.cs) — the sync scope resolves
+        // the mutable scoped AuditContext to mark it system for the sync's duration.
+        services.AddScoped<IAuditContext, AuditContext>();
+
         foreach (var executor in executors)
         {
             services.AddSingleton<IConnectorSyncExecutor>(executor);
@@ -51,8 +57,10 @@ public class ConnectorSyncServiceTests
 
     private static IConnectorSyncExecutor CreateMockExecutor(
         string connectorId,
-        SyncResult? result = null)
+        SyncResult? result = null,
+        Action<IServiceProvider>? onSyncScope = null)
     {
+        var syncResult = result ?? new SyncResult { Success = true, Message = "OK" };
         var mock = new Mock<IConnectorSyncExecutor>();
         mock.Setup(x => x.ConnectorId).Returns(connectorId);
         mock.Setup(x => x.ExecuteSyncAsync(
@@ -60,7 +68,11 @@ public class ConnectorSyncServiceTests
                 It.IsAny<SyncRequest>(),
                 It.IsAny<CancellationToken>(),
                 It.IsAny<ISyncProgressReporter?>()))
-            .ReturnsAsync(result ?? new SyncResult { Success = true, Message = "OK" });
+            .ReturnsAsync((IServiceProvider sp, SyncRequest _, CancellationToken _, ISyncProgressReporter? _) =>
+            {
+                onSyncScope?.Invoke(sp);
+                return syncResult;
+            });
         return mock.Object;
     }
 
@@ -105,6 +117,28 @@ public class ConnectorSyncServiceTests
         // Assert
         result.Success.Should().BeFalse();
         result.Message.Should().Contain("Unknown connector");
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_MarksScopedAuditContextAsSystem()
+    {
+        // Regression test for the mutation_audit_log firehose: V4 repositories stamp their
+        // factory-created DbContexts from the scoped IAuditContext, and the child scope this
+        // service creates starts with a blank user context (IsSystem = false), so every record
+        // a manually triggered sync imported was audited with null attribution instead of being
+        // skipped as a system mutation.
+        bool? capturedIsSystemMutation = null;
+        var executor = CreateMockExecutor(
+            "test",
+            onSyncScope: sp =>
+                capturedIsSystemMutation = sp.GetRequiredService<IAuditContext>().IsSystemMutation());
+        var sut = CreateService(BuildProvider(executor));
+
+        // Act
+        await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        // Assert
+        capturedIsSystemMutation.Should().BeTrue();
     }
 
     [Fact]
