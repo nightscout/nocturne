@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Nocturne.API.Controllers.V4.Audit;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Responses;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -577,4 +578,54 @@ public class AuditControllerTests : IDisposable
 
         result.Should().BeOfType<OkObjectResult>();
     }
+
+    // ── Read limits ─────────────────────────────────────────────────
+    //
+    // Both audit reads page in EF rather than through a repository, so the clamp is observed on
+    // the pagination the response reports, which is the same value the query was given.
+
+    [Fact]
+    public async Task GetMutations_LimitAtCeiling_IsUnchanged()
+    {
+        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetMutationAuditLog(
+            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize, 0);
+
+        PaginationOf<MutationAuditDto>(result).Should().BeEquivalentTo(
+            new PaginationInfo(V4ReadLimits.MaxPageSize, 0, 0));
+    }
+
+    [Fact]
+    public async Task GetMutations_LimitAboveCeiling_IsClamped()
+    {
+        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetMutationAuditLog(
+            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize + 1, -1);
+
+        PaginationOf<MutationAuditDto>(result).Should().BeEquivalentTo(
+            new PaginationInfo(V4ReadLimits.MaxPageSize, 0, 0));
+    }
+
+    [Fact]
+    public async Task GetReads_LimitAtCeiling_IsUnchanged()
+    {
+        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetReadAccessAuditLog(
+            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize, 0);
+
+        PaginationOf<ReadAccessAuditDto>(result).Should().BeEquivalentTo(
+            new PaginationInfo(V4ReadLimits.MaxPageSize, 0, 0));
+    }
+
+    [Fact]
+    public async Task GetReads_LimitAboveCeiling_IsClamped()
+    {
+        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetReadAccessAuditLog(
+            DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize + 1, -1);
+
+        PaginationOf<ReadAccessAuditDto>(result).Should().BeEquivalentTo(
+            new PaginationInfo(V4ReadLimits.MaxPageSize, 0, 0));
+    }
+
+    private static PaginationInfo PaginationOf<T>(IActionResult result) =>
+        result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PaginatedResponse<T>>().Subject
+            .Pagination;
 }

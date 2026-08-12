@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -501,6 +502,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         [FromQuery] int limit = 100
     )
     {
+        limit = V4ReadLimits.ClampLimit(limit);
+
         var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetCompletedInstancesAsync(
             userId,

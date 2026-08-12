@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -77,6 +78,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(
             category, state, from, to, source, active, limit, offset, descending, cancellationToken);
@@ -102,6 +106,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpMode, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.PumpMode, from: from, to: to, cancellationToken: cancellationToken);
@@ -124,6 +131,9 @@ public class StateSpansController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.PumpConnectivity, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
@@ -148,6 +158,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Override, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Override, from: from, to: to, cancellationToken: cancellationToken);
@@ -170,6 +183,9 @@ public class StateSpansController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.TemporaryTarget, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
@@ -194,6 +210,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Profile, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Profile, from: from, to: to, cancellationToken: cancellationToken);
@@ -216,6 +235,9 @@ public class StateSpansController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Exercise, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
@@ -240,6 +262,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Illness, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Illness, from: from, to: to, cancellationToken: cancellationToken);
@@ -263,6 +288,9 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _stateSpanService.GetStateSpansAsync(StateSpanCategory.Travel, from: from, to: to, count: limit, skip: offset, descending: descending, cancellationToken: cancellationToken);
         var total = await _stateSpanService.CountStateSpansAsync(StateSpanCategory.Travel, from: from, to: to, cancellationToken: cancellationToken);
@@ -285,6 +313,9 @@ public class StateSpansController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var activityCategories = new[] { StateSpanCategory.Exercise, StateSpanCategory.Illness, StateSpanCategory.Travel };

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -261,6 +262,9 @@ public class FoodsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<Food[]>> GetRecentFoods([FromQuery] int limit = 20)
     {
+        limit = V4ReadLimits.ClampLimit(limit);
+
+
         // Recents are tenant-wide; the subject only subtracts the caller's own favorites, so a
         // subject-less caller gets the same list with nothing subtracted.
         var foods = await _favoriteService.GetRecentFoodsAsync(

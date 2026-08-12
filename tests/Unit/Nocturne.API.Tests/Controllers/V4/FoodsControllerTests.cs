@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -270,6 +271,32 @@ public class FoodsControllerTests : IDisposable
             .Which.Should().HaveCount(1);
         _favoriteServiceMock.Verify(
             x => x.GetRecentFoodsAsync(null, 5, It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task GetRecentFoods_LimitAtCeiling_ReachesServiceUnchanged()
+    {
+        var controller = CreateController(null);
+
+        await controller.GetRecentFoods(V4ReadLimits.MaxPageSize);
+
+        _favoriteServiceMock.Verify(
+            x => x.GetRecentFoodsAsync(null, V4ReadLimits.MaxPageSize, It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task GetRecentFoods_LimitAboveCeiling_IsClamped()
+    {
+        var controller = CreateController(null);
+
+        await controller.GetRecentFoods(V4ReadLimits.MaxPageSize + 1);
+
+        _favoriteServiceMock.Verify(
+            x => x.GetRecentFoodsAsync(null, V4ReadLimits.MaxPageSize, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }

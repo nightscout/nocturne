@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Devices;
@@ -189,6 +190,8 @@ public class BatteryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        limit = V4ReadLimits.ClampLimit(limit);
+
         _logger.LogDebug(
             "Charge cycles requested for device: {Device}, from: {From}, to: {To}, limit: {Limit}",
             device,

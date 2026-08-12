@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
@@ -49,6 +50,9 @@ public class TempBasalController(
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var data = await repo.GetAsync(from, to, device, source, limit, offset, descending, ct);

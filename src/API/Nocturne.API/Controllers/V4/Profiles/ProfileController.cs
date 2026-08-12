@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -250,6 +251,10 @@ public class ProfileController : ControllerBase, IWriteScopedController
             return BadRequest(
                 new { error = $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'." }
             );
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _therapyRepo.GetAsync(
             from,

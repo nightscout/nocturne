@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
@@ -151,4 +152,23 @@ public class TempBasalControllerTests
 
         ((ObjectResult)result.Result!).StatusCode.Should().Be(400);
     }
+
+    [Fact]
+    public async Task GetAll_LimitAtCeiling_ReachesRepositoryUnchanged()
+    {
+        await _controller.GetAll(null, null, V4ReadLimits.MaxPageSize, 0);
+
+        VerifyFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    [Fact]
+    public async Task GetAll_LimitAboveCeiling_IsClamped()
+    {
+        await _controller.GetAll(null, null, V4ReadLimits.MaxPageSize + 1, -1);
+
+        VerifyFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    private void VerifyFetched(int limit, int offset) =>
+        _repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);
 }

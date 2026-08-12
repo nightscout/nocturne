@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Audit;
@@ -61,6 +62,9 @@ public class AuditController : ControllerBase
     {
         if (!HasPermission(TenantPermissions.AuditRead))
             return Forbid();
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
         db.TenantId = _tenantAccessor.TenantId;
@@ -132,6 +136,9 @@ public class AuditController : ControllerBase
     {
         if (!HasPermission(TenantPermissions.AuditRead))
             return Forbid();
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
         db.TenantId = _tenantAccessor.TenantId;

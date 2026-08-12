@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -51,6 +52,9 @@ public class SleepController : ControllerBase
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
 
         var descending = sort == "timestamp_desc";
         var data = await _sleepService.GetSessionsAsync(from, to, type, source, limit, offset, descending, cancellationToken: cancellationToken);

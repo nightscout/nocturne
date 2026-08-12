@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
@@ -54,6 +55,9 @@ public class HeartRateController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        count = V4ReadLimits.ClampLimit(count);
+        skip = V4ReadLimits.ClampOffset(skip);
+
         try
         {
             IEnumerable<HeartRate> records;
