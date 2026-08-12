@@ -7,8 +7,9 @@
 // to the Nocturne server, which owns the PKCE exchange and stores the connector secrets.
 //
 // The app authenticates to Nocturne with a short-lived link code minted by the web UI
-// (nocturne-connect://link?server=…&token=…); the token is a tenant-pinned bearer accepted
-// only by the CareLink connect endpoints.
+// (nocturne-connect://link?server=…&token=…), either pasted in or opened from the browser through
+// the registered URL scheme; the token is a tenant-pinned bearer accepted only by the CareLink
+// connect endpoints.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -19,6 +20,7 @@ mod glucose_file;
 mod glucose_poll;
 mod http;
 mod install_id;
+mod link_code;
 mod signalr;
 mod toast;
 mod tray;
@@ -38,6 +40,9 @@ struct Session {
     server_url: Option<String>,
     token: Option<String>,
     flow_state: Option<String>,
+    /// A link code that arrived over the `nocturne-connect://` scheme. Held aside until the user
+    /// confirms the server, so opening a link never links the app on its own.
+    pending: Option<link_code::LinkCredentials>,
 }
 
 type SessionState = Mutex<Session>;
@@ -103,46 +108,66 @@ pub(crate) fn error_chain(err: &dyn std::error::Error) -> String {
     msg
 }
 
-/// Parses and stores a `nocturne-connect://link?server=…&token=…` link code.
-#[tauri::command]
-fn link(link_code: String, session: State<'_, SessionState>) -> CommandResult<LinkInfo> {
-    let parsed = Url::parse(link_code.trim())
-        .map_err(|_| CommandError::new("That doesn't look like a link code. Copy the whole nocturne-connect:// line from Nocturne."))?;
-
-    if parsed.scheme() != "nocturne-connect" {
-        return Err(CommandError::new(
-            "That doesn't look like a link code. Copy the whole nocturne-connect:// line from Nocturne.",
-        ));
-    }
-
-    let mut server = None;
-    let mut token = None;
-    for (key, value) in parsed.query_pairs() {
-        match key.as_ref() {
-            "server" => server = Some(value.to_string()),
-            "token" => token = Some(value.to_string()),
-            _ => {}
-        }
-    }
-
-    let (server, token) = match (server, token) {
-        (Some(s), Some(t)) if !s.is_empty() && !t.is_empty() => (s, t),
-        _ => return Err(CommandError::new("The link code is missing its server or token part. Generate a fresh one in Nocturne.")),
-    };
-
-    let server_url = Url::parse(&server)
-        .ok()
-        .filter(|u| matches!(u.scheme(), "http" | "https"))
-        .ok_or_else(|| CommandError::new("The link code's server address is not a valid URL."))?;
-
-    let server_url = server_url.as_str().trim_end_matches('/').to_string();
-
+fn apply_link(credentials: link_code::LinkCredentials, session: &SessionState) -> LinkInfo {
+    let server_url = credentials.server_url;
     let mut session = session.lock().unwrap();
     session.server_url = Some(server_url.clone());
-    session.token = Some(token);
+    session.token = Some(credentials.token);
     session.flow_state = None;
+    session.pending = None;
+    LinkInfo { server_url }
+}
 
-    Ok(LinkInfo { server_url })
+/// Parses and stores a `nocturne-connect://link?server=…&token=…` link code the user pasted in.
+#[tauri::command]
+fn link(link_code: String, session: State<'_, SessionState>) -> CommandResult<LinkInfo> {
+    let credentials = link_code::parse(&link_code).map_err(CommandError::new)?;
+    Ok(apply_link(credentials, &session))
+}
+
+/// The server address of a link code that arrived over the URL scheme and is awaiting confirmation.
+/// Lets the UI recover a deep link that landed before it was listening.
+#[tauri::command]
+fn pending_link_server(session: State<'_, SessionState>) -> Option<String> {
+    session.lock().unwrap().pending.as_ref().map(|p| p.server_url.clone())
+}
+
+/// Accepts the pending deep link. Only the user, having seen the server address, gets to call this
+/// — the token is never handed to the frontend.
+#[tauri::command]
+fn confirm_pending_link(session: State<'_, SessionState>) -> CommandResult<LinkInfo> {
+    let pending = session.lock().unwrap().pending.take();
+    match pending {
+        Some(credentials) => Ok(apply_link(credentials, &session)),
+        None => Err(CommandError::new("That link is no longer available. Open it again from Nocturne.")),
+    }
+}
+
+#[tauri::command]
+fn discard_pending_link(session: State<'_, SessionState>) {
+    session.lock().unwrap().pending = None;
+}
+
+/// Handles `nocturne-connect://` URLs opened elsewhere on the machine. The URL is attacker-supplied
+/// — any web page can navigate to one — so it is validated exactly like a pasted code and then
+/// parked for confirmation rather than applied.
+fn on_deep_link(app: &tauri::AppHandle, urls: Vec<Url>) {
+    let Some(url) = urls.into_iter().find(|u| u.scheme() == link_code::SCHEME) else {
+        return;
+    };
+
+    tray::show_main_window(app);
+
+    match link_code::parse(url.as_str()) {
+        Ok(credentials) => {
+            let server_url = credentials.server_url.clone();
+            app.state::<SessionState>().lock().unwrap().pending = Some(credentials);
+            let _ = app.emit("link-code-received", server_url);
+        }
+        Err(message) => {
+            let _ = app.emit("link-code-rejected", message);
+        }
+    }
 }
 
 /// Starts the connect flow: asks the server for the Auth0 authorize URL (PKCE verifier stays
@@ -520,6 +545,13 @@ fn spawn_glucose_poller(app: tauri::AppHandle, mut refresh_rx: tokio::sync::mpsc
 
 fn main() {
     tauri::Builder::default()
+        // Must be registered first: it decides whether this process is the one that keeps running.
+        // A second launch (including one the OS starts to open a nocturne-connect:// URL) hands its
+        // arguments to the live instance and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            tray::show_main_window(app);
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
@@ -529,6 +561,25 @@ fn main() {
         .manage(SessionState::default())
         .setup(|app| {
             let handle = app.handle();
+
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                // In a packaged build the NSIS installer owns the registry association; a dev or
+                // portable run has none, so point it at the running executable.
+                #[cfg(debug_assertions)]
+                let _ = app.deep_link().register_all();
+
+                // A cold start opened by a link has already consumed its argv by the time this hook
+                // runs, so the launch URL is read back rather than awaited.
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    on_deep_link(handle, urls);
+                }
+
+                let handle = handle.clone();
+                app.deep_link().on_open_url(move |event| {
+                    on_deep_link(&handle, event.urls());
+                });
+            }
 
             // Render `--` until the first poll lands a reading.
             tray::build_tray(handle)?;
@@ -604,6 +655,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             link,
+            pending_link_server,
+            confirm_pending_link,
+            discard_pending_link,
             start_connect,
             complete_connect,
             cancel_login,

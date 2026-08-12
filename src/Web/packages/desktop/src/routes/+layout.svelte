@@ -2,6 +2,9 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { Button } from "@nocturne/ui/ui/button";
@@ -14,6 +17,21 @@
 
   // The floating clock is a chromeless overlay window — keep the update banner off it.
   const isOverlay = $derived(page.url.pathname.startsWith("/float"));
+
+  // The connect surface lives in Settings, so a link opened from the browser has to take the user
+  // there before it can be confirmed.
+  onMount(() => {
+    if (isOverlay) return;
+    invoke<string | null>("pending_link_server")
+      .then((server) => {
+        if (server) goto("/settings");
+      })
+      .catch(() => {});
+    const unlisten = listen("link-code-received", () => goto("/settings"));
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
 
   onMount(async () => {
     if (isOverlay) return;
