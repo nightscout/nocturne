@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import { toast } from 'svelte-sonner';
+	import { remoteErrorMessage } from '$lib/api/remote-error';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
@@ -34,6 +37,18 @@
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import { time, bg, bgLabel } from '$lib/utils/formatting';
 	import type { CompressionLowSuggestion } from '$lib/api';
+
+	const effectivePermissions: string[] = $derived(
+		(page.data as any).effectivePermissions ?? []
+	);
+	// Accepting, dismissing, deleting and re-running detection all write state
+	// spans and suggestion rows, so the server gates them on glucose.readwrite.
+	const canReviewSuggestions = $derived(
+		effectivePermissions.includes('*') ||
+			effectivePermissions.includes('glucose.readwrite')
+	);
+	const NEEDS_GLUCOSE_READWRITE =
+		'Reviewing compression lows requires the glucose.readwrite permission.';
 
 	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
@@ -145,6 +160,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
 		} finally {
 			isLoading = false;
 		}
@@ -162,6 +179,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
 		} finally {
 			isLoading = false;
 		}
@@ -179,6 +198,8 @@
 			suggestionsResource.refresh();
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+		} catch (err) {
+			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
 		} finally {
 			isLoading = false;
 		}
@@ -212,6 +233,8 @@
 			});
 			detectionResult = result;
 			suggestionsResource.refresh();
+		} catch (err) {
+			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
 		} finally {
 			isLoading = false;
 		}
@@ -327,6 +350,7 @@
 					<p class="mb-4 text-muted-foreground">
 						When compression lows are detected during your sleep, they will appear here.
 					</p>
+					{#if canReviewSuggestions}
 					<div class="flex flex-col items-center gap-4 print:hidden">
 						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
@@ -366,6 +390,7 @@
 							</p>
 						{/if}
 					</div>
+					{/if}
 				</CardContent>
 			</Card>
 		{:else if filteredSuggestions.length === 0}
@@ -456,7 +481,9 @@
 												engine={chartEngine}
 												heightClass="h-64"
 												selectionDomain={brushDomain}
-												onSelectionChange={isPending ? handleSelectionChange : undefined}
+												onSelectionChange={isPending && canReviewSuggestions
+													? handleSelectionChange
+													: undefined}
 											>
 												{#snippet tracks(_ctx)}
 													<ThresholdRules />
@@ -505,7 +532,7 @@
 										<p class="font-medium">
 											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
-										{#if isPending}
+										{#if isPending && canReviewSuggestions}
 											<p class="text-sm text-muted-foreground print:hidden">
 												Drag the handles on the chart to adjust
 											</p>
@@ -514,7 +541,7 @@
 								{/if}
 
 								<!-- Bulk Selection Bar -->
-								{#if isBulkMode}
+								{#if isBulkMode && canReviewSuggestions}
 									<div
 									class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3 print:hidden"
 								>
@@ -551,7 +578,7 @@
 								{/if}
 
 								<!-- Actions -->
-								{#if !isBulkMode}
+								{#if !isBulkMode && canReviewSuggestions}
 									{#if isPending}
 										<div class="flex gap-4 print:hidden">
 											<Button
