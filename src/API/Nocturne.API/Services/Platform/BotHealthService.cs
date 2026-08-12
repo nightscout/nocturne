@@ -9,28 +9,13 @@ namespace Nocturne.API.Services.Platform;
 /// <see cref="ChannelType"/> is available, degraded (heartbeat stale), or unavailable (adapter not configured).
 /// </summary>
 /// <remarks>
-/// Channels in <see cref="AlwaysAvailable"/> (WebPush, Webhook) are always reported as available
-/// regardless of heartbeat state. Bot-backed channels are degraded if the last heartbeat is older
-/// than 2 minutes (see <c>StalenessThreshold</c>).
+/// The heartbeat only speaks for the bot's adapters, so a channel type the bot does not deliver
+/// is reported available regardless of heartbeat state. Bot-backed channels are degraded if the
+/// last heartbeat is older than 2 minutes (see <c>StalenessThreshold</c>).
 /// </remarks>
 public sealed class BotHealthService
 {
     private static readonly TimeSpan StalenessThreshold = TimeSpan.FromMinutes(2);
-
-    private static readonly Dictionary<string, ChannelType> PlatformToChannel = new()
-    {
-        ["discord"] = ChannelType.DiscordDm,
-        ["slack"] = ChannelType.SlackDm,
-        ["telegram"] = ChannelType.Telegram,
-        ["whatsapp"] = ChannelType.WhatsApp,
-        ["resend"] = ChannelType.ResendEmail,
-    };
-
-    private static readonly HashSet<ChannelType> AlwaysAvailable =
-        [ChannelType.WebPush, ChannelType.Webhook];
-
-    private static readonly HashSet<ChannelType> RequiresLinkTypes =
-        [ChannelType.DiscordDm, ChannelType.SlackDm, ChannelType.Telegram, ChannelType.WhatsApp];
 
     private string[] _lastPlatforms = [];
     private DateTime _lastHeartbeat = DateTime.MinValue;
@@ -63,10 +48,7 @@ public sealed class BotHealthService
             heartbeat = _lastHeartbeat;
         }
 
-        var reportedChannels = platforms
-            .Where(PlatformToChannel.ContainsKey)
-            .Select(p => PlatformToChannel[p])
-            .ToHashSet();
+        var reportedPlatforms = platforms.ToHashSet();
 
         var isStale = heartbeat != DateTime.MinValue
             && DateTime.UtcNow - heartbeat > StalenessThreshold;
@@ -74,44 +56,33 @@ public sealed class BotHealthService
         return Enum.GetValues<ChannelType>()
             .Select(ct =>
             {
-                if (AlwaysAvailable.Contains(ct))
-                {
-                    return new ChannelStatusEntry
-                    {
-                        ChannelType = ct,
-                        Status = ChannelStatus.Available,
-                        RequiresLink = false,
-                    };
-                }
-
-                if (!reportedChannels.Contains(ct))
-                {
-                    return new ChannelStatusEntry
-                    {
-                        ChannelType = ct,
-                        Status = ChannelStatus.Unavailable,
-                        Reason = ChannelUnavailableReason.AdapterNotConfigured,
-                        RequiresLink = RequiresLinkTypes.Contains(ct),
-                    };
-                }
-
-                if (isStale)
-                {
-                    return new ChannelStatusEntry
-                    {
-                        ChannelType = ct,
-                        Status = ChannelStatus.Degraded,
-                        Reason = ChannelUnavailableReason.HeartbeatStale,
-                        RequiresLink = RequiresLinkTypes.Contains(ct),
-                    };
-                }
-
-                return new ChannelStatusEntry
+                var entry = new ChannelStatusEntry
                 {
                     ChannelType = ct,
                     Status = ChannelStatus.Available,
-                    RequiresLink = RequiresLinkTypes.Contains(ct),
+                    Offered = ChannelDestinations.Offered.Contains(ct),
+                    RequiresDestination = ChannelDestinations.RequiresDestination(ct),
+                    RequiresLink = ChannelDestinations.ResolvesFromLinkedIdentity(ct),
                 };
+
+                var platform = ChannelDestinations.PlatformOf(ct);
+                if (platform is null)
+                {
+                    return entry;
+                }
+
+                if (!reportedPlatforms.Contains(platform))
+                {
+                    entry.Status = ChannelStatus.Unavailable;
+                    entry.Reason = ChannelUnavailableReason.AdapterNotConfigured;
+                }
+                else if (isStale)
+                {
+                    entry.Status = ChannelStatus.Degraded;
+                    entry.Reason = ChannelUnavailableReason.HeartbeatStale;
+                }
+
+                return entry;
             })
             .ToList();
     }
@@ -123,5 +94,13 @@ public class ChannelStatusEntry
     public ChannelType ChannelType { get; set; }
     public ChannelStatus Status { get; set; }
     public ChannelUnavailableReason? Reason { get; set; }
+
+    /// <summary>Whether the rule editor may add a channel of this type.</summary>
+    public bool Offered { get; set; }
+
+    /// <summary>Whether the user must supply this channel's destination for it to deliver.</summary>
+    public bool RequiresDestination { get; set; }
+
+    /// <summary>Whether this channel's destination comes from the caller's linked chat identity.</summary>
     public bool RequiresLink { get; set; }
 }

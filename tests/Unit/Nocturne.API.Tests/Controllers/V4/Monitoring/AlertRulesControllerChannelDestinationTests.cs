@@ -29,6 +29,8 @@ public class AlertRulesControllerChannelDestinationTests
     private static readonly Guid Subject = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private const string ChannelSnowflake = "1234567890123456789";
     private const string DiscordUserSnowflake = "9876543210987654321";
+    private const string SlackMemberId = "U00FAKEUSER1";
+    private const string TelegramUserId = "864203571";
 
     private static (AlertRulesController Controller, NocturneDbContext Db) CreateController()
     {
@@ -131,29 +133,150 @@ public class AlertRulesControllerChannelDestinationTests
         JsonSerializer.Serialize(bad.Value).Should().Contain("\"message\"").And.Contain("Discord");
     }
 
-    [Fact]
-    public async Task CreateRule_resolves_discord_dm_destination_from_the_linked_identity()
+    private static async Task LinkIdentityAsync(
+        NocturneDbContext db, string platform, string platformUserId)
     {
-        var (controller, db) = CreateController();
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(),
-            Platform = "discord",
-            PlatformUserId = DiscordUserSnowflake,
+            Platform = platform,
+            PlatformUserId = platformUserId,
             TenantId = Tenant,
             NocturneUserId = Subject,
             IsActive = true,
         });
         await db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData(ChannelType.DiscordDm, "discord", DiscordUserSnowflake)]
+    [InlineData(ChannelType.SlackDm, "slack", SlackMemberId)]
+    [InlineData(ChannelType.TelegramDm, "telegram", TelegramUserId)]
+    public async Task CreateRule_resolves_a_dm_destination_from_the_linked_identity(
+        ChannelType channelType, string platform, string platformUserId)
+    {
+        var (controller, db) = CreateController();
+        await LinkIdentityAsync(db, platform, platformUserId);
 
         var result = await controller.CreateRule(
-            RuleWith(ChannelType.DiscordDm, null),
+            RuleWith(channelType, null),
             CancellationToken.None);
 
         var created = result.Result.Should().BeOfType<CreatedAtActionResult>()
             .Subject.Value.Should().BeOfType<AlertRuleResponse>().Subject;
         created.Channels.Should().ContainSingle()
-            .Which.Destination.Should().Be(DiscordUserSnowflake);
+            .Which.Destination.Should().Be(platformUserId);
+    }
+
+    [Theory]
+    [InlineData(ChannelType.SlackDm, "Slack")]
+    [InlineData(ChannelType.TelegramDm, "Telegram")]
+    public async Task CreateRule_rejects_a_dm_channel_when_the_caller_has_no_link_on_that_platform(
+        ChannelType channelType, string platform)
+    {
+        var (controller, db) = CreateController();
+        await LinkIdentityAsync(db, "discord", DiscordUserSnowflake);
+
+        var result = await controller.CreateRule(
+            RuleWith(channelType, null),
+            CancellationToken.None);
+
+        var bad = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain(platform);
+    }
+
+    [Theory]
+    [InlineData(ChannelType.SlackChannel, "C0123456789")]
+    [InlineData(ChannelType.SlackChannel, "G0123456789")]
+    [InlineData(ChannelType.TelegramGroup, "-1001234567890")]
+    [InlineData(ChannelType.TelegramGroup, "@nocturne_family")]
+    public async Task CreateRule_accepts_a_group_destination_the_adapter_can_address(
+        ChannelType channelType, string destination)
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.CreateRule(
+            RuleWith(channelType, destination),
+            CancellationToken.None);
+
+        var created = result.Result.Should().BeOfType<CreatedAtActionResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+        created.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(destination);
+    }
+
+    [Theory]
+    [InlineData(ChannelType.SlackChannel, null)]
+    [InlineData(ChannelType.SlackChannel, "  ")]
+    [InlineData(ChannelType.SlackChannel, "#general")]
+    [InlineData(ChannelType.SlackChannel, "U00FAKEUSER1")]
+    [InlineData(ChannelType.TelegramGroup, null)]
+    [InlineData(ChannelType.TelegramGroup, "  ")]
+    [InlineData(ChannelType.TelegramGroup, "1001234567890")]
+    [InlineData(ChannelType.TelegramGroup, "https://t.me/nocturne")]
+    [InlineData(ChannelType.SlackDm, "not-a-member-id")]
+    [InlineData(ChannelType.TelegramDm, "-1001234567890")]
+    public async Task CreateRule_rejects_a_destination_the_adapter_cannot_address(
+        ChannelType channelType, string? destination)
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.CreateRule(
+            RuleWith(channelType, destination),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(ChannelType.Telegram, "telegram_dm")]
+    [InlineData(ChannelType.WhatsApp, "whatsapp_dm")]
+    public async Task CreateRule_rejects_a_channel_type_with_no_delivery_path(
+        ChannelType channelType, string replacement)
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.CreateRule(
+            RuleWith(channelType, "anything"),
+            CancellationToken.None);
+
+        var bad = result.Result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain(replacement);
+    }
+
+    [Fact]
+    public async Task TestFireDryRun_rejects_a_destination_the_adapter_cannot_address()
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.TestFireDryRun(
+            new TestFireDryRunRequest("Low", AlertRuleSeverity.Warning,
+            [
+                new CreateAlertRuleChannelRequest
+                {
+                    ChannelType = ChannelType.SlackChannel,
+                    Destination = "#general",
+                },
+            ]),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task TestFireDryRun_fires_a_dm_channel_at_the_linked_identity()
+    {
+        var (controller, db) = CreateController();
+        await LinkIdentityAsync(db, "slack", SlackMemberId);
+
+        var result = await controller.TestFireDryRun(
+            new TestFireDryRunRequest("Low", AlertRuleSeverity.Warning,
+            [
+                new CreateAlertRuleChannelRequest { ChannelType = ChannelType.SlackDm },
+            ]),
+            CancellationToken.None);
+
+        result.Should().BeOfType<AcceptedResult>();
     }
 
     [Fact]

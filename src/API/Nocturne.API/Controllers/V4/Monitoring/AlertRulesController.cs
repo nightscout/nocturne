@@ -47,9 +47,6 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase
 {
-    /// <summary>Chat-identity-directory key for Discord links.</summary>
-    private const string DiscordPlatform = "discord";
-
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
@@ -386,10 +383,17 @@ public class AlertRulesController : ControllerBase
     [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        // Held to the same rules as a save: a preview that accepted a destination the editor
+        // would refuse to store would report success for a channel that cannot deliver.
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
+
         var tenantId = db.TenantId;
 
         // Synthesise channel snapshots with provisional ids — none of them point to a
@@ -442,13 +446,14 @@ public class AlertRulesController : ControllerBase
     #region Helpers
 
     /// <summary>
-    /// Fills in a Discord DM channel's destination from the caller's linked Discord identity and
-    /// rejects a channel list whose destinations cannot deliver: a <c>device_action</c> channel
-    /// naming an unknown kind or capability, a channel type that needs a destination and was given
-    /// none, or a Discord channel/DM destination that is not a snowflake ID. Nothing downstream
-    /// inspects a destination, so an unrejected one becomes a channel that stores fine and never
-    /// delivers. Returns a 400 <see cref="BadRequestObjectResult"/> on the first offender, or null
-    /// when all channels are valid.
+    /// Fills in a DM channel's destination from the caller's linked identity on that channel's
+    /// platform and rejects a channel list whose destinations cannot deliver: a
+    /// <c>device_action</c> channel naming an unknown kind or capability, a channel type with no
+    /// delivery path, a channel type that needs a destination and was given none, or a destination
+    /// the platform adapter cannot address. Nothing downstream inspects a destination, so an
+    /// unrejected one becomes a channel that stores fine and never delivers. Returns a 400
+    /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are
+    /// valid.
     /// </summary>
     private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
         List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, CancellationToken ct)
@@ -470,15 +475,27 @@ public class AlertRulesController : ControllerBase
                 continue;
             }
 
-            if (ch.ChannelType == ChannelType.DiscordDm && string.IsNullOrWhiteSpace(ch.Destination))
+            if (ChannelDestinations.SupersededBy(ch.ChannelType) is { } replacements)
             {
-                ch.Destination = await ResolveLinkedDiscordUserIdAsync(db, ct);
+                return BadRequest(new
+                {
+                    message = $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
+                        + $"{string.Join(" or ", replacements.Select(WireName))} instead.",
+                });
+            }
+
+            if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
+                && string.IsNullOrWhiteSpace(ch.Destination))
+            {
+                var platform = ChannelDestinations.PlatformOf(ch.ChannelType)!;
+                ch.Destination = await ResolveLinkedPlatformUserIdAsync(db, platform, ct);
                 if (ch.Destination is null)
                 {
+                    var name = char.ToUpperInvariant(platform[0]) + platform[1..];
                     return BadRequest(new
                     {
-                        message = "No linked Discord account for this user. Link Discord under "
-                            + "Connectors & Apps, or enter a Discord user ID as the destination.",
+                        message = $"No linked {name} account for this user. Link {name} under "
+                            + $"Connectors & Apps, or enter a {name} user ID as the destination.",
                     });
                 }
             }
@@ -492,13 +509,13 @@ public class AlertRulesController : ControllerBase
                 });
             }
 
-            if (ChannelDestinations.RequiresSnowflake(ch.ChannelType)
-                && !ChannelDestinations.IsSnowflake(ch.Destination))
+            if (!ChannelDestinations.IsWellFormed(ch.ChannelType, ch.Destination))
             {
                 return BadRequest(new
                 {
-                    message = $"A {WireName(ch.ChannelType)} channel's destination must be a Discord "
-                        + $"ID (17-20 digits); got '{ch.Destination}'.",
+                    message = $"A {WireName(ch.ChannelType)} channel's destination must be "
+                        + $"{ChannelDestinations.DescribeDestination(ch.ChannelType)}; "
+                        + $"got '{ch.Destination}'.",
                 });
             }
         }
@@ -543,12 +560,13 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
-    /// Returns the Discord user ID linked to the calling subject within this tenant, or null when
-    /// the subject has no active Discord link. Resolution happens here rather than at delivery
-    /// because a dispatch runs from the background orchestrator, where there is no caller to
-    /// attribute a DM to — and a rule carries no owner of its own.
+    /// Returns the platform user ID linked to the calling subject within this tenant, or null when
+    /// the subject has no active link on that platform. Resolution happens here rather than at
+    /// delivery because a dispatch runs from the background orchestrator, where there is no caller
+    /// to attribute a DM to — and a rule carries no owner of its own.
     /// </summary>
-    private async Task<string?> ResolveLinkedDiscordUserIdAsync(NocturneDbContext db, CancellationToken ct)
+    private async Task<string?> ResolveLinkedPlatformUserIdAsync(
+        NocturneDbContext db, string platform, CancellationToken ct)
     {
         var subjectId = HttpContext?.GetSubjectId();
         if (subjectId is null)
@@ -560,7 +578,7 @@ public class AlertRulesController : ControllerBase
         return await db.ChatIdentityDirectory
             .Where(d => d.TenantId == tenantId
                         && d.NocturneUserId == subjectId.Value
-                        && d.Platform == DiscordPlatform
+                        && d.Platform == platform
                         && d.IsActive)
             .OrderBy(d => d.CreatedAt)
             .Select(d => d.PlatformUserId)
