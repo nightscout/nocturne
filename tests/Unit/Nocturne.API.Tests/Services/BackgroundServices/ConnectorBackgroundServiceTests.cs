@@ -889,6 +889,81 @@ public class ConnectorBackgroundServiceTests
     }
 
     /// <summary>
+    /// The poll loop itself must run listener supervision: before the first sync cycle at startup,
+    /// and again on later ticks — that repeat is what replaces a listener that dies mid-lifetime.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_RunsListenerSupervisionFromThePollLoop()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            BuildEnabledConfigMock(),
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        var sut = new PollLoopWiringService(serviceProvider);
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            var winner = await Task.WhenAny(sut.SecondSupervisionPass, Task.Delay(TimeSpan.FromSeconds(10)));
+            winner.Should().Be(sut.SecondSupervisionPass,
+                "the poll loop must re-run listener supervision on later ticks, not just once before the loop");
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        sut.Events.TryPeek(out var first);
+        first.Should().Be("listeners", "listener startup must precede the first sync cycle");
+    }
+
+    /// <summary>
+    /// Runs the real ExecuteAsync poll loop with test-fast intervals, recording listener-startup
+    /// passes and sync cycles in order.
+    /// </summary>
+    private sealed class PollLoopWiringService(IServiceProvider serviceProvider)
+        : ConnectorBackgroundService<TestConnectorConfig>(serviceProvider, NullLogger.Instance)
+    {
+        private readonly TaskCompletionSource _secondSupervisionPass =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _listenerStartCount;
+
+        public ConcurrentQueue<string> Events { get; } = new();
+
+        public Task SecondSupervisionPass => _secondSupervisionPass.Task;
+
+        protected override string ConnectorName => "TestConnector";
+
+        protected override TimeSpan StartupDelay => TimeSpan.Zero;
+
+        protected override TimeSpan PollInterval => TimeSpan.FromMilliseconds(20);
+
+        protected override TimeSpan RealtimeSupervisionInterval => TimeSpan.Zero;
+
+        protected override Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
+        {
+            Events.Enqueue("listeners");
+            if (Interlocked.Increment(ref _listenerStartCount) >= 2)
+                _secondSupervisionPass.TrySetResult();
+            return Task.CompletedTask;
+        }
+
+        protected override Task<SyncResult> PerformSyncAsync(
+            IServiceProvider scopeProvider,
+            TestConnectorConfig config,
+            CancellationToken cancellationToken,
+            ISyncProgressReporter? progressReporter = null)
+        {
+            Events.Enqueue("sync");
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    /// <summary>
     /// Stand-in for a real-time client whose liveness the test controls.
     /// </summary>
     private sealed class FakeListenerClient

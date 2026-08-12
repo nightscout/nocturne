@@ -115,6 +115,17 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     /// </summary>
     protected virtual TimeSpan RealtimeSupervisionInterval => TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Delay before the first poll tick, letting the application fully start. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan StartupDelay => TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Interval between poll ticks. Each tenant is still only synced when its own
+    /// SyncIntervalMinutes has elapsed since its last sync. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan PollInterval => TimeSpan.FromMinutes(1);
+
     private DateTime _lastRealtimeSupervision = DateTime.MinValue;
 
     private async Task SuperviseRealtimeListenersAsync(CancellationToken stoppingToken)
@@ -240,8 +251,8 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Wait briefly to let the application fully start
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        if (StartupDelay > TimeSpan.Zero)
+            await Task.Delay(StartupDelay, stoppingToken);
 
         Logger.LogInformation(
             "{ConnectorName} connector background service started",
@@ -249,9 +260,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         try
         {
-            // Poll every minute; each tenant is only synced when its own
-            // SyncIntervalMinutes has elapsed since its last sync.
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            using var timer = new PeriodicTimer(PollInterval);
 
             do
             {
