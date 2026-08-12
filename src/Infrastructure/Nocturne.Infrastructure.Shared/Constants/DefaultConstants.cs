@@ -63,7 +63,6 @@ public static class DefaultConstants
         {
             public const int AppPlatform = 2;
             public const int AppVersion = 20403;
-            public const int SyncMonths = 6;
         }
     }
 
