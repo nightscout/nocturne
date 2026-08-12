@@ -59,6 +59,12 @@ public class ShareReadSurfaceReachabilityTests
             ["Nocturne.API.Controllers.V4.Health.StepCountController"] = OAuthScopes.StepCountRead,
             ["Nocturne.API.Controllers.V4.Analytics.SensorIntegrityController"] = OAuthScopes.ReportsRead,
             ["Nocturne.API.Controllers.V4.Analytics.StatisticsController"] = OAuthScopes.ReportsRead,
+            ["Nocturne.API.Controllers.V4.Analytics.DataOverviewController"] = OAuthScopes.ReportsRead,
+            // Backs the steps and heart-rate reports, which are not member-only, so its gate must
+            // admit a share holding any one of its categories;
+            // ActogramReadScopeGuard empties the rest. Listed against glucose because the default
+            // share grant is glucose-only and the report still renders its glucose overlay.
+            ["Nocturne.API.Controllers.V4.Analytics.ActogramController"] = OAuthScopes.GlucoseRead,
             // Feeds the data quality report. Its rows are hidden from shares by RLS
             // (compression_low_suggestions has no ShareDataCategories entry), so the gate decides
             // error-vs-empty-list, not what a share can see.

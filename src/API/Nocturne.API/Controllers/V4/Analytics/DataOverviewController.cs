@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Services;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -12,6 +14,12 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <remarks>
 /// Responses are cached (300s for years and GRI timeline; 180s for daily summary)
 /// to reduce database load when the heatmap re-renders.
+/// <para>
+/// Every response is an aggregate — record counts, daily averages, monthly GRI — so the whole
+/// controller sits behind <see cref="OAuthScopes.ReportsRead"/> rather than the read scope of each
+/// category it counts, matching <c>StatisticsController</c>. Public shares are narrowed further by
+/// per-category share RLS.
+/// </para>
 /// </remarks>
 /// <seealso cref="IDataOverviewService"/>
 /// <seealso cref="DataOverviewYearsResponse"/>
@@ -21,6 +29,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/year-overview")]
 [Produces("application/json")]
+[RequireScope(OAuthScopes.ReportsRead)]
 [ClientPropertyName("dataOverview")]
 public class DataOverviewController : ControllerBase
 {

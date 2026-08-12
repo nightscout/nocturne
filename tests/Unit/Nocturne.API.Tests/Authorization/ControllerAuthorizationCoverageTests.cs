@@ -58,9 +58,7 @@ public class ControllerAuthorizationCoverageTests
             // underlying rows to the categories the share was granted. Adding [Authorize] here
             // would 401 the anonymous share dashboard. All actions are GET, so there is no write
             // surface to expose.
-            ["Nocturne.API.Controllers.V4.Analytics.ActogramController"] = "public-share read analytics (fallback + share RLS)",
             ["Nocturne.API.Controllers.V4.Analytics.ChartDataController"] = "public-share read analytics (fallback + share RLS)",
-            ["Nocturne.API.Controllers.V4.Analytics.DataOverviewController"] = "public-share read analytics (fallback + share RLS)",
             ["Nocturne.API.Controllers.V4.Analytics.RetrospectiveController"] = "public-share read analytics (fallback + share RLS)",
             ["Nocturne.API.Controllers.V4.Analytics.PredictionController"] = "public-share read analytics (fallback + share RLS)",
 
