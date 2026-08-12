@@ -2,6 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getOriginalHost, isShareHost } from "$lib/server/request-host";
+import { toIsoString } from "$lib/utils/api-date";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -80,7 +81,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) 
     : publicViewAllowed;
 
   const isDemo = status?.isDemo ?? false;
-  const nextResetAt = status?.nextResetAt ? status.nextResetAt.toISOString() : null;
+  const nextResetAt = toIsoString(status?.nextResetAt);
 
   return {
     user: locals.user ?? null,
