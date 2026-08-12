@@ -320,4 +320,19 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
         }
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Bolus>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.GetUnattributedAsync<BolusEntity>(from, to, limit, ct);
+        return entities.Select(BolusMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SetPatientDeviceIdsAsync<BolusEntity>(patientDeviceIdByRecordId, ct);
+    }
 }

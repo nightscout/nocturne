@@ -93,7 +93,7 @@ public class DeviceEventController(
 
         // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
         // direct API records stay unstamped. No-op when the request carried an explicit patientDeviceId.
-        await deviceStamper.StampAsync([model], CategoriesFor(model.EventType), model.DataSource, ct);
+        await deviceStamper.StampAsync([model], DeviceAttributionCategories.DeviceEvent(model.EventType), model.DataSource, ct);
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
@@ -115,7 +115,7 @@ public class DeviceEventController(
             return error;
 
         // No-op when attribution was preserved or explicitly set above; re-attributes only records still unstamped.
-        await deviceStamper.StampAsync([model], CategoriesFor(model.EventType), model.DataSource, ct);
+        await deviceStamper.StampAsync([model], DeviceAttributionCategories.DeviceEvent(model.EventType), model.DataSource, ct);
 
         try
         {
@@ -177,18 +177,6 @@ public class DeviceEventController(
             ? Problem(detail: $"patientDeviceId '{patientDeviceId}' does not resolve to a registered patient device", statusCode: 400, title: "Bad Request")
             : null;
     }
-
-    /// <summary>
-    /// Device categories eligible to receive an event of the given type: sensor lifecycle events belong
-    /// to CGMs, every other lifecycle event (site, cannula, reservoir, battery, pod, priming, settings)
-    /// to insulin pumps.
-    /// </summary>
-    private static DeviceCategory[] CategoriesFor(DeviceEventType eventType) => eventType switch
-    {
-        DeviceEventType.SensorStart or DeviceEventType.SensorChange or DeviceEventType.SensorStop
-            or DeviceEventType.TransmitterSensorInsert => [DeviceCategory.CGM],
-        _ => [DeviceCategory.InsulinPump],
-    };
 
     /// <summary>
     /// Delete a device event by its external sync identifier (dataSource + syncIdentifier pair).

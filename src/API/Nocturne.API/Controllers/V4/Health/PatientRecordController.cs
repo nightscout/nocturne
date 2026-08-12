@@ -136,7 +136,7 @@ public class PatientRecordController : ControllerBase
     {
         await ResolveDeviceIdAsync(model, cancellationToken);
         var created = await _deviceRepo.CreateAsync(model, WriteOrigin.Live, cancellationToken);
-        // Back-stamp existing unattributed readings this device now explains (glucose stream only).
+        // Back-stamp existing unattributed records this device now explains.
         await _reattribution.ReattributeForDeviceAsync(created, cancellationToken);
         return CreatedAtAction(nameof(GetDevices), created);
     }

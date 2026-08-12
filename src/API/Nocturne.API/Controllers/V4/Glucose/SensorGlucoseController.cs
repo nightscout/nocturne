@@ -87,7 +87,7 @@ public class SensorGlucoseController(
         // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
         // direct API records stay unstamped and only ever surface as pseudo-devices. Fills only when
         // the record is unattributed; the canonical stream still governs reads.
-        await deviceStamper.StampAsync([model], [DeviceCategory.CGM], model.DataSource, ct);
+        await deviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
 
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
@@ -148,7 +148,7 @@ public class SensorGlucoseController(
         await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
         // No-op when attribution was preserved above; re-attributes only records still unstamped.
-        await deviceStamper.StampAsync([model], [DeviceCategory.CGM], model.DataSource, ct);
+        await deviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
 
         try
         {
@@ -187,7 +187,7 @@ public class SensorGlucoseController(
 
         // Attribute the batch before persisting (see Create). Per-record DataSource drives matching,
         // so no batch-level source is needed for a mixed-source bulk upload.
-        await deviceStamper.StampAsync(models, [DeviceCategory.CGM], batchSource: null, ct);
+        await deviceStamper.StampAsync(models, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
 
         var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         var createdArray = created.ToArray();

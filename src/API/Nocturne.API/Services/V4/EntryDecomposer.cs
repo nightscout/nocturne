@@ -116,7 +116,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         // Carry an earlier attribution forward on re-upload: the rebuilt model starts null and a
         // later ambiguous stamp (e.g. a second device registered since) must not wipe the stored FK.
         model.PatientDeviceId = existing?.PatientDeviceId;
-        await _patientDeviceStamper.StampAsync([model], [DeviceCategory.CGM], model.DataSource, ct);
+        await _patientDeviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
 
         if (existing != null)
         {
@@ -141,7 +141,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
         var model = MapToMeterGlucose(entry, result.CorrelationId);
         model.PatientDeviceId = existing?.PatientDeviceId;
-        await _patientDeviceStamper.StampAsync([model], [DeviceCategory.GlucoseMeter], model.DataSource, ct);
+        await _patientDeviceStamper.StampAsync([model], DeviceAttributionCategories.MeterGlucose, model.DataSource, ct);
 
         if (existing != null)
         {
@@ -234,9 +234,9 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         }
 
         if (sgvList.Count > 0)
-            await _patientDeviceStamper.StampAsync(sgvList, [DeviceCategory.CGM], batchSource: null, ct);
+            await _patientDeviceStamper.StampAsync(sgvList, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
         if (mbgList.Count > 0)
-            await _patientDeviceStamper.StampAsync(mbgList, [DeviceCategory.GlucoseMeter], batchSource: null, ct);
+            await _patientDeviceStamper.StampAsync(mbgList, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);
 
         using (SystemAuditScope.Push(_auditContext))
         {

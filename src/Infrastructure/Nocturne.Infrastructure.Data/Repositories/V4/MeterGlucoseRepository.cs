@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -93,5 +94,20 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
             query = query.Where(e => e.Timestamp < to.Value);
 
         return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MeterGlucose>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.GetUnattributedAsync<MeterGlucoseEntity>(from, to, limit, ct);
+        return entities.Select(MeterGlucoseMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SetPatientDeviceIdsAsync<MeterGlucoseEntity>(patientDeviceIdByRecordId, ct);
     }
 }

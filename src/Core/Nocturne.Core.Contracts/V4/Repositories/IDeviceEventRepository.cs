@@ -16,8 +16,21 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="DeviceEvent"/>
 /// <seealso cref="DeviceEventType"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
+public interface IDeviceEventRepository : IV4Repository<DeviceEvent>, IDeviceAttributionWriter
 {
+    /// <summary>
+    /// Returns unattributed events (<c>PatientDeviceId == null</c>) of the given types within the time
+    /// window, newest first, capped at <paramref name="limit"/>. Unlike the other device-attributed
+    /// types, one table holds both sensor- and pump-originated events, so back-stamping must narrow to
+    /// the types the registering device's category can own.
+    /// </summary>
+    Task<IReadOnlyList<DeviceEvent>> GetUnattributedAsync(
+        DateTime? from,
+        DateTime? to,
+        IReadOnlyCollection<DeviceEventType> eventTypes,
+        int limit,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Retrieve a page of <see cref="DeviceEvent"/> records filtered by time range, device, source, and origin.
     /// </summary>

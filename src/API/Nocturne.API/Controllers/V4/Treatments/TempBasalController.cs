@@ -121,7 +121,7 @@ public class TempBasalController(
             var model = MapToModel(request);
             // Attribute like the sensor-glucose native path — otherwise direct API records stay
             // unstamped and only ever surface as pseudo-devices.
-            await deviceStamper.StampAsync([model], [DeviceCategory.InsulinPump], model.DataSource, ct);
+            await deviceStamper.StampAsync([model], DeviceAttributionCategories.TempBasal, model.DataSource, ct);
             results.Add(await repo.CreateAsync(model, WriteOrigin.Live, ct));
         }
 

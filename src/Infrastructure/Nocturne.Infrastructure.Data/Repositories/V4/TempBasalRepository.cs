@@ -437,4 +437,24 @@ public class TempBasalRepository : ITempBasalRepository
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
     }
+
+    /// <inheritdoc />
+    /// <remarks>Windows on the span start, the timestamp temp basals are attributed by.</remarks>
+    public async Task<IReadOnlyList<TempBasal>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var query = ctx.TempBasals.AsNoTracking();
+        if (from.HasValue) query = query.Where(e => e.StartTimestamp >= from.Value);
+        if (to.HasValue) query = query.Where(e => e.StartTimestamp <= to.Value);
+
+        var entities = await query.UnattributedNewestFirstAsync(e => e.StartTimestamp, limit, ct);
+        return entities.Select(TempBasalMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        return await ctx.SetPatientDeviceIdsAsync<TempBasalEntity>(patientDeviceIdByRecordId, ct);
+    }
 }

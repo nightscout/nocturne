@@ -104,7 +104,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
 
             await ResolvePatientInsulinsForBolusesAsync(recordList, origin, cancellationToken);
             await _patientDeviceStamper.StampAsync(
-                recordList, [DeviceCategory.InsulinPump, DeviceCategory.SmartPen], source, cancellationToken);
+                recordList, DeviceAttributionCategories.Bolus, source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _bolusRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
@@ -198,7 +198,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await _patientDeviceStamper.StampAsync(
-                recordList, [DeviceCategory.InsulinPump], source, cancellationToken);
+                recordList, DeviceAttributionCategories.TempBasal, source, cancellationToken);
 
             var minTimestamp = recordList.Min(r => r.StartTimestamp);
             var maxTimestamp = recordList.Max(r => r.StartTimestamp);
@@ -302,7 +302,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
 
             await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, origin, cancellationToken);
             await _patientDeviceStamper.StampAsync(
-                recordList, [DeviceCategory.InsulinPen, DeviceCategory.SmartPen], source, cancellationToken);
+                recordList, DeviceAttributionCategories.BasalInjection, source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _basalInjectionRepository.BulkCreateAsync(recordList, origin, cancellationToken);
 

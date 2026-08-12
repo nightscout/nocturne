@@ -14,6 +14,9 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="PatientDevice"/>
 public interface IDeviceAttributed
 {
+    /// <summary>Primary key of the record, used to persist a resolved attribution back to its row.</summary>
+    Guid Id { get; }
+
     /// <summary>Timestamp used to match the record against a device's usage window.</summary>
     DateTime Timestamp { get; }
 

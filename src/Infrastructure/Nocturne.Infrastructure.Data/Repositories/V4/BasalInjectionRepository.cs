@@ -441,4 +441,15 @@ public class BasalInjectionRepository : IBasalInjectionRepository
             .FirstOrDefaultAsync(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier, ct);
         return entity is null ? null : BasalInjectionMapper.ToDomainModel(entity);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BasalInjection>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
+    {
+        var entities = await _context.GetUnattributedAsync<BasalInjectionEntity>(from, to, limit, ct);
+        return entities.Select(BasalInjectionMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+        => _context.SetPatientDeviceIdsAsync<BasalInjectionEntity>(patientDeviceIdByRecordId, ct);
 }

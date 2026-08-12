@@ -225,4 +225,28 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
 
         return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceEvent>> GetUnattributedAsync(
+        DateTime? from,
+        DateTime? to,
+        IReadOnlyCollection<DeviceEventType> eventTypes,
+        int limit,
+        CancellationToken ct = default)
+    {
+        if (eventTypes.Count == 0) return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
+        var entities = await ctx.GetUnattributedAsync<DeviceEventEntity>(
+            from, to, limit, ct, filter: e => eventTypeStrings.Contains(e.EventType));
+        return entities.Select(DeviceEventMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.SetPatientDeviceIdsAsync<DeviceEventEntity>(patientDeviceIdByRecordId, ct);
+    }
 }
