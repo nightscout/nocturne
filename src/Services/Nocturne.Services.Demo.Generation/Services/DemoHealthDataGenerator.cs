@@ -21,6 +21,19 @@ public static class DemoHealthDataGenerator
     /// record and prefixes the deterministic sync identifiers, so re-seeding
     /// updates in place via the (DataSource, SyncIdentifier) dedup key.
     /// </summary>
+    /// <summary>
+    /// The day's 75-minute late-afternoon workout window. Deterministic per
+    /// date and shared with the state-span seeding, so Exercise spans cover
+    /// exactly the step spike and heart-rate ramp.
+    /// </summary>
+    public static (DateTime Start, DateTime End) WorkoutWindowFor(DateTime localDay)
+    {
+        var rng = DayScenarios.RngFor(localDay, "workout-window");
+        var startHour = 16 + DayScenarios.Roll(localDay, "workout", 4); // 16-19
+        var start = localDay.AddHours(startHour).AddMinutes(rng.Next(0, 45));
+        return (start, start.AddMinutes(75));
+    }
+
     public static (List<HeartRate> HeartRates, List<StepCount> StepCounts) GenerateDailyActivity(
         DateTime localDay, string dataSource)
     {
@@ -28,9 +41,7 @@ public static class DemoHealthDataGenerator
         var rng = DayScenarios.RngFor(localDay, "activity");
 
         // Exercise window: a 75-minute workout starting late afternoon.
-        var workoutStartHour = 16 + DayScenarios.Roll(localDay, "workout", 4); // 16-19
-        var workoutStart = localDay.AddHours(workoutStartHour).AddMinutes(rng.Next(0, 45));
-        var workoutEnd = workoutStart.AddMinutes(75);
+        var (workoutStart, workoutEnd) = WorkoutWindowFor(localDay);
         var hasWorkout = scenario == DayScenario.Exercise;
 
         var heartRates = new List<HeartRate>();
