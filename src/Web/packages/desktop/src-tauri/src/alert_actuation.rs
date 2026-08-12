@@ -7,8 +7,10 @@
 //! live event overlapping the periodic poll cannot double-actuate) and self-healing (an alert closed
 //! while the companion was offline simply never appears, producing nothing). Acknowledged intents are
 //! skipped. Each active intent actuates the subset of capabilities the server narrowed it to
-//! (`notify` → toast, `tray_flash` → flash), so an intent can drive both. Reconcile runs on connect,
-//! on every `device_action`, and on a ~30s interval.
+//! (`notify` → toast, `tray_flash` → flash), so an intent can drive both, further narrowed by the
+//! user's local opt-in (`device_capabilities`) so a capability switched off stops actuating before
+//! the re-registration that withdraws it server-side lands. Reconcile runs on connect, on every
+//! `device_action`, and on a ~30s interval.
 //!
 //! Registration happens once per process and the device id is reused across sessions; it is
 //! re-resolved only when the server invalidates it (401/404 on the snapshot, 409 on register) or the
@@ -26,6 +28,7 @@
 
 use crate::auth::{self, TokenError};
 use crate::client_devices::{self, DeviceActionIntent};
+use crate::device_capabilities::{self, DeviceCapabilitySettings};
 use crate::signalr::DeviceNotificationMirror;
 use crate::toast::{self, AckContext};
 use crate::tray;
@@ -135,8 +138,20 @@ pub fn on_link(app: &tauri::AppHandle) {
     reset_registration(app);
 }
 
+/// Called when the user changes which capabilities are enabled. Dropping the registration makes the
+/// next pass re-register with the new advertised set; the state reset withdraws what is actuating
+/// now, so a capability switched off stops immediately rather than at the next excursion. Leaves
+/// `NEEDS_RELINK` alone — a capability choice says nothing about the grant's scopes.
+pub fn on_capabilities_changed(app: &tauri::AppHandle) {
+    restart(app);
+}
+
 fn reset_registration(app: &tauri::AppHandle) {
     NEEDS_RELINK.store(false, Ordering::SeqCst);
+    restart(app);
+}
+
+fn restart(app: &tauri::AppHandle) {
     RESET_STATE.store(true, Ordering::SeqCst);
     tray::stop_all_flashes(app);
     wake().notify_one();
@@ -262,9 +277,10 @@ async fn register_install(
     install_id: &mut String,
     label: &str,
 ) -> Result<String, u64> {
+    let capabilities = device_capabilities::current().advertised();
     let mut regenerated = false;
     loop {
-        match client_devices::register(client, server, token, install_id, label).await {
+        match client_devices::register(client, server, token, install_id, label, &capabilities).await {
             Ok(id) => return Ok(id),
             Err(e) => {
                 eprintln!("alert actuation: register: {e}");
@@ -536,7 +552,7 @@ async fn reconcile_with(
         }
     };
 
-    let effects = reconcile_effects(state, &intents);
+    let effects = reconcile_effects(state, &intents, device_capabilities::current());
     for intent in &effects.toast {
         show_toast(intent, &server, runtime);
     }
@@ -562,37 +578,61 @@ struct ReconcileEffects {
     flash_stop: Vec<String>,
 }
 
-fn reconcile_effects(state: &mut ActuationState, intents: &[DeviceActionIntent]) -> ReconcileEffects {
-    let active: HashSet<String> = intents
-        .iter()
-        .filter(|i| i.is_active())
-        .map(|i| i.excursion_id.clone())
-        .collect();
+fn reconcile_effects(
+    state: &mut ActuationState,
+    intents: &[DeviceActionIntent],
+    enabled: DeviceCapabilitySettings,
+) -> ReconcileEffects {
+    let wanted_notify = wanted(intents, enabled.notify, DeviceActionIntent::wants_notify);
+    let wanted_flash = wanted(intents, enabled.tray_flash, DeviceActionIntent::wants_tray_flash);
 
     let mut effects = ReconcileEffects::default();
 
     // New actuations per capability: fire once per excursion (HashSet::insert is the dedup gate).
     for intent in intents.iter().filter(|i| i.is_active()) {
-        if intent.wants_notify() && state.notified.insert(intent.excursion_id.clone()) {
+        if wanted_notify.contains(&intent.excursion_id)
+            && state.notified.insert(intent.excursion_id.clone())
+        {
             effects.toast.push(intent.clone());
         }
-        if intent.wants_tray_flash() && state.flashing.insert(intent.excursion_id.clone()) {
+        if wanted_flash.contains(&intent.excursion_id)
+            && state.flashing.insert(intent.excursion_id.clone())
+        {
             effects.flash_start.push(intent.excursion_id.clone());
         }
     }
 
-    // Withdrawn excursions: actuating locally but no longer active server-side → clear. Windows owns
-    // the toast lifecycle (the alarm scenario persists until dismissed), so notify only drops its
-    // dedup record; tray_flash is companion-owned, so each stopped excursion is reported for an
+    // Withdrawn excursions: actuating locally but no longer wanted — the excursion left the active
+    // set, the server narrowed the capability away, or the user disabled it here → clear. Windows
+    // owns the toast lifecycle (the alarm scenario persists until dismissed), so notify only drops
+    // its dedup record; tray_flash is companion-owned, so each stopped excursion is reported for an
     // explicit stop. Dropping the dedup record lets a later re-open of the same excursion id actuate
     // again.
-    state.notified.retain(|id| active.contains(id));
-    effects.flash_stop = state.flashing.difference(&active).cloned().collect();
+    state.notified.retain(|id| wanted_notify.contains(id));
+    effects.flash_stop = state.flashing.difference(&wanted_flash).cloned().collect();
     for id in &effects.flash_stop {
         state.flashing.remove(id);
     }
 
     effects
+}
+
+/// The excursions one capability should currently be actuating: active intents the server narrowed
+/// that capability to, and only while the user has it enabled here. A disabled capability yields an
+/// empty set, which both suppresses new actuations and withdraws any already running.
+fn wanted(
+    intents: &[DeviceActionIntent],
+    enabled: bool,
+    requests: fn(&DeviceActionIntent) -> bool,
+) -> HashSet<String> {
+    if !enabled {
+        return HashSet::new();
+    }
+    intents
+        .iter()
+        .filter(|i| i.is_active() && requests(i))
+        .map(|i| i.excursion_id.clone())
+        .collect()
 }
 
 /// Withdraws every active actuation: clears the per-excursion state and stops all tray flashes
@@ -649,6 +689,12 @@ mod tests {
         }
     }
 
+    /// The default opt-in: every capability enabled, i.e. actuation driven purely by the server's
+    /// narrowed set.
+    fn all_enabled() -> DeviceCapabilitySettings {
+        DeviceCapabilitySettings::default()
+    }
+
     impl ReconcileEffects {
         fn toasted_ids(&self) -> Vec<&str> {
             self.toast.iter().map(|i| i.excursion_id.as_str()).collect()
@@ -659,21 +705,21 @@ mod tests {
     fn new_excursion_toasts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents).toasted_ids(), vec!["a"]);
+        assert_eq!(reconcile_effects(&mut state, &intents, all_enabled()).toasted_ids(), vec!["a"]);
         // Same active state on the next reconcile → no new toast.
-        assert!(reconcile_effects(&mut state, &intents).toast.is_empty());
+        assert!(reconcile_effects(&mut state, &intents, all_enabled()).toast.is_empty());
     }
 
     #[test]
     fn resolved_excursion_clears_and_can_reopen() {
         let mut state = ActuationState::default();
-        reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
+        reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled());
         // Resolved → removed from the notified set.
-        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])]).toast.is_empty());
+        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])], all_enabled()).toast.is_empty());
         assert!(!state.notified.contains("a"));
         // Re-open of the same id toasts again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]).toasted_ids(),
+            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled()).toasted_ids(),
             vec!["a"]
         );
     }
@@ -681,7 +727,7 @@ mod tests {
     #[test]
     fn acknowledged_excursion_is_not_actuated() {
         let mut state = ActuationState::default();
-        let fx = reconcile_effects(&mut state, &[intent("a", true, true, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])]);
+        let fx = reconcile_effects(&mut state, &[intent("a", true, true, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])], all_enabled());
         assert!(fx.toast.is_empty());
         assert!(fx.flash_start.is_empty());
         assert!(!state.notified.contains("a"));
@@ -692,16 +738,16 @@ mod tests {
     fn closed_while_offline_produces_nothing() {
         // The companion was offline for the whole excursion; the snapshot is empty on reconnect.
         let mut state = ActuationState::default();
-        assert_eq!(reconcile_effects(&mut state, &[]), ReconcileEffects::default());
+        assert_eq!(reconcile_effects(&mut state, &[], all_enabled()), ReconcileEffects::default());
     }
 
     #[test]
     fn tray_flash_starts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[TRAY_FLASH_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents).flash_start, vec!["a".to_string()]);
+        assert_eq!(reconcile_effects(&mut state, &intents, all_enabled()).flash_start, vec!["a".to_string()]);
         // Same active state next reconcile → no restart (don't re-flash every 30s poll).
-        let fx = reconcile_effects(&mut state, &intents);
+        let fx = reconcile_effects(&mut state, &intents, all_enabled());
         assert!(fx.flash_start.is_empty());
         assert!(fx.flash_stop.is_empty());
     }
@@ -709,14 +755,14 @@ mod tests {
     #[test]
     fn tray_flash_stops_when_excursion_leaves_active_set() {
         let mut state = ActuationState::default();
-        reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]);
+        reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])], all_enabled());
         // Resolved → flash stops and the dedup record clears.
-        let fx = reconcile_effects(&mut state, &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])]);
+        let fx = reconcile_effects(&mut state, &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])], all_enabled());
         assert_eq!(fx.flash_stop, vec!["a".to_string()]);
         assert!(!state.flashing.contains("a"));
         // Re-open flashes again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]).flash_start,
+            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])], all_enabled()).flash_start,
             vec!["a".to_string()]
         );
     }
@@ -727,6 +773,7 @@ mod tests {
         let fx = reconcile_effects(
             &mut state,
             &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
+            all_enabled(),
         );
         assert_eq!(fx.toasted_ids(), vec!["a"]);
         assert_eq!(fx.flash_start, vec!["a".to_string()]);
@@ -735,17 +782,80 @@ mod tests {
     #[test]
     fn notify_only_intent_does_not_flash() {
         let mut state = ActuationState::default();
-        let fx = reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
+        let fx = reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled());
         assert_eq!(fx.toasted_ids(), vec!["a"]);
         assert!(fx.flash_start.is_empty());
         assert!(!state.flashing.contains("a"));
+    }
+
+    // ── local capability opt-in ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn disabled_capability_does_not_actuate() {
+        // The server still narrows the intent to both capabilities (the re-registration that drops
+        // notify may not have landed yet); the local opt-in is what suppresses the toast.
+        let mut state = ActuationState::default();
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
+            DeviceCapabilitySettings { notify: false, tray_flash: true },
+        );
+        assert!(fx.toast.is_empty());
+        assert!(!state.notified.contains("a"));
+        // The capability left enabled is untouched.
+        assert_eq!(fx.flash_start, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn disabling_a_capability_withdraws_what_it_is_already_actuating() {
+        let mut state = ActuationState::default();
+        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])];
+        reconcile_effects(&mut state, &intents, all_enabled());
+        assert!(state.flashing.contains("a"));
+
+        // Same still-active excursion, tray_flash switched off here: the flash stops without the
+        // rule or the server's narrowed set changing.
+        let fx = reconcile_effects(
+            &mut state,
+            &intents,
+            DeviceCapabilitySettings { notify: true, tray_flash: false },
+        );
+        assert_eq!(fx.flash_stop, vec!["a".to_string()]);
+        assert!(!state.flashing.contains("a"));
+        assert!(fx.flash_start.is_empty());
+    }
+
+    #[test]
+    fn disabling_every_capability_actuates_nothing() {
+        let mut state = ActuationState::default();
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
+            DeviceCapabilitySettings { notify: false, tray_flash: false },
+        );
+        assert_eq!(fx, ReconcileEffects::default());
+        assert!(state.notified.is_empty());
+        assert!(state.flashing.is_empty());
+    }
+
+    #[test]
+    fn re_enabling_a_capability_actuates_a_still_active_excursion() {
+        let mut state = ActuationState::default();
+        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY])];
+        reconcile_effects(
+            &mut state,
+            &intents,
+            DeviceCapabilitySettings { notify: false, tray_flash: true },
+        );
+        let fx = reconcile_effects(&mut state, &intents, all_enabled());
+        assert_eq!(fx.toasted_ids(), vec!["a"]);
     }
 
     #[test]
     fn withdraw_all_clears_state_and_next_reconcile_reactuates() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])];
-        reconcile_effects(&mut state, &intents);
+        reconcile_effects(&mut state, &intents, all_enabled());
         assert!(state.notified.contains("a"));
         assert!(state.flashing.contains("a"));
 
@@ -755,7 +865,7 @@ mod tests {
         assert!(state.flashing.is_empty());
 
         // …and a later relink with the excursion still active re-actuates both capabilities.
-        let fx = reconcile_effects(&mut state, &intents);
+        let fx = reconcile_effects(&mut state, &intents, all_enabled());
         assert_eq!(fx.toasted_ids(), vec!["a"]);
         assert_eq!(fx.flash_start, vec!["a".to_string()]);
     }

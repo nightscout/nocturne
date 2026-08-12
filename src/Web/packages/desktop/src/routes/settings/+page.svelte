@@ -25,6 +25,9 @@
 
   type CommandError = { message: string };
 
+  // Matches the camelCase DeviceCapabilitySettings the `*_device_capabilities` Rust commands carry.
+  type DeviceCapabilities = { notify: boolean; trayFlash: boolean };
+
   const UNIT_OPTIONS: { value: GlucoseUnits; label: string }[] = [
     { value: "mmol", label: "mmol/L" },
     { value: "mg/dl", label: "mg/dL" },
@@ -32,6 +35,8 @@
 
   let runOnStartup = $state(false);
   let savingStartup = $state(false);
+  let capabilities = $state<DeviceCapabilities>({ notify: true, trayFlash: true });
+  let savingCapabilities = $state(false);
   let version = $state<string | null>(null);
   let error = $state<string | null>(null);
 
@@ -98,9 +103,31 @@
     }
   }
 
+  async function toggleCapability(key: keyof DeviceCapabilities, next: boolean) {
+    // Optimistic flip; revert if the choice can't be persisted so the switch reflects what the
+    // Companion will actually do.
+    const previous = capabilities;
+    capabilities = { ...capabilities, [key]: next };
+    savingCapabilities = true;
+    error = null;
+    try {
+      await invoke("set_device_capabilities", { settings: capabilities });
+    } catch (e) {
+      capabilities = previous;
+      error = describeError(e);
+    } finally {
+      savingCapabilities = false;
+    }
+  }
+
   onMount(async () => {
     try {
       runOnStartup = await invoke<boolean>("get_run_on_startup");
+    } catch (e) {
+      error = describeError(e);
+    }
+    try {
+      capabilities = await invoke<DeviceCapabilities>("get_device_capabilities");
     } catch (e) {
       error = describeError(e);
     }
@@ -195,6 +222,46 @@
             {option.label}
           </Button>
         {/each}
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>Alert actions</CardTitle>
+      <CardDescription>
+        What the Companion may do when an alert rule targets this device. Turning one off stops it
+        now and removes it from what this device advertises to your Nocturne site.
+      </CardDescription>
+    </CardHeader>
+    <CardContent class="space-y-4">
+      <div class="flex items-start justify-between gap-4">
+        <div class="space-y-1">
+          <Label for="capability-notify">Show a notification</Label>
+          <p class="text-muted-foreground text-xs">
+            Show a Windows notification when an alert starts, with a button to acknowledge it.
+          </p>
+        </div>
+        <Switch
+          id="capability-notify"
+          checked={capabilities.notify}
+          disabled={savingCapabilities}
+          onCheckedChange={(next) => toggleCapability("notify", next)}
+        />
+      </div>
+      <div class="flex items-start justify-between gap-4">
+        <div class="space-y-1">
+          <Label for="capability-tray-flash">Flash the tray icon</Label>
+          <p class="text-muted-foreground text-xs">
+            Pulse the tray icon for as long as the alert stays active.
+          </p>
+        </div>
+        <Switch
+          id="capability-tray-flash"
+          checked={capabilities.trayFlash}
+          disabled={savingCapabilities}
+          onCheckedChange={(next) => toggleCapability("trayFlash", next)}
+        />
       </div>
     </CardContent>
   </Card>

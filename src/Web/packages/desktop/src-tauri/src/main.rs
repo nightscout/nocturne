@@ -13,8 +13,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod alert_actuation;
+mod app_dir;
 mod auth;
 mod client_devices;
+mod device_capabilities;
 mod glucose_file;
 mod glucose_poll;
 mod http;
@@ -470,6 +472,24 @@ fn set_run_on_startup(enabled: bool, app: tauri::AppHandle) -> CommandResult<()>
     result.map_err(|e| CommandError::new(e.to_string()))
 }
 
+/// Which alert actuations this install may perform.
+#[tauri::command]
+fn get_device_capabilities() -> device_capabilities::DeviceCapabilitySettings {
+    device_capabilities::current()
+}
+
+/// Persists the capability opt-in and applies it: the actuation loop re-registers with the narrowed
+/// advertised set and withdraws anything a now-disabled capability is actuating.
+#[tauri::command]
+fn set_device_capabilities(
+    settings: device_capabilities::DeviceCapabilitySettings,
+    app: tauri::AppHandle,
+) -> CommandResult<()> {
+    device_capabilities::store(settings).map_err(CommandError::new)?;
+    alert_actuation::on_capabilities_changed(&app);
+    Ok(())
+}
+
 /// One poll cycle: refresh the token, write glucose.json, emit `glucose-updated`. Best-effort —
 /// a token-refresh or fetch failure is logged and skipped, never fatal.
 async fn poll_glucose(client: &reqwest::Client, app: &tauri::AppHandle) {
@@ -618,7 +638,9 @@ fn main() {
             companion_server_url,
             list_clock_faces,
             get_run_on_startup,
-            set_run_on_startup
+            set_run_on_startup,
+            get_device_capabilities,
+            set_device_capabilities
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

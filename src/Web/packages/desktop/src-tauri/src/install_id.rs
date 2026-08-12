@@ -9,19 +9,9 @@ use std::path::PathBuf;
 
 const FILE_NAME: &str = "install_id.txt";
 
-/// Returns `%LOCALAPPDATA%\Nocturne\install_id.txt`, mirroring `glucose_file`'s base-dir fallback.
+/// Returns `%LOCALAPPDATA%\Nocturne\install_id.txt`.
 fn install_id_path() -> PathBuf {
-    let base = std::env::var("LOCALAPPDATA")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let mut p = std::env::var("USERPROFILE").map(PathBuf::from).unwrap_or_default();
-            p.push("AppData");
-            p.push("Local");
-            p
-        });
-    base.join("Nocturne").join(FILE_NAME)
+    crate::app_dir::nocturne_dir().join(FILE_NAME)
 }
 
 /// Returns the persisted install id, generating and writing a fresh UUID on first launch. A

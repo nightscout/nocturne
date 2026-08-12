@@ -39,9 +39,10 @@ pub const NOTIFY_CAPABILITY: &str = "notify";
 /// Flash the system tray icon (`DeviceCapabilities.TrayFlash`; requires the `device.actuate` scope).
 pub const TRAY_FLASH_CAPABILITY: &str = "tray_flash";
 
-/// Capabilities this device advertises on registration. The server narrows each intent's
-/// `capabilities` to the intersection of what the rule requested and what this set advertises, so
-/// advertising a capability is what enables actuating it. No local opt-in filtering yet (later phase).
+/// Capabilities this device can actuate. The server narrows each intent's `capabilities` to the
+/// intersection of what the rule requested and what the device advertises, so advertising a
+/// capability is what enables actuating it — which is why registration sends only the subset the
+/// user has left enabled (`device_capabilities`), not this whole set.
 pub const ADVERTISED_CAPABILITIES: [&str; 2] = [NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY];
 
 /// Registration request body (camelCase to match `RegisterDeviceRequest`).
@@ -51,7 +52,7 @@ struct RegisterRequest<'a> {
     install_id: &'a str,
     kind: &'a str,
     label: &'a str,
-    capabilities: Vec<&'a str>,
+    capabilities: &'a [&'a str],
 }
 
 /// Subset of `ClientDeviceDto` we need back: the server-assigned id keys the snapshot endpoint.
@@ -111,20 +112,22 @@ impl DeviceActionIntent {
 
 /// Registers (or refreshes) this install with the server and returns its server-assigned device id.
 /// Idempotent — called on every startup. The label is the machine name when resolvable, else a
-/// generic fallback.
+/// generic fallback. `capabilities` replaces whatever the server has stored for this install, so a
+/// re-registration with a narrower set is how a capability is withdrawn.
 pub async fn register(
     client: &reqwest::Client,
     server: &str,
     token: &str,
     install_id: &str,
     label: &str,
+    capabilities: &[&str],
 ) -> Result<String, ApiError> {
     let server = server.trim_end_matches('/');
     let body = RegisterRequest {
         install_id,
         kind: DEVICE_KIND,
         label,
-        capabilities: ADVERTISED_CAPABILITIES.to_vec(),
+        capabilities,
     };
 
     let resp = client
