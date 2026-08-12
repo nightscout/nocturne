@@ -405,12 +405,10 @@ public class StatisticsController : ControllerBase
             {
                 if (!countByDevice.TryGetValue(d.Id, out var readingCount) || readingCount == 0) continue;
 
-                var name = (d.CatalogId != null ? DeviceCatalog.GetById(d.CatalogId)?.Name : null)
-                    ?? d.Model ?? d.Manufacturer ?? "Unknown device";
                 contributingDevices.Add(new ContributingDevice
                 {
                     PatientDeviceId = d.Id,
-                    Name = name,
+                    Name = d.DisplayName(),
                     ReadingCount = readingCount,
                 });
             }

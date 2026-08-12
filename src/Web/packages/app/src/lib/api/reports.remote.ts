@@ -173,18 +173,45 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const { analysis, averagedStats, personalRange } =
+    const { analysis, averagedStats, personalRange, contributingDevices } =
       await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
       averagedStats,
       personalRange,
+      contributingDevices,
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),
       },
     };
+  }
+);
+
+/**
+ * Two of the patient's CGMs time-paired over a date range, with the agreement measures
+ * over that pairing. Both devices come from the contributing-devices list on
+ * {@link getReportsAnalysis} for the same range.
+ */
+export const getCgmComparison = query(
+  DateRangeSchema.extend({
+    deviceAId: z.string().uuid(),
+    deviceBId: z.string().uuid(),
+    toleranceMinutes: z.number().optional(),
+  }),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { apiClient } = locals;
+    const { startDate, endDate } = await resolveReportRange(input);
+
+    return apiClient.cgmComparison.compare(
+      input.deviceAId,
+      input.deviceBId,
+      startDate,
+      endDate,
+      input.toleranceMinutes
+    );
   }
 );
 

@@ -15,6 +15,7 @@
 	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import Activity from 'lucide-svelte/icons/activity';
 	import Waves from 'lucide-svelte/icons/waves';
+	import GitCompareArrows from 'lucide-svelte/icons/git-compare-arrows';
 	import Clock from 'lucide-svelte/icons/clock';
 	import Check from 'lucide-svelte/icons/check';
 	import X from 'lucide-svelte/icons/x';
@@ -188,6 +189,30 @@
 									<CardTitle class="text-base">Signal Integrity</CardTitle>
 									<CardDescription>
 										Windows where readings oscillate in a way that is unlikely to be physiologic
+									</CardDescription>
+								</div>
+							</div>
+							<ChevronRight class="h-5 w-5 text-muted-foreground" />
+						</div>
+					</CardHeader>
+				</Card>
+			</a>
+
+			<!-- CGM Comparison Card -->
+			<a href="/reports/data-quality/cgm-comparison" class="block">
+				<Card class="transition-colors hover:bg-muted/50">
+					<CardHeader class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+								>
+									<GitCompareArrows class="h-5 w-5 text-primary" />
+								</div>
+								<div>
+									<CardTitle class="text-base">CGM Comparison</CardTitle>
+									<CardDescription>
+										How far apart two sensors run over the same window
 									</CardDescription>
 								</div>
 							</div>
