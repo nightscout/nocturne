@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Group, Rect, Text } from "layerchart";
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import type { TrackerCategory } from "$lib/api";
 
@@ -29,9 +28,9 @@
   class="opacity-60"
 />
 <!-- Icon and label at the top of the basal track -->
-<Group x={xPos} y={basalTrackTop + 10}>
+<g transform="translate({xPos}, {basalTrackTop + 10})">
   <!-- Background pill -->
-  <Rect
+  <rect
     x={-24}
     y={-8}
     width={48}
@@ -49,16 +48,15 @@
     </div>
   </foreignObject>
   <!-- Time label -->
-  <Text
+  <text
     x={3}
     y={0}
-    textAnchor="start"
+    text-anchor="start"
     class="text-[7px] fill-muted-foreground font-medium"
-    dy="0.35em"
   >
     {time.toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit",
     })}
-  </Text>
-</Group>
+  </text>
+</g>
