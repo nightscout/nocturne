@@ -858,6 +858,12 @@ public class NotificationThresholdDto
     public int MaxRepeats { get; set; }
     public bool RespectQuietHours { get; set; }
 
+    /// <summary>
+    /// The managed alert rule that delivers this threshold. Null until the sync service
+    /// has run, so callers must treat it as optional.
+    /// </summary>
+    public Guid? AlertRuleId { get; set; }
+
     public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
         new()
         {
@@ -874,6 +880,7 @@ public class NotificationThresholdDto
             RepeatIntervalMins = entity.RepeatIntervalMins,
             MaxRepeats = entity.MaxRepeats,
             RespectQuietHours = entity.RespectQuietHours,
+            AlertRuleId = entity.AlertRuleId,
         };
 }
 

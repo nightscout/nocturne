@@ -132,6 +132,7 @@
         hours: t.hours,
         description: t.description ?? "",
         displayOrder: t.displayOrder ?? i,
+        alertRuleId: t.alertRuleId ?? undefined,
       }));
     }
 
