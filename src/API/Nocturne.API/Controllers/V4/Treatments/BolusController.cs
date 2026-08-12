@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -18,20 +20,25 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 ///
 /// On update, immutable fields (<see cref="Bolus.BolusType"/>, <see cref="Bolus.Kind"/>,
 /// <see cref="Bolus.LegacyId"/>, <see cref="Bolus.CreatedAt"/>, <see cref="Bolus.PumpRecordId"/>,
-/// <see cref="Bolus.DeviceId"/>, <see cref="Bolus.PatientDeviceId"/>, and
-/// <see cref="Bolus.AdditionalProperties"/>) are preserved from the existing record. <see cref="Bolus.CorrelationId"/> falls back to the existing value if the request
+/// <see cref="Bolus.DeviceId"/>, and <see cref="Bolus.AdditionalProperties"/>) are preserved from the
+/// existing record. <see cref="Bolus.CorrelationId"/> falls back to the existing value if the request
 /// does not supply one.
 /// </remarks>
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="Bolus"/>
 /// <seealso cref="CreateBolusRequest"/>
 /// <seealso cref="UpdateBolusRequest"/>
+/// <seealso cref="PatientDeviceAttribution"/>
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
 [RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]
-public class BolusController(IBolusRepository repo, IPatientInsulinRepository insulinRepo)
+public class BolusController(
+    IBolusRepository repo,
+    IPatientInsulinRepository insulinRepo,
+    IPatientDeviceRepository patientDevices,
+    IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<Bolus, CreateBolusRequest, UpdateBolusRequest, IBolusRepository>(repo)
 {
     /// <inheritdoc/>
@@ -59,6 +66,11 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
 
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
 
+        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
+        // direct API records stay unstamped and only ever surface as pseudo-devices.
+        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct) is { } error)
+            return error;
+
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -77,6 +89,9 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
+
+        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct) is { } error)
+            return error;
 
         try
         {
@@ -117,7 +132,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
     /// <summary>Maps an <see cref="UpdateBolusRequest"/> onto a <see cref="Bolus"/> domain model, preserving immutable fields from the existing record.</summary>
     /// <param name="id">The bolus ID to carry forward.</param>
     /// <param name="request">The inbound update request.</param>
-    /// <param name="existing">The existing <see cref="Bolus"/> record; immutable fields (<c>BolusType</c>, <c>Kind</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PumpRecordId</c>, <c>DeviceId</c>, <c>PatientDeviceId</c>, <c>AdditionalProperties</c>) are copied from here.</param>
+    /// <param name="existing">The existing <see cref="Bolus"/> record; immutable fields (<c>BolusType</c>, <c>Kind</c>, <c>LegacyId</c>, <c>CreatedAt</c>, <c>PumpRecordId</c>, <c>DeviceId</c>, <c>AdditionalProperties</c>) are copied from here.</param>
     /// <returns>A fully-populated <see cref="Bolus"/> ready for persistence.</returns>
     protected override Bolus MapUpdateToModel(Guid id, UpdateBolusRequest request, Bolus existing) => new()
     {
@@ -144,7 +159,6 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         CreatedAt = existing.CreatedAt,
         PumpRecordId = existing.PumpRecordId,
         DeviceId = existing.DeviceId,
-        PatientDeviceId = existing.PatientDeviceId,
         AdditionalProperties = existing.AdditionalProperties,
     };
 
@@ -186,6 +200,14 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
             models.Add(model);
         }
 
+        // Attribute the batch before persisting (see Create). Per-record DataSource drives matching,
+        // so no batch-level source is needed for a mixed-source bulk upload.
+        var attributionError = await PatientDeviceAttribution.ApplyManyAsync(
+            [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
+            patientDevices, deviceStamper, DeviceAttributionCategories.Bolus, batchSource: null, ct);
+        if (attributionError is not null)
+            return Problem(detail: attributionError, statusCode: 400, title: "Bad Request");
+
         var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         return StatusCode(201, persisted.ToArray());
     }
@@ -209,6 +231,20 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
 
         var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Settles the bolus's device attribution from the request. Returns a 400 result when an explicit
+    /// id doesn't resolve (tenant scoping makes a cross-tenant id indistinguishable from a nonexistent
+    /// one), or <c>null</c> on success.
+    /// </summary>
+    private async Task<ObjectResult?> ApplyAttributionAsync(Bolus model, Guid? requested, Guid? existing, CancellationToken ct)
+    {
+        var error = await PatientDeviceAttribution.ApplyAsync(
+            model, requested, existing, patientDevices, deviceStamper,
+            DeviceAttributionCategories.Bolus, ct);
+
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     private async Task EnrichInsulinContextAsync(Bolus model, Guid? patientInsulinId, CancellationToken ct)
