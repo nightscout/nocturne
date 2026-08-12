@@ -323,9 +323,9 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<ConflictObjectResult>();
     }
 
-    // Sole-tenant paths run here via the set_config() stand-in registered in the
-    // constructor. What SQLite cannot reproduce is RLS, so tests that depend on rows
-    // being filtered by tenant belong in the integration suite.
+    // Sole-tenant paths run here because PinTenantAsync no-ops off Postgres. What SQLite
+    // cannot reproduce is RLS, so tests that depend on rows being filtered by tenant
+    // belong in the integration suite.
 
     // ── Soft-lock scenario: the full sequence ─────────────────────────────
 

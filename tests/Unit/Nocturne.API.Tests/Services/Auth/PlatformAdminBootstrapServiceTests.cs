@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -23,6 +24,7 @@ namespace Nocturne.API.Tests.Services.Auth;
 public class PlatformAdminBootstrapServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
     private readonly NocturneDbContext _db;
 
     public PlatformAdminBootstrapServiceTests()
@@ -30,12 +32,12 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(_connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
 
-        _db = new NocturneDbContext(options);
+        _db = new NocturneDbContext(_dbOptions);
         _db.Database.EnsureCreated();
     }
 
@@ -106,9 +108,16 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
-            _db,
-            Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }))
+            new TestDbContextFactory(_dbOptions),
+            Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
+            NullLogger<PlatformAdminBootstrapService>.Instance)
             .BootstrapAsync(CancellationToken.None);
+
+    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
+        : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() => new(options);
+    }
 
     private async Task<bool> IsPlatformAdminAsync(Guid subjectId) =>
         await _db.Subjects.AsNoTracking()

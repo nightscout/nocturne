@@ -161,13 +161,20 @@ public class PlatformAdminBootstrapService
             return false;
 
         // More than one tenant means this is not a fresh install, whatever the caller thinks.
-        if (await db.Tenants.Take(2).CountAsync(cancellationToken) != 1)
+        var tenantIds = await db.Tenants.Select(t => t.Id).Take(2).ToListAsync(cancellationToken);
+        if (tenantIds.Count != 1)
             return false;
+
+        // The membership read runs under the sole tenant's pin: tenant_members is slated for
+        // RLS policies keyed on the tenant GUC, and an unpinned read would then see no rows
+        // and silently decline the grant — reintroducing the fresh-install lockout.
+        await db.PinTenantAsync(tenantIds[0], cancellationToken);
 
         var isTenantOwner = await db.TenantMembers
             .AnyAsync(
-                tm => tm.SubjectId == subjectId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == "owner"),
+                tm => tm.TenantId == tenantIds[0]
+                    && tm.SubjectId == subjectId
+                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == TenantPermissions.SeedRoles.Owner),
                 cancellationToken);
 
         if (!isTenantOwner)
