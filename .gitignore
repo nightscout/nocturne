@@ -94,3 +94,4 @@ docs/diagrams/er-*.mmd
 # External projects
 AndroidAPS/
 Trio/
+.claude/worktrees/
