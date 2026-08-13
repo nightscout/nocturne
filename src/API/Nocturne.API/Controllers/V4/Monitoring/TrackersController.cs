@@ -492,11 +492,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get completed tracker instances (history). Matches <see cref="GetActiveInstances"/> and
     /// <see cref="GetUpcomingInstances"/>: a caller carrying no subject reads the public-visibility
-    /// instances only. <c>[Authorize]</c> here instead 401'd the calendar for every public share,
-    /// which renders history alongside the active and upcoming instances.
+    /// instances only, and the fallback authorization policy (no <c>[AllowAnonymous]</c>) rejects a
+    /// bare unauthenticated request, so a private tenant exposes no history anonymously. The public
+    /// share subject is still admitted by the policy, so the calendar keeps rendering history
+    /// alongside the active and upcoming instances — <c>[Authorize]</c> is what 401'd it.
     /// </summary>
     [HttpGet("instances/history")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
