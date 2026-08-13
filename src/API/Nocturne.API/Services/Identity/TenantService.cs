@@ -363,8 +363,18 @@ public partial class TenantService : ITenantService
                 return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
         }
 
+        // Chat identity directory rows are global and carry no membership join, so a link left
+        // behind here would keep answering bot commands for this tenant. It goes in the same
+        // SaveChanges as the membership so the two cannot come apart, and is scoped to this
+        // tenant: the same subject's links to tenants they still belong to must survive.
+        var chatLinks = await context.ChatIdentityDirectory
+            .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
+            .ToListAsync(ct);
+
         context.TenantMembers.Remove(member);
+        context.ChatIdentityDirectory.RemoveRange(chatLinks);
         await context.SaveChangesAsync(ct);
+
         return new MemberRemovalResult(true);
     }
 

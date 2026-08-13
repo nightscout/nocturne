@@ -2244,6 +2244,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // The directory row is what binds a chat account to a tenant, so it must not outlive
+            // the subject it was issued for. Subjects are global, so this only covers deleting the
+            // person entirely — losing one tenant's membership is handled where that happens.
+            b.HasOne<SubjectEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.NocturneUserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChatIdentityPendingLinkEntity>(b =>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Services.Chat;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -199,6 +200,52 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         (await check.TenantMembers.AnyAsync(m => m.SubjectId == subjectId)).Should().BeTrue(
             "the other tenant's membership must be untouched");
     }
+
+    /// <summary>
+    /// A chat directory row resolves on platform + platform user alone, with no join to the member
+    /// list, so a link left behind would keep answering bot commands for a tenant the person no
+    /// longer belongs to. Subjects are global, so only this tenant's link may go.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMemberAsync_removesTheMembersChatLinkForThisTenantOnly()
+    {
+        var subjectId = SeedMember();
+        var otherTenantId = Guid.CreateVersion7();
+        var otherSubjectId = SeedMember();
+
+        await using (var db = Context())
+        {
+            db.Tenants.Add(new TenantEntity { Id = otherTenantId, Slug = "other", DisplayName = "Other" });
+            db.ChatIdentityDirectory.AddRange(
+                Link("chat-user", _tenantId, subjectId, "here"),
+                Link("chat-user", otherTenantId, subjectId, "elsewhere"),
+                Link("another-chat-user", _tenantId, otherSubjectId, "someone-else"));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Service().RemoveMemberAsync(_tenantId, subjectId);
+
+        result.Ok.Should().BeTrue();
+        var directory = new ChatIdentityDirectoryService(
+            new Factory(_options, _tenantId), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+        (await directory.GetCandidatesAsync("discord", "chat-user", default))
+            .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
+        (await directory.GetCandidatesAsync("discord", "another-chat-user", default))
+            .Select(c => c.Label).Should().BeEquivalentTo(["someone-else"]);
+    }
+
+    private static ChatIdentityDirectoryEntry Link(
+        string platformUserId, Guid tenantId, Guid subjectId, string label) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Platform = "discord",
+        PlatformUserId = platformUserId,
+        TenantId = tenantId,
+        NocturneUserId = subjectId,
+        Label = label,
+        DisplayName = label,
+        IsActive = true,
+    };
 
     public void Dispose() => _connection.Dispose();
 }
