@@ -191,8 +191,9 @@ public class SessionCookieHandler : IAuthHandler
     /// Session JWTs and grant JWTs are signed with the same key, issuer, and audience, so
     /// <see cref="IJwtService.ValidateAccessToken"/> accepts either. Only the claim shape tells
     /// them apart: a grant carries the pins and ceilings that bound its authority — a tenant pin,
-    /// a consent scope list, the client it was issued to, the grant it came from, or the
-    /// platform-access marker. The session path ignores all of those, and
+    /// a consent scope list, the client it was issued to, the grant it came from, the
+    /// 24-hour data ceiling, or the platform-access marker. The session path ignores all of
+    /// those, and
     /// <see cref="AuthType.SessionCookie"/> is treated as an unscoped credential, so accepting a
     /// grant here would let a holder move it into the session cookie and shed both its tenant pin
     /// and its scope ceiling. Session tokens are minted only via the overload that cannot emit any
@@ -205,7 +206,8 @@ public class SessionCookieHandler : IAuthHandler
         || claims.Scopes is { Count: > 0 }
         || !string.IsNullOrEmpty(claims.ClientId)
         || claims.GrantId.HasValue
-        || claims.PlatformAccess;
+        || claims.PlatformAccess
+        || claims.LimitTo24Hours;
 
     /// <summary>
     /// Build an AuthContext from JWT claims
