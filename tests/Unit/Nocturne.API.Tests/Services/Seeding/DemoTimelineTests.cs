@@ -36,17 +36,16 @@ public class DemoTimelineTests
     }
 
     [Fact]
-    public void Timeline_EntriesAndTreatmentsAreProjectionsOfTheSameRun()
+    public void Timeline_CarriesBothStreamsFromOneRun()
     {
-        // Both projections must re-run the same simulation shape: same step
-        // count, same treatment count, no divergence between the streams.
-        var generator = CreateGenerator(3);
-        var entries = generator.GenerateHistoricalEntries().ToList();
-        var treatments = generator.GenerateHistoricalTreatments().ToList();
+        // One enumeration yields the chart and the treatment history together —
+        // the old divergent per-stream simulation passes are gone.
+        var steps = CreateGenerator(3).GenerateHistoricalTimeline().ToList();
 
-        entries.Should().NotBeEmpty();
+        var entries = steps.SelectMany(s => new[] { s.Entry }.Concat(s.ExtraEntries)).ToList();
+        var treatments = steps.SelectMany(s => s.Treatments).ToList();
+
         treatments.Should().NotBeEmpty();
-
         // sgv entries at 5-minute cadence plus mbg/cal extras.
         entries.Count(e => e.Type == "sgv").Should().BeGreaterThan(3 * 280);
         entries.Should().Contain(e => e.Type == "mbg", "fingersticks ride the timeline");
@@ -58,7 +57,9 @@ public class DemoTimelineTests
         // "Scheduled Basal" was dropped: the decomposer never recognized it and
         // every regenerate logged ~2k warnings. Scheduled basal now comes from
         // the seeded therapy profile.
-        var treatments = CreateGenerator(3).GenerateHistoricalTreatments().ToList();
+        var treatments = CreateGenerator(3).GenerateHistoricalTimeline()
+            .SelectMany(s => s.Treatments)
+            .ToList();
 
         treatments.Should().NotBeEmpty();
         treatments.Should().NotContain(t => t.EventType == "Scheduled Basal");
@@ -67,13 +68,19 @@ public class DemoTimelineTests
     }
 
     [Fact]
-    public void Timeline_TreatmentsAreNeverFutureDated()
+    public void Timeline_NothingIsFutureDated()
     {
         var nowMills = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-        var treatments = CreateGenerator(2).GenerateHistoricalTreatments().ToList();
+        var steps = CreateGenerator(2).GenerateHistoricalTimeline().ToList();
+
+        var treatments = steps.SelectMany(s => s.Treatments).ToList();
+        var extras = steps.SelectMany(s => s.ExtraEntries).ToList();
 
         treatments.Should().NotBeEmpty();
+        // The final partial step clamps planned-item consumption to "now";
+        // small slack covers the wall-clock advancing during enumeration.
         treatments.Should().OnlyContain(t => t.Mills <= nowMills + 60_000);
+        extras.Should().OnlyContain(e => e.Mills <= nowMills + 60_000);
     }
 
     [Fact]
@@ -88,10 +95,13 @@ public class DemoTimelineTests
     }
 
     [Fact]
-    public void Timeline_IncludesNotesAndBgChecks()
+    public void Timeline_IncludesNotes()
     {
-        // 14 days is enough for the deterministic note/fingerstick rolls to hit.
-        var treatments = CreateGenerator(14).GenerateHistoricalTreatments().ToList();
+        // Note rolls hit ~35% of days; over 30 days the chance of an empty
+        // window is negligible (0.65^30) even though rolls are date-anchored.
+        var treatments = CreateGenerator(30).GenerateHistoricalTimeline()
+            .SelectMany(s => s.Treatments)
+            .ToList();
 
         treatments.Should().Contain(t => t.EventType == "Note" || t.EventType == "Announcement");
     }
@@ -101,7 +111,9 @@ public class DemoTimelineTests
     {
         // A 21-day window always contains at least two sensor changes
         // (10-day cycle), each followed by cal entries.
-        var entries = CreateGenerator(21).GenerateHistoricalEntries().ToList();
+        var entries = CreateGenerator(21).GenerateHistoricalTimeline()
+            .SelectMany(s => s.ExtraEntries)
+            .ToList();
 
         var calibrations = entries.Where(e => e.Type == "cal").ToList();
         calibrations.Should().NotBeEmpty();
@@ -240,6 +252,27 @@ public class DemoTimelineTests
                 && s.StartLocal == start.AddMinutes(-10),
                 $"exercise day {day:yyyy-MM-dd} carries a workout override at the workout window");
         }
+    }
+
+    [Fact]
+    public void LifestyleSeeds_ProfileAndTargetSpansCarryDecomposerShapedMetadata()
+    {
+        // Resolvers read the profile name and target values from metadata, not
+        // from State — a name-in-State span silently resolves as "Default".
+        var spans = DemoLifestyleSeeds.BuildSpans(DateTime.Now.Date, 60);
+
+        var profile = spans.Single(s => s.Category == StateSpanCategory.Profile);
+        profile.State.Should().Be(nameof(ProfileState.Active));
+        profile.Metadata.Should().ContainKey("profileName")
+            .WhoseValue.Should().Be(DemoTherapyProfile.ProfileName);
+
+        var targets = spans.Where(s => s.Category == StateSpanCategory.TemporaryTarget).ToList();
+        targets.Should().NotBeEmpty("60 days contain exercise days with temp targets");
+        targets.Should().OnlyContain(t =>
+            t.State == nameof(TemporaryTargetState.Active)
+            && t.Metadata != null
+            && t.Metadata.ContainsKey("targetTop")
+            && t.Metadata.ContainsKey("targetBottom"));
     }
 
     [Fact]

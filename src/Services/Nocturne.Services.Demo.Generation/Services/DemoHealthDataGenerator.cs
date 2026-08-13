@@ -15,13 +15,6 @@ public static class DemoHealthDataGenerator
     private const string WearableDevice = "Demo Watch";
 
     /// <summary>
-    /// Heart rate samples (5-minute cadence) and hourly step-count deltas for
-    /// one local calendar day. <paramref name="localDay"/> is a local midnight;
-    /// timestamps are stored UTC. <paramref name="dataSource"/> stamps every
-    /// record and prefixes the deterministic sync identifiers, so re-seeding
-    /// updates in place via the (DataSource, SyncIdentifier) dedup key.
-    /// </summary>
-    /// <summary>
     /// The day's 75-minute late-afternoon workout window. Deterministic per
     /// date and shared with the state-span seeding, so Exercise spans cover
     /// exactly the step spike and heart-rate ramp.
@@ -34,6 +27,13 @@ public static class DemoHealthDataGenerator
         return (start, start.AddMinutes(75));
     }
 
+    /// <summary>
+    /// Heart rate samples (5-minute cadence) and hourly step-count deltas for
+    /// one local calendar day. <paramref name="localDay"/> is a local midnight;
+    /// timestamps are stored UTC. <paramref name="dataSource"/> stamps every
+    /// record and prefixes the deterministic sync identifiers, so re-seeding
+    /// updates in place via the (DataSource, SyncIdentifier) dedup key.
+    /// </summary>
     public static (List<HeartRate> HeartRates, List<StepCount> StepCounts) GenerateDailyActivity(
         DateTime localDay, string dataSource)
     {

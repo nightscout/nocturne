@@ -45,19 +45,11 @@ public interface IDemoDataGenerator
     /// <summary>
     /// Streams the unified historical timeline: one simulation pass yielding
     /// entries, treatments, and simulator state per 5-minute step, so every
-    /// derived stream (chart, treatments, device status, alarm episodes) agrees.
+    /// derived stream (chart, treatments, device status, alarm episodes)
+    /// agrees. Each call runs a fresh simulation — consumers must enumerate
+    /// once and project what they need.
     /// </summary>
     IEnumerable<DemoTimeStep> GenerateHistoricalTimeline();
-
-    /// <summary>
-    /// Generates historical entries using streaming/yield pattern to minimize memory usage.
-    /// </summary>
-    IEnumerable<Entry> GenerateHistoricalEntries();
-
-    /// <summary>
-    /// Generates historical treatments using streaming/yield pattern to minimize memory usage.
-    /// </summary>
-    IEnumerable<Treatment> GenerateHistoricalTreatments();
 }
 
 /// <summary>
@@ -208,32 +200,6 @@ public class DemoDataGenerator : IDemoDataGenerator
     }
 
     /// <summary>
-    /// Generates historical entries as a projection of the unified timeline.
-    /// Includes the fingerstick (mbg) and calibration (cal) entries.
-    /// </summary>
-    public IEnumerable<Entry> GenerateHistoricalEntries()
-    {
-        foreach (var step in GenerateHistoricalTimeline())
-        {
-            yield return step.Entry;
-            foreach (var extra in step.ExtraEntries)
-                yield return extra;
-        }
-    }
-
-    /// <summary>
-    /// Generates historical treatments as a projection of the unified timeline.
-    /// </summary>
-    public IEnumerable<Treatment> GenerateHistoricalTreatments()
-    {
-        foreach (var step in GenerateHistoricalTimeline())
-        {
-            foreach (var treatment in step.Treatments)
-                yield return treatment;
-        }
-    }
-
-    /// <summary>
     /// The single historical simulation pass. Runs the oref simulator over the
     /// backfill window and yields one <see cref="DemoTimeStep"/> per 5 minutes
     /// carrying the CGM entry, the treatments issued at that step, and the
@@ -321,12 +287,15 @@ public class DemoDataGenerator : IDemoDataGenerator
             while (currentTime < endTime)
             {
                 var stepEnd = currentTime.AddMinutes(5);
+                // The final (partial) step must not emit anything past "now" —
+                // a future-dated planned item would outrank the realtime stream.
+                var consumeUntil = stepEnd < endTime ? stepEnd : endTime;
                 var stepTreatments = new List<Treatment>();
                 double? tempRate = null;
                 int? tempDuration = null;
 
                 // Consume planned treatments due this step.
-                while (pending.Count > 0 && pending[0].Time < stepEnd)
+                while (pending.Count > 0 && pending[0].Time < consumeUntil)
                 {
                     stepTreatments.Add(pending[0].Treatment);
                     pending.RemoveAt(0);
@@ -474,12 +443,12 @@ public class DemoDataGenerator : IDemoDataGenerator
                 var entry = CreateEntry(currentTime, glucose, delta);
 
                 List<Entry> extraEntries = [];
-                while (fingerstickTimes.Count > 0 && fingerstickTimes[0] < stepEnd)
+                while (fingerstickTimes.Count > 0 && fingerstickTimes[0] < consumeUntil)
                 {
                     extraEntries.Add(CreateFingerstickEntry(fingerstickTimes[0], glucose));
                     fingerstickTimes.RemoveAt(0);
                 }
-                while (calibrations.Count > 0 && calibrations[0].Time < stepEnd)
+                while (calibrations.Count > 0 && calibrations[0].Time < consumeUntil)
                 {
                     extraEntries.Add(CreateCalibrationEntry(calibrations[0]));
                     calibrations.RemoveAt(0);

@@ -60,9 +60,18 @@ public static class DemoLifestyleSeeds
         return Math.Round(77.5 + drift + wobble, 1);
     }
 
-    /// <summary>One state span to seed; local times, null end = still active.</summary>
+    /// <summary>
+    /// One state span to seed; local times, null end = still active. Metadata
+    /// follows the decomposer's conventions (e.g. Profile spans carry the name
+    /// in <c>profileName</c>, temporary targets carry <c>targetTop/Bottom</c>)
+    /// so the resolvers that read spans see the same shape as real uploads.
+    /// </summary>
     public sealed record SpanSeed(
-        StateSpanCategory Category, string State, DateTime StartLocal, DateTime? EndLocal);
+        StateSpanCategory Category,
+        string State,
+        DateTime StartLocal,
+        DateTime? EndLocal,
+        IReadOnlyDictionary<string, object>? Metadata = null);
 
     /// <summary>The timezone-timeline trip: NYC for five days, three weeks back.</summary>
     public const string HomeTimezoneFallback = "Australia/Sydney";
@@ -83,7 +92,11 @@ public static class DemoLifestyleSeeds
         var now = DateTime.Now;
 
         // Profile: the seeded therapy profile is active for the whole window.
-        spans.Add(new SpanSeed(StateSpanCategory.Profile, DemoTherapyProfile.ProfileName, windowStart, null));
+        // Resolvers read the name from metadata, not from State (which is the
+        // ProfileState enum name).
+        spans.Add(new SpanSeed(
+            StateSpanCategory.Profile, nameof(ProfileState.Active), windowStart, null,
+            new Dictionary<string, object> { ["profileName"] = DemoTherapyProfile.ProfileName }));
 
         // Pump mode: Automatic, interrupted by occasional Manual windows and
         // by Exercise mode during workouts on exercise days.
@@ -100,8 +113,10 @@ public static class DemoLifestyleSeeds
 
                 spans.Add(new SpanSeed(StateSpanCategory.Override, "Workout Mode",
                     workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10)));
-                spans.Add(new SpanSeed(StateSpanCategory.TemporaryTarget, "140",
-                    workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10)));
+                spans.Add(new SpanSeed(
+                    StateSpanCategory.TemporaryTarget, nameof(TemporaryTargetState.Active),
+                    workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10),
+                    new Dictionary<string, object> { ["targetTop"] = 150.0, ["targetBottom"] = 140.0 }));
             }
             else if (DayScenarios.Roll(day, "manual-mode", 100) < 9)
             {

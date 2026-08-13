@@ -113,15 +113,20 @@ public sealed class DemoApiClient
 
             if (treatment.EventType == "Temp Basal" && treatment.Rate is { } rate)
             {
-                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals", new
+                // The temp-basal endpoint is array-only (uploaders batch).
+                var payload = new[]
                 {
-                    timestamp,
-                    rate,
-                    durationMinutes = treatment.Duration,
-                    origin = (int)TempBasalOrigin.Algorithm,
-                    device = DemoDeviceStatusGenerator.DeviceName,
-                    dataSource = treatment.DataSource,
-                }, SerializerOptions, ct);
+                    new
+                    {
+                        timestamp,
+                        rate,
+                        durationMinutes = treatment.Duration,
+                        origin = (int)TempBasalOrigin.Algorithm,
+                        device = DemoDeviceStatusGenerator.DeviceName,
+                        dataSource = treatment.DataSource,
+                    },
+                };
+                var response = await client.PostAsJsonAsync("api/v4/insulin/temp-basals", payload, SerializerOptions, ct);
                 response.EnsureSuccessStatusCode();
             }
             else if (treatment.Insulin is > 0)

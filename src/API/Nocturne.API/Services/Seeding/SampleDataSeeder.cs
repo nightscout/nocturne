@@ -181,7 +181,10 @@ public class SampleDataSeeder
             async Task FlushEntriesAsync()
             {
                 if (entryBatch.Count == 0) return;
-                var created = await _entryService.CreateEntriesAsync(entryBatch, cancellationToken: ct);
+                // Backfill origin: a 90-day seed must not broadcast tens of
+                // thousands of records over SignalR from one request.
+                var created = await _entryService.CreateEntriesAsync(
+                    entryBatch, WriteOrigin.Backfill, ct);
                 entryCount += created.Count();
                 entryBatch.Clear();
             }
@@ -200,7 +203,7 @@ public class SampleDataSeeder
                 foreach (var status in statusBatch)
                 {
                     await _deviceStatusDecomposer.DecomposeAsync(
-                        status, dataSource, Core.Contracts.V4.WriteOrigin.Backfill, ct);
+                        status, dataSource, WriteOrigin.Backfill, ct);
                     deviceStatusCount++;
                 }
                 statusBatch.Clear();
@@ -676,14 +679,18 @@ public class SampleDataSeeder
 
             foreach (var (time, mealName) in mealCarbLinks)
             {
-                if (DayScenarios.Roll(time.Date, $"food-link:{time.Hour}", 100) >= 60)
+                // Deterministic rolls key on the meal's local calendar day,
+                // like every other demo stream (the UTC day differs east of
+                // Greenwich).
+                var localMeal = time.ToLocalTime();
+                if (DayScenarios.Roll(localMeal.Date, $"food-link:{localMeal.Hour}", 100) >= 60)
                     continue;
 
                 var intake = intakes.FirstOrDefault(i => i.Timestamp == time);
                 if (intake is null)
                     continue;
 
-                foreach (var seed in DemoLifestyleSeeds.MealFoodsFor(time.Date, mealName))
+                foreach (var seed in DemoLifestyleSeeds.MealFoodsFor(localMeal.Date, mealName))
                 {
                     if (!foodsByName.TryGetValue(seed.Name, out var food))
                         continue;
@@ -729,6 +736,7 @@ public class SampleDataSeeder
                 StartTimestamp = seed.StartLocal.ToUniversalTime(),
                 EndTimestamp = seed.EndLocal?.ToUniversalTime(),
                 Source = dataSource,
+                MetadataJson = seed.Metadata is null ? null : JsonSerializer.Serialize(seed.Metadata),
             });
         }
         await _db.SaveChangesAsync(ct);
