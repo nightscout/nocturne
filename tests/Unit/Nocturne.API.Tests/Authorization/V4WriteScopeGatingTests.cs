@@ -194,7 +194,9 @@ public class V4WriteScopeGatingTests
             // Both replay actions compute over the STORED alert rules and glucose history — the
             // body supplies only the window — and return the events that would have fired.
             // AlertReplayService has no SaveChangesAsync and adds to no DbSet, so a POST here is a
-            // read the body shape forced off GET.
+            // read the body shape forced off GET. As a read it is gated: the class requires
+            // alerts.read and AlertReplayReadScopeGuard drops the fact timelines outside the
+            // caller's categories, asserted by AlertReplayReadScopeTests.
             ["AlertReplayController"] = NotDataCategory.ComputesAndReturns,
 
             ["ClockFacesController"] = NotDataCategory.SplitSharingVocabulary,

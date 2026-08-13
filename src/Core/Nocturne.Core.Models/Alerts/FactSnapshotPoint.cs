@@ -20,7 +20,8 @@ public sealed record FactSnapshotPoint(long AtMs, decimal Value);
 /// each tick. Adding a new fact is a one-line change: drop the attribute on the property
 /// and replay picks it up automatically — no parallel registry to maintain. The
 /// <see cref="Key"/> is the single source of truth for the wire name; the FE's
-/// leaf-to-fact mapping references the same string.
+/// leaf-to-fact mapping references the same string, and <see cref="Scope"/> is the single
+/// source of truth for the read scope that unlocks the fact on the wire.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
 public sealed class ReplayFactAttribute : Attribute
@@ -28,6 +29,14 @@ public sealed class ReplayFactAttribute : Attribute
     /// <summary>Snake_case wire key the FE looks up in <c>FactTimelines</c>. Keep stable;
     /// renaming is a wire break.</summary>
     public string Key { get; }
+
+    /// <summary>
+    /// The <see cref="Authorization.OAuthScopes"/> read scope governing the data the fact is
+    /// derived from, matching the category its source tables sit under in
+    /// <see cref="Authorization.ShareDataCategories"/>. Constructor-required so a new fact cannot
+    /// reach the wire without a category decision.
+    /// </summary>
+    public string Scope { get; }
 
     /// <summary>Decimal places to round to before change-detection. Mirrors the precision
     /// the rule sidebar will display so the FE never sees jitter the user can't perceive.</summary>
@@ -41,10 +50,12 @@ public sealed class ReplayFactAttribute : Attribute
 
     public ReplayFactAttribute(
         string key,
+        string scope,
         int decimals = 2,
         ReplayFactConversion conversion = ReplayFactConversion.Direct)
     {
         Key = key;
+        Scope = scope;
         Decimals = decimals;
         Conversion = conversion;
     }
