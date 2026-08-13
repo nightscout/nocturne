@@ -51,7 +51,9 @@ public class DemoSettingsGenerator
                 new()
                 {
                     Id = "demo-pump-1",
-                    Name = "Omnipod 5",
+                    // Matches the seeded patient-device roster: Trio driving an
+                    // Omnipod DASH.
+                    Name = "Omnipod DASH",
                     Type = "pump",
                     Status = "connected",
                     Battery = 72,

@@ -32,6 +32,21 @@ public static class DemoTherapyProfile
         (TimeSpan.FromHours(22), 0.9),
     ];
 
+    /// <summary>
+    /// The server's zone as an IANA id — <see cref="TimeZoneInfo.Local"/>
+    /// reports a Windows id on Windows dev machines, which timezone pickers
+    /// and profile consumers don't recognize.
+    /// </summary>
+    public static string LocalIanaTimezone()
+    {
+        var local = TimeZoneInfo.Local;
+        if (local.HasIanaId)
+            return local.Id;
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana)
+            ? iana
+            : DemoLifestyleSeeds.HomeTimezoneFallback;
+    }
+
     /// <summary>Scheduled basal rate at a wall-clock time for the configured base rate.</summary>
     public static double ScheduledRateAt(DateTime localTime, double baseRate)
     {
@@ -66,7 +81,7 @@ public static class DemoTherapyProfile
         {
             Dia = config.InsulinDurationMinutes / 60.0,
             CarbsHr = 20,
-            Timezone = TimeZoneInfo.Local.Id,
+            Timezone = LocalIanaTimezone(),
             Units = "mg/dL",
             Basal = basal,
             CarbRatio =

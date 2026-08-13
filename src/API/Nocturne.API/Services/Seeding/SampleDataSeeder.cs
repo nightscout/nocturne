@@ -753,7 +753,7 @@ public class SampleDataSeeder
                 DiabetesType = "type1",
                 DiagnosisDate = new DateOnly(2014, 3, 12),
                 DateOfBirth = new DateOnly(1992, 4, 17),
-                Timezone = TimeZoneInfo.Local.Id,
+                Timezone = DemoTherapyProfile.LocalIanaTimezone(),
             });
         }
 
@@ -847,14 +847,15 @@ public class SampleDataSeeder
     /// <summary>
     /// The timezone timeline: home zone from the window start, with a
     /// five-day trip (matching the Travel state span) three weeks back.
-    /// Created only when the timeline is empty.
+    /// EffectiveFrom is a local wall-clock value (Kind=Unspecified), matching
+    /// <c>TimezoneTimelineService</c>. Created only when the timeline is empty.
     /// </summary>
     private async Task SeedTimezoneTimelineAsync(DateTime localToday, int days, CancellationToken ct)
     {
         if (await _db.TimezoneTimeline.AnyAsync(ct))
             return;
 
-        var home = TimeZoneInfo.Local.Id;
+        var home = DemoTherapyProfile.LocalIanaTimezone();
         var windowStart = localToday.AddDays(-days);
         var tripStart = localToday.AddDays(-DemoLifestyleSeeds.TripStartDaysAgo).AddHours(14);
         var tripEnd = tripStart.AddDays(DemoLifestyleSeeds.TripLengthDays).AddHours(-4);
@@ -863,7 +864,7 @@ public class SampleDataSeeder
         {
             Id = Guid.CreateVersion7(),
             TenantId = _db.TenantId,
-            EffectiveFrom = windowStart.ToUniversalTime(),
+            EffectiveFrom = DateTime.SpecifyKind(windowStart, DateTimeKind.Unspecified),
             Timezone = home,
         });
 
@@ -873,14 +874,14 @@ public class SampleDataSeeder
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = _db.TenantId,
-                EffectiveFrom = tripStart.ToUniversalTime(),
+                EffectiveFrom = DateTime.SpecifyKind(tripStart, DateTimeKind.Unspecified),
                 Timezone = DemoLifestyleSeeds.TripTimezone,
             });
             _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = _db.TenantId,
-                EffectiveFrom = tripEnd.ToUniversalTime(),
+                EffectiveFrom = DateTime.SpecifyKind(tripEnd, DateTimeKind.Unspecified),
                 Timezone = home,
             });
         }
@@ -902,11 +903,12 @@ public class SampleDataSeeder
         {
             Id = Guid.CreateVersion7(),
             TenantId = _db.TenantId,
+            Scope = DndScope.All,
             StartedAt = start.ToUniversalTime(),
             EndsAt = start.AddHours(8.5).ToUniversalTime(),
             ClearedAt = start.AddHours(8.2).ToUniversalTime(),
             ClearedBy = "demo",
-            Source = "manual",
+            Source = "web",
         });
         await _db.SaveChangesAsync(ct);
     }
