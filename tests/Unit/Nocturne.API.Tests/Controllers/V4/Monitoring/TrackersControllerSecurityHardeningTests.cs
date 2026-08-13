@@ -71,6 +71,7 @@ public class TrackersControllerSecurityHardeningTests
     [InlineData(nameof(TrackersController.GetDefinition))]
     [InlineData(nameof(TrackersController.GetActiveInstances))]
     [InlineData(nameof(TrackersController.GetUpcomingInstances))]
+    [InlineData(nameof(TrackersController.GetInstanceHistory))]
     public void ReadAction_IsNotAllowAnonymous(string actionName)
     {
         var method = typeof(TrackersController).GetMethod(
