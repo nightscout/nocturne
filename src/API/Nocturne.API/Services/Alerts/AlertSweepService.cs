@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -30,6 +31,17 @@ public class AlertSweepService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AlertSweepService> _logger;
+
+    /// <summary>
+    /// Audit endpoint recorded for the sweep's writes. The sweep runs with no request and no
+    /// actor, and <see cref="AlertAcknowledgementService"/> — reached through the orchestrator's
+    /// Info-severity auto-acknowledgement — stamps the scope's ambient context onto its own
+    /// contexts, so without an explicit push those acks are recorded as user mutations with every
+    /// actor field null. The other scopes' writers fall to the null-context system default today;
+    /// they carry the push so attribution is explicit rather than an accident of which context
+    /// path a writer uses.
+    /// </summary>
+    private const string AuditEndpoint = "service:alert-sweep";
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertSweepService"/>.
@@ -133,6 +145,9 @@ public class AlertSweepService : BackgroundService
                 true,
                 IsDemo: false));
 
+            using var systemScope = SystemAuditScope.PushForScope(
+                tenantScope.ServiceProvider, AuditEndpoint);
+
             var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
             var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
 
@@ -206,6 +221,9 @@ public class AlertSweepService : BackgroundService
                     using var tenantScope = _serviceProvider.CreateScope();
                     var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
                     tenantAccessor.SetTenant(new TenantContext(tenantContext.TenantId, tenantContext.Slug ?? string.Empty, tenantContext.DisplayName ?? string.Empty, true, IsDemo: false));
+
+                    using var systemScope = SystemAuditScope.PushForScope(
+                        tenantScope.ServiceProvider, AuditEndpoint);
 
                     var excursionTracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
                     await excursionTracker.ProcessEvaluationAsync(rule.Id, true, ct);
@@ -489,6 +507,9 @@ public class AlertSweepService : BackgroundService
                 true,
                 IsDemo: false));
 
+            using var systemScope = SystemAuditScope.PushForScope(
+                tenantScope.ServiceProvider, AuditEndpoint);
+
             var engine = tenantScope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
             var enricher = tenantScope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
             var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
@@ -548,7 +569,7 @@ public class AlertSweepService : BackgroundService
     /// "sensor expired" alert. The excursion state machine dedupes: once opened, further
     /// sweep passes are ExcursionContinues no-ops.
     /// </summary>
-    private async Task EvaluateTrackerAgeRulesAsync(CancellationToken ct)
+    internal async Task EvaluateTrackerAgeRulesAsync(CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
@@ -571,6 +592,9 @@ public class AlertSweepService : BackgroundService
                 tenantContext.DisplayName ?? string.Empty,
                 true,
                 IsDemo: false));
+
+            using var systemScope = SystemAuditScope.PushForScope(
+                tenantScope.ServiceProvider, AuditEndpoint);
 
             var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
 

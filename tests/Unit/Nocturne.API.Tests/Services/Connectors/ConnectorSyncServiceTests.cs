@@ -156,11 +156,8 @@ public class ConnectorSyncServiceTests
     [Fact]
     public async Task TriggerSyncAsync_SystemAttributesTheScopeInjectedDbContext()
     {
-        // The other half of the same hole: writes made on the scope's directly-injected
-        // NocturneDbContext (state spans, alert excursions) are attributed by that context's own
-        // AuditContext, and when it is unset the interceptor falls back to the enclosing HTTP
-        // request's — the person who clicked sync. That flags the sync's soft-deletes
-        // DeletedByUser, which stops a later resync re-creating those rows.
+        // Writes on the scope's directly-injected context are attributed by that context's own
+        // AuditContext, not the ambient one, so it needs stamping too.
         IAuditContext? captured = null;
         var executor = CreateMockExecutor(
             "test",
