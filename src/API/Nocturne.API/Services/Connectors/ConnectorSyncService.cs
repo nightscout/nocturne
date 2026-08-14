@@ -1,7 +1,6 @@
 using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Services.Connectors;
@@ -83,14 +82,6 @@ public class ConnectorSyncService : IConnectorSyncService
                 scopedTenantAccessor.SetTenant(tenantContext);
             }
 
-            // A manual trigger ingests the same connector data as the scheduled sync and must be
-            // attributed the same way. TenantDbContextFactory stamps this scope's IAuditContext
-            // onto every context it creates for the V4 repositories, and a child scope's is a
-            // blank user context (IsSystem = false) — without this push the imports are audited
-            // as null-attributed user mutations. Mirrors ConnectorBackgroundService.
-            using var systemScope = SystemAuditScope.Push(
-                scope.ServiceProvider.GetRequiredService<IAuditContext>());
-
             var executors = scope.ServiceProvider.GetServices<IConnectorSyncExecutor>();
             var executor = executors.FirstOrDefault(e =>
                 e.ConnectorId.Equals(connectorId, StringComparison.OrdinalIgnoreCase));
@@ -105,6 +96,11 @@ public class ConnectorSyncService : IConnectorSyncService
                     Message = $"Unknown connector: {connectorId}",
                 };
             }
+
+            // A manual trigger ingests the same connector data as the scheduled sync and must be
+            // attributed the same way. Mirrors ConnectorBackgroundService.
+            using var systemScope = SystemAuditScope.PushForScope(
+                scope.ServiceProvider, $"connector:{executor.ConnectorId}");
 
             var result = await executor.ExecuteSyncAsync(scope.ServiceProvider, request, ct, _progressReporter);
 
