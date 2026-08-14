@@ -1,10 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -39,6 +43,7 @@ public class CurrentTherapyStateController : ControllerBase
     /// </summary>
     [HttpGet]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.DevicesRead, OAuthScopes.TherapyRead)]
     [ProducesResponseType(typeof(CurrentTherapyStateResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CurrentTherapyStateResponse>> GetCurrentTherapyState(
         CancellationToken cancellationToken = default)
@@ -46,14 +51,16 @@ public class CurrentTherapyStateController : ControllerBase
         var pumpMode = await _stateSpanService.GetCurrentPumpModeAsync(cancellationToken);
         var sensitivityPercent = await _sensitivityResolver.GetCurrentSensitivityPercentAsync(cancellationToken);
         var latestPump = await _pumpSnapshotRepository.GetLatestAsync(asOf: null, cancellationToken);
-        return Ok(new CurrentTherapyStateResponse
-        {
-            CurrentPumpMode = pumpMode,
-            SensitivityPercent = sensitivityPercent,
-            Reservoir = latestPump?.Reservoir,
-            PumpBatteryPercent = latestPump?.BatteryPercent,
-            PumpBatteryVoltage = latestPump?.BatteryVoltage,
-        });
+        return Ok(CurrentTherapyStateReadScopeGuard.Redact(
+            new CurrentTherapyStateResponse
+            {
+                CurrentPumpMode = pumpMode,
+                SensitivityPercent = sensitivityPercent,
+                Reservoir = latestPump?.Reservoir,
+                PumpBatteryPercent = latestPump?.BatteryPercent,
+                PumpBatteryVoltage = latestPump?.BatteryVoltage,
+            },
+            HttpContext.GetGrantedScopes()));
     }
 }
 

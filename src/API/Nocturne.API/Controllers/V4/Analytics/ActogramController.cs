@@ -53,7 +53,7 @@ public class ActogramController : ControllerBase
         OAuthScopes.HeartRateRead,
         OAuthScopes.StepCountRead,
         OAuthScopes.SleepRead)]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(ActogramReportData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -19,10 +21,17 @@ public class CurrentTherapyStateControllerTests
 
     public CurrentTherapyStateControllerTests()
     {
+        // The pump readings are the device category, so the response is redacted without it.
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { OAuthScopes.DevicesRead };
+
         _controller = new CurrentTherapyStateController(
             _stateSpanService.Object,
             _sensitivityResolver.Object,
-            _pumpSnapshotRepository.Object);
+            _pumpSnapshotRepository.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
     }
 
     [Fact]

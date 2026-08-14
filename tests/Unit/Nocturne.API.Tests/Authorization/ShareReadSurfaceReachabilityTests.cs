@@ -65,6 +65,13 @@ public class ShareReadSurfaceReachabilityTests
             // ActogramReadScopeGuard empties the rest. Listed against glucose because the default
             // share grant is glucose-only and the report still renders its glucose overlay.
             ["Nocturne.API.Controllers.V4.Analytics.ActogramController"] = OAuthScopes.GlucoseRead,
+            // The dashboard chart, the day-in-review pages and the forecast overlay. Each merges
+            // several categories, so its gate is an OR across them and the matching read-scope
+            // guard empties the rest; listed against glucose because that is the default share
+            // grant and the glucose series is what those pages render from it.
+            ["Nocturne.API.Controllers.V4.Analytics.ChartDataController"] = OAuthScopes.GlucoseRead,
+            ["Nocturne.API.Controllers.V4.Analytics.RetrospectiveController"] = OAuthScopes.GlucoseRead,
+            ["Nocturne.API.Controllers.V4.Analytics.PredictionController"] = OAuthScopes.GlucoseRead,
             // Feeds the data quality report. Its rows are hidden from shares by RLS
             // (compression_low_suggestions has no ShareDataCategories entry), so the gate decides
             // error-vs-empty-list, not what a share can see.
@@ -144,6 +151,27 @@ public class ShareReadSurfaceReachabilityTests
         {
             ["StatisticsController.GetMultiPeriodStatistics"] = OAuthScopes.GlucoseRead,
             ["StatisticsController.GetPunchCardData"] = OAuthScopes.GlucoseRead,
+            // Basal delivery is wholly the treatment category, so neither action is broadened to
+            // the OR its controller's mixed payloads need.
+            ["ChartDataController.GetBasalSeries"] = OAuthScopes.TreatmentsRead,
+            ["RetrospectiveController.GetBasalTimeline"] = OAuthScopes.TreatmentsRead,
+        };
+
+    /// <summary>
+    /// Read actions on a share-facing controller that require a read scope outside
+    /// <see cref="TenantPermissions.PublicShareScopes"/>, keyed <c>Controller.Action</c> with the
+    /// scope, so no share can reach them however the owner configures the link. Listing one is a
+    /// deliberate narrowing and is exempt from
+    /// <see cref="EveryRequiredScope_IsGrantableToAShare"/>; everything else on these controllers
+    /// must name a scope a share can hold.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> MemberOnlyReadScopeActions =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // The resolved therapy profile — basal schedule, ISF, carb ratio, targets — served for
+            // an on-device oref run. V1/V3 profile reads require the same scope, and the sharing UI
+            // deliberately offers no therapy category.
+            ["PredictionController.GetProfileSnapshot"] = OAuthScopes.TherapyRead,
         };
 
     private static Assembly ApiAssembly => typeof(RequireScopeAttribute).Assembly;
@@ -213,8 +241,9 @@ public class ShareReadSurfaceReachabilityTests
 
                 shareReadActions++;
 
-                var expected = ActionScopeOverrides.TryGetValue($"{type.Name}.{action.Name}", out var o)
-                    ? o
+                var key = $"{type.Name}.{action.Name}";
+                var expected = MemberOnlyReadScopeActions.TryGetValue(key, out var m) ? m
+                    : ActionScopeOverrides.TryGetValue(key, out var o) ? o
                     : ShareReadableControllers[type.FullName!];
 
                 var effective = classScopes.Concat(ScopesOf(actionAttributes)).ToList();
@@ -226,6 +255,16 @@ public class ShareReadSurfaceReachabilityTests
                 // requirement naming anything else makes RequireScope demand authentication.
                 if (effective.Any(s => !s.EndsWith(".read", StringComparison.Ordinal)))
                     violations.Add($"{type.Name}.{action.Name}: names a non-read scope, which excludes the anonymous share");
+
+                // A multi-category gate must be an OR. An AND over categories a share cannot hold
+                // all of refuses every share, and the checks above cannot see it: the scope list is
+                // unchanged and each scope is still share-grantable on its own.
+                var conjunctions = actionAttributes.Concat(type.GetCustomAttributes(inherit: true))
+                    .OfType<RequireScopeAttribute>()
+                    .Where(a => a.RequiresAll && a.Scopes.Count > 1);
+                if (conjunctions.Any())
+                    violations.Add($"{type.Name}.{action.Name}: requires ALL of its categories, so a share "
+                        + "granted only some of them is refused the whole endpoint");
             }
 
             if (shareReadActions == 0)
@@ -244,6 +283,11 @@ public class ShareReadSurfaceReachabilityTests
         // would silently turn "share-reachable" into "member-only" without any test failing.
         var scopes = ShareReadableControllers.Values.Concat(ActionScopeOverrides.Values).Distinct();
         scopes.Should().OnlyContain(s => TenantPermissions.PublicShareScopes.Contains(s));
+
+        // The converse for the exemptions: an action listed as member-only whose scope a share can
+        // in fact hold is not member-only, and the entry is hiding a gate nobody is checking.
+        MemberOnlyReadScopeActions.Values.Should()
+            .OnlyContain(s => !TenantPermissions.PublicShareScopes.Contains(s));
     }
 
     [Fact]
@@ -252,12 +296,12 @@ public class ShareReadSurfaceReachabilityTests
         foreach (var (name, _) in ShareReadableControllers)
             ApiAssembly.GetType(name).Should().NotBeNull($"{name} is listed but does not exist");
 
-        foreach (var (key, _) in ActionScopeOverrides)
+        foreach (var (key, _) in ActionScopeOverrides.Concat(MemberOnlyReadScopeActions))
         {
             var (controller, action) = (key.Split('.')[0], key.Split('.')[1]);
             Controllers().Should().Contain(
                 t => t.Name == controller && Actions(t).Any(a => a.Name == action),
-                $"{key} is listed in ActionScopeOverrides but no such action exists");
+                $"{key} is listed as a per-action scope but no such action exists");
         }
     }
 

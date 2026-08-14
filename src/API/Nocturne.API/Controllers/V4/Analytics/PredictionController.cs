@@ -2,7 +2,11 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -54,6 +58,7 @@ public class PredictionController : ControllerBase
     /// <returns>Glucose predictions including IOB, UAM, COB, and zero-temp curves</returns>
     [HttpGet]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
@@ -73,7 +78,7 @@ public class PredictionController : ControllerBase
         try
         {
             var result = await _predictionService.GetPredictionsAsync(profileId, asOf: null, cancellationToken);
-            return Ok(result);
+            return Ok(PredictionReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (InvalidOperationException ex)
         {
@@ -95,6 +100,7 @@ public class PredictionController : ControllerBase
     /// <returns>Status of the prediction service including configured source</returns>
     [HttpGet("status")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(typeof(PredictionStatusResponse), 200)]
     public ActionResult<PredictionStatusResponse> GetStatus()
     {
@@ -124,6 +130,7 @@ public class PredictionController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("profile-snapshot")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 500)]

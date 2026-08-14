@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Services.Devices;
@@ -7,6 +10,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using System.Linq;
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -79,6 +83,7 @@ public class RetrospectiveController : ControllerBase
     /// <response code="500">If there was an internal server error</response>
     [HttpGet("at")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(typeof(RetrospectiveDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -192,7 +197,7 @@ public class RetrospectiveController : ControllerBase
                 Basal = basalData,
                 RecentTreatments = recentTreatments
             };
-            return Ok(response);
+            return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
         }
         catch (Exception ex)
         {
@@ -213,6 +218,7 @@ public class RetrospectiveController : ControllerBase
     /// <response code="500">If there was an internal server error</response>
     [HttpGet("timeline")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(typeof(RetrospectiveTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -321,7 +327,7 @@ public class RetrospectiveController : ControllerBase
                 TotalPoints = dataPoints.Count,
                 Data = dataPoints
             };
-            return Ok(response);
+            return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
         }
         catch (Exception ex)
         {
@@ -339,6 +345,7 @@ public class RetrospectiveController : ControllerBase
     /// <returns>Basal rate timeline for the day</returns>
     [HttpGet("basal-timeline")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(typeof(BasalTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

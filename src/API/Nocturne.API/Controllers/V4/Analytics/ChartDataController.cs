@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -12,8 +16,12 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// state spans, system events, and tracker markers.
 /// </summary>
 /// <remarks>
-/// Responses are cached for 60 seconds, varying by query keys,
-/// to avoid redundant recalculation when the browser reconnects.
+/// Responses are cached for 60 seconds in the caller's own client cache, so a browser that
+/// reconnects does not force a recalculation. The cache is deliberately private:
+/// <see cref="ChartDataReadScopeGuard"/> makes the body depend on the caller's scopes, and the
+/// shared response cache keys only on host, query and <c>Cookie</c>, so a credential that presents
+/// neither a cookie nor an <c>Authorization</c> header — the legacy <c>api-secret</c> header —
+/// would otherwise be served another credential's unredacted body.
 /// </remarks>
 /// <seealso cref="IChartDataService"/>
 /// <seealso cref="DashboardChartData"/>
@@ -49,7 +57,15 @@ public class ChartDataController : ControllerBase
     /// <exception cref="Exception">Returns HTTP 500 if chart data calculation fails.</exception>
     [HttpGet("dashboard")]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [RequireScope(
+        OAuthScopes.GlucoseRead,
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.DevicesRead,
+        OAuthScopes.TherapyRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead)]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(DashboardChartData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -75,7 +91,7 @@ public class ChartDataController : ControllerBase
                 cancellationToken
             );
 
-            return Ok(result);
+            return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (Exception ex)
         {
@@ -96,6 +112,7 @@ public class ChartDataController : ControllerBase
     /// <returns>A list of <see cref="BasalPoint"/> representing basal delivery over time.</returns>
     [HttpGet("basal-series")]
     [RemoteQuery]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

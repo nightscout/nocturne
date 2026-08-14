@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -67,19 +71,24 @@ public class CorrelationController : ControllerBase
     /// Arrays are empty when no matching records exist in that category.
     /// </returns>
     [HttpGet("{correlationId:guid}")]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult> GetCorrelated(Guid correlationId, CancellationToken ct = default)
     {
+        var granted = HttpContext.GetGrantedScopes();
+        var glucose = CorrelationReadScopeGuard.AllowsGlucose(granted);
+        var treatments = CorrelationReadScopeGuard.AllowsTreatments(granted);
+
         var result = new
         {
-            SensorGlucose = await _sensorRepo.GetByCorrelationIdAsync(correlationId, ct),
-            MeterGlucose = await _meterRepo.GetByCorrelationIdAsync(correlationId, ct),
-            Calibrations = await _calibrationRepo.GetByCorrelationIdAsync(correlationId, ct),
-            Boluses = await _bolusRepo.GetByCorrelationIdAsync(correlationId, ct),
-            CarbIntakes = await _carbIntakeRepo.GetByCorrelationIdAsync(correlationId, ct),
-            BGChecks = await _bgCheckRepo.GetByCorrelationIdAsync(correlationId, ct),
-            Notes = await _noteRepo.GetByCorrelationIdAsync(correlationId, ct),
-            BolusCalculations = await _bolusCalcRepo.GetByCorrelationIdAsync(correlationId, ct),
+            SensorGlucose = glucose ? await _sensorRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            MeterGlucose = glucose ? await _meterRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            Calibrations = glucose ? await _calibrationRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            Boluses = treatments ? await _bolusRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            CarbIntakes = treatments ? await _carbIntakeRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            BGChecks = glucose ? await _bgCheckRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            Notes = treatments ? await _noteRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
+            BolusCalculations = treatments ? await _bolusCalcRepo.GetByCorrelationIdAsync(correlationId, ct) : [],
         };
         return Ok(result);
     }

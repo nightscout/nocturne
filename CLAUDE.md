@@ -212,10 +212,16 @@ Design notes:
   table from that map — so a new entity gets a policy on the next boot, and a table
   with no governing scope is **hidden from shares** (fail-safe). A guard test asserts
   every `ITenantScoped` table is classified.
-- **Response-cache invariant.** `ChartDataController` is `[ResponseCache]`d; RLS
-  gates the DB read, not a cache hit. Safe only because a share is its own subdomain
-  (per-tenant Host cache key, `UseForwardedHeaders` before `UseResponseCaching`).
-  A public-scope toggle has up to a 60s staleness window.
+- **Response-cache invariant.** RLS gates the DB read, not a cache hit, so any
+  `[ResponseCache]`d share-reachable read is safe only because a share is its own
+  subdomain (per-tenant Host cache key, `UseForwardedHeaders` before
+  `UseResponseCaching`), and a public-scope toggle has up to a 60s staleness window.
+  A response whose body is additionally narrowed per *caller scope* cannot use the
+  shared cache at all — its key is only host + query + `Cookie`, so a credential
+  presenting neither a cookie nor an `Authorization` header (the legacy `api-secret`
+  header) would be served another credential's unredacted body. Those endpoints
+  (`ChartDataController`'s dashboard, `ActogramController`) declare
+  `ResponseCacheLocation.Client`.
 
 ## Testing
 

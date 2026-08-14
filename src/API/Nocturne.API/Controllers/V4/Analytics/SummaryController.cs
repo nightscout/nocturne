@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Widget;
 using Nocturne.API.Services.Glucose;
 
@@ -57,6 +60,7 @@ public class SummaryController : ControllerBase
     /// <returns>Widget summary response with aggregated diabetes management data</returns>
     [HttpGet]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.AlertsRead)]
     [ProducesResponseType(typeof(V4SummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<V4SummaryResponse>> GetSummary(
@@ -87,7 +91,7 @@ public class SummaryController : ControllerBase
                 HttpContext.RequestAborted
             );
 
-            return Ok(summary);
+            return Ok(WidgetSummaryReadScopeGuard.Redact(summary, HttpContext.GetGrantedScopes()));
         }
         catch (Exception ex)
         {

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
@@ -21,6 +23,10 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
+// Usage telemetry and its collection switch are a tenant-wide operational setting, not a data
+// category: nothing here is per-subject and the payloads carry no PHI, so the gate is the same
+// permission TenantSettingsController checks rather than any health-data scope.
+[RequireScope(TenantPermissions.TenantSettings)]
 public class AnalyticsController : ControllerBase
 {
     private readonly IAnalyticsService _analyticsService;
