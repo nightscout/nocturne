@@ -346,8 +346,8 @@ app.UseRouting();
 // Ahead of the documentation branch below, which jumps straight to its endpoint and would
 // otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
 // UseRouting to have run. Everything without a policy passes through untouched, and every
-// policy that exists partitions on the remote address alone, so none of their accounting
-// depends on running after UseAuthorization.
+// policy that exists partitions on pre-auth request data (the remote address or the Host),
+// so none of their accounting depends on running after UseAuthorization.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();

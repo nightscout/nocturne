@@ -92,6 +92,25 @@ public static class ServiceRegistrationExtensions
     public const string DocsRateLimitPolicy = "docs";
 
     /// <summary>
+    /// Rate-limiting policy for the statistics actions that compute over a caller-supplied body.
+    /// Named here rather than inline so the guard test asserting every one of them carries it
+    /// reads the same value the registration does.
+    /// </summary>
+    public const string StatisticsComputeRateLimitPolicy = "statistics-compute";
+
+    /// <summary>
+    /// Partition key for <see cref="StatisticsComputeRateLimitPolicy"/>: the request host, lowered.
+    /// </summary>
+    /// <remarks>
+    /// A host is case-insensitive and tenant resolution lower-cases the subdomain it reads, so a
+    /// caller sending the same host in another casing reaches the same tenant. Keying on the raw
+    /// string would hand them a fresh window per variant, and the caller this policy bounds — an
+    /// anonymous share-link holder — writes the header themselves.
+    /// </remarks>
+    internal static string StatisticsComputePartitionKey(HttpContext context) =>
+        context.Request.Host.Host.ToLowerInvariant();
+
+    /// <summary>
     /// Core API utility and calculation services (status, versioning, time queries,
     /// IOB/COB, predictions, statistics, etc.)
     /// </summary>
@@ -427,6 +446,27 @@ public static class ServiceRegistrationExtensions
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
                             PermitLimit = 30,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Statistics compute POSTs: 60 per tenant host per minute. These actions compute over a
+            // caller-supplied body rather than over stored data, and reports.read — the scope
+            // gating them — is held by every public share link, so an anonymous viewer can post
+            // them. The partition is the Host rather than the IP because the limiter runs before
+            // tenant resolution, the tenant (or share token) is the subdomain, and the browser does
+            // not reach these actions directly: the SvelteKit server calls them, so every tenant's
+            // traffic arrives from one address.
+            options.AddPolicy(
+                StatisticsComputeRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: StatisticsComputePartitionKey(context),
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
                             Window = TimeSpan.FromMinutes(1),
                             QueueLimit = 0,
                         }
