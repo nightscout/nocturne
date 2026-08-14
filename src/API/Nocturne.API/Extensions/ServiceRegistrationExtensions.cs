@@ -94,6 +94,12 @@ public static class ServiceRegistrationExtensions
     public const string DocsRateLimitPolicy = "docs";
 
     /// <summary>
+    /// Rate-limiting policy for connector credential verification, which is named here rather than
+    /// inline so the action's attribute and the registration read the same value.
+    /// </summary>
+    public const string ConnectorVerifyRateLimitPolicy = "connector-verify";
+
+    /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
     /// each applies. Held as one table so all of them resolve their partition through
     /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
@@ -152,6 +158,10 @@ public static class ServiceRegistrationExtensions
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
         ("support-issues", 5, TimeSpan.FromHours(1)),
+        // Connector credential verification drives a live sign-in against the external provider
+        // from this deployment's address, so the ceiling bounds both provider-side lockouts and
+        // use of the API as a credential-testing proxy.
+        (ConnectorVerifyRateLimitPolicy, 5, TimeSpan.FromMinutes(5)),
         // The documentation surface (/scalar, /openapi) runs before tenant resolution and
         // authentication, and the reference reads the tenants table and may write that tenant's
         // OAuth client, so it is the one unauthenticated path that reaches the database that

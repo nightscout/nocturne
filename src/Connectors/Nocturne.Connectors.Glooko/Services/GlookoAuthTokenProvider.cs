@@ -41,9 +41,11 @@ public class GlookoAuthTokenProvider(
         var sessionCookie = await ExecuteWithRetryAsync<string>(
             async attempt =>
             {
+                // Log the resolved URL, not config.Server: the raw value is caller-supplied and
+                // unclamped.
                 _logger.LogInformation(
-                    "Authenticating with Glooko server: {Server} (v3={UseV3}, attempt {Attempt}/{MaxRetries})",
-                    config.Server, config.UseV3Api, attempt + 1, maxRetries);
+                    "Authenticating with Glooko server: {BaseUrl} (v3={UseV3}, attempt {Attempt}/{MaxRetries})",
+                    GlookoConstants.ResolveBaseUrl(config.Server), config.UseV3Api, attempt + 1, maxRetries);
 
                 var (cookie, sessionMetadata, shouldRetry) = await SignInAsync(config, cancellationToken);
                 if (cookie == null)
@@ -116,16 +118,15 @@ public class GlookoAuthTokenProvider(
 
         if (!response.IsSuccessStatusCode)
         {
-            // Read through the Glooko helper rather than the base class's reader: Glooko returns
-            // gzip bodies the HTTP layer has not decompressed, so the raw bytes are unreadable.
-            var errorContent = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
+            // Status code only, no body: a Glooko sign-in failure echoes the submitted email back,
+            // and a rejection is an expected outcome on the credential-verification path.
             var shouldRetry = response.IsRetryableError();
             if (shouldRetry)
-                _logger.LogWarning("Glooko authentication failed with retryable error: {StatusCode} - {Error}",
-                    response.StatusCode, errorContent);
+                _logger.LogWarning("Glooko authentication failed with retryable error: {StatusCode}",
+                    response.StatusCode);
             else
-                _logger.LogError("Glooko authentication failed with non-retryable error: {StatusCode} - {Error}",
-                    response.StatusCode, errorContent);
+                _logger.LogError("Glooko authentication failed with non-retryable error: {StatusCode}",
+                    response.StatusCode);
 
             return (null, null, shouldRetry);
         }

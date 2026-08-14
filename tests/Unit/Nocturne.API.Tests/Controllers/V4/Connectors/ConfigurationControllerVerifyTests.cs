@@ -95,4 +95,22 @@ public class ConfigurationControllerVerifyTests
         Assert.Null(method!.GetCustomAttribute<AllowAnonymousAttribute>());
         Assert.NotNull(typeof(ConfigurationController).GetCustomAttribute<AuthorizeAttribute>());
     }
+
+    [Fact]
+    public void VerifyCredentials_RequiresTenantSettingsScopeAndIsRateLimited()
+    {
+        var method = typeof(ConfigurationController)
+            .GetMethod(nameof(ConfigurationController.VerifyCredentials));
+
+        Assert.NotNull(method);
+        var scope = method!.GetCustomAttribute<Nocturne.API.Attributes.RequireScopeAttribute>();
+        Assert.NotNull(scope);
+        Assert.Contains(
+            Nocturne.Core.Models.Authorization.TenantPermissions.TenantSettings,
+            scope!.RequiredScopes);
+        var rateLimit = method.GetCustomAttribute<
+            Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>();
+        Assert.NotNull(rateLimit);
+        Assert.Equal("connector-verify", rateLimit!.PolicyName);
+    }
 }
