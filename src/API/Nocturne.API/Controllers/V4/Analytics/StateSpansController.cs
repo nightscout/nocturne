@@ -300,6 +300,11 @@ public class StateSpansController : ControllerBase
     /// <summary>
     /// Get all activity state spans (exercise, illness, travel)
     /// </summary>
+    /// <remarks>
+    /// This read merges three categories in memory before it paginates, so the page is bounded by
+    /// <see cref="V4ReadLimits.ClampMergedPage"/> rather than the plain page-size ceiling, and each
+    /// category is fetched only as deep as the requested page reaches.
+    /// </remarks>
     [HttpGet("activities")]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -314,17 +319,22 @@ public class StateSpansController : ControllerBase
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
-        limit = V4ReadLimits.ClampLimit(limit);
         offset = V4ReadLimits.ClampOffset(offset);
+        limit = V4ReadLimits.ClampMergedPage(limit, offset);
 
         var descending = sort == "timestamp_desc";
         var activityCategories = new[] { StateSpanCategory.Exercise, StateSpanCategory.Illness, StateSpanCategory.Travel };
         var allSpans = new List<StateSpan>();
         var total = 0;
 
+        // Every span on the requested page is within the first offset + limit of its own category,
+        // a sum ClampMergedPage has already held inside the merged window — or driven to a zero
+        // limit, a page no category has to be read for at all.
+        var perCategoryWindow = limit == 0 ? 0 : offset + limit;
+
         foreach (var category in activityCategories)
         {
-            var spans = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: int.MaxValue, descending: descending, cancellationToken: cancellationToken);
+            var spans = await _stateSpanService.GetStateSpansAsync(category, from: from, to: to, count: perCategoryWindow, descending: descending, cancellationToken: cancellationToken);
             allSpans.AddRange(spans);
             total += await _stateSpanService.CountStateSpansAsync(category, from: from, to: to, cancellationToken: cancellationToken);
         }

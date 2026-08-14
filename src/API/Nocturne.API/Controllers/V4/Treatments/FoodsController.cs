@@ -93,6 +93,11 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// List foods with optional filtering and pagination.
     /// This is a V4 endpoint (not Nightscout-legacy) used by the meal attribution UI.
     /// </summary>
+    /// <remarks>
+    /// The picker and the food page ask for no <c>count</c> and render the whole catalog, so an
+    /// absent <c>count</c> reads up to <see cref="V4ReadLimits.MaxPageSize"/> records rather than
+    /// every row. <c>find</c> matches name, category, and subcategory.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [Authorize]
@@ -103,7 +108,11 @@ public class FoodsController : ControllerBase, IWriteScopedController
         [FromQuery] int? skip = null,
         CancellationToken ct = default)
     {
-        var foods = await _foodService.GetFoodAsync(find, count, skip, ct);
+        var foods = await _foodService.GetFoodAsync(
+            find,
+            V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize),
+            V4ReadLimits.ClampOffset(skip ?? 0),
+            ct);
         return Ok(foods.ToArray());
     }
 

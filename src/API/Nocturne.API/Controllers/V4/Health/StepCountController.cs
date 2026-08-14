@@ -24,6 +24,9 @@ namespace Nocturne.API.Controllers.V4.Health;
 [Produces("application/json")]
 public class StepCountController : ControllerBase
 {
+    /// <summary>Records returned when a caller supplies no <c>count</c> and no date range.</summary>
+    private const int DefaultCount = 10;
+
     private readonly IStepCountService _stepCountService;
     private readonly ILogger<StepCountController> _logger;
 
@@ -36,35 +39,42 @@ public class StepCountController : ControllerBase
     /// <summary>
     /// Get step count records with optional pagination and date filtering
     /// </summary>
-    /// <param name="count">Maximum number of records to return (default: 10, ignored when from/to are specified)</param>
-    /// <param name="skip">Number of records to skip for pagination (default: 0, ignored when from/to are specified)</param>
-    /// <param name="from">Start of date range (inclusive). When specified with 'to', returns all records in range.</param>
-    /// <param name="to">End of date range (exclusive). When specified with 'from', returns all records in range.</param>
+    /// <param name="count">Maximum number of records to return (default: 10, or up to the ceiling when from/to are specified)</param>
+    /// <param name="skip">Number of records to skip for pagination (default: 0)</param>
+    /// <param name="from">Start of date range (inclusive).</param>
+    /// <param name="to">End of date range (exclusive).</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of step count records</returns>
+    /// <remarks>
+    /// A date range without a <paramref name="count"/> reads up to
+    /// <see cref="V4ReadLimits.MaxPageSize"/> records rather than the whole range, so a wide range
+    /// cannot load the table into memory. Page through the rest with <paramref name="skip"/>.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(OAuthScopes.StepCountRead)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
-        [FromQuery] int count = 10,
+        [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
-        count = V4ReadLimits.ClampLimit(count);
         skip = V4ReadLimits.ClampOffset(skip);
 
         try
         {
             IEnumerable<StepCount> records;
             if (from.HasValue && to.HasValue)
-                records = await _stepCountService.GetStepCountsByDateRangeAsync(from.Value, to.Value, cancellationToken);
+                records = await _stepCountService.GetStepCountsByDateRangeAsync(
+                    from.Value, to.Value,
+                    V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
             else
-                records = await _stepCountService.GetStepCountsAsync(count, skip, cancellationToken);
+                records = await _stepCountService.GetStepCountsAsync(
+                    V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
 
             return Ok(records);
         }

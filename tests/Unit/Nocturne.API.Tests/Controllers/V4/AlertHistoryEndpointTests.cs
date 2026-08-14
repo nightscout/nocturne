@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -138,5 +139,64 @@ public class AlertHistoryEndpointTests
 
         var withoutTest = Body(await controller.GetAlertHistory(ct: CancellationToken.None));
         withoutTest.Items.Should().ContainSingle().Which.Id.Should().Be(realId);
+    }
+
+    [Fact]
+    public async Task GetAlertHistory_PageSizeAtCeiling_IsServedUnchanged()
+    {
+        var controller = CreateController();
+
+        var body = Body(await controller.GetAlertHistory(
+            pageSize: V4ReadLimits.MaxOrdinalPageSize, ct: CancellationToken.None));
+
+        body.PageSize.Should().Be(V4ReadLimits.MaxOrdinalPageSize);
+    }
+
+    [Fact]
+    public async Task GetAlertHistory_PageSizeAboveCeiling_IsClamped()
+    {
+        var controller = CreateController();
+
+        var body = Body(await controller.GetAlertHistory(
+            pageSize: V4ReadLimits.MaxOrdinalPageSize + 1, ct: CancellationToken.None));
+
+        body.PageSize.Should().Be(V4ReadLimits.MaxOrdinalPageSize);
+    }
+
+    [Fact]
+    public async Task GetAlertHistory_PageBelowTheFirst_IsNormalized()
+    {
+        var controller = CreateController();
+
+        var body = Body(await controller.GetAlertHistory(page: 0, ct: CancellationToken.None));
+
+        body.Page.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetAlertHistory_PageAtTheDeepestReachable_IsServedUnchanged()
+    {
+        const int pageSize = V4ReadLimits.MaxOrdinalPageSize;
+        var deepest = V4ReadLimits.MaxPageSize / pageSize;
+        var controller = CreateController();
+
+        var body = Body(await controller.GetAlertHistory(
+            page: deepest, pageSize: pageSize, ct: CancellationToken.None));
+
+        body.Page.Should().Be(deepest);
+    }
+
+    [Fact]
+    public async Task GetAlertHistory_PagePastTheDeepestReachable_IsClamped()
+    {
+        const int pageSize = V4ReadLimits.MaxOrdinalPageSize;
+        var deepest = V4ReadLimits.MaxPageSize / pageSize;
+        var controller = CreateController();
+
+        // int.MaxValue also overflows the page-to-offset multiplication when it is not clamped.
+        var body = Body(await controller.GetAlertHistory(
+            page: int.MaxValue, pageSize: pageSize, ct: CancellationToken.None));
+
+        body.Page.Should().Be(deepest);
     }
 }
