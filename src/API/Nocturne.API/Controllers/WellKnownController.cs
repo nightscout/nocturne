@@ -65,7 +65,6 @@ public class WellKnownController : ControllerBase
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 UserinfoEndpoint = $"{baseUrl}/auth/userinfo",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
-                RegistrationEndpoint = null,
                 ScopesSupported = new[] { "openid", "profile", "email", "offline_access" },
                 ResponseTypesSupported = new[]
                 {
@@ -190,6 +189,10 @@ public class WellKnownController : ControllerBase
 /// with <see cref="JsonPropertyNameAttribute"/> rather than left to the camelCase policy MVC
 /// applies by default. Pinning them on the model also keeps the generated OpenAPI schema — and
 /// therefore the generated clients — describing the names that actually go on the wire.
+///
+/// Discovery also requires absent optional metadata to be omitted rather than sent as
+/// <c>null</c>, so every optional member carries <see cref="JsonIgnoreAttribute"/> with
+/// <see cref="JsonIgnoreCondition.WhenWritingNull"/>.
 /// </remarks>
 public class OpenIdConfiguration
 {
@@ -203,15 +206,18 @@ public class OpenIdConfiguration
     public string TokenEndpoint { get; set; } = string.Empty;
 
     [JsonPropertyName("userinfo_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? UserinfoEndpoint { get; set; }
 
     [JsonPropertyName("jwks_uri")]
     public string JwksUri { get; set; } = string.Empty;
 
     [JsonPropertyName("registration_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RegistrationEndpoint { get; set; }
 
     [JsonPropertyName("end_session_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EndSessionEndpoint { get; set; }
 
     [JsonPropertyName("scopes_supported")]
@@ -242,6 +248,7 @@ public class OpenIdConfiguration
     public string[] CodeChallengeMethodsSupported { get; set; } = Array.Empty<string>();
 
     [JsonPropertyName("service_documentation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceDocumentation { get; set; }
 }
 
@@ -282,15 +289,19 @@ public class OAuthAuthorizationServerMetadata
     public string TokenEndpoint { get; set; } = string.Empty;
 
     [JsonPropertyName("device_authorization_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DeviceAuthorizationEndpoint { get; set; }
 
     [JsonPropertyName("revocation_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RevocationEndpoint { get; set; }
 
     [JsonPropertyName("introspection_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? IntrospectionEndpoint { get; set; }
 
     [JsonPropertyName("registration_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RegistrationEndpoint { get; set; }
 
     [JsonPropertyName("jwks_uri")]
@@ -312,6 +323,7 @@ public class OAuthAuthorizationServerMetadata
     public string[] CodeChallengeMethodsSupported { get; set; } = Array.Empty<string>();
 
     [JsonPropertyName("service_documentation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceDocumentation { get; set; }
 }
 
