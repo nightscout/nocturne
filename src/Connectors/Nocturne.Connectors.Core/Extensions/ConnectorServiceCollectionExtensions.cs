@@ -99,7 +99,11 @@ public static class ConnectorServiceCollectionExtensions
         /// <typeparam name="TTokenProvider">Token provider type</typeparam>
         /// <param name="configuration">Configuration</param>
         /// <param name="options">Connector options</param>
-        public void AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
+        /// <returns>
+        ///     The bound configuration, so that a caller can tell an enabled connector from a
+        ///     disabled one whose registrations were skipped.
+        /// </returns>
+        public TConfig AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
             ConnectorOptions options)
             where TConfig : BaseConnectorConfiguration, new()
             where TService : class, IConnectorService<TConfig>
@@ -113,7 +117,7 @@ public static class ConnectorServiceCollectionExtensions
 
             // Skip registration if disabled
             if (!config.Enabled)
-                return;
+                return config;
 
             // Register server resolver
             services.AddSingleton<IConnectorServerResolver<TConfig>>(
@@ -152,6 +156,8 @@ public static class ConnectorServiceCollectionExtensions
 
             services.AddConnectorTokenProvider<TTokenProvider>();
             services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TService, TConfig>>();
+
+            return config;
         }
 
         /// <summary>
@@ -200,6 +206,17 @@ public static class ConnectorServiceCollectionExtensions
                     $"on '{connectorId}'.");
 
             services.AddScoped<IConnectorSyncExecutor, TSyncExecutor>();
+            return services;
+        }
+
+        /// <summary>
+        ///     Registers a credential verifier as a scoped IConnectorCredentialVerifier.
+        /// </summary>
+        /// <typeparam name="TCredentialVerifier">Credential verifier type</typeparam>
+        public IServiceCollection AddConnectorCredentialVerifier<TCredentialVerifier>()
+            where TCredentialVerifier : class, IConnectorCredentialVerifier
+        {
+            services.AddScoped<IConnectorCredentialVerifier, TCredentialVerifier>();
             return services;
         }
 
