@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Area, Axis, Text, ChartClipPath, Highlight, getChartContext } from "layerchart";
+  import { Area, Axis, ChartClipPath, Highlight, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
@@ -80,13 +80,14 @@
   />
 
   <!-- IOB/COB track label -->
-  <Text
+  <text
     x={4}
     y={iobTrackTop + 12}
+    dy="-0.355em"
     class="text-[8px] fill-muted-foreground font-medium"
   >
     IOB/COB
-  </Text>
+  </text>
 
   <ChartClipPath>
     <!-- COB area (scaled by carb ratio to show on IOB-equivalent scale) -->

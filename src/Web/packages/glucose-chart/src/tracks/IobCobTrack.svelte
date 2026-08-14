@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Area, Axis, Text, ChartClipPath, Highlight } from "layerchart";
+  import { Area, Axis, ChartClipPath, Highlight } from "layerchart";
   import { curveMonotoneX, bisector } from "d3";
   import type { ScaleLinear } from "d3-scale";
   import BolusMarker from "../markers/BolusMarker.svelte";
@@ -97,13 +97,14 @@
   />
 
   <!-- IOB/COB track label -->
-  <Text
+  <text
     x={4}
     y={iobTrackTop + 12}
+    dy="-0.355em"
     class="text-[8px] fill-muted-foreground font-medium"
   >
     IOB/COB
-  </Text>
+  </text>
 {/if}
 
 <ChartClipPath>
