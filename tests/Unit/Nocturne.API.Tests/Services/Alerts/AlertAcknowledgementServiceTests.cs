@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -20,6 +21,7 @@ public class AlertAcknowledgementServiceTests
     private readonly AlertAcknowledgementService _service;
 
     private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly ITenantAccessor _tenantAccessor;
 
     public AlertAcknowledgementServiceTests()
     {
@@ -36,9 +38,11 @@ public class AlertAcknowledgementServiceTests
         tenantAccessor.Setup(t => t.IsResolved).Returns(true);
         tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
+        _tenantAccessor = tenantAccessor.Object;
+
         _service = new AlertAcknowledgementService(
             _factory,
-            tenantAccessor.Object,
+            _tenantAccessor,
             _broadcast.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
     }
@@ -244,12 +248,35 @@ public class AlertAcknowledgementServiceTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task AcknowledgeAllAsync_CarriesTheScopeAuditContextOntoEachContext()
+    {
+        // Acknowledgement mutates an auditable entity, and the pooled context is leased with
+        // AuditContext cleared. Left unset, an auto-acknowledgement made inside a connector
+        // sync's scope is attributed to whichever HTTP request the interceptor falls back to.
+        await SeedActiveExcursionAsync();
+        var audit = SystemAuditContext.ForService("connector:test");
+        var service = new AlertAcknowledgementService(
+            _factory,
+            _tenantAccessor,
+            _broadcast.Object,
+            NullLogger<AlertAcknowledgementService>.Instance,
+            audit);
+
+        await service.AcknowledgeAllAsync(_tenantId, "system", CancellationToken.None);
+
+        _factory.Created.Should().NotBeEmpty();
+        _factory.Created.Should().OnlyContain(c => c.AuditContext == audit);
+    }
+
     private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
         : IDbContextFactory<NocturneDbContext>
     {
         // Optional override so AcknowledgeExcursionAsync (which doesn't take a tenant) can still
         // resolve the excursion across tenants under the global query filter.
         public Guid? TenantOverride { get; set; }
+
+        public List<NocturneDbContext> Created { get; } = [];
 
         public NocturneDbContext CreateDbContext()
         {
@@ -258,6 +285,7 @@ public class AlertAcknowledgementServiceTests
             {
                 ctx.TenantId = t;
             }
+            Created.Add(ctx);
             return ctx;
         }
 
