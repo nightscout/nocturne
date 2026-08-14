@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Connectors;
 
@@ -23,6 +25,13 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 // visitor's: the demo's account is shared and obtainable without signing up. A permission gate
 // would not do — the demo member holds tenant.settings.
 [DenyDemoSubject]
+// Reading or changing a connector's configuration is tenant administration, so every action but
+// the schema — which describes a connector's declared fields and holds no tenant state — requires
+// tenant.settings. Repeated per action rather than declared on the class because the schema route
+// is [AllowAnonymous], and an authorization filter on the class would run for it regardless.
+// [RequireAdmin] would not do: it resolves against the PermissionTrie, which ScopeTranslator never
+// populates with a tenant-administration atom, so it admits only a superuser membership and would
+// lock the Administrator role out of the connector settings it holds tenant.settings for.
 public class ConfigurationController : ControllerBase
 {
     private readonly IConnectorConfigurationService _configService;
@@ -50,6 +59,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>Configuration response or 404 if not found</returns>
     [HttpGet("{connectorName}")]
     [RemoteQuery]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> GetConfiguration(
@@ -93,13 +103,14 @@ public class ConfigurationController : ControllerBase
     /// Gets the effective configuration for a connector: the non-secret runtime values resolved
     /// from stored configuration and environment variables. Secret values (passwords, tokens) are
     /// excluded, but the result includes non-secret account identifiers such as the connector
-    /// account username or email, so it requires authentication (the class-level <c>[Authorize]</c>).
+    /// account username or email.
     /// </summary>
     /// <param name="connectorName">The connector name</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Dictionary of property names to effective values</returns>
     [HttpGet("{connectorName}/effective")]
     [RemoteQuery]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<Dictionary<string, object?>>> GetEffectiveConfiguration(
@@ -131,6 +142,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> SaveConfiguration(
@@ -382,6 +394,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpPut("{connectorName}/secrets")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SaveSecrets(
@@ -412,6 +425,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>List of connector status information</returns>
     [HttpGet]
     [RemoteQuery]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(IReadOnlyList<ConnectorStatusInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ConnectorStatusInfo>>> GetAllConnectorStatus(
         CancellationToken ct)
@@ -430,6 +444,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpPatch("{connectorName}/active")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(
         string connectorName,
@@ -451,6 +466,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpDelete("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteConfiguration(

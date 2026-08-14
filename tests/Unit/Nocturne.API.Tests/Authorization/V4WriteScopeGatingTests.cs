@@ -81,10 +81,29 @@ public class V4WriteScopeGatingTests
         public const string IdentityAndDelegation = "identity/delegation state, governed by RBAC atoms";
 
         /// <summary>
-        /// Configures a connector: credentials, cursors, sync triggers and webhook targets. The data
-        /// a sync then writes is written by the connector's own publish path, not by the caller.
+        /// Caller-supplied import of raw nutritional records from a connector's companion app
+        /// (MyFitnessPal, Glooko). It writes connector_food_entries, so it is a data write; which
+        /// write scope should govern it is an open question this entry records rather than answers.
         /// </summary>
-        public const string ConnectorAdministration = "connector configuration, not a data write";
+        public const string ConnectorFoodImport = "connector food-entry import; governing write scope undecided";
+
+        /// <summary>
+        /// Connector configuration, gated on <see cref="TenantPermissions.TenantSettings"/> — an
+        /// administration atom, absent from <see cref="OAuthScopes.AllScopes"/>, so no data-category
+        /// scope names it. Asserted per controller by
+        /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>, and behaviourally by
+        /// <see cref="ConnectorConfigurationScopeTests"/>.
+        /// </summary>
+        public const string TenantSettingsScope = "connector configuration, gated on tenant.settings";
+
+        /// <summary>
+        /// The same tenant-administration gate as <see cref="TenantSettingsScope"/>, enforced in the
+        /// handler because the action also admits the CareLink desktop link token, whose scope is
+        /// outside the OAuth vocabulary and resolves to an empty set — no attribute can express it.
+        /// Every controller filed under this must have a test that drives the real handler, which
+        /// <see cref="HandlerGuardedControllers_HaveABehaviouralTest"/> asserts.
+        /// </summary>
+        public const string ConnectorHandlerGuard = "tenant.settings enforced in the handler";
 
         /// <summary>
         /// POST whose handler computes and returns: a statistic over the values in the request
@@ -182,11 +201,13 @@ public class V4WriteScopeGatingTests
             ["SessionsController"] = NotDataCategory.IdentityAndDelegation,
             ["ShareLinkController"] = NotDataCategory.IdentityAndDelegation,
 
-            ["CareLinkConnectController"] = NotDataCategory.ConnectorAdministration,
-            ["ConfigurationController"] = NotDataCategory.ConnectorAdministration,
-            ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorAdministration,
-            ["MyFitnessPalSettingsController"] = NotDataCategory.ConnectorAdministration,
-            ["WebhookSettingsController"] = NotDataCategory.ConnectorAdministration,
+            ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorFoodImport,
+
+            ["ConfigurationController"] = NotDataCategory.TenantSettingsScope,
+            ["MyFitnessPalSettingsController"] = NotDataCategory.TenantSettingsScope,
+            ["WebhookSettingsController"] = NotDataCategory.TenantSettingsScope,
+
+            ["CareLinkConnectController"] = NotDataCategory.ConnectorHandlerGuard,
 
             ["DebugController"] = NotDataCategory.ComputesAndReturns,
             ["StatisticsController"] = NotDataCategory.ComputesAndReturns,
@@ -658,6 +679,9 @@ public class V4WriteScopeGatingTests
                     .OfType<AuthorizeAttribute>()
                     .Any(a => a.Roles?.Contains("platform_admin", StringComparison.Ordinal) == true),
                 NotDataCategory.TenantAdminAttribute => CarriesAttribute(controller, "RequireAdminAttribute"),
+                NotDataCategory.TenantSettingsScope => GovernsEveryWrite(controller,
+                    a => a is RequireScopeAttribute scope
+                         && scope.Scopes.Contains(TenantPermissions.TenantSettings, StringComparer.Ordinal)),
                 NotDataCategory.InstanceKey => attributes
                     .Any(a => a.GetType().Name == "RequireInstanceKeyAuthAttribute"),
                 NotDataCategory.DevelopmentOnly => controller.Namespace == V4Namespace + ".DevOnly",
@@ -675,13 +699,34 @@ public class V4WriteScopeGatingTests
     /// Whether the named attribute governs every write action on the controller — present on the
     /// class, or repeated on each write action.
     /// </summary>
-    private static bool CarriesAttribute(Type controller, string attributeTypeName)
-    {
-        bool Named(IEnumerable<object> attributes) =>
-            attributes.Any(a => a.GetType().Name == attributeTypeName);
+    private static bool CarriesAttribute(Type controller, string attributeTypeName) =>
+        GovernsEveryWrite(controller, a => a.GetType().Name == attributeTypeName);
 
-        return Named(controller.GetCustomAttributes(inherit: true))
-               || WriteActions(controller).All(a => Named(a.GetCustomAttributes(inherit: true)));
+    /// <summary>
+    /// Whether an attribute matching <paramref name="predicate"/> governs every write action on the
+    /// controller — present on the class, or repeated on each write action.
+    /// </summary>
+    private static bool GovernsEveryWrite(Type controller, Func<object, bool> predicate) =>
+        controller.GetCustomAttributes(inherit: true).Any(predicate)
+        || WriteActions(controller).All(a => a.GetCustomAttributes(inherit: true).Any(predicate));
+
+    /// <summary>
+    /// <see cref="NotDataCategory.ConnectorHandlerGuard"/> is a method call in the handler, which no
+    /// attribute scan can see — delete the call and the sweep stays green. So each controller filed
+    /// under it must be covered by a test that drives the real handler. That coverage is listed here
+    /// rather than discovered, so filing a controller under it without a behavioural test fails.
+    /// </summary>
+    [Fact]
+    public void HandlerGuardedControllers_HaveABehaviouralTest()
+    {
+        // ConnectorConfigurationScopeTests drives Start and Complete through the real handler.
+        var covered = new[] { "CareLinkConnectController" };
+
+        GateExemptControllers
+            .Where(entry => entry.Value == NotDataCategory.ConnectorHandlerGuard)
+            .Select(entry => entry.Key)
+            .Should().BeEquivalentTo(covered,
+                "every handler-guarded connector controller needs a test that drives its handler");
     }
 
     private static bool IsGateExempt(Type controller, MethodInfo action) =>

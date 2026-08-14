@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Webhooks;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Controllers.V4.Connectors;
@@ -22,6 +24,9 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [Tags("Connectors")]
 [Route("api/v4/ui-settings/notifications/webhooks")]
 [Authorize]
+// Choosing where a tenant's alerts are delivered, and dispatching from the server to a
+// caller-named host, are tenant administration. The GET is left on [Authorize] alone: it returns a
+// fixed disabled stub rather than anything the tenant configured.
 public class WebhookSettingsController(
     WebhookRequestSender requestSender,
     ILogger<WebhookSettingsController> logger)
@@ -51,6 +56,7 @@ public class WebhookSettingsController(
 
     /// <summary>Saves webhook notification settings.</summary>
     [HttpPut]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(WebhookNotificationSettings), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -67,11 +73,11 @@ public class WebhookSettingsController(
     /// <remarks>
     /// Gated for the demo's shared visitor because the destination is caller-chosen: the server
     /// makes an outbound POST from its own address. <c>OutboundDestination</c> keeps it off private
-    /// networks, so what remains is a relay to public hosts. The GET and PUT above are a stub and a
-    /// logged no-op, so gating them would only break the demo's notification settings screen.
+    /// networks, so what remains is a relay to public hosts.
     /// </remarks>
     [HttpPost("test")]
     [DenyDemoSubject]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(WebhookTestResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]

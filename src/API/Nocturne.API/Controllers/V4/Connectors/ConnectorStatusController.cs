@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4;
@@ -13,13 +15,15 @@ namespace Nocturne.API.Controllers.V4;
 /// <remarks>
 /// Connector status is maintained by <see cref="IConnectorHealthService"/>, which tracks
 /// the last-seen timestamp and error state for each connector (Dexcom, Glooko, Libre, etc.).
-/// This endpoint is used by the frontend dashboard to display connector health indicators.
+/// This endpoint backs the connector settings screen's health indicators; no patient-facing
+/// dashboard reads it.
 /// </remarks>
 /// <seealso cref="IConnectorHealthService"/>
 [Authorize]
 // Reports the outcome of a fetch to a tenant-configured host — the readback half of the
 // request-forgery shape gated on ConfigurationController.
 [DenyDemoSubject]
+[RequireScope(TenantPermissions.TenantSettings)]
 [ApiController]
 [Tags("Connectors")]
 [Route("api/v4/connectors")]
