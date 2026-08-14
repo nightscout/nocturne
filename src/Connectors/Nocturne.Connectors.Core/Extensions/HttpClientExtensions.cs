@@ -73,6 +73,12 @@ public static class HttpClientExtensions
                         AutomaticDecompression = DecompressionMethods.All,
                         ConnectTimeout = effectiveConnectTimeout,
                         PooledConnectionLifetime = effectiveTimeout,
+                        // The handler — and therefore an automatic CookieContainer — is shared by
+                        // every tenant's requests through this named client, so provider session
+                        // cookies from one tenant would override the manually-set Cookie headers
+                        // of another. Connectors that need cookies manage them per-session
+                        // themselves (see GlookoHttpHelper); isolated flows use OutboundHttpClient.
+                        UseCookies = false,
                         // LinkLocalGuardHandler follows redirects itself so it can re-check each
                         // hop; see its remarks for why neither leaving them on nor refusing them
                         // outright works.

@@ -126,6 +126,29 @@ public abstract class AuthTokenProviderBase<TConfig>(
     }
 
     /// <summary>
+    ///     Attempts a live authentication with the supplied configuration, bypassing the
+    ///     per-tenant token cache entirely: no cached session is read, nothing is stored, and no
+    ///     tenant context is required. Used for credential verification, where a cache hit would
+    ///     skip the provider and a cache write would overwrite the tenant's live session.
+    /// </summary>
+    /// <param name="config">The configuration carrying the credentials to verify.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Whether the provider issued a token for the credentials.</returns>
+    public async Task<bool> VerifyCredentialsAsync(TConfig config, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await AcquireTokenAsync(config, cancellationToken);
+            return !string.IsNullOrEmpty(result.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Credential verification failed for {ProviderName}", GetType().Name);
+            return false;
+        }
+    }
+
+    /// <summary>
     ///     Returns the cached session for the current tenant, or null if not cached.
     ///     Used by connector services that need to read metadata (e.g. session cookies, user data).
     /// </summary>

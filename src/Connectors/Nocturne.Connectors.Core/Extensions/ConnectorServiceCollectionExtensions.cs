@@ -231,6 +231,17 @@ public static class ConnectorServiceCollectionExtensions
         }
 
         /// <summary>
+        ///     Registers a credential verifier as a scoped IConnectorCredentialVerifier.
+        /// </summary>
+        /// <typeparam name="TCredentialVerifier">Credential verifier type</typeparam>
+        public IServiceCollection AddConnectorCredentialVerifier<TCredentialVerifier>()
+            where TCredentialVerifier : class, IConnectorCredentialVerifier
+        {
+            services.AddScoped<IConnectorCredentialVerifier, TCredentialVerifier>();
+            return services;
+        }
+
+        /// <summary>
         ///     Discovers and registers all connector services via assembly scanning.
         ///     Replaces explicit per-connector AddXxxConnector() calls in Program.cs.
         /// </summary>

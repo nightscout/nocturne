@@ -36,10 +36,12 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
     {
         try
         {
-            _logger.LogInformation("Authenticating with Glooko server: {Server} (v3={UseV3})",
-                config.Server, config.UseV3Api);
-
             var baseUrl = GlookoConstants.ResolveBaseUrl(config.Server);
+
+            // Log the resolved URL, not config.Server: the raw value is caller-supplied and
+            // unclamped.
+            _logger.LogInformation("Authenticating with Glooko server: {BaseUrl} (v3={UseV3})",
+                baseUrl, config.UseV3Api);
             var webOrigin = GlookoConstants.ResolveWebOrigin(config.Server);
 
             string signInPath;
@@ -84,9 +86,10 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorContent = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
-                _logger.LogError("Glooko authentication failed: {StatusCode} - {Error}",
-                    response.StatusCode, errorContent);
+                // Status code only: the response body can echo the submitted email, and a failed
+                // sign-in is an expected outcome on the verification path.
+                _logger.LogWarning("Glooko authentication failed: {StatusCode}",
+                    response.StatusCode);
                 return (null, DateTime.MinValue, null);
             }
 

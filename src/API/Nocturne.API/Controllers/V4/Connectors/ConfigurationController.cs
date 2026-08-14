@@ -1,8 +1,13 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Controllers.V4.Connectors;
@@ -403,6 +408,43 @@ public class ConfigurationController : ControllerBase
             _logger.LogWarning(ex, "Failed to save secrets - encryption not configured");
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Verifies connector credentials against the provider without persisting anything.
+    /// Accepts the combined configuration and secrets payload (the same field shapes the
+    /// configuration and secrets PUT endpoints take) and attempts a live authentication.
+    /// Connectors that do not support verification return <c>supported = false</c>.
+    /// The submitted values are never stored, logged, or echoed back.
+    /// </summary>
+    /// <param name="connectorName">The connector name</param>
+    /// <param name="request">The configuration and secrets to verify</param>
+    /// <param name="verifiers">The registered per-connector credential verifiers</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>The verification outcome</returns>
+    [HttpPost("{connectorName}/verify")]
+    [RemoteCommand]
+    [RequireScope(TenantPermissions.TenantSettings)]
+    [EnableRateLimiting("connector-verify")]
+    [ProducesResponseType(typeof(ConnectorCredentialVerificationResult), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ConnectorCredentialVerificationResult>> VerifyCredentials(
+        string connectorName,
+        [FromBody] VerifyConnectorCredentialsRequest request,
+        [FromServices] IEnumerable<IConnectorCredentialVerifier> verifiers,
+        CancellationToken ct)
+    {
+        _logger.LogDebug("Verifying credentials for connector {ConnectorName}", connectorName);
+
+        var verifier = verifiers.FirstOrDefault(
+            v => v.ConnectorId.Equals(connectorName, StringComparison.OrdinalIgnoreCase));
+        if (verifier == null)
+        {
+            return Ok(ConnectorCredentialVerificationResult.NotSupported());
+        }
+
+        var result = await verifier.VerifyAsync(
+            request.Configuration, request.Secrets ?? new Dictionary<string, string>(), ct);
+        return Ok(result);
     }
 
     /// <summary>

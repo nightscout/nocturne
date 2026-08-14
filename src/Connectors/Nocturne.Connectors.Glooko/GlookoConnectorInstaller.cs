@@ -24,6 +24,7 @@ public class GlookoConnectorInstaller : IConnectorInstaller
 
         services.AddConnectorTokenProvider<GlookoAuthTokenProvider>();
         services.AddConnectorSyncExecutor<GlookoSyncExecutor>();
+        services.AddConnectorCredentialVerifier<GlookoCredentialVerifier>();
     }
 
     private sealed class GlookoConnectorOptions : ConnectorOptions

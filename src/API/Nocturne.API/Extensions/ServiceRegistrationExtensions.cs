@@ -377,6 +377,24 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
+            // Connector credential verification: 5 attempts per IP per 5 minutes. Each request
+            // drives a live sign-in against the external provider from this deployment's IP, so
+            // this bounds both provider-side lockouts and use of the API as a credential-testing
+            // proxy.
+            options.AddPolicy(
+                "connector-verify",
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 5,
+                            Window = TimeSpan.FromMinutes(5),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
             // Demo sign-in: 10 sessions per IP per 5 minutes. Friction against naive abuse
             // only — this does NOT bound the refresh_tokens table. The partition key comes from
             // Connection.RemoteIpAddress, which UseForwardedHeaders sets from X-Forwarded-For
