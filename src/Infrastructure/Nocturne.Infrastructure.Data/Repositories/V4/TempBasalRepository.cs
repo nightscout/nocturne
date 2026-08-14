@@ -163,7 +163,7 @@ public class TempBasalRepository : ITempBasalRepository
                     ct);
             if (existing != null)
             {
-                TempBasalMapper.UpdateEntity(existing, model);
+                ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = TempBasalMapper.ToDomainModel(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
@@ -178,6 +178,35 @@ public class TempBasalRepository : ITempBasalRepository
         var created = TempBasalMapper.ToDomainModel(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
         return created;
+    }
+
+    /// <summary>
+    /// Applies an upserted record onto the row matched by (DataSource, SyncIdentifier), keeping the
+    /// stored value of every field the write path cannot express.
+    /// </summary>
+    /// <remarks>
+    /// The match is made from the incoming record alone — the caller never read the stored row, so a
+    /// retry carries no value for server-resolved links (device attribution, resolved insulin context)
+    /// or for identity carried in from an import. Taking the incoming null for those would drop state
+    /// the retry never disputed: a re-upload after a device's usage window moved, or after the device
+    /// was removed, would unattribute a row that back-stamping had already resolved. Fields the request
+    /// can carry stay unconditional, so an omitted one still means "clear it".
+    /// </remarks>
+    private static void ApplySyncUpsert(TempBasalEntity entity, TempBasal model)
+    {
+        var deviceId = entity.DeviceId;
+        var patientDeviceId = entity.PatientDeviceId;
+        var legacyId = entity.LegacyId;
+        var insulinContextJson = entity.InsulinContextJson;
+        var additionalPropertiesJson = entity.AdditionalPropertiesJson;
+
+        TempBasalMapper.UpdateEntity(entity, model);
+
+        entity.DeviceId ??= deviceId;
+        entity.PatientDeviceId ??= patientDeviceId;
+        entity.LegacyId ??= legacyId;
+        entity.InsulinContextJson ??= insulinContextJson;
+        entity.AdditionalPropertiesJson ??= additionalPropertiesJson;
     }
 
     /// <summary>
