@@ -1,18 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Moq;
 using Nocturne.API.Services.Devices;
-using Nocturne.API.Tests.Integration.Infrastructure;
-using Nocturne.Core.Models;
-using Xunit;
+using Nocturne.API.Tests.TestDoubles;
 
-namespace Nocturne.API.Tests.Integration;
+namespace Nocturne.API.Tests.Services.Devices;
 
 /// <summary>
-/// Integration tests for Loop notification parity with legacy Nightscout
-/// These tests verify that APNS payloads match the legacy loop.js implementation exactly
+/// Verifies that the APNS payloads LoopService builds match the legacy loop.js implementation exactly.
 /// </summary>
-[Trait("Category", "Integration")]
 public class LoopServiceParityTests
 {
     private (LoopService service, MockApnsClientFactory factory) CreateLoopService()
