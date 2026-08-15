@@ -82,4 +82,12 @@ public sealed class TenantlessDashboardPathsTests
         // request to take a method from, so a method-restricted path must still be reported.
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants").Should().BeTrue();
     }
+
+    [Fact]
+    public void An_empty_method_is_a_method_not_an_omission()
+    {
+        // Only an omitted method means "any". A real request always carries one, and treating
+        // the empty string as a wildcard would admit a blank-verb request to a narrowed path.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", "").Should().BeFalse();
+    }
 }

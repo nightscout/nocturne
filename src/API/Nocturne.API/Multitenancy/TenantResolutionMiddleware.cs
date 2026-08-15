@@ -49,7 +49,7 @@ public class TenantResolutionMiddleware
 
         public bool Matches(string path, string? method) =>
             Path.Equals(path, StringComparison.OrdinalIgnoreCase) &&
-            (Method is null || string.IsNullOrEmpty(method) ||
+            (Method is null || method is null ||
              Method.Equals(method, StringComparison.OrdinalIgnoreCase));
     }
 
