@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
   import { page } from "$app/state";
   import { getOverview } from "$lib/api/generated/myTenants.generated.remote";
   import TenantOverviewTile from "$lib/components/tenants/TenantOverviewTile.svelte";
   import { Button } from "$lib/components/ui/button";
   import { sortTenantsByUrgency } from "$lib/utils/glucose-status";
+  import { pollWhileVisible } from "$lib/utils/poll-while-visible.svelte";
+
+  /** How often to re-read the cross-tenant overview while the tab is visible. */
+  const POLL_MS = 60_000;
 
   const overviewQuery = getOverview();
   const data = $derived(overviewQuery.current);
@@ -12,18 +15,8 @@
 
   const baseDomain = $derived(page.data.baseDomain ?? null);
 
-  let refreshInterval: ReturnType<typeof setInterval> | null = null;
-
-  onMount(() => {
-    refreshInterval = setInterval(() => {
-      // Detached callback: use .refresh(), not a bare await (no reactive context here).
-      overviewQuery.refresh();
-    }, 60_000);
-  });
-
-  onDestroy(() => {
-    if (refreshInterval) clearInterval(refreshInterval);
-  });
+  // Detached callback: use .refresh(), not a bare await (no reactive context here).
+  pollWhileVisible(() => overviewQuery.refresh(), POLL_MS);
 </script>
 
 <svelte:head>
