@@ -1,6 +1,5 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { getOriginalHost, isShareHost } from "$lib/server/request-host";
 import type { PageServerLoad } from "./$types";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
@@ -24,8 +23,8 @@ const AUTO_LOGIN_MARKER = "__autologin";
 const DEV_LOGIN_ENDPOINT = "/api/v4/dev-only/auth/login";
 const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 
-export const load: PageServerLoad = async ({ url, locals, request }) => {
-  const endpoint = await resolveAutoLoginEndpoint(locals, request);
+export const load: PageServerLoad = async ({ url, locals }) => {
+  const endpoint = await resolveAutoLoginEndpoint(locals);
   if (!endpoint) return;
 
   const raw = url.searchParams.get("returnUrl") || "/";
@@ -58,13 +57,12 @@ export const load: PageServerLoad = async ({ url, locals, request }) => {
  */
 async function resolveAutoLoginEndpoint(
   locals: App.Locals,
-  request: Request,
 ): Promise<string | null> {
   if (env.NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
 
   // The share host serves the anonymous read-only view and never honors
   // credentials, so there is no session to be had there.
-  if (isShareHost(getOriginalHost(request))) return null;
+  if (locals.isShareHost) return null;
 
   // Fail closed to the passkey UI: an unreachable status call must not bounce a
   // real tenant's owner through an endpoint that will 404.

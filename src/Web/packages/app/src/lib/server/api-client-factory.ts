@@ -27,6 +27,12 @@ export interface ServerHttpClientOptions {
   hashedInstanceKey?: string | null;
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
+  /**
+   * Sink for Set-Cookie headers that SvelteKit's name-keyed cookie jar cannot hold — the
+   * host-scoped half of a deliberate pair. A handler appends these to the outgoing response
+   * verbatim. See propagateAuthCookies.
+   */
+  rawSetCookies?: string[];
   signal?: AbortSignal;
 }
 
@@ -98,9 +104,11 @@ export function createServerHttpClient(
       });
 
       if (options?.responseCookies) {
+        const rawSink = options.rawSetCookies;
         propagateAuthCookies(
           response.headers.getSetCookie(),
-          options.responseCookies
+          options.responseCookies,
+          rawSink && ((header) => rawSink.push(header))
         );
       }
 

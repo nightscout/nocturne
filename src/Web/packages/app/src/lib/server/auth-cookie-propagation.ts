@@ -45,15 +45,37 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
  *
  * Only auth cookies are propagated; unrelated Set-Cookie headers from the
  * backend are ignored.
+ *
+ * The API deliberately emits some cookies twice under one name: a host-scoped
+ * expiry alongside the domain-wide value or expiry, so a browser holding a
+ * cookie from before the domain was widened converges on the wide one, and so
+ * sign-out clears both. SvelteKit's cookie jar is keyed by name alone and would
+ * keep only the last of such a pair — silently defeating both. `emitRaw`
+ * receives the host-scoped half verbatim, for a caller to append to the
+ * response as its own Set-Cookie header. Without it, only the domain-wide half
+ * survives, which is the older behaviour and no worse than it was.
  */
 export function propagateAuthCookies(
   setCookieHeaders: readonly string[],
-  cookies: CookieSetter
+  cookies: CookieSetter,
+  emitRaw?: (header: string) => void
 ): void {
   for (const header of setCookieHeaders) {
     const parsed = parseSetCookieHeader(header);
     if (!parsed) continue;
     if (!AUTH_COOKIE_SET.has(parsed.name)) continue;
+
+    // The pair is distinguished by the Domain attribute, so a host-scoped header that shares
+    // its name with a domain-wide one is the half the jar cannot hold. Passed through raw,
+    // attributes untouched, since nothing else in the request needs to observe it.
+    if (
+      emitRaw &&
+      parsed.domain === undefined &&
+      hasDomainWideSibling(setCookieHeaders, parsed.name)
+    ) {
+      emitRaw(header);
+      continue;
+    }
 
     if (parsed.isDeletion) {
       cookies.delete(parsed.name, {
@@ -75,6 +97,17 @@ export function propagateAuthCookies(
 
     cookies.set(parsed.name, parsed.value, opts);
   }
+}
+
+/** Whether another header of the same name carries a Domain attribute. */
+function hasDomainWideSibling(
+  setCookieHeaders: readonly string[],
+  name: string
+): boolean {
+  return setCookieHeaders.some((header) => {
+    const parsed = parseSetCookieHeader(header);
+    return parsed?.name === name && parsed.domain !== undefined;
+  });
 }
 
 interface ParsedSetCookie {

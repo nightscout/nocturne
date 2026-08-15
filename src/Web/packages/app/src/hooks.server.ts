@@ -18,6 +18,7 @@ import {
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import { STATIC_ASSET_PREFIXES, isPublicRoute } from "$lib/server/public-routes";
 import {
@@ -61,7 +62,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   // unread. The API applies the same rule (AuthenticationMiddleware returns an unauthenticated
   // context whenever ShareAccess is set), so this keeps SSR agreeing with it rather than
   // rendering a signed-in shell over an anonymous API.
-  if (isShareHost(getOriginalHost(event.request))) {
+  if (event.locals.isShareHost) {
     return resolve(event);
   }
 
@@ -129,6 +130,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
+      rawSetCookies: event.locals.rawSetCookies,
     });
 
     // Validate session with the API using the typed client
@@ -306,44 +308,13 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     // Construct the target URL
     const targetUrl = new URL(event.url.pathname + event.url.search, apiBaseUrl);
 
-    // Forward the request to the backend API
-    const headers = new Headers(event.request.headers);
-    // Forward original Host for tenant resolution behind reverse proxies
-    const effectiveHost = getEffectiveHost(event.request, event.cookies);
-    if (effectiveHost) {
-      headers.set("X-Forwarded-Host", effectiveHost);
-    }
-    headers.set("X-Forwarded-Proto", getOriginalProto(event.request));
-    // NB: this proxies end-user browser calls to /api, so it forwards ONLY the
-    // user's own credentials (cookies) — never the instance key. Attaching the
-    // instance key here would authenticate anonymous visitors as admin and
-    // bypass per-tenant public access.
-    // Strip any client-supplied instance-service / instance-key headers so a
-    // browser can't smuggle service auth through the proxy.
-    headers.delete("X-Instance-Key");
-    headers.delete("X-Instance-Service");
-
-    // Forward auth and guest session cookies for authentication
-    const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
-    const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-    const guestSession = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
-    const platformAccess = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
-    const cookies: string[] = [];
-    if (accessToken) {
-      cookies.push(`${AUTH_COOKIE_NAMES.accessToken}=${accessToken}`);
-    }
-    if (refreshToken) {
-      cookies.push(`${AUTH_COOKIE_NAMES.refreshToken}=${refreshToken}`);
-    }
-    if (guestSession) {
-      cookies.push(`${AUTH_COOKIE_NAMES.guestSession}=${guestSession}`);
-    }
-    if (platformAccess) {
-      cookies.push(`${AUTH_COOKIE_NAMES.platformAccess}=${platformAccess}`);
-    }
-    if (cookies.length > 0) {
-      headers.set("Cookie", cookies.join("; "));
-    }
+    const headers = buildProxyHeaders({
+      requestHeaders: event.request.headers,
+      effectiveHost: getEffectiveHost(event.request, event.cookies),
+      proto: getOriginalProto(event.request),
+      isShareHost: event.locals.isShareHost,
+      cookies: event.cookies,
+    });
 
     const proxyResponse = await fetch(targetUrl.toString(), {
       method: event.request.method,
@@ -379,7 +350,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // the browser now sends session cookies there. The API ignores them under ShareAccess, so
   // this is belt-and-braces — but it also keeps a token rotation from being triggered by a
   // page that is meant to be credential-free.
-  const onShareHost = isShareHost(getOriginalHost(event.request));
+  const onShareHost = event.locals.isShareHost;
   const accessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
   const guestSessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
@@ -412,6 +383,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     platformAccessToken,
     extraHeaders,
     responseCookies: event.cookies,
+    rawSetCookies: event.locals.rawSetCookies,
     signal: event.request.signal,
   });
 
@@ -544,11 +516,35 @@ installRequestScopedBitsIdCounter();
 const resetBitsId: Handle = ({ event, resolve }) =>
   withFreshBitsIdCounter(() => resolve(event));
 
+/**
+ * Per-request facts every later handler shares, established before any of them run.
+ *
+ * The share-host classification is one of them: the auth handler, the /api proxy, and the API
+ * client each have to stay credential-free there, and three separate readings of the same host
+ * are three chances to drift.
+ *
+ * It also drains the raw Set-Cookie sink on the way out. SvelteKit's cookie jar keys by name, so
+ * the API's deliberate same-name pairs (host-scoped expiry plus domain-wide value) can only be
+ * carried in full by appending the second header to the finished response.
+ */
+const requestContextHandle: Handle = async ({ event, resolve }) => {
+  event.locals.isShareHost = isShareHost(getOriginalHost(event.request));
+  event.locals.rawSetCookies = [];
+
+  const response = await resolve(event);
+
+  for (const header of event.locals.rawSetCookies) {
+    response.headers.append("set-cookie", header);
+  }
+
+  return response;
+};
+
 // Public share host: keep the token-bearing URL out of Referer headers and search indexes on
 // every response (SSR page, /api proxy, realtime ticket), not just the page document.
 const shareHostSecurityHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
-  if (isShareHost(getOriginalHost(event.request))) {
+  if (event.locals.isShareHost) {
     response.headers.set("Referrer-Policy", "no-referrer");
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
@@ -568,5 +564,7 @@ const healthHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
-// Chain the auth handler, site security handler, proxy handler, and API client handler
-export const handle: Handle = sequence(healthHandle, shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+// Chain the auth handler, site security handler, proxy handler, and API client handler.
+// requestContextHandle comes first of the request-serving handlers: everything after it reads
+// the facts it establishes.
+export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
