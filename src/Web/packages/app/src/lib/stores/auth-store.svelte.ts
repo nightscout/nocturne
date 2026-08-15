@@ -14,7 +14,6 @@ import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import {
   getSessionInfo,
-  getProvidersInfo,
   refreshSession as refreshSessionRemote,
   logoutSession as logoutSessionRemote,
 } from "../../routes/(unauthenticated)/auth/auth.remote";
@@ -32,16 +31,6 @@ export interface AuthUser {
   permissions: string[];
   expiresAt?: Date;
   avatarUrl?: string;
-}
-
-/**
- * OIDC Provider information for login UI
- */
-export interface OidcProvider {
-  id: string;
-  name: string;
-  icon?: string;
-  buttonColor?: string;
 }
 
 /**
@@ -68,7 +57,6 @@ export class AuthStore {
   private _state = $state<AuthState>("idle");
   private _user = $state<AuthUser | null>(null);
   private _error = $state<string | null>(null);
-  private _providers = $state<OidcProvider[]>([]);
 
   // Login dialog state
   private _loginDialogOpen = $state(false);
@@ -77,7 +65,6 @@ export class AuthStore {
   state = $derived(this._state);
   user = $derived(this._user);
   error = $derived(this._error);
-  providers = $derived(this._providers);
   loginDialogOpen = $derived(this._loginDialogOpen);
 
   isAuthenticated = $derived(this._state === "authenticated" && this._user !== null);
@@ -208,48 +195,6 @@ export class AuthStore {
       this._user = null;
       this._expiresAt = null;
     }
-  }
-
-  /**
-   * Load available OIDC providers
-   */
-  async loadProviders(): Promise<OidcProvider[]> {
-    if (!browser) return [];
-
-    try {
-      const result = await getProvidersInfo().run();
-      this._providers = result.providers.map((p) => ({
-        id: p.id ?? "",
-        name: p.name ?? "",
-        icon: p.icon,
-        buttonColor: p.buttonColor,
-      }));
-
-      return this._providers;
-    } catch (e) {
-      console.error("Failed to load providers:", e);
-      return [];
-    }
-  }
-
-  /**
-   * Initiate OIDC login flow
-   * @param providerId - Optional provider ID (uses default if not specified)
-   * @param returnUrl - URL to return to after login
-   */
-  login(providerId?: string, returnUrl?: string): void {
-    if (!browser) return;
-
-    const params = new URLSearchParams();
-    if (providerId) {
-      params.set("provider", providerId);
-    }
-    if (returnUrl) {
-      params.set("returnUrl", returnUrl);
-    }
-
-    const loginUrl = `/api/auth/login${params.toString() ? `?${params.toString()}` : ""}`;
-    window.location.href = loginUrl;
   }
 
   /**
