@@ -17,7 +17,10 @@ describe("filterTenantlessNav", () => {
     expect(filterTenantlessNav(items)).toEqual([{ title: "Dashboard", href: "/" }]);
   });
 
-  it("keeps only subject-scoped settings children", () => {
+  it("drops the settings group, whose pages all need a resolved tenant", () => {
+    // Account and appearance look subject-scoped but call /api/auth/passkey/*, /api/v4/totp/*,
+    // and /api/v4/settings, none of which the API serves without a tenant. Listing them would
+    // put entries in the sidebar that 404 when opened.
     const items = [
       {
         title: "Settings",
@@ -31,15 +34,7 @@ describe("filterTenantlessNav", () => {
       },
     ];
 
-    expect(filterTenantlessNav(items)).toEqual([
-      {
-        title: "Settings",
-        children: [
-          { title: "Account", href: "/settings/account" },
-          { title: "Appearance", href: "/settings/appearance" },
-        ],
-      },
-    ]);
+    expect(filterTenantlessNav(items)).toEqual([]);
   });
 
   it("drops a group whose children are all tenant-scoped, leaving no empty heading", () => {
@@ -73,6 +68,16 @@ describe("filterTenantlessNav", () => {
   });
 });
 
+describe("TENANTLESS_NAV_HREFS", () => {
+  it("lists only routes whose data the API serves without a tenant", () => {
+    // The API's tenantless surface (TenantResolutionMiddleware.TenantlessAllowedPaths) admits
+    // the cross-tenant overview and the session/auth endpoints, and nothing else that a page
+    // renders from. Anything added here has to have its endpoints admitted there first, or the
+    // nav gains an entry that 404s.
+    expect(TENANTLESS_NAV_HREFS).toEqual(["/"]);
+  });
+});
+
 describe("isTenantlessRoute", () => {
   it("admits exactly the tenantless hrefs", () => {
     for (const href of TENANTLESS_NAV_HREFS) {
@@ -84,11 +89,12 @@ describe("isTenantlessRoute", () => {
     expect(isTenantlessRoute("/calendar")).toBe(false);
     expect(isTenantlessRoute("/tenants")).toBe(false);
     expect(isTenantlessRoute("/settings/members")).toBe(false);
+    expect(isTenantlessRoute("/settings/account")).toBe(false);
+    expect(isTenantlessRoute("/settings/appearance")).toBe(false);
   });
 
   it("matches whole paths, not prefixes", () => {
-    // "/" must not admit every path, and a deeper settings path is not the account page.
-    expect(isTenantlessRoute("/settings/account/danger")).toBe(false);
+    // "/" must not admit every path.
     expect(isTenantlessRoute("/reports")).toBe(false);
   });
 });

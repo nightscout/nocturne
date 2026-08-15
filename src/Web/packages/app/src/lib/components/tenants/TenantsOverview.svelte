@@ -26,6 +26,10 @@
   });
 </script>
 
+<svelte:head>
+  <title>Tenants overview - Nocturne</title>
+</svelte:head>
+
 <div class="container mx-auto space-y-6 p-4 md:p-6">
   <div>
     <h1 class="text-2xl font-bold">Tenants overview</h1>

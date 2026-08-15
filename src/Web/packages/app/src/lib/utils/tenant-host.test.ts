@@ -69,4 +69,25 @@ describe("resolveSingleTenantLanding", () => {
     expect(resolveSingleTenantLanding([{ slug: "alice" }], null, "https:")).toBeNull();
     expect(resolveSingleTenantLanding([{ slug: "alice" }], "", "https:")).toBeNull();
   });
+
+  it("does not redirect to a sole tenant whose slug is itself a dashboard slug", () => {
+    // That tenant's host IS the dashboard host, so the redirect would land back on this same
+    // load and redirect again, forever. DASHBOARD_SLUGS is an operator setting and may name a
+    // slug some tenant already holds.
+    expect(
+      resolveSingleTenantLanding([{ slug: "home" }], "example.com", "https:", ["home"])
+    ).toBeNull();
+    expect(
+      resolveSingleTenantLanding([{ slug: "HOME" }], "example.com", "https:", ["home"])
+    ).toBeNull();
+  });
+
+  it("still redirects to a sole tenant that is not a dashboard slug", () => {
+    expect(
+      resolveSingleTenantLanding([{ slug: "alice" }], "example.com", "https:", [
+        "dashboard",
+        "app",
+      ])
+    ).toBe("https://alice.example.com/");
+  });
 });

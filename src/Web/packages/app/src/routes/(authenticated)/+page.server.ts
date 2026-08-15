@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getOriginalHost, getOriginalProto } from '$lib/server/request-host';
-import { isTenantlessHost, parseDashboardSlugs } from '$lib/server/tenantless-host';
+import { getOriginalProto } from '$lib/server/request-host';
+import { parseDashboardSlugs } from '$lib/server/tenantless-host';
 import { resolveSingleTenantLanding } from '$lib/utils/tenant-host';
 import { transformChartData, type TransformedChartData } from '$lib/utils/chart-data-transform';
 
@@ -10,15 +10,11 @@ const INITIAL_HOURS = 6;
 // Total hours to fetch (matches GLUCOSE_CHART_FETCH_HOURS)
 const TOTAL_HOURS = 48;
 
-export const load: PageServerLoad = async ({ locals, request }) => {
+export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	const { apiClient } = locals;
 
 	const baseDomain = process.env.BASE_DOMAIN ?? null;
-	const tenantless = isTenantlessHost(
-		getOriginalHost(request),
-		baseDomain,
-		parseDashboardSlugs(process.env.DASHBOARD_SLUGS)
-	);
+	const { tenantless } = await parent();
 
 	// A tenantless host serves the cross-tenant overview instead of one tenant's dashboard, so
 	// there is no tenant whose chart data could be loaded here. The overview itself is fetched
@@ -27,7 +23,8 @@ export const load: PageServerLoad = async ({ locals, request }) => {
 		const landing = resolveSingleTenantLanding(
 			await getOverviewTenants(apiClient),
 			baseDomain,
-			getOriginalProto(request) + ':'
+			getOriginalProto(request) + ':',
+			parseDashboardSlugs(process.env.DASHBOARD_SLUGS)
 		);
 		if (landing) throw redirect(303, landing);
 

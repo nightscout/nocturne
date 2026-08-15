@@ -21,6 +21,9 @@
   // Get return URL from query params
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
 
+  // Resolved once by the root layout; here it decides which sign-in methods can work at all.
+  const tenantless = $derived(page.data.tenantless === true);
+
   // Redirect if already authenticated
   $effect(() => {
     const currentAuth = authStateQuery.current;
@@ -51,7 +54,7 @@
     </Card.Header>
 
     <Card.Content>
-      <LoginForm {returnUrl} />
+      <LoginForm {returnUrl} {tenantless} />
     </Card.Content>
 
     <Card.Footer class="flex flex-col space-y-2">

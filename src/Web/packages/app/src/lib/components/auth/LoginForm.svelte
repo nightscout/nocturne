@@ -36,9 +36,16 @@
   interface Props {
     returnUrl?: string;
     onSuccess?: () => void;
+    /**
+     * Whether this page is served on a host that resolves no tenant. Passkeys, authenticator
+     * codes, and recovery codes are all checked against a resolved tenant's members, so on such
+     * a host only the identity-provider path can complete a sign-in and it is the only one
+     * offered.
+     */
+    tenantless?: boolean;
   }
 
-  let { returnUrl = "/", onSuccess }: Props = $props();
+  let { returnUrl = "/", onSuccess, tenantless = false }: Props = $props();
 
   const oidcQuery = getOidcProviders();
 
@@ -262,7 +269,17 @@
   {@const hasOidc = oidc?.enabled && oidc.providers.length > 0}
 
   <div class="space-y-4">
-    {#if !passkeysSupported}
+    {#if tenantless}
+      <p class="text-sm text-muted-foreground">
+        Passkeys, authenticator codes, and recovery codes are checked against one
+        tenant, so they are used at that tenant's own web address.
+        {#if !hasOidc}
+          Open your tenant's address to sign in.
+        {/if}
+      </p>
+    {/if}
+
+    {#if !passkeysSupported && !tenantless}
       <div class="flex items-start gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
         <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
         <p class="text-sm text-yellow-700 dark:text-yellow-400">
@@ -274,6 +291,7 @@
     <FormError issues={passkeyError} focusOnShow />
 
     {#if mode === "default"}
+      {#if !tenantless}
       <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
            WebAuthn ceremony, so there is no server-side counterpart. -->
       <form onsubmit={handleDiscoverableLogin}>
@@ -303,8 +321,10 @@
         <User class="mr-2 h-4 w-4" />
         {signInMethodLabels.username}
       </Button>
+      {/if}
 
       {#if hasOidc && oidc}
+        {#if !tenantless}
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
             <span class="w-full border-t"></span>
@@ -315,6 +335,7 @@
             </span>
           </div>
         </div>
+        {/if}
 
         <div class="space-y-3">
           {#each oidc.providers as provider}
@@ -337,9 +358,11 @@
         </div>
       {/if}
 
-      <div class="flex justify-center gap-3 text-xs">
-        {@render otherMethodLinks()}
-      </div>
+      {#if !tenantless}
+        <div class="flex justify-center gap-3 text-xs">
+          {@render otherMethodLinks()}
+        </div>
+      {/if}
 
     {:else if mode === "username"}
       <!-- Username-first passkey sign-in. JavaScript-only, as above. -->

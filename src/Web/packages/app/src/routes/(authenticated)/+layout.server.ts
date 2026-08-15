@@ -1,8 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
-import { getOriginalHost, isShareHost } from "$lib/server/request-host";
-import { isTenantlessHost, parseDashboardSlugs } from "$lib/server/tenantless-host";
+import { getRequestStatus } from "$lib/server/request-status";
 import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
 import { toIsoString } from "$lib/utils/api-date";
 
@@ -22,7 +21,7 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
-export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) => {
+export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) => {
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
   if (!locals.isGuestSession) {
     // Check onboarding first — if the instance needs setup, redirect there
@@ -38,14 +37,10 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) 
     }
   }
 
-  // Fetch tenant status once — it drives both the anonymous-access gate and the demo banner.
-  // Default to no anonymous access on failure (fail safe: require sign-in rather than over-expose).
-  let status: Awaited<ReturnType<typeof locals.apiClient.status.getStatus>> | null = null;
-  try {
-    status = await locals.apiClient.status.getStatus();
-  } catch {
-    // Swallow — handled below by the conservative defaults.
-  }
+  // Tenant status drives the anonymous-access gate and the demo banner. Shared with the root
+  // layout's tenantless check, and null on failure — default to no anonymous access then
+  // (fail safe: require sign-in rather than over-expose).
+  const status = await getRequestStatus(locals);
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
   // Public read is served only on the share host ({token}.share.{baseDomain}); the bare tenant
@@ -54,8 +49,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) 
   // then bursting 401s on the bare host.
   // Security headers for the share host (Referrer-Policy, X-Robots-Tag) are applied for every
   // response in hooks.server.ts (shareHostSecurityHandle).
-  const onShareHost = isShareHost(getOriginalHost(request));
-  const publicViewAllowed = onShareHost && anonymousReadAccess;
+  const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
 
   // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
   // than bouncing an anonymous visitor to login. (checkOnboarding fails open on a missing cookie
@@ -78,11 +72,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) 
   // then 404 against the API. The nav hides those entries; this catches direct navigation and
   // stale links, and runs only once the visitor is known to be signed in (above) so it can
   // never pre-empt the login redirect.
-  const tenantless = isTenantlessHost(
-    getOriginalHost(request),
-    process.env.BASE_DOMAIN ?? null,
-    parseDashboardSlugs(process.env.DASHBOARD_SLUGS),
-  );
+  const { tenantless } = await parent();
   if (tenantless && !isTenantlessRoute(url.pathname)) {
     throw redirect(303, "/");
   }

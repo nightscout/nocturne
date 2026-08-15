@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DASHBOARD_SLUGS,
+  apexResolvedTenant,
   classifyHost,
   isTenantlessHost,
   parseDashboardSlugs,
@@ -25,13 +26,13 @@ describe("parseDashboardSlugs", () => {
 });
 
 describe("classifyHost", () => {
-  it("classifies the apex as tenantless", () => {
-    expect(classifyHost(BASE, BASE)).toEqual({ kind: "tenantless", slug: null });
+  it("classifies the apex as the apex, leaving whether it serves a tenant to the API", () => {
+    expect(classifyHost(BASE, BASE)).toEqual({ kind: "apex", slug: null });
   });
 
   it("ignores ports on both sides", () => {
     expect(classifyHost("nocturne.run:1612", "nocturne.run")).toEqual({
-      kind: "tenantless",
+      kind: "apex",
       slug: null,
     });
     expect(classifyHost("acme.nocturne.run:1612", "nocturne.run:1612")).toEqual({
@@ -44,10 +45,10 @@ describe("classifyHost", () => {
     expect(classifyHost("AcMe.nocturne.run", BASE)).toEqual({ kind: "tenant", slug: "AcMe" });
   });
 
-  it("classifies reserved dashboard slugs as tenantless", () => {
-    expect(classifyHost("dashboard.nocturne.run", BASE).kind).toBe("tenantless");
-    expect(classifyHost("app.nocturne.run", BASE).kind).toBe("tenantless");
-    expect(classifyHost("DASHBOARD.nocturne.run", BASE).kind).toBe("tenantless");
+  it("classifies reserved dashboard slugs as dashboard slugs", () => {
+    expect(classifyHost("dashboard.nocturne.run", BASE).kind).toBe("dashboard-slug");
+    expect(classifyHost("app.nocturne.run", BASE).kind).toBe("dashboard-slug");
+    expect(classifyHost("DASHBOARD.nocturne.run", BASE).kind).toBe("dashboard-slug");
   });
 
   it("treats a reserved slug as a tenant once it is no longer reserved", () => {
@@ -76,8 +77,8 @@ describe("classifyHost", () => {
 
   it("is suffix-based, not label-counting, for multi-label base domains", () => {
     const deep = "nocturne.example.com";
-    expect(classifyHost(deep, deep).kind).toBe("tenantless");
-    expect(classifyHost("dashboard.nocturne.example.com", deep).kind).toBe("tenantless");
+    expect(classifyHost(deep, deep).kind).toBe("apex");
+    expect(classifyHost("dashboard.nocturne.example.com", deep).kind).toBe("dashboard-slug");
     expect(classifyHost("acme.nocturne.example.com", deep)).toEqual({
       kind: "tenant",
       slug: "acme",
@@ -91,11 +92,50 @@ describe("classifyHost", () => {
 });
 
 describe("isTenantlessHost", () => {
-  it("is true only for the apex and reserved slugs", () => {
-    expect(isTenantlessHost(BASE, BASE)).toBe(true);
-    expect(isTenantlessHost("dashboard.nocturne.run", BASE)).toBe(true);
-    expect(isTenantlessHost("acme.nocturne.run", BASE)).toBe(false);
-    expect(isTenantlessHost("tok.share.nocturne.run", BASE)).toBe(false);
-    expect(isTenantlessHost("evil.com", BASE)).toBe(false);
+  it("serves the full app on an apex that resolves a sole tenant", () => {
+    // The single-tenant self-hosted install: nocturne.example.com IS the app. Calling it
+    // tenantless trims its sidebar and bounces it to a wildcard subdomain that, per the
+    // deployment's TLS shape, may not resolve or may present an invalid certificate.
+    expect(isTenantlessHost("apex", true)).toBe(false);
+  });
+
+  it("serves the dashboard on an apex that resolves nothing", () => {
+    // Zero tenants, or several: either way the apex names no tenant of its own.
+    expect(isTenantlessHost("apex", false)).toBe(true);
+  });
+
+  it("serves the dashboard on a reserved slug regardless of what the apex resolves", () => {
+    expect(isTenantlessHost("dashboard-slug", true)).toBe(true);
+    expect(isTenantlessHost("dashboard-slug", false)).toBe(true);
+  });
+
+  it("never serves the dashboard on a tenant, share, or unrelated host", () => {
+    for (const resolved of [true, false]) {
+      expect(isTenantlessHost("tenant", resolved)).toBe(false);
+      expect(isTenantlessHost("share", resolved)).toBe(false);
+      expect(isTenantlessHost("unknown", resolved)).toBe(false);
+    }
+  });
+});
+
+describe("apexResolvedTenant", () => {
+  it("reports the tenant the API resolved for this request", async () => {
+    await expect(apexResolvedTenant(async () => ({ tenantSlug: "theconen" }))).resolves.toBe(true);
+  });
+
+  it("reports no tenant when the status names none", async () => {
+    await expect(apexResolvedTenant(async () => ({ tenantSlug: null }))).resolves.toBe(false);
+    await expect(apexResolvedTenant(async () => ({}))).resolves.toBe(false);
+    await expect(apexResolvedTenant(async () => null)).resolves.toBe(false);
+  });
+
+  it("reports no tenant when status cannot be reached", async () => {
+    // Falling back to the dashboard is the recoverable direction: it renders for any signed-in
+    // subject, whereas the tenant app would render a shell over an API resolving nothing.
+    await expect(
+      apexResolvedTenant(async () => {
+        throw new Error("API unreachable");
+      })
+    ).resolves.toBe(false);
   });
 });

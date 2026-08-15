@@ -1,6 +1,12 @@
 import type { LayoutServerLoad } from "./$types";
 import { getOriginalHost } from "$lib/server/request-host";
-import { classifyHost, parseDashboardSlugs } from "$lib/server/tenantless-host";
+import {
+  apexResolvedTenant,
+  classifyHost,
+  isTenantlessHost,
+  parseDashboardSlugs,
+} from "$lib/server/tenantless-host";
+import { getRequestStatus } from "$lib/server/request-status";
 import {
   PREFS_COOKIE_NAME,
   hasStoredPreferences,
@@ -17,7 +23,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   // Tenant identity is resolved here, from the request host against BASE_DOMAIN,
   // so the browser never has to guess it by counting hostname labels. A share
   // host carries a token rather than a slug, so it has no tenant to name, and a
-  // tenantless host (apex or a reserved dashboard slug) names no single tenant either.
+  // reserved dashboard slug names no single tenant either.
   const host = getOriginalHost(request);
   const baseDomain = process.env.BASE_DOMAIN ?? null;
   const { kind, slug } = classifyHost(
@@ -26,7 +32,14 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     parseDashboardSlugs(process.env.DASHBOARD_SLUGS)
   );
   const tenantSlug = slug;
-  const tenantless = kind === "tenantless";
+
+  // Resolved once here, for every route: the apex needs the API's answer (does a sole tenant
+  // resolve behind it?) and asking per-page would repeat both the question and the round-trip.
+  // Children read `tenantless` from this layout's data via parent().
+  const tenantless = isTenantlessHost(
+    kind,
+    kind === "apex" ? await apexResolvedTenant(() => getRequestStatus(locals)) : false
+  );
 
   // Display preferences for SSR, in the same precedence the browser applies them
   // (backend blob over the mirrored cookie) so the markup matches hydration.
