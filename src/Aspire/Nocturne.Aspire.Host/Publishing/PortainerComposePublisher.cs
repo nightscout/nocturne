@@ -123,7 +123,7 @@ public static class PortainerComposePublisherExtensions
                 {
                     await File.WriteAllTextAsync(composePath, transformed, ctx.CancellationToken);
                     ctx.Logger.LogInformation(
-                        "[compose] Inlined init script + Caddyfile, added Postgres healthcheck/service_healthy gate");
+                        "[compose] Inlined init script + Caddyfile, added Postgres healthcheck/service_healthy gate, scoped Watchtower");
                 }
             },
             dependsOn: "publish-compose",
@@ -134,15 +134,17 @@ public static class PortainerComposePublisherExtensions
 
     /// <summary>
     /// Produces a self-contained compose: inlines the init script and the Caddyfile
-    /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts) and
-    /// adds the Postgres readiness healthcheck + service_healthy gate. Each transform
-    /// is idempotent and no-ops when its target isn't present, so applying it to an
-    /// already-transformed compose is safe.
+    /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts),
+    /// adds the Postgres readiness healthcheck + service_healthy gate, and scopes
+    /// Watchtower to this stack's own containers. Each transform is idempotent and
+    /// no-ops when its target isn't present, so applying it to an already-transformed
+    /// compose is safe.
     /// </summary>
     private static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
-        => InlineCaddyfile(
-            HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
-            caddyfilePath);
+        => ScopeWatchtowerToStack(
+            InlineCaddyfile(
+                HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
+                caddyfilePath));
 
     /// <summary>
     /// Replaces the ./init bind-mount on the postgres service with a docker compose
@@ -387,6 +389,61 @@ public static class PortainerComposePublisherExtensions
                 condMap.Children[new YamlScalarNode("condition")] =
                     new YamlScalarNode("service_healthy");
             }
+        }
+
+        var sb = new StringBuilder();
+        using (var writer = new StringWriter(sb))
+            yaml.Save(writer, assignAnchors: false);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Restricts Watchtower to the containers in this compose file: it puts Watchtower
+    /// in label-only mode and stamps every service — including Watchtower itself, so it
+    /// still self-updates — with the enable label. Unscoped, Watchtower updates every
+    /// container on the Docker daemon it is pointed at, so a host running Nocturne
+    /// alongside other stacks would have those updated too.
+    ///
+    /// Labelling is done here rather than per-resource in the AppHost so any service
+    /// added to the bundle later is covered by construction. Returns the compose
+    /// unchanged when Watchtower is disabled.
+    /// </summary>
+    private static string ScopeWatchtowerToStack(string composeYaml)
+    {
+        const string enableLabel = "com.centurylinklabs.watchtower.enable";
+
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(composeYaml))
+            yaml.Load(reader);
+
+        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        var services = (YamlMappingNode)root["services"];
+
+        if (!services.Children.TryGetValue(new YamlScalarNode("watchtower"), out var watchtowerNode)
+            || watchtowerNode is not YamlMappingNode watchtower)
+            return composeYaml;
+
+        var environment = watchtower.Children.TryGetValue(new YamlScalarNode("environment"), out var envNode)
+            && envNode is YamlMappingNode envMap
+                ? envMap
+                : new YamlMappingNode();
+        environment.Children[new YamlScalarNode("WATCHTOWER_LABEL_ENABLE")] =
+            new YamlScalarNode("true") { Style = ScalarStyle.DoubleQuoted };
+        watchtower.Children[new YamlScalarNode("environment")] = environment;
+
+        foreach (var entry in services)
+        {
+            if (entry.Value is not YamlMappingNode service)
+                continue;
+
+            var labels = service.Children.TryGetValue(new YamlScalarNode("labels"), out var labelsNode)
+                && labelsNode is YamlMappingNode labelsMap
+                    ? labelsMap
+                    : new YamlMappingNode();
+            labels.Children[new YamlScalarNode(enableLabel)] =
+                new YamlScalarNode("true") { Style = ScalarStyle.DoubleQuoted };
+            service.Children[new YamlScalarNode("labels")] = labels;
         }
 
         var sb = new StringBuilder();

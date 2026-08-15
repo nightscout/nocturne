@@ -131,7 +131,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed.
+The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed. It runs in label-only mode and every service in the bundle carries `com.centurylinklabs.watchtower.enable=true`, so it only ever updates Nocturne's own containers — anything else on the same Docker host is left alone.
 
 ### First-run setup
 
