@@ -12,7 +12,7 @@
   } from "$lib/stores/appearance-store.svelte";
   import { userPrefersMode } from "mode-watcher";
   import {
-    items,
+    paletteItemsFor,
     groupMeta,
     type CommandPaletteItem,
     type CommandPaletteGroup,
@@ -29,9 +29,11 @@
 
   interface Props {
     open: boolean;
+    /** Whether the host resolves no tenant (the apex, or a reserved dashboard slug). */
+    tenantless?: boolean;
   }
 
-  let { open = $bindable(false) }: Props = $props();
+  let { open = $bindable(false), tenantless = false }: Props = $props();
 
   let searchValue = $state("");
 
@@ -39,7 +41,7 @@
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
-    items.filter(
+    paletteItemsFor(tenantless).filter(
       (item) =>
         (!item.permission || authStore.hasPermission(item.permission)) &&
         (!item.role || authStore.hasRole(item.role))
@@ -262,7 +264,10 @@
 <Command.Dialog bind:open>
   <Command.Input placeholder="Search commands..." bind:value={searchValue} />
 
-  <CommandPaletteVitals />
+  <!-- The vitals strip reads one tenant's live glucose, which a tenantless host has none of. -->
+  {#if !tenantless}
+    <CommandPaletteVitals />
+  {/if}
 
   <Command.List class="max-h-[400px]">
     <Command.Empty>No results found.</Command.Empty>

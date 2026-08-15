@@ -48,6 +48,7 @@ import {
 	Wrench,
 	ZoomIn,
 } from "lucide-svelte";
+import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export type CommandPaletteGroup =
 	| "stats"
@@ -550,3 +551,13 @@ export const items: CommandPaletteItem[] = [
 		icon: RefreshCw,
 	},
 ];
+
+/**
+ * The entries a host can actually use. On a tenantless host every one of these but the dashboard
+ * leads somewhere the route guard bounces back to "/" — the stats navigate to a report, and the
+ * actions and quick settings write through to tenant-scoped endpoints — so the palette is narrowed
+ * to the same surface the sidebar draws, from the same list of hrefs, rather than keeping a second.
+ */
+export function paletteItemsFor(tenantless: boolean): CommandPaletteItem[] {
+	return tenantless ? filterTenantlessNav(items) : items;
+}

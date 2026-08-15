@@ -255,5 +255,5 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
-  <CommandPalette bind:open={commandPaletteOpen} />
+  <CommandPalette bind:open={commandPaletteOpen} {tenantless} />
 </CoachMarkProvider>
