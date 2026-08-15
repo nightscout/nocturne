@@ -4,8 +4,8 @@
  * Most hosts name a tenant ({slug}.{base-domain}). Two do not, and either may serve the
  * cross-tenant caregiver dashboard instead of a single tenant's app:
  *
- * - a reserved dashboard slug (dashboard.{base-domain}, app.{base-domain}), for hosted
- *   deployments whose apex is already taken by a marketing site — always the dashboard;
+ * - a reserved dashboard slug (opt-in via DASHBOARD_SLUGS, e.g. dashboard.{base-domain}), for
+ *   hosted deployments whose apex is already taken by a marketing site — always the dashboard;
  * - the apex (the base domain itself) — the dashboard only when it resolves no tenant.
  *   The API auto-resolves a sole tenant on the apex, which is how a single-tenant
  *   self-hosted install serves the whole app at https://nocturne.example.com/, so the
@@ -20,15 +20,20 @@ import { extractTenantSlug, isShareHost } from "./request-host";
 
 /**
  * Reserved slugs that serve the dashboard rather than a tenant, when DASHBOARD_SLUGS is unset.
+ *
+ * Empty: reserving a slug is opt-in. A reserved slug is a host that offers only identity-provider
+ * sign-in, so reserving one by default would hand every wildcard-DNS deployment two extra hosts
+ * whose sign-in depends on the OIDC state cookie reaching the apex callback. The apex serves the
+ * dashboard whenever it resolves no tenant either way, so nothing is lost by default.
  */
-export const DEFAULT_DASHBOARD_SLUGS = ["dashboard", "app"];
+export const DEFAULT_DASHBOARD_SLUGS: readonly string[] = [];
 
 /**
- * Parse the DASHBOARD_SLUGS env var (comma-separated). An unset value takes the defaults; an
- * explicitly empty value reserves nothing, so the apex alone serves the dashboard.
+ * Parse the DASHBOARD_SLUGS env var (comma-separated). Unset or empty reserves nothing, so the
+ * apex alone serves the dashboard.
  */
 export function parseDashboardSlugs(raw: string | null | undefined): string[] {
-  if (raw === null || raw === undefined) return DEFAULT_DASHBOARD_SLUGS;
+  if (raw === null || raw === undefined) return [...DEFAULT_DASHBOARD_SLUGS];
   return raw
     .split(",")
     .map((slug) => slug.trim().toLowerCase())

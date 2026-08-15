@@ -10,9 +10,10 @@ import {
 const BASE = "nocturne.run";
 
 describe("parseDashboardSlugs", () => {
-  it("takes the defaults when unset", () => {
-    expect(parseDashboardSlugs(undefined)).toEqual(DEFAULT_DASHBOARD_SLUGS);
-    expect(parseDashboardSlugs(null)).toEqual(DEFAULT_DASHBOARD_SLUGS);
+  it("reserves nothing when unset, so reserving a slug stays opt-in", () => {
+    expect(DEFAULT_DASHBOARD_SLUGS).toEqual([]);
+    expect(parseDashboardSlugs(undefined)).toEqual([]);
+    expect(parseDashboardSlugs(null)).toEqual([]);
   });
 
   it("reserves nothing when explicitly empty", () => {
@@ -46,15 +47,20 @@ describe("classifyHost", () => {
   });
 
   it("classifies reserved dashboard slugs as dashboard slugs", () => {
-    expect(classifyHost("dashboard.nocturne.run", BASE).kind).toBe("dashboard-slug");
-    expect(classifyHost("app.nocturne.run", BASE).kind).toBe("dashboard-slug");
-    expect(classifyHost("DASHBOARD.nocturne.run", BASE).kind).toBe("dashboard-slug");
+    const reserved = ["dashboard", "app"];
+    expect(classifyHost("dashboard.nocturne.run", BASE, reserved).kind).toBe("dashboard-slug");
+    expect(classifyHost("app.nocturne.run", BASE, reserved).kind).toBe("dashboard-slug");
+    expect(classifyHost("DASHBOARD.nocturne.run", BASE, reserved).kind).toBe("dashboard-slug");
   });
 
-  it("treats a reserved slug as a tenant once it is no longer reserved", () => {
+  it("treats an unreserved slug as a tenant, which is every slug by default", () => {
     expect(classifyHost("app.nocturne.run", BASE, ["dashboard"])).toEqual({
       kind: "tenant",
       slug: "app",
+    });
+    expect(classifyHost("dashboard.nocturne.run", BASE)).toEqual({
+      kind: "tenant",
+      slug: "dashboard",
     });
   });
 
@@ -78,7 +84,9 @@ describe("classifyHost", () => {
   it("is suffix-based, not label-counting, for multi-label base domains", () => {
     const deep = "nocturne.example.com";
     expect(classifyHost(deep, deep).kind).toBe("apex");
-    expect(classifyHost("dashboard.nocturne.example.com", deep).kind).toBe("dashboard-slug");
+    expect(classifyHost("dashboard.nocturne.example.com", deep, ["dashboard"]).kind).toBe(
+      "dashboard-slug"
+    );
     expect(classifyHost("acme.nocturne.example.com", deep)).toEqual({
       kind: "tenant",
       slug: "acme",
