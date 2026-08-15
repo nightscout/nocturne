@@ -2,6 +2,8 @@ import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getOriginalHost, isShareHost } from "$lib/server/request-host";
+import { isTenantlessHost, parseDashboardSlugs } from "$lib/server/tenantless-host";
+import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
 import { toIsoString } from "$lib/utils/api-date";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
@@ -70,6 +72,19 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, request }) 
       const returnUrl = encodeURIComponent(url.pathname + url.search);
       throw redirect(303, `/auth/login?returnUrl=${returnUrl}`);
     }
+  }
+
+  // A tenantless host resolves no tenant, so a tenant-scoped page would render its shell and
+  // then 404 against the API. The nav hides those entries; this catches direct navigation and
+  // stale links, and runs only once the visitor is known to be signed in (above) so it can
+  // never pre-empt the login redirect.
+  const tenantless = isTenantlessHost(
+    getOriginalHost(request),
+    process.env.BASE_DOMAIN ?? null,
+    parseDashboardSlugs(process.env.DASHBOARD_SLUGS),
+  );
+  if (tenantless && !isTenantlessRoute(url.pathname)) {
+    throw redirect(303, "/");
   }
 
   // Enable realtime glucose data for:

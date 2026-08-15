@@ -11,6 +11,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isWidgetEnabled } from "$lib/types/dashboard-widgets";
   import { coachmark } from "@nocturne/coach";
+  import TenantsOverview from "$lib/components/tenants/TenantsOverview.svelte";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();
@@ -36,6 +37,10 @@
   );
 </script>
 
+{#if data.tenantless}
+  <!-- Apex / reserved dashboard slug: no tenant to show, so serve the cross-tenant overview. -->
+  <TenantsOverview />
+{:else}
 <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
   <div
     {@attach coachmark({
@@ -90,3 +95,4 @@
     <RecentTreatmentsCard />
   {/if}
 </div>
+{/if}

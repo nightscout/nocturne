@@ -47,6 +47,7 @@
     History as HistoryIcon,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
+  import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
   import { tenantUrl } from "$lib/utils/tenant-host";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
@@ -63,6 +64,8 @@
     currentSlug?: string | null;
     /** Public base domain tenant subdomains hang off (from layout data) */
     baseDomain?: string | null;
+    /** Whether this host serves the cross-tenant dashboard rather than one tenant (from layout data) */
+    tenantless?: boolean;
   }
 
   const {
@@ -72,6 +75,7 @@
     isGuestSession = false,
     currentSlug = null,
     baseDomain = null,
+    tenantless = false,
   }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
@@ -307,6 +311,12 @@
           : []),
       ],
     });
+
+    // A tenantless host has no tenant for the API to resolve, so every tenant-scoped page
+    // would render and then 404. Trim to the cross-tenant surface.
+    if (tenantless) {
+      return filterTenantlessNav(items);
+    }
 
     return items;
   });
