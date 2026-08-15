@@ -1,3 +1,4 @@
+using System.Net;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
@@ -21,10 +22,13 @@ public static class SessionCookieExtensions
     /// tenants the subject belongs to. Returns null (host-only cookies) when widening is unsafe.
     /// </summary>
     /// <remarks>
-    /// Two cases yield null. A single-label host ("localhost") cannot carry a Domain attribute at
-    /// all — browsers reject it. And Chromium does not reliably scope cookies across
+    /// Three cases yield null. A single-label host ("localhost") cannot carry a Domain attribute at
+    /// all — browsers reject it. Chromium does not reliably scope cookies across
     /// <c>*.localhost</c> names, so local development keeps host-only cookies rather than silently
-    /// dropping every session cookie; dev works per-host as it always has.
+    /// dropping every session cookie; dev works per-host as it always has. And an IP literal has no
+    /// domain hierarchy to widen into — a browser discards any cookie whose Domain attribute is set
+    /// on an IP host, so a LAN install reached at <c>192.168.1.10:1612</c> would be unable to hold a
+    /// session at all.
     /// </remarks>
     public static string? ResolveCookieDomain(string? baseDomain)
     {
@@ -32,6 +36,11 @@ public static class SessionCookieExtensions
         // discarded wholesale by the browser (taking the session with it).
         var (host, _) = BaseDomainOptions.SplitHostPort(baseDomain ?? "");
         if (string.IsNullOrEmpty(host))
+            return null;
+
+        // Covers IPv4 ("192.168.1.10", which contains dots and would otherwise widen) and bare
+        // IPv6. A bracketed IPv6 literal fails to parse here but is caught by the dot check below.
+        if (IPAddress.TryParse(host, out _))
             return null;
 
         if (!host.Contains('.'))

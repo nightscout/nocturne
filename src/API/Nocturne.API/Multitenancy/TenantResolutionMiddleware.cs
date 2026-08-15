@@ -35,10 +35,29 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
+    /// A path served without a resolved tenant, optionally narrowed to a single HTTP method.
+    /// </summary>
+    /// <param name="Path">The exact path, matched case-insensitively.</param>
+    /// <param name="Method">
+    /// The only method admitted tenantlessly, or null to admit every method. Naming a method
+    /// matters where a path carries both a cross-tenant read and a tenant-affecting write.
+    /// </param>
+    private readonly record struct TenantlessPath(string Path, string? Method = null)
+    {
+        /// <summary>Admit every method on a path, which is the case for most of the list.</summary>
+        public static implicit operator TenantlessPath(string path) => new(path);
+
+        public bool Matches(string path, string? method) =>
+            Path.Equals(path, StringComparison.OrdinalIgnoreCase) &&
+            (Method is null || string.IsNullOrEmpty(method) ||
+             Method.Equals(method, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Paths that operate across all tenants and don't require a resolved tenant context.
     /// These are allowed through even when no matching tenant is found.
     /// </summary>
-    private static readonly string[] TenantlessAllowedPaths =
+    private static readonly TenantlessPath[] TenantlessAllowedPaths =
     [
         // Aspire ServiceDefaults health endpoints — must never be tenant-gated;
         // they are used by Kubernetes liveness/readiness probes and external
@@ -55,10 +74,14 @@ public class TenantResolutionMiddleware
         "/api/v4/me/tenants/overview",
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
-        "/api/v4/me/tenants",
-        // The subject's granted scopes. Tenantless it resolves to an empty set (scopes
-        // come from tenant membership), which is the correct answer on a host that
-        // exposes no tenant data.
+        // GET only: the same path takes a POST that creates a tenant, and self-service
+        // provisioning is a tenant-affecting write with no place on a host that resolves
+        // no tenant — in the hosted deployment it goes through billing instead.
+        new TenantlessPath("/api/v4/me/tenants", HttpMethods.Get),
+        // The caller's own global subject-role scopes. Tenantless, MemberScopeMiddleware
+        // returns before applying tenant-derived scopes, so this reports whatever the JWT
+        // carries — empty for an ordinary subject, non-empty for one holding global roles.
+        // Caller-scoped either way, so nothing about a tenant is exposed.
         "/api/v4/me/permissions",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
@@ -106,11 +129,16 @@ public class TenantResolutionMiddleware
     ];
 
     /// <summary>
-    /// Whether a request path is served without a resolved tenant. Public so the authorization
+    /// Whether a request is served without a resolved tenant. Public so the authorization
     /// guard tests can enumerate the same surface rather than restating these lists.
     /// </summary>
-    public static bool IsTenantlessAllowed(string path) =>
-        TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
+    /// <param name="path">The request path.</param>
+    /// <param name="method">
+    /// The request method. Omit it to ask whether the path is reachable tenantlessly under any
+    /// method, which is what a coverage sweep over the whole surface wants.
+    /// </param>
+    public static bool IsTenantlessAllowed(string path, string? method = null) =>
+        TenantlessAllowedPaths.Any(p => p.Matches(path, method)) ||
         TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
     public async Task InvokeAsync(HttpContext context)
@@ -155,7 +183,7 @@ public class TenantResolutionMiddleware
         }
 
         var path = context.Request.Path.Value ?? "";
-        var isTenantlessAllowedPath = IsTenantlessAllowed(path);
+        var isTenantlessAllowedPath = IsTenantlessAllowed(path, context.Request.Method);
 
         // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
         // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,

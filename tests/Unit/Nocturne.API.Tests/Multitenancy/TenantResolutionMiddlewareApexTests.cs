@@ -70,11 +70,12 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     }
 
     // Host == BaseDomain → apex, no subdomain.
-    private DefaultHttpContext ApexRequest(IServiceScope scope, string path)
+    private DefaultHttpContext ApexRequest(IServiceScope scope, string path, string method = "GET")
     {
         var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         ctx.Request.Headers["X-Forwarded-Host"] = BaseDomain;
         ctx.Request.Path = path;
+        ctx.Request.Method = method;
         ctx.Response.Body = new MemoryStream();
         return ctx;
     }
@@ -133,6 +134,47 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         // through, so the apex status response is unchanged for multi-tenant deployments.
         nextCalled.Should().BeTrue();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apex_status_with_a_sole_tenant_names_it_so_the_web_serves_the_full_app()
+    {
+        SeedTenant("theconen");
+        using var scope = _root.CreateScope();
+
+        var mw = Build(_ => Task.CompletedTask);
+        var ctx = ApexRequest(scope, "/api/v4/status");
+
+        await mw.InvokeAsync(ctx);
+
+        // The status response carries this slug, and it is the only thing that tells the web app
+        // an apex serving a single-tenant install apart from one serving the dashboard. Getting
+        // it wrong trims that install's sidebar and bounces it to a wildcard subdomain.
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().Context!.Slug
+            .Should().Be("theconen");
+    }
+
+    [Fact]
+    public async Task Apex_tenant_list_is_readable_but_not_creatable()
+    {
+        SeedTenant("alpha");
+        SeedTenant("beta");
+        using var scope = _root.CreateScope();
+
+        var read = false;
+        var readCtx = ApexRequest(scope, "/api/v4/me/tenants");
+        await Build(_ => { read = true; return Task.CompletedTask; }).InvokeAsync(readCtx);
+
+        var created = false;
+        var createCtx = ApexRequest(scope, "/api/v4/me/tenants", "POST");
+        await Build(_ => { created = true; return Task.CompletedTask; }).InvokeAsync(createCtx);
+
+        // The list is keyed on the caller's subject and is what the dashboard navigates by. The
+        // POST on the same path provisions a tenant, which is not a cross-tenant read and has no
+        // business on a host that resolves none — so it falls through to the ordinary apex 404.
+        read.Should().BeTrue();
+        created.Should().BeFalse();
+        createCtx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
     [Fact]

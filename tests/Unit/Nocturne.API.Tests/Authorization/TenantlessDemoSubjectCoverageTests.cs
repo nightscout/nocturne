@@ -50,7 +50,7 @@ public class TenantlessDemoSubjectCoverageTests
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
-            ["MyPermissionsController.GetMyPermissions"] = "returns the caller's own scopes, which off a tenant resolve to the empty set",
+            ["MyPermissionsController.GetMyPermissions"] = "returns the caller's own global subject-role scopes; tenant-derived scopes are not applied off a tenant",
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
         };
@@ -129,8 +129,10 @@ public class TenantlessDemoSubjectCoverageTests
                 if (!AuthenticationIsTheOnlyGate(action, controller))
                     continue;
 
+                // No method: this sweeps the whole tenantless surface, so a path reachable under
+                // any method has to be covered.
                 if (!ControllerActionReflection.GetRoutes(controller, action)
-                        .Any(TenantResolutionMiddleware.IsTenantlessAllowed))
+                        .Any(route => TenantResolutionMiddleware.IsTenantlessAllowed(route)))
                     continue;
 
                 yield return (controller, action);

@@ -80,11 +80,12 @@ public class CookieSettings
     /// also presented at the apex dashboard and at sibling tenants the subject belongs to.
     /// </summary>
     /// <remarks>
-    /// Deliberately separate from <see cref="Domain"/>, which still scopes the OIDC state,
-    /// platform-access, and recovery cookies. Those carry a narrower grant that is only ever
-    /// redeemed on the host that minted it, so widening them would hand the same credential to
-    /// every subdomain — including the anonymous <c>{token}.share.{base-domain}</c> hosts — for
-    /// no benefit.
+    /// Derived from the base domain and deliberately independent of <see cref="Domain"/>, which is
+    /// an operator-set option scoping a different set of cookies: the OIDC and setup state cookies
+    /// and the platform-access grant. Those are left to the operator because at least one of them
+    /// genuinely spans hosts — the platform-access grant is minted on the apex, where the operator
+    /// still is, and redeemed on the tenant subdomain it is pinned to — so their scope is a
+    /// deployment decision rather than something the session widening should decide for them.
     /// </remarks>
     public string? SessionDomain { get; set; }
 

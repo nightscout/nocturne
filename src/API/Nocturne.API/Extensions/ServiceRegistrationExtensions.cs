@@ -240,10 +240,11 @@ public static class ServiceRegistrationExtensions
         // Widen session cookies to ".{base-domain}" so one sign-in carries across tenant
         // subdomains and the apex dashboard. Post-configure so explicit configuration still
         // wins, and so every session-cookie writer and deleter — which all read
-        // Cookie.SessionDomain — picks the value up from this one place.
+        // Cookie.SessionDomain — picks the value up from this one place. Derived from the base
+        // domain alone: Cookie.Domain scopes an unrelated set of cookies (see CookieSettings), so
+        // inheriting from it would make session scope a silent side effect of that operator knob.
         services.PostConfigure<OidcOptions>(opts =>
-            opts.Cookie.SessionDomain ??=
-                opts.Cookie.Domain ?? SessionCookieExtensions.ResolveCookieDomain(baseDomain)
+            opts.Cookie.SessionDomain ??= SessionCookieExtensions.ResolveCookieDomain(baseDomain)
         );
 
         // Operator (SaaS platform policy)

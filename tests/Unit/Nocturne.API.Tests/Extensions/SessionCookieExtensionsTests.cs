@@ -40,6 +40,13 @@ public sealed class SessionCookieExtensionsTests
     // Chromium does not reliably scope cookies across *.localhost names.
     [InlineData("nocturne.localhost", null)]
     [InlineData("nocturne.localhost:1612", null)]
+    // An IP literal has no domain hierarchy: a browser discards any cookie carrying a Domain
+    // attribute on an IP host, so widening a LAN install's session cookies would lose them all.
+    [InlineData("192.168.1.10", null)]
+    [InlineData("192.168.1.10:1612", null)]
+    [InlineData("127.0.0.1", null)]
+    [InlineData("[::1]", null)]
+    [InlineData("[2001:db8::1]", null)]
     [InlineData("", null)]
     [InlineData(null, null)]
     public void ResolveCookieDomain_derives_the_widened_domain(string? baseDomain, string? expected)
@@ -96,6 +103,33 @@ public sealed class SessionCookieExtensionsTests
                 $"{name} must not be expired and re-written when cookies are already host-scoped");
             Written(cookies(), name).Should().NotContain("domain=");
         }
+    }
+
+    [Fact]
+    public void SetSessionCookies_keeps_the_protective_attributes_on_the_widened_cookies()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
+            Options(".nocturne.run"));
+
+        // Widening the domain hands these cookies to every subdomain, including the anonymous
+        // share hosts, so the attributes that keep them off script and off cross-site requests
+        // matter more here than they did when each cookie was host-only.
+        foreach (var name in new[] { AccessName, RefreshName })
+        {
+            Written(cookies(), name).Should()
+                .Contain("httponly", "a session token must stay out of reach of page script")
+                .And.Contain("secure")
+                .And.Contain("samesite=lax");
+        }
+
+        // The flag cookie carries no credential and is read by the frontend, so it alone is not
+        // HttpOnly — but it still travels only over HTTPS and only on same-site navigations.
+        Written(cookies(), FlagName).Should()
+            .NotContain("httponly")
+            .And.Contain("secure")
+            .And.Contain("samesite=lax");
     }
 
     [Fact]

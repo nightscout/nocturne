@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Nocturne.API.Multitenancy;
 using Xunit;
 
@@ -21,7 +22,7 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/tenants/overview")]
     // Drives the navigation and tenant switcher.
     [InlineData("/api/v4/me/tenants")]
-    // Resolves to an empty scope set tenantlessly, which is the correct answer.
+    // Reports the caller's own global subject-role scopes; nothing tenant-derived.
     [InlineData("/api/v4/me/permissions")]
     public void The_tenantless_dashboard_paths_are_allowed(string path)
     {
@@ -48,5 +49,37 @@ public sealed class TenantlessDashboardPathsTests
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants").Should().BeTrue();
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants/anything-else")
             .Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_subject_tenant_list_admits_only_the_read()
+    {
+        // The same path takes a POST that creates a tenant (MyTenantsController.Create).
+        // Self-service provisioning affects tenants rather than reading across them, and in the
+        // hosted deployment it goes through billing, so it stays off a host with no tenant.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", HttpMethods.Get)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", HttpMethods.Post)
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", HttpMethods.Delete)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_unrestricted_path_admits_every_method()
+    {
+        // Most entries name no method, so narrowing one must not narrow the rest.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/logout", HttpMethods.Post)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants/overview", HttpMethods.Get)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void Omitting_the_method_asks_about_the_path_under_any_method()
+    {
+        // The authorization coverage sweep enumerates the whole tenantless surface and has no
+        // request to take a method from, so a method-restricted path must still be reported.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants").Should().BeTrue();
     }
 }

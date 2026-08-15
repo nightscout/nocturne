@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 using OpenApi.Remote.Attributes;
@@ -20,16 +21,22 @@ namespace Nocturne.API.Controllers.V4.Platform;
 public class StatusController : ControllerBase
 {
     private readonly IStatusService _statusService;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<StatusController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="StatusController"/>.
     /// </summary>
     /// <param name="statusService">Service providing system status information.</param>
+    /// <param name="tenantAccessor">Accessor for the tenant this request resolved to, if any.</param>
     /// <param name="logger">Logger instance.</param>
-    public StatusController(IStatusService statusService, ILogger<StatusController> logger)
+    public StatusController(
+        IStatusService statusService,
+        ITenantAccessor tenantAccessor,
+        ILogger<StatusController> logger)
     {
         _statusService = statusService;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -51,6 +58,12 @@ public class StatusController : ControllerBase
         {
             var status = await _statusService.GetSystemStatusAsync();
 
+            // Stamped here rather than in the service: the service caches its response per
+            // tenant, and this must also be right on the error path below, where no service
+            // response exists at all — which is exactly the apex-with-several-tenants case
+            // the web app reads this field to detect.
+            status.TenantSlug = _tenantAccessor.Context?.Slug;
+
             _logger.LogDebug("Successfully generated V4 status response");
 
             return Ok(status);
@@ -67,6 +80,7 @@ public class StatusController : ControllerBase
                     Name = "Nocturne",
                     Version = "unknown",
                     ServerTime = DateTime.UtcNow,
+                    TenantSlug = _tenantAccessor.Context?.Slug,
                 }
             );
         }
