@@ -107,6 +107,13 @@ public class TenantResolutionMiddleware
         // Sign-out from the tenantless dashboard. Revokes the refresh token and clears the
         // session cookies, neither of which is tenant-scoped.
         "/api/auth/oidc/logout",
+        // Session refresh, driven by the client's expiry timer on every host — including the
+        // tenantless dashboard, where a 404 would flip the shell to a signed-out UI while the
+        // server-side session is still valid. Subject-scoped like the two above: it validates
+        // the refresh token, reads global subject roles, and mints an access token with no
+        // tenant pin, so it can confer no tenant-scoped authority. POST only, matching the
+        // only verb the endpoint serves.
+        new TenantlessPath("/api/auth/oidc/refresh", HttpMethods.Post),
     ];
 
     /// <summary>

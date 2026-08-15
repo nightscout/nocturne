@@ -18,6 +18,8 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/auth/oidc/session")]
     // Sign-out from the dashboard.
     [InlineData("/api/auth/oidc/logout")]
+    // Driven by the client's expiry timer; a 404 here signs the shell out of a live session.
+    [InlineData("/api/auth/oidc/refresh")]
     // Drives the dashboard tiles.
     [InlineData("/api/v4/me/tenants/overview")]
     // Drives the navigation and tenant switcher.
@@ -62,6 +64,20 @@ public sealed class TenantlessDashboardPathsTests
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", HttpMethods.Post)
             .Should().BeFalse();
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/me/tenants", HttpMethods.Delete)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_session_refresh_admits_only_the_post()
+    {
+        // Refresh is subject-scoped — it validates the refresh token, reads global subject roles,
+        // and mints an access token with no tenant pin — so it is safe without a tenant. POST is
+        // the only verb the endpoint serves, and naming it keeps any future sibling verb gated.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/refresh", HttpMethods.Post)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/refresh", HttpMethods.Get)
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/refresh", HttpMethods.Delete)
             .Should().BeFalse();
     }
 
