@@ -237,6 +237,15 @@ public static class ServiceRegistrationExtensions
             opts.BaseDomain = configuration[BaseDomainOptions.ConfigKey] ?? ""
         );
 
+        // Widen session cookies to ".{base-domain}" so one sign-in carries across tenant
+        // subdomains and the apex dashboard. Post-configure so explicit configuration still
+        // wins, and so every session-cookie writer and deleter — which all read
+        // Cookie.SessionDomain — picks the value up from this one place.
+        services.PostConfigure<OidcOptions>(opts =>
+            opts.Cookie.SessionDomain ??=
+                opts.Cookie.Domain ?? SessionCookieExtensions.ResolveCookieDomain(baseDomain)
+        );
+
         // Operator (SaaS platform policy)
         services.AddOptions<OperatorConfiguration>()
             .Bind(configuration.GetSection(OperatorConfiguration.SectionName))

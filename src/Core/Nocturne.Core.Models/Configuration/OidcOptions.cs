@@ -75,6 +75,20 @@ public class CookieSettings
     public string? Domain { get; set; }
 
     /// <summary>
+    /// Domain attribute for the session cookies (access token, refresh token, IsAuthenticated)
+    /// only. Defaults to ".{base-domain}" so a session established on one tenant subdomain is
+    /// also presented at the apex dashboard and at sibling tenants the subject belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately separate from <see cref="Domain"/>, which still scopes the OIDC state,
+    /// platform-access, and recovery cookies. Those carry a narrower grant that is only ever
+    /// redeemed on the host that minted it, so widening them would hand the same credential to
+    /// every subdomain — including the anonymous <c>{token}.share.{base-domain}</c> hosts — for
+    /// no benefit.
+    /// </remarks>
+    public string? SessionDomain { get; set; }
+
+    /// <summary>
     /// Cookie path
     /// </summary>
     public string Path { get; set; } = "/";

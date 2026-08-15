@@ -747,69 +747,14 @@ public class OidcController : ControllerBase
     /// <summary>
     /// Set session cookies (access token and refresh token)
     /// </summary>
-    private void SetSessionCookies(OidcTokenResponse tokens)
-    {
-        // Access token cookie (short-lived)
-        Response.Cookies.Append(
-            _options.Cookie.AccessTokenName,
-            tokens.AccessToken,
-            new CookieOptions
-            {
-                HttpOnly = _options.Cookie.HttpOnly,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = tokens.ExpiresAt,
-            }
-        );
-
-        // Refresh token cookie (longer-lived)
-        Response.Cookies.Append(
-            _options.Cookie.RefreshTokenName,
-            tokens.RefreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true, // Always HttpOnly for refresh tokens
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-
-        // Also set a non-HttpOnly cookie with just auth status for JavaScript
-        Response.Cookies.Append(
-            "IsAuthenticated",
-            "true",
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-    }
+    private void SetSessionCookies(OidcTokenResponse tokens) =>
+        Response.SetSessionCookies(
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     /// <summary>
     /// Clear session cookies
     /// </summary>
-    private void ClearSessionCookies()
-    {
-        var cookieOptions = new CookieOptions
-        {
-            Path = _options.Cookie.Path,
-            Domain = _options.Cookie.Domain,
-        };
-
-        Response.Cookies.Delete(_options.Cookie.AccessTokenName, cookieOptions);
-        Response.Cookies.Delete(_options.Cookie.RefreshTokenName, cookieOptions);
-        Response.Cookies.Delete("IsAuthenticated", cookieOptions);
-    }
+    private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body
