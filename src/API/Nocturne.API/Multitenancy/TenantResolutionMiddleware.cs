@@ -93,6 +93,12 @@ public class TenantResolutionMiddleware
         // so login must not be tenant-gated. On a subdomain the tenant still resolves
         // normally; this only allows the apex (tenantless) case through.
         "/api/auth/oidc/login",
+        // The provider list the login page renders its buttons from. On a tenantless host the
+        // identity-provider path is the only one that can complete a sign-in, so a 404 here
+        // leaves the page with no sign-in control at all. The data is already served
+        // tenantlessly by the allow-listed login above, which reads the same enabled-provider
+        // set; the providers themselves are not tenant-scoped. GET is the only verb served.
+        new TenantlessPath("/api/auth/oidc/providers", HttpMethods.Get),
         // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
         // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
         // can't bounce it to a subdomain and it must process here. The session it

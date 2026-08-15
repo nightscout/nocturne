@@ -26,6 +26,8 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/tenants")]
     // Reports the caller's own global subject-role scopes; nothing tenant-derived.
     [InlineData("/api/v4/me/permissions")]
+    // The login page's provider buttons — the only sign-in affordance on a tenantless host.
+    [InlineData("/api/auth/oidc/providers")]
     public void The_tenantless_dashboard_paths_are_allowed(string path)
     {
         TenantResolutionMiddleware.IsTenantlessAllowed(path).Should().BeTrue();
@@ -78,6 +80,20 @@ public sealed class TenantlessDashboardPathsTests
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/refresh", HttpMethods.Get)
             .Should().BeFalse();
         TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/refresh", HttpMethods.Delete)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_provider_list_admits_only_the_read()
+    {
+        // Listing the enabled providers exposes nothing tenant-scoped — the allow-listed
+        // /api/auth/oidc/login already reads the same set on a tenantless host. GET is the only
+        // verb the endpoint serves, and naming it keeps any future sibling verb gated.
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/providers", HttpMethods.Get)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/providers", HttpMethods.Post)
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/oidc/providers", HttpMethods.Delete)
             .Should().BeFalse();
     }
 
