@@ -22,6 +22,10 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
 }
 
 export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) => {
+  // Resolved by the root layout from the request host and the API's answer for the apex. Read
+  // first because it qualifies the setup redirect below as well as the route guard further down.
+  const { tenantless } = await parent();
+
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
   if (!locals.isGuestSession) {
     // Check onboarding first — if the instance needs setup, redirect there
@@ -52,9 +56,15 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
   const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
 
   // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
-  // than bouncing an anonymous visitor to login. (checkOnboarding fails open on a missing cookie
-  // or an unreachable auth-status call, so this is the authoritative no-tenant signal.)
-  if (status?.status === "setup_required") {
+  // than bouncing an anonymous visitor to login.
+  //
+  // Not on a tenantless host. So does every apex of a multi-tenant install and every reserved
+  // dashboard slug, because the status endpoint reports "setup_required" for any request that
+  // resolves no tenant, whatever the reason. Redirecting those would put the fresh-install wizard
+  // in front of a production deployment that already has tenants, and the dashboard would never
+  // render at all. A genuinely fresh install is caught above instead: checkOnboarding reads the
+  // 503 the API serves when no tenant exists.
+  if (!tenantless && status?.status === "setup_required") {
     throw redirect(303, "/setup");
   }
 
@@ -70,9 +80,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
 
   // A tenantless host resolves no tenant, so a tenant-scoped page would render its shell and
   // then 404 against the API. The nav hides those entries; this catches direct navigation and
-  // stale links, and runs only once the visitor is known to be signed in (above) so it can
-  // never pre-empt the login redirect.
-  const { tenantless } = await parent();
+  // stale links, and stays below the login redirect so it can never pre-empt it.
   if (tenantless && !isTenantlessRoute(url.pathname)) {
     throw redirect(303, "/");
   }
