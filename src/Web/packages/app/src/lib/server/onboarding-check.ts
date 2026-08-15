@@ -12,6 +12,11 @@ export interface OnboardingResult {
  * serves on a host that names no tenant. It is the one API failure that positively identifies a
  * fresh install: every other host with no resolved tenant (a multi-tenant apex, a reserved
  * dashboard slug, an unknown subdomain) gets a 404 instead.
+ *
+ * Only sound for an endpoint marked [AllowDuringSetup]. TenantSetupMiddleware serves its own 503
+ * to every other endpoint while an instance awaits first-run setup, which this would read as the
+ * tenant-resolution 503 and so as a fresh install. GET /api/auth/passkey/status, the caller
+ * below, is [AllowDuringSetup] and short-circuits that middleware.
  */
 export function isFreshInstallError(err: unknown): boolean {
   return !!err && typeof err === "object" && "status" in err && err.status === 503;

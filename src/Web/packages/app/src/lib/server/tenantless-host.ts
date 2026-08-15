@@ -31,6 +31,13 @@ export const DEFAULT_DASHBOARD_SLUGS: readonly string[] = [];
 /**
  * Parse the DASHBOARD_SLUGS env var (comma-separated). Unset or empty reserves nothing, so the
  * apex alone serves the dashboard.
+ *
+ * Reserve a slug only after first-run setup is complete. A reserved slug names no tenant, and the
+ * API answers a host that resolves no tenant with 404 whether the instance holds zero tenants or
+ * a thousand — so the fresh-install signal (the 503 from tenant resolution) never reaches the web
+ * app on such a host, and an operator who opens the reserved host on a brand-new instance is sent
+ * to sign in on an instance that has no accounts yet. Complete setup on the apex or on the
+ * tenant's own host first, then set DASHBOARD_SLUGS.
  */
 export function parseDashboardSlugs(raw: string | null | undefined): string[] {
   if (raw === null || raw === undefined) return [...DEFAULT_DASHBOARD_SLUGS];

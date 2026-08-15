@@ -72,8 +72,8 @@ describe("resolveSingleTenantLanding", () => {
 
   it("does not redirect to a sole tenant whose slug is itself a dashboard slug", () => {
     // That tenant's host IS the dashboard host, so the redirect would land back on this same
-    // load and redirect again, forever. DASHBOARD_SLUGS is an operator setting and may name a
-    // slug some tenant already holds.
+    // load and redirect again, forever. Nothing is reserved by default, so this only arises once
+    // an operator sets DASHBOARD_SLUGS — and it may name a slug some tenant already holds.
     expect(
       resolveSingleTenantLanding([{ slug: "home" }], "example.com", "https:", ["home"])
     ).toBeNull();

@@ -28,8 +28,8 @@ export function tenantUrl(
  *
  * It also returns null when the sole tenant's own slug is a reserved dashboard slug. Its host is
  * then the dashboard host, so redirecting there would land back on this same load and redirect
- * again, forever. The default reserved slugs cannot name a tenant, but DASHBOARD_SLUGS is an
- * operator setting and may name one that already exists.
+ * again, forever. Nothing is reserved by default, so this only arises once an operator sets
+ * DASHBOARD_SLUGS — and it may name a slug some tenant already holds.
  */
 export function resolveSingleTenantLanding(
   tenants: readonly { slug?: string | null }[] | null | undefined,
