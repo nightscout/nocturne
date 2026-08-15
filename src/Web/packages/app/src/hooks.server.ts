@@ -55,6 +55,16 @@ const authHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // The share host is anonymous for everyone, including the owner of the data behind it: a
+  // share link has to show its sender exactly what it shows a stranger. Session cookies are
+  // scoped to ".{base-domain}", so the browser now presents them here too — leave them
+  // unread. The API applies the same rule (AuthenticationMiddleware returns an unauthenticated
+  // context whenever ShareAccess is set), so this keeps SSR agreeing with it rather than
+  // rendering a signed-in shell over an anonymous API.
+  if (isShareHost(getOriginalHost(event.request))) {
+    return resolve(event);
+  }
+
   // Check for auth cookie
   const authCookie = event.cookies.get("IsAuthenticated");
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
@@ -364,11 +374,16 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     );
   }
 
-  // Get auth tokens from cookies to forward to the backend
-  const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
-  const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-  const guestSessionToken = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
-  const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
+  // Get auth tokens from cookies to forward to the backend. On a share host none are read:
+  // that host is anonymous for everyone (see authHandle), and the widened cookie domain means
+  // the browser now sends session cookies there. The API ignores them under ShareAccess, so
+  // this is belt-and-braces — but it also keeps a token rotation from being triggered by a
+  // page that is meant to be credential-free.
+  const onShareHost = isShareHost(getOriginalHost(event.request));
+  const accessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
+  const refreshToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
+  const guestSessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
+  const platformAccessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),

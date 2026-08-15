@@ -12,6 +12,7 @@ using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -50,19 +51,56 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance);
     }
 
-    private AuthenticationMiddleware Build(params IAuthHandler[] handlers) => new(
+    private AuthenticationMiddleware Build(params IAuthHandler[] handlers) =>
+        Build(Mock.Of<IServiceScopeFactory>(), handlers);
+
+    private AuthenticationMiddleware Build(IServiceScopeFactory scopeFactory, params IAuthHandler[] handlers) => new(
         next: _ => Task.CompletedTask,
         logger: NullLogger<AuthenticationMiddleware>.Instance,
         handlers: handlers,
         environment: Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"),
         publicAccessCacheService: _publicAccess,
         oidcOptions: Options.Create(new OidcOptions()),
-        scopeFactory: Mock.Of<IServiceScopeFactory>());
+        scopeFactory: scopeFactory);
+
+    /// <summary>
+    /// A real session-cookie credential for the seeded member subject, plus the scope factory the
+    /// middleware needs to resolve it (subject lookup for the platform-admin flag).
+    /// </summary>
+    private (SessionCookieHandler Handler, IServiceScopeFactory ScopeFactory, string Token) RealSessionCredential()
+    {
+        var jwt = new JwtService(
+            Options.Create(new JwtOptions { SecretKey = new string('k', 48) }),
+            NullLogger<JwtService>.Instance);
+
+        var token = jwt.GenerateAccessToken(
+            new SubjectInfo { Id = TestDatabaseSeeder.TestSubjectId, Name = "owner" },
+            permissions: ["*"],
+            roles: ["Owner"]);
+
+        // Sanity: the credential really is valid, so a "not authenticated" result below is the
+        // share gate at work rather than a token that would have been rejected anyway.
+        jwt.ValidateAccessToken(token).IsValid.Should().BeTrue();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJwtService>(jwt);
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(_dbName));
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+
+        var handler = new SessionCookieHandler(
+            scopeFactory, NullLogger<SessionCookieHandler>.Instance, Options.Create(new OidcOptions()));
+
+        return (handler, scopeFactory, token);
+    }
 
     private static DefaultHttpContext ContextFor(bool shareAccess)
     {
         var services = new ServiceCollection();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        // The seeded subject is a member of the seeded tenant; the middleware's membership check
+        // is orthogonal to the share gate under test, so it is satisfied rather than exercised.
+        services.AddSingleton(Mock.Of<ITenantMemberService>(m =>
+            m.IsMemberAsync(TestDatabaseSeeder.TestSubjectId, TestDatabaseSeeder.TenantId) == Task.FromResult(true)));
         var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);
@@ -259,6 +297,50 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         var auth = ctx.Items["AuthContext"] as AuthContext;
         auth!.IsAuthenticated.Should().BeFalse("the share host must never honor credentials");
         auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId);
+    }
+
+    [Fact]
+    public async Task Share_host_ignores_a_real_session_cookie()
+    {
+        // Session cookies are scoped to ".{base-domain}" so one sign-in reaches the apex
+        // dashboard and every tenant subdomain. That also means the browser now presents them on
+        // {token}.share.{base-domain}, a host that must stay anonymous for everyone: an owner
+        // following their own share link has to see exactly what a stranger sees. Unlike the
+        // fake-handler test above, this drives the real SessionCookieHandler with a genuinely
+        // valid JWT, so it fails if the share gate ever moves below credential resolution.
+        var (handler, scopeFactory, token) = RealSessionCredential();
+
+        var ctx = ContextFor(shareAccess: true);
+        ctx.Request.Headers.Cookie = $".Nocturne.AccessToken={token}";
+
+        await Build(scopeFactory, handler).InvokeAsync(ctx);
+
+        var auth = ctx.Items["AuthContext"] as AuthContext;
+        auth!.IsAuthenticated.Should().BeFalse(
+            "a valid session cookie must not authenticate on a share host");
+        auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId,
+            "the share host resolves to the anonymous Public subject, never the cookie's owner");
+        auth.Permissions.Should().NotContain("*");
+        ctx.User.Identity?.IsAuthenticated.Should().NotBe(true,
+            "[Authorize] reads the principal, so it must be anonymous too");
+    }
+
+    [Fact]
+    public async Task Bare_host_honours_the_same_session_cookie()
+    {
+        // The sensitivity guard for the test above: the identical credential on a non-share host
+        // authenticates. Without this, "not authenticated" could pass for the wrong reason (an
+        // unparseable token, a misnamed cookie) and the share gate would go untested.
+        var (handler, scopeFactory, token) = RealSessionCredential();
+
+        var ctx = ContextFor(shareAccess: false);
+        ctx.Request.Headers.Cookie = $".Nocturne.AccessToken={token}";
+
+        await Build(scopeFactory, handler).InvokeAsync(ctx);
+
+        var auth = ctx.Items["AuthContext"] as AuthContext;
+        auth!.IsAuthenticated.Should().BeTrue();
+        auth.SubjectId.Should().Be(TestDatabaseSeeder.TestSubjectId);
     }
 
     private sealed class AlwaysAuthHandler : IAuthHandler
