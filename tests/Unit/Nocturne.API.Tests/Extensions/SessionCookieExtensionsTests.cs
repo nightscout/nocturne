@@ -176,6 +176,123 @@ public sealed class SessionCookieExtensionsTests
         }
     }
 
+    [Fact]
+    public void ApplyCookieDomainDefaults_widens_both_scopes_from_the_base_domain()
+    {
+        var options = new OidcOptions();
+
+        SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run:1612");
+
+        options.Cookie.SessionDomain.Should().Be(".nocturne.run");
+        options.Cookie.StateDomain.Should().Be(".nocturne.run",
+            "a login begun on a reserved dashboard slug has no slug in its state to be bounced " +
+            "back by, so its state cookie has to be readable at the apex callback");
+    }
+
+    [Fact]
+    public void ApplyCookieDomainDefaults_lets_the_operators_cookie_domain_win_for_state()
+    {
+        var options = new OidcOptions
+        {
+            Cookie = new CookieSettings { Domain = ".ops.example.com" },
+        };
+
+        SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run");
+
+        options.Cookie.StateDomain.Should().Be(".ops.example.com",
+            "an operator who set Cookie.Domain already scoped the state cookies deliberately");
+        options.Cookie.SessionDomain.Should().Be(".nocturne.run",
+            "session scope stays derived from the base domain, not a side effect of that knob");
+    }
+
+    [Fact]
+    public void ApplyCookieDomainDefaults_leaves_both_host_scoped_where_widening_is_unsafe()
+    {
+        var options = new OidcOptions();
+
+        SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.localhost:1612");
+
+        options.Cookie.SessionDomain.Should().BeNull();
+        options.Cookie.StateDomain.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyCookieDomainDefaults_never_overwrites_an_explicit_value()
+    {
+        var options = new OidcOptions
+        {
+            Cookie = new CookieSettings { SessionDomain = ".a.example", StateDomain = ".b.example" },
+        };
+
+        SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run");
+
+        options.Cookie.SessionDomain.Should().Be(".a.example");
+        options.Cookie.StateDomain.Should().Be(".b.example");
+    }
+
+    [Fact]
+    public void SetStateCookie_stamps_the_state_domain_so_the_apex_callback_can_read_it()
+    {
+        var (response, cookies) = NewResponse();
+        var options = new OidcOptions
+        {
+            Cookie = new CookieSettings { StateDomain = ".nocturne.run", Secure = true },
+        };
+
+        response.SetStateCookie(".Nocturne.OidcState", "abc", DateTimeOffset.UtcNow.AddMinutes(15), options);
+
+        // The registered redirect_uri is the apex callback. A login begun on any other host —
+        // a tenant subdomain, or a reserved dashboard slug that has no slug in its state for
+        // OidcCallbackRedirectMiddleware to bounce back to — must present this cookie there.
+        Written(cookies(), ".Nocturne.OidcState").Should()
+            .Contain("domain=.nocturne.run")
+            .And.Contain("httponly")
+            .And.Contain("secure")
+            .And.Contain("samesite=lax");
+    }
+
+    [Fact]
+    public void SetStateCookie_expires_the_host_scoped_cookie_it_replaces()
+    {
+        var (response, cookies) = NewResponse();
+        var options = new OidcOptions
+        {
+            Cookie = new CookieSettings { StateDomain = ".nocturne.run", Secure = true },
+        };
+
+        response.SetStateCookie(".Nocturne.OidcState", "abc", DateTimeOffset.UtcNow.AddMinutes(15), options);
+
+        var headers = cookies().Where(c => c.StartsWith(".Nocturne.OidcState=", StringComparison.Ordinal)).ToList();
+        headers.Should().HaveCount(2, "a browser holding the pre-widening host-only cookie sends both");
+        headers.Single(h => !h.Contains("domain=", StringComparison.OrdinalIgnoreCase))
+            .Should().Contain("expires=Thu, 01 Jan 1970");
+    }
+
+    [Fact]
+    public void SetStateCookie_stays_host_scoped_when_no_state_domain_is_resolved()
+    {
+        var (response, cookies) = NewResponse();
+        var options = new OidcOptions { Cookie = new CookieSettings { StateDomain = null } };
+
+        response.SetStateCookie(".Nocturne.OidcState", "abc", DateTimeOffset.UtcNow.AddMinutes(15), options);
+
+        cookies().Should().ContainSingle().Which.Should().NotContain("domain=");
+    }
+
+    [Fact]
+    public void ClearStateCookie_deletes_both_scopes_so_single_use_state_is_really_single_use()
+    {
+        var (response, cookies) = NewResponse();
+        var options = new OidcOptions { Cookie = new CookieSettings { StateDomain = ".nocturne.run" } };
+
+        response.ClearStateCookie(".Nocturne.OidcState", options);
+
+        var headers = cookies().Where(c => c.StartsWith(".Nocturne.OidcState=", StringComparison.Ordinal)).ToList();
+        headers.Should().HaveCount(2);
+        headers.Should().AllSatisfy(h => h.Should().Contain("expires=Thu, 01 Jan 1970"));
+        headers.Should().ContainSingle(h => h.Contains("domain=.nocturne.run", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>The live (non-expiring) Set-Cookie header for a cookie name.</summary>
     private static string Written(IReadOnlyList<string> cookies, string name) =>
         cookies.Single(c =>

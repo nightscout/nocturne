@@ -53,6 +53,23 @@ public static class SessionCookieExtensions
     }
 
     /// <summary>
+    /// Fill in the cookie <c>Domain</c> attributes that are derived from the base domain rather
+    /// than configured. Applied as a post-configure so explicit configuration still wins.
+    /// </summary>
+    /// <remarks>
+    /// Two independent scopes, for two different reasons. Session cookies widen so one sign-in
+    /// carries across tenant subdomains and the apex dashboard. State cookies widen so a login
+    /// begun on any host can be completed at the apex callback, which is the registered
+    /// redirect_uri; an operator who already set <see cref="CookieSettings.Domain"/> made that
+    /// choice explicitly, so it is inherited rather than overridden.
+    /// </remarks>
+    public static void ApplyCookieDomainDefaults(OidcOptions options, string? baseDomain)
+    {
+        options.Cookie.SessionDomain ??= ResolveCookieDomain(baseDomain);
+        options.Cookie.StateDomain ??= options.Cookie.Domain ?? ResolveCookieDomain(baseDomain);
+    }
+
+    /// <summary>
     /// Append access-token, refresh-token, and IsAuthenticated cookies to the response,
     /// using the centralized <see cref="OidcOptions"/> configuration for names, domain,
     /// path, security flags, and refresh-token lifetime.
@@ -160,6 +177,58 @@ public static class SessionCookieExtensions
         response.Cookies.Delete(options.Cookie.AccessTokenName, hostScoped);
         response.Cookies.Delete(options.Cookie.RefreshTokenName, hostScoped);
         response.Cookies.Delete(IsAuthenticatedCookieName, hostScoped);
+    }
+
+    /// <summary>
+    /// The single OIDC state-cookie writer, shared by the login, account-link, and setup flows so
+    /// their <c>Domain</c> cannot drift — the setup flow reuses the login flow's cookie name, and
+    /// two same-named cookies at different scopes are indistinguishable in the request header.
+    /// </summary>
+    public static void SetStateCookie(
+        this HttpResponse response,
+        string name,
+        string state,
+        DateTimeOffset expiresAt,
+        OidcOptions options)
+    {
+        // Same reason and same ordering as the session cookies: a browser holding a pre-widening
+        // host-only cookie of this name would otherwise send both, and the server cannot tell
+        // which it read. A stale one shadowing the fresh one costs a login attempt.
+        ExpireHostScopedStateCookie(response, name, options);
+
+        response.Cookies.Append(name, state, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = options.Cookie.Secure,
+            SameSite = MapSameSiteMode(options.Cookie.SameSite),
+            Path = options.Cookie.Path,
+            Domain = options.Cookie.StateDomain,
+            Expires = expiresAt,
+        });
+    }
+
+    /// <summary>
+    /// Delete an OIDC state cookie, mirroring <see cref="SetStateCookie"/>. State is single-use,
+    /// so this runs on every callback, successful or not.
+    /// </summary>
+    public static void ClearStateCookie(this HttpResponse response, string name, OidcOptions options)
+    {
+        ExpireHostScopedStateCookie(response, name, options);
+
+        response.Cookies.Delete(name, new CookieOptions
+        {
+            Path = options.Cookie.Path,
+            Domain = options.Cookie.StateDomain,
+        });
+    }
+
+    private static void ExpireHostScopedStateCookie(
+        HttpResponse response, string name, OidcOptions options)
+    {
+        if (string.IsNullOrEmpty(options.Cookie.StateDomain))
+            return;
+
+        response.Cookies.Delete(name, new CookieOptions { Path = options.Cookie.Path });
     }
 
     internal static Microsoft.AspNetCore.Http.SameSiteMode MapSameSiteMode(

@@ -70,7 +70,8 @@ public class CookieSettings
     public string LinkStateCookieName { get; set; } = ".Nocturne.OidcLinkState";
 
     /// <summary>
-    /// Cookie domain (null = current domain)
+    /// Cookie domain for the platform-access grant, and the operator's override for
+    /// <see cref="StateDomain"/> (null = current domain).
     /// </summary>
     public string? Domain { get; set; }
 
@@ -81,13 +82,32 @@ public class CookieSettings
     /// </summary>
     /// <remarks>
     /// Derived from the base domain and deliberately independent of <see cref="Domain"/>, which is
-    /// an operator-set option scoping a different set of cookies: the OIDC and setup state cookies
-    /// and the platform-access grant. Those are left to the operator because at least one of them
-    /// genuinely spans hosts — the platform-access grant is minted on the apex, where the operator
-    /// still is, and redeemed on the tenant subdomain it is pinned to — so their scope is a
-    /// deployment decision rather than something the session widening should decide for them.
+    /// an operator-set option scoping the platform-access grant. That one is left to the operator:
+    /// it is minted on the apex, where the operator still is, and redeemed on the tenant subdomain
+    /// it is pinned to, so its scope is a deployment decision rather than something the session
+    /// widening should decide for them. The OIDC state cookies take <see cref="StateDomain"/>.
     /// </remarks>
     public string? SessionDomain { get; set; }
+
+    /// <summary>
+    /// Domain attribute for the short-lived OIDC state cookies (login state, link state, and the
+    /// setup flow's reuse of the login-state cookie name). Defaults to <see cref="Domain"/> when
+    /// the operator set it, and otherwise to ".{base-domain}".
+    /// </summary>
+    /// <remarks>
+    /// The registered redirect_uri is the apex callback, so a login begun on any other host has to
+    /// present its state cookie at the apex to be verifiable. A host-only state cookie cannot: the
+    /// apex never receives it and the callback fails with <c>invalid_state</c>. That is invisible
+    /// on a tenant subdomain, where <c>OidcCallbackRedirectMiddleware</c> bounces the callback back
+    /// to the originating host before the cookie is read, and fatal on a host that names no tenant
+    /// — a reserved dashboard slug — because there is no slug in the state to bounce to.
+    /// <para>
+    /// Widening is safe: the state cookie is single-use, expires in minutes, and is only ever
+    /// compared against the <c>state</c> parameter the provider echoes back, which is itself
+    /// integrity-protected. It confers no access on its own.
+    /// </para>
+    /// </remarks>
+    public string? StateDomain { get; set; }
 
     /// <summary>
     /// Cookie path

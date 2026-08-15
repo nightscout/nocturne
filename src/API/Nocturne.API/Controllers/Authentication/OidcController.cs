@@ -685,64 +685,26 @@ public class OidcController : ControllerBase
     /// <summary>
     /// Set the OIDC state cookie
     /// </summary>
-    private void SetStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.StateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
+    private void SetStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.StateCookieName, state, expiresAt, _options);
 
     /// <summary>
     /// Clear the OIDC state cookie
     /// </summary>
-    private void ClearStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.StateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
+    private void ClearStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.StateCookieName, _options);
 
     /// <summary>
     /// Set the OIDC link state cookie
     /// </summary>
-    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        Response.Cookies.Append(
-            _options.Cookie.LinkStateCookieName,
-            state,
-            new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = expiresAt,
-            }
-        );
-    }
+    private void SetLinkStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_options.Cookie.LinkStateCookieName, state, expiresAt, _options);
 
     /// <summary>
     /// Clear the OIDC link state cookie
     /// </summary>
-    private void ClearLinkStateCookie()
-    {
-        Response.Cookies.Delete(
-            _options.Cookie.LinkStateCookieName,
-            new CookieOptions { Path = _options.Cookie.Path, Domain = _options.Cookie.Domain }
-        );
-    }
+    private void ClearLinkStateCookie() =>
+        Response.ClearStateCookie(_options.Cookie.LinkStateCookieName, _options);
 
     /// <summary>
     /// Set session cookies (access token and refresh token)

@@ -590,35 +590,13 @@ public partial class SetupController : ControllerBase
             subjectId, CancellationToken.None);
     }
 
-    private void SetOidcStateCookie(string state, DateTimeOffset expiresAt)
-    {
-        var cookieSameSite = _oidcOptions.Cookie.SameSite switch
-        {
-            SameSiteMode.Strict => Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            SameSiteMode.Lax => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            SameSiteMode.None => Microsoft.AspNetCore.Http.SameSiteMode.None,
-            _ => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-        };
+    // Through the shared writer: the setup flow reuses the login flow's state-cookie name, so a
+    // scope of its own would leave two same-named cookies the callback cannot tell apart.
+    private void SetOidcStateCookie(string state, DateTimeOffset expiresAt) =>
+        Response.SetStateCookie(_oidcOptions.Cookie.StateCookieName, state, expiresAt, _oidcOptions);
 
-        Response.Cookies.Append(_oidcOptions.Cookie.StateCookieName, state, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _oidcOptions.Cookie.Secure,
-            SameSite = cookieSameSite,
-            Path = _oidcOptions.Cookie.Path,
-            Domain = _oidcOptions.Cookie.Domain,
-            Expires = expiresAt,
-        });
-    }
-
-    private void ClearOidcStateCookie()
-    {
-        Response.Cookies.Delete(_oidcOptions.Cookie.StateCookieName, new CookieOptions
-        {
-            Path = _oidcOptions.Cookie.Path,
-            Domain = _oidcOptions.Cookie.Domain,
-        });
-    }
+    private void ClearOidcStateCookie() =>
+        Response.ClearStateCookie(_oidcOptions.Cookie.StateCookieName, _oidcOptions);
 
     #endregion
 }
