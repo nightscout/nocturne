@@ -30,6 +30,8 @@ interface Situation {
   authStatus: { onboardingCompleted?: boolean } | number;
   signedIn?: boolean;
   pathname?: string;
+  /** The caller's effective permissions, as /api/v4/me/permissions reports them. */
+  permissions?: string[];
 }
 
 function runLoad(situation: Situation) {
@@ -49,7 +51,7 @@ function runLoad(situation: Situation) {
     isShareHost: false,
     isAuthenticated: signedIn,
     user: signedIn ? { subjectId: "s1", name: "Sam" } : null,
-    effectivePermissions: ["*"],
+    effectivePermissions: situation.permissions ?? ["*"],
     apiClient: {
       status: { getStatus: async () => situation.status },
       passkey: {
@@ -70,6 +72,12 @@ function runLoad(situation: Situation) {
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load reads five fields of the request event; the rest of SvelteKit's ServerLoadEvent is not reachable from here
   return load(event as unknown as LoadEvent);
+}
+
+/** The page data the load returned, for situations that render rather than redirect. */
+async function loadedData(situation: Situation): Promise<{ canViewRealtimeData: boolean }> {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load's declared return includes void, for the paths that throw a redirect; these situations render
+  return (await runLoad(situation)) as { canViewRealtimeData: boolean };
 }
 
 /** The Location of the redirect the load threw, or null if it returned page data. */
@@ -171,5 +179,46 @@ describe("(authenticated) layout load — where each host situation lands", () =
         ...populatedTenantless,
       })
     ).resolves.toBe("/auth/login?returnUrl=%2Fsettings%2Faccount");
+  });
+});
+
+describe("(authenticated) layout load — realtime data", () => {
+  it("withholds realtime data on a tenantless host from a platform admin holding *", async () => {
+    // On a tenantless host /api/v4/me/permissions reports the raw JWT scopes, and a platform
+    // admin's carry "*" — which reads as glucose access even though no tenant resolved. Left
+    // ungated, that session opens a websocket that reconnects forever and bursts a day of
+    // entries, devicestatus, profile and tracker reads against a host that answers 404.
+    const data = await loadedData({ host: BASE, ...populatedTenantless });
+    expect(data.canViewRealtimeData).toBe(false);
+  });
+
+  it("withholds realtime data on a reserved dashboard slug", async () => {
+    const data = await loadedData({
+      host: `dashboard.${BASE}`,
+      dashboardSlugs: ["dashboard"],
+      apexResolvesTenant: true,
+      ...populatedTenantless,
+    });
+    expect(data.canViewRealtimeData).toBe(false);
+  });
+
+  it("enables realtime data on a tenant host for a caller with glucose read", async () => {
+    const data = await loadedData({
+      host: `acme.${BASE}`,
+      permissions: ["glucose.read"],
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(data.canViewRealtimeData).toBe(true);
+  });
+
+  it("withholds realtime data on a tenant host from a caller without glucose read", async () => {
+    const data = await loadedData({
+      host: `acme.${BASE}`,
+      permissions: ["treatments.read"],
+      status: { status: "ok", tenantSlug: "acme" },
+      authStatus: { onboardingCompleted: true },
+    });
+    expect(data.canViewRealtimeData).toBe(false);
   });
 });

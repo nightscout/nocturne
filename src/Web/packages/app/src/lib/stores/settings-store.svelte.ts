@@ -63,9 +63,9 @@ export class SettingsStore {
   private _isSaving = $state(false);
   isSaving = $derived(this._isSaving);
 
-  constructor() {
+  constructor(autoLoad = true) {
     // Auto-load settings when store is created in browser
-    if (browser) {
+    if (browser && autoLoad) {
       this.load();
     }
   }
@@ -306,10 +306,14 @@ export class SettingsStore {
 }
 
 /**
- * Creates a settings store and sets it in context
+ * Creates a settings store and sets it in context.
+ *
+ * @param autoLoad Whether to fetch the settings immediately. Pass false where the settings
+ * endpoint cannot answer — it is tenant-scoped, so a host that resolves no tenant would only 404.
+ * The store is still placed in context, so every consumer keeps resolving it.
  */
-export function createSettingsStore(): SettingsStore {
-  const store = new SettingsStore();
+export function createSettingsStore(autoLoad = true): SettingsStore {
+  const store = new SettingsStore(autoLoad);
   setContext(SETTINGS_STORE_KEY, store);
   return store;
 }

@@ -15,9 +15,7 @@
   import { beforeNavigate } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
-  import FiringToast from "$lib/components/alerts/FiringToast.svelte";
-  import { pollActiveAlerts } from "$lib/components/alerts/active-alerts-poll.svelte";
+  import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
@@ -46,6 +44,13 @@
 
   const { data, children } = $props<{ data: LayoutData; children: any }>();
 
+  // A tenantless host (the apex of a multi-tenant install, or a reserved dashboard slug) resolves
+  // no tenant, so every tenant-scoped surface this shell mounts would render and then 404 against
+  // the API — forever, for every visitor, in the case of the polled ones. Read once: the host
+  // cannot change without a fresh load.
+  // svelte-ignore state_referenced_locally
+  const tenantless: boolean = data.tenantless === true;
+
   const realtimeStore = createRealtimeStore(config);
   createAuthStore(); // Initialize auth store in context
 
@@ -56,16 +61,16 @@
   });
 
   // Create settings store in context for the entire app
-  // This makes feature settings available on all pages including the main dashboard
-  createSettingsStore();
+  // This makes feature settings available on all pages including the main dashboard.
+  // The store is always in context so getSettingsStore() resolves everywhere; only the fetch of
+  // /api/v4/ui-settings, which is tenant-scoped, is withheld on a tenantless host.
+  createSettingsStore(!tenantless);
 
   let commandPaletteOpen = $state(false);
 
-  // One poll for the alert surfaces this layout mounts (AlertBanner and
-  // FiringToast both read the same query).
-  pollActiveAlerts();
-
-  const coachMarkAdapter = createCoachMarkAdapter();
+  // Coach-mark state is tenant-scoped, so on a tenantless host the adapter stays on its
+  // localStorage path rather than asking for marks no tenant owns.
+  const coachMarkAdapter = createCoachMarkAdapter(tenantless);
 
   // Title/Favicon service for dynamic updates
   const titleFaviconService = getTitleFaviconService();
@@ -216,12 +221,13 @@
       {#if data.isGuestSession && data.guestExpiresAt}
         <GuestBanner expiresAt={data.guestExpiresAt} />
       {/if}
-      <MembershipRequestAutoSubmit
-        isAuthenticated={!!data.user}
-        isGuestSession={data.isGuestSession}
-      />
-      <AlertBanner />
-      <FiringToast />
+      {#if !tenantless}
+        <MembershipRequestAutoSubmit
+          isAuthenticated={!!data.user}
+          isGuestSession={data.isGuestSession}
+        />
+        <AlertSurfaces />
+      {/if}
       <main class="flex-1 overflow-auto">
         <svelte:boundary>
           {@render children()}

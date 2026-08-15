@@ -89,9 +89,16 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
   // - Authenticated users with a glucose read permission
   // - Anonymous visitors on the share host of a tenant that grants public read access
   // The API enforces authorization on each endpoint as defense in depth.
-  const canViewRealtimeData = locals.isAuthenticated
-    ? hasGlucoseReadPermission(locals.effectivePermissions ?? [])
-    : publicViewAllowed;
+  //
+  // Never on a tenantless host: there is no tenant whose glucose could be read, and the
+  // permissions reported there are the raw JWT scopes rather than tenant-derived ones — so a
+  // platform admin carrying "*" would otherwise open a websocket that reconnects forever and
+  // burst a day of entries, devicestatus, profile and tracker reads against 404s.
+  const canViewRealtimeData = tenantless
+    ? false
+    : locals.isAuthenticated
+      ? hasGlucoseReadPermission(locals.effectivePermissions ?? [])
+      : publicViewAllowed;
 
   const isDemo = status?.isDemo ?? false;
   const nextResetAt = toIsoString(status?.nextResetAt);

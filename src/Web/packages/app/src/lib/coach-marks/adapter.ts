@@ -38,12 +38,19 @@ function isAuthError(err: unknown): boolean {
 /**
  * Creates a {@link CoachMarkAdapter} backed by the generated remote functions,
  * with localStorage fallback when unauthenticated.
+ *
+ * @param localOnly Skip the remote functions entirely and keep every mark in localStorage. Set
+ * this where the coach-mark endpoints cannot answer — they are tenant-scoped, so a host that
+ * resolves no tenant would only 404 — rather than relying on the 401 fallback, which that 404
+ * would never trip.
  */
-export function createCoachMarkAdapter(): CoachMarkAdapter {
-  let usingLocal = false;
+export function createCoachMarkAdapter(localOnly = false): CoachMarkAdapter {
+  let usingLocal = localOnly;
 
   return {
     async fetchAll(): Promise<MarkState[]> {
+      if (usingLocal) return [...readLocal().values()];
+
       try {
         const states = await getAll();
         // Authenticated — merge any localStorage marks into the server response
