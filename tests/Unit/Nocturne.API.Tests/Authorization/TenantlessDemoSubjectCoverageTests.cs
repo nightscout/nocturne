@@ -49,6 +49,8 @@ public class TenantlessDemoSubjectCoverageTests
             // deletes any it picked up elsewhere — so both return the tenant already on screen.
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
+            ["MyPermissionsController.GetMyPermissions"] = "returns the caller's own scopes, which off a tenant resolve to the empty set",
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
         };

@@ -53,6 +53,13 @@ public class TenantResolutionMiddleware
         // so it must be reachable from the apex in multi-tenant deployments. The
         // service pins each tenant itself and never uses the request-scoped context.
         "/api/v4/me/tenants/overview",
+        // The subject's tenant list, which drives the tenantless dashboard's navigation
+        // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
+        "/api/v4/me/tenants",
+        // The subject's granted scopes. Tenantless it resolves to an empty set (scopes
+        // come from tenant membership), which is the correct answer on a host that
+        // exposes no tenant data.
+        "/api/v4/me/permissions",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
@@ -69,6 +76,14 @@ public class TenantResolutionMiddleware
         // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
         // are already redirected to their subdomain before reaching this point.
         "/api/auth/oidc/callback",
+        // Session introspection, called on every page load — including on the tenantless
+        // dashboard host, which would otherwise 404 before rendering anything. The session
+        // it reports is subject-scoped; the only tenant-dependent field (member roles) is
+        // already skipped when no tenant is resolved.
+        "/api/auth/oidc/session",
+        // Sign-out from the tenantless dashboard. Revokes the refresh token and clears the
+        // session cookies, neither of which is tenant-scoped.
+        "/api/auth/oidc/logout",
     ];
 
     /// <summary>
