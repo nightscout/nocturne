@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
@@ -7,6 +8,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using OpenApi.Remote.Attributes;
 
@@ -43,10 +45,22 @@ public class ActivityController : ControllerBase
     /// <remarks>
     /// This read merges four sources in memory, so the page is bounded by
     /// <see cref="V4ReadLimits.ClampMergedPage"/> rather than the plain page-size ceiling.
+    /// The scope requirement is an OR over the four storages, and
+    /// <see cref="ActivityReadScopeGuard"/> then drops the records whose category the caller does
+    /// not hold — pagination happens in the service before that filter, so a caller holding a
+    /// subset of the categories can receive fewer than <paramref name="limit"/> records. The total
+    /// is counted over only those same categories, both so it stays consistent with what the page
+    /// can contain and so it cannot disclose how many records exist in a category the caller may
+    /// not read.
     /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Activity>), StatusCodes.Status200OK)]
+    [RequireScope(
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead)]
     public async Task<ActionResult<PaginatedResponse<Activity>>> GetActivities(
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
@@ -57,11 +71,17 @@ public class ActivityController : ControllerBase
 
         var records = await _activityService.GetActivitiesAsync(
             count: limit, skip: offset, cancellationToken: cancellationToken);
-        var total = (int)await _activityService.CountActivitiesAsync(cancellationToken: cancellationToken);
+        var visible = ActivityReadScopeGuard.Filter(
+            records, _activityDecomposer, HttpContext.GetGrantedScopes());
+
+        var counts = await _activityService.CountActivitiesByCategoryAsync(
+            ActivityReadScopeGuard.GrantedCategories(HttpContext),
+            cancellationToken: cancellationToken);
+        var total = (int)counts.Values.Sum();
 
         return Ok(new PaginatedResponse<Activity>
         {
-            Data = records,
+            Data = visible,
             Pagination = new PaginationInfo(limit, offset, total),
         });
     }
@@ -69,16 +89,29 @@ public class ActivityController : ControllerBase
     /// <summary>
     /// Get a specific activity record by ID
     /// </summary>
+    /// <remarks>
+    /// A record in a category the caller does not hold answers 404 rather than 403, so the
+    /// response does not disclose that the record exists.
+    /// </remarks>
     [HttpGet("{id}")]
     [RemoteQuery]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [RequireScope(
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead)]
     public async Task<ActionResult<Activity>> GetActivity(
         string id,
         CancellationToken cancellationToken = default)
     {
         var record = await _activityService.GetActivityByIdAsync(id, cancellationToken);
         if (record == null)
+            return NotFound();
+
+        if (!ActivityReadScopeGuard.CanRead(
+            record, _activityDecomposer, HttpContext.GetGrantedScopes()))
             return NotFound();
 
         return Ok(record);

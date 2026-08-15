@@ -29,6 +29,10 @@ public class ActivityControllerV4Tests
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
+
+        _service.Setup(s => s.CountActivitiesByCategoryAsync(
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, long>());
     }
 
     private void GrantScopes(params string[] scopes) =>

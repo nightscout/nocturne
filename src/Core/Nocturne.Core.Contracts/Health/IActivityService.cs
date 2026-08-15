@@ -106,4 +106,19 @@ public interface IActivityService
         string? find = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Count <see cref="Activity"/> records in each of <paramref name="categories"/>, keyed by the
+    /// same read scope <see cref="V4.IActivityDecomposer.RequiredReadScope"/> returns for records
+    /// from that source. A source not named is not queried at all, and a name this service does not
+    /// recognize yields no entry.
+    /// </summary>
+    /// <param name="categories">The sources to count, named by their read scope.</param>
+    /// <param name="find">Optional MongoDB-style query filter string.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyDictionary<string, long>> CountActivitiesByCategoryAsync(
+        IReadOnlySet<string> categories,
+        string? find = null,
+        CancellationToken cancellationToken = default
+    );
 }

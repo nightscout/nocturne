@@ -1,24 +1,28 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
 /// Asserts that <c>ActivityController</c> actually calls
-/// <see cref="Nocturne.API.Authorization.ActivityWriteScopeGuard"/>. <c>ActivityWriteScopeGuardTests</c>
-/// exercises the guard function in isolation, so removing the call from the handler would leave both
-/// that suite and the attribute sweep in <see cref="V4WriteScopeGatingTests"/> green while the
-/// endpoint became ungated — the activity endpoints are exempted from the sweep precisely because
-/// their gate is a method call.
+/// <see cref="Nocturne.API.Authorization.ActivityWriteScopeGuard"/> and
+/// <see cref="Nocturne.API.Authorization.ActivityReadScopeGuard"/>. The guard suites exercise those
+/// functions in isolation, so removing a call from a handler would leave them and the attribute
+/// sweep in <see cref="V4WriteScopeGatingTests"/> green while the endpoint became ungated — the
+/// activity endpoints are exempted from the sweep precisely because their gate is a method call.
 /// </summary>
 public class ActivityControllerScopeTests
 {
@@ -72,16 +76,185 @@ public class ActivityControllerScopeTests
             .Which.StatusCode.Should().Be(StatusCodes.Status201Created);
     }
 
+    [Fact]
+    public async Task GetActivities_DropsRecordsWhoseCategoryScopeIsMissing()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        StubPage(service, OneRecordPerCategory());
+        StubCounts(service);
+
+        var result = await controller.GetActivities();
+
+        Payload(result).Data.Select(a => a.Id).Should().Equal("hr");
+    }
+
+    [Fact]
+    public async Task GetActivities_TotalsOnlyTheCategoriesTheCallerHolds()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        StubPage(service, OneRecordPerCategory());
+        StubCounts(service);
+
+        var result = await controller.GetActivities();
+
+        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[OAuthScopes.HeartRateRead]);
+    }
+
+    [Fact]
+    public async Task GetActivities_TotalsEveryCategoryForACallerHoldingThemAll()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [.. CategoryScopes.Values]);
+        StubPage(service, OneRecordPerCategory());
+        StubCounts(service);
+
+        var result = await controller.GetActivities();
+
+        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts.Values.Sum());
+    }
+
+    [Fact]
+    public async Task GetActivities_AsksTheCountForNoCategoryTheCallerLacks()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        StubPage(service, OneRecordPerCategory());
+        StubCounts(service);
+
+        await controller.GetActivities();
+
+        service.Verify(
+            s => s.CountActivitiesByCategoryAsync(
+                It.Is<IReadOnlySet<string>>(asked =>
+                    asked.SetEquals(new[] { OAuthScopes.HeartRateRead })),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// The total counts categories, not the page, so a page carrying nothing the caller may see
+    /// must still report the records waiting on later pages — otherwise a client paging while
+    /// <c>offset &lt; total</c> stops at the first such page.
+    /// </summary>
+    [Fact]
+    public async Task GetActivities_TotalsTheHeldCategoriesEvenWhenThePageShowsNoneOfThem()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        StubPage(service, [ActivityWithId("sleep"), ActivityWithId("regular")]);
+        StubCounts(service);
+
+        var result = await controller.GetActivities(offset: 20);
+
+        Payload(result).Data.Should().BeEmpty();
+        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[OAuthScopes.HeartRateRead]);
+    }
+
+    [Fact]
+    public async Task GetActivity_HidesARecordWhoseCategoryScopeIsMissing()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ActivityWithId("sleep"));
+
+        var result = await controller.GetActivity("sleep");
+
+        result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task GetActivity_ReturnsARecordWhoseCategoryScopeIsHeld()
+    {
+        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.SleepRead]);
+        service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ActivityWithId("sleep"));
+
+        var result = await controller.GetActivity("sleep");
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<Activity>()
+            .Which.Id.Should().Be("sleep");
+    }
+
+    /// <summary>
+    /// The in-handler filter decides what a response may contain, but only the attribute keeps a
+    /// caller holding none of the four categories out — and a controller-level <c>[Authorize]</c>
+    /// alone admits any member.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(ActivityController.GetActivities))]
+    [InlineData(nameof(ActivityController.GetActivity))]
+    public void ReadActions_AdmitOnAnyMergedActivityCategory(string action)
+    {
+        var attribute = typeof(ActivityController).GetMethod(action)!
+            .GetCustomAttribute<RequireScopeAttribute>();
+
+        attribute.Should().NotBeNull($"{action} must be gated on the activity read scopes");
+        attribute!.Scopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
+    }
+
     private static void Denied(object? result) =>
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
 
+    private static PaginatedResponse<Activity> Payload(
+        ActionResult<PaginatedResponse<Activity>> result) =>
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PaginatedResponse<Activity>>().Subject;
+
+    private static void StubPage(Mock<IActivityService> service, IEnumerable<Activity> page) =>
+        service.Setup(s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(page);
+
+    /// <summary>
+    /// Stubs the per-category count with <see cref="CategoryCounts"/>, honouring the contract that
+    /// a category the caller did not ask for is not counted — so a total that includes one is a
+    /// category the controller asked for and should not have.
+    /// </summary>
+    private static void StubCounts(Mock<IActivityService> service) =>
+        service.Setup(s => s.CountActivitiesByCategoryAsync(
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlySet<string> asked, string? _, CancellationToken _) =>
+                (IReadOnlyDictionary<string, long>)CategoryCounts
+                    .Where(c => asked.Contains(c.Key))
+                    .ToDictionary(c => c.Key, c => c.Value));
+
+    private static Activity ActivityWithId(string id) => new() { Id = id, Mills = 1 };
+
+    /// <summary>One record per merged category, each identified by its category's key.</summary>
+    private static IEnumerable<Activity> OneRecordPerCategory() =>
+        CategoryScopes.Keys.Select(ActivityWithId).ToList();
+
+    /// <summary>Distinct per-category counts, so a total names the categories that produced it.</summary>
+    private static readonly Dictionary<string, long> CategoryCounts = new()
+    {
+        [OAuthScopes.HeartRateRead] = 71,
+        [OAuthScopes.StepCountRead] = 13,
+        [OAuthScopes.SleepRead] = 5,
+        [OAuthScopes.TreatmentsRead] = 11,
+    };
+
+    private static readonly Dictionary<string, string> CategoryScopes = new()
+    {
+        ["hr"] = OAuthScopes.HeartRateRead,
+        ["sc"] = OAuthScopes.StepCountRead,
+        ["sleep"] = OAuthScopes.SleepRead,
+        ["regular"] = OAuthScopes.TreatmentsRead,
+    };
+
+    private static (ActivityController Controller, Mock<IActivityService> Service) BuildRead(
+        string[] grantedScopes) =>
+        Build(requiredScope: null, grantedScopes, a => CategoryScopes[a.Id!]);
+
     private static (ActivityController Controller, Mock<IActivityService> Service) Build(
-        string? requiredScope, string[] grantedScopes)
+        string? requiredScope,
+        string[] grantedScopes,
+        Func<Activity, string>? requiredReadScope = null)
     {
         var service = new Mock<IActivityService>(MockBehavior.Strict);
         var decomposer = new Mock<IActivityDecomposer>(MockBehavior.Loose);
         decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(requiredScope);
+        if (requiredReadScope is not null)
+            decomposer.Setup(d => d.RequiredReadScope(It.IsAny<Activity>())).Returns(requiredReadScope);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };

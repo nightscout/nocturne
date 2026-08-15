@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -9,6 +10,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Xunit;
 using Nocturne.API.Services.Realtime;
 
@@ -833,6 +835,79 @@ public class ActivityServiceTests
         // Assert
         Assert.Equal(6, count);
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CountActivitiesByCategoryAsync_KeysEachSourceByItsReadScope()
+    {
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Activity { Id = "1", Mills = 1000 }]);
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HeartRate(), new HeartRate()]);
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new StepCount(), new StepCount(), new StepCount()]);
+        _mockSleepService
+            .Setup(s => s.CountSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<SleepSessionType?>(),
+                It.IsAny<SleepSource?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+
+        var counts = await _activityService.CountActivitiesByCategoryAsync(
+            AllCategories, cancellationToken: CancellationToken.None);
+
+        counts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [OAuthScopes.TreatmentsRead] = 1,
+            [OAuthScopes.HeartRateRead] = 2,
+            [OAuthScopes.StepCountRead] = 3,
+            [OAuthScopes.SleepRead] = 4,
+        });
+    }
+
+    /// <summary>
+    /// Each source is materialized in full to be counted, so a category nobody asked for must not
+    /// be fetched at all.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CountActivitiesByCategoryAsync_DoesNotQueryASourceItWasNotAskedFor()
+    {
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new HeartRate(), new HeartRate()]);
+
+        var counts = await _activityService.CountActivitiesByCategoryAsync(
+            new HashSet<string> { OAuthScopes.HeartRateRead },
+            cancellationToken: CancellationToken.None);
+
+        counts.Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [OAuthScopes.HeartRateRead] = 2,
+        });
+        _mockStateSpanService.Verify(
+            s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockStepCountService.Verify(
+            s => s.GetStepCountsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mockSleepService.Verify(
+            s => s.CountSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<SleepSessionType?>(),
+                It.IsAny<SleepSource?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// The categories the merged read endpoints ask for. Driving the count from the guard's own
+    /// list is what keeps a category the endpoints admit from silently going uncounted.
+    /// </summary>
+    private static readonly IReadOnlySet<string> AllCategories =
+        ActivityReadScopeGuard.AdmissionScopes.ToHashSet();
 
     [Fact]
     [Trait("Category", "Unit")]
