@@ -53,20 +53,27 @@ public static class SessionCookieExtensions
     }
 
     /// <summary>
-    /// Fill in the cookie <c>Domain</c> attributes that are derived from the base domain rather
-    /// than configured. Applied as a post-configure so explicit configuration still wins.
+    /// Fill in the cookie <c>Domain</c> attributes, all three of which are derived from the base
+    /// domain rather than configured. Applied as a post-configure so explicit configuration
+    /// still wins.
     /// </summary>
     /// <remarks>
-    /// Two independent scopes, for two different reasons. Session cookies widen so one sign-in
-    /// carries across tenant subdomains and the apex dashboard. State cookies widen so a login
-    /// begun on any host can be completed at the apex callback, which is the registered
-    /// redirect_uri; an operator who already set <see cref="CookieSettings.Domain"/> made that
-    /// choice explicitly, so it is inherited rather than overridden.
+    /// Three scopes, one source. Session cookies widen so one sign-in carries across tenant
+    /// subdomains and the apex dashboard. The platform-access grant widens because it is minted
+    /// on the apex and redeemed on the tenant subdomain it is pinned to. State cookies widen so a
+    /// login begun on any host can be completed at the apex callback, which is the registered
+    /// redirect_uri.
+    /// <para>
+    /// <see cref="CookieSettings.Domain"/> is defaulted before <see cref="CookieSettings.StateDomain"/>
+    /// reads it, so an operator override moves both together while the derived value reaches both
+    /// as well.
+    /// </para>
     /// </remarks>
     public static void ApplyCookieDomainDefaults(OidcOptions options, string? baseDomain)
     {
         options.Cookie.SessionDomain ??= ResolveCookieDomain(baseDomain);
-        options.Cookie.StateDomain ??= options.Cookie.Domain ?? ResolveCookieDomain(baseDomain);
+        options.Cookie.Domain ??= ResolveCookieDomain(baseDomain);
+        options.Cookie.StateDomain ??= options.Cookie.Domain;
     }
 
     /// <summary>

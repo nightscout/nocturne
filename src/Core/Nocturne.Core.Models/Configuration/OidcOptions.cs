@@ -70,9 +70,21 @@ public class CookieSettings
     public string LinkStateCookieName { get; set; } = ".Nocturne.OidcLinkState";
 
     /// <summary>
-    /// Cookie domain for the platform-access grant, and the operator's override for
-    /// <see cref="StateDomain"/> (null = current domain).
+    /// Domain attribute for the platform-access grant cookie, and the operator's override for
+    /// <see cref="StateDomain"/>. Defaults, like the other two domains, to ".{base-domain}".
     /// </summary>
+    /// <remarks>
+    /// Derived rather than left unset because the grant is minted on the apex — where the platform
+    /// admin signs in — and redeemed on the <c>{slug}.{base-domain}</c> host it is pinned to. A
+    /// host-only cookie is never sent to that second host, so an underived value silently breaks
+    /// platform access altogether; anything wider than the base domain broadcasts a superuser
+    /// credential past the app. Tenants are always reached at a subdomain of the base domain, so
+    /// no deployment topology makes a third value correct.
+    /// <para>
+    /// Retained as an override for an operator with a reason to narrow or move it. Setting it also
+    /// moves <see cref="StateDomain"/>, which defaults from this value.
+    /// </para>
+    /// </remarks>
     public string? Domain { get; set; }
 
     /// <summary>
@@ -81,18 +93,17 @@ public class CookieSettings
     /// also presented at the apex dashboard and at sibling tenants the subject belongs to.
     /// </summary>
     /// <remarks>
-    /// Derived from the base domain and deliberately independent of <see cref="Domain"/>, which is
-    /// an operator-set option scoping the platform-access grant. That one is left to the operator:
-    /// it is minted on the apex, where the operator still is, and redeemed on the tenant subdomain
-    /// it is pinned to, so its scope is a deployment decision rather than something the session
-    /// widening should decide for them. The OIDC state cookies take <see cref="StateDomain"/>.
+    /// Derived from the base domain, as <see cref="Domain"/> and <see cref="StateDomain"/> are.
+    /// Kept a separate knob from those so an operator can narrow one scope without dragging the
+    /// others with it: this one carries the ordinary session, <see cref="Domain"/> the
+    /// platform-access grant, and <see cref="StateDomain"/> the OIDC state cookies.
     /// </remarks>
     public string? SessionDomain { get; set; }
 
     /// <summary>
     /// Domain attribute for the short-lived OIDC state cookies (login state, link state, and the
-    /// setup flow's reuse of the login-state cookie name). Defaults to <see cref="Domain"/> when
-    /// the operator set it, and otherwise to ".{base-domain}".
+    /// setup flow's reuse of the login-state cookie name). Defaults to <see cref="Domain"/>, which
+    /// is itself ".{base-domain}" unless the operator overrode it.
     /// </summary>
     /// <remarks>
     /// The registered redirect_uri is the apex callback, so a login begun on any other host has to

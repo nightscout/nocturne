@@ -7,9 +7,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Extensions;
 
 /// <summary>
-/// Covers the session-cookie Domain widening: the value derived from the base domain, that every
-/// writer and the deleter agree on it, and that the pre-widening host-scoped cookies are expired
-/// so a browser holding both converges on one.
+/// Covers the cookie Domain widening — session, state, and platform-access grant: the value
+/// derived from the base domain, that every writer and the deleter agree on it, and that the
+/// pre-widening host-scoped cookies are expired so a browser holding both converges on one.
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class SessionCookieExtensionsTests
@@ -177,7 +177,7 @@ public sealed class SessionCookieExtensionsTests
     }
 
     [Fact]
-    public void ApplyCookieDomainDefaults_widens_both_scopes_from_the_base_domain()
+    public void ApplyCookieDomainDefaults_widens_all_three_scopes_from_the_base_domain()
     {
         var options = new OidcOptions();
 
@@ -187,6 +187,30 @@ public sealed class SessionCookieExtensionsTests
         options.Cookie.StateDomain.Should().Be(".nocturne.run",
             "a login begun on a reserved dashboard slug has no slug in its state to be bounced " +
             "back by, so its state cookie has to be readable at the apex callback");
+        options.Cookie.Domain.Should().Be(".nocturne.run",
+            "the platform-access grant is minted on the apex and redeemed on the tenant " +
+            "subdomain it is pinned to, so a host-only grant never arrives");
+    }
+
+    [Theory]
+    // Single-label hosts, *.localhost, and IP literals cannot carry a Domain attribute; the
+    // platform-access grant stays host-only there for the same reasons the session cookies do.
+    [InlineData("localhost")]
+    [InlineData("nocturne.localhost:1612")]
+    [InlineData("192.168.1.10")]
+    [InlineData("[2001:db8::1]")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void ApplyCookieDomainDefaults_leaves_every_scope_host_scoped_where_widening_is_unsafe(
+        string? baseDomain)
+    {
+        var options = new OidcOptions();
+
+        SessionCookieExtensions.ApplyCookieDomainDefaults(options, baseDomain);
+
+        options.Cookie.SessionDomain.Should().BeNull();
+        options.Cookie.StateDomain.Should().BeNull();
+        options.Cookie.Domain.Should().BeNull();
     }
 
     [Fact]
@@ -199,6 +223,8 @@ public sealed class SessionCookieExtensionsTests
 
         SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run");
 
+        options.Cookie.Domain.Should().Be(".ops.example.com",
+            "the derived default must not overwrite an operator's explicit scope");
         options.Cookie.StateDomain.Should().Be(".ops.example.com",
             "an operator who set Cookie.Domain already scoped the state cookies deliberately");
         options.Cookie.SessionDomain.Should().Be(".nocturne.run",
@@ -206,28 +232,23 @@ public sealed class SessionCookieExtensionsTests
     }
 
     [Fact]
-    public void ApplyCookieDomainDefaults_leaves_both_host_scoped_where_widening_is_unsafe()
-    {
-        var options = new OidcOptions();
-
-        SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.localhost:1612");
-
-        options.Cookie.SessionDomain.Should().BeNull();
-        options.Cookie.StateDomain.Should().BeNull();
-    }
-
-    [Fact]
     public void ApplyCookieDomainDefaults_never_overwrites_an_explicit_value()
     {
         var options = new OidcOptions
         {
-            Cookie = new CookieSettings { SessionDomain = ".a.example", StateDomain = ".b.example" },
+            Cookie = new CookieSettings
+            {
+                SessionDomain = ".a.example",
+                StateDomain = ".b.example",
+                Domain = ".c.example",
+            },
         };
 
         SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run");
 
         options.Cookie.SessionDomain.Should().Be(".a.example");
         options.Cookie.StateDomain.Should().Be(".b.example");
+        options.Cookie.Domain.Should().Be(".c.example");
     }
 
     [Fact]
