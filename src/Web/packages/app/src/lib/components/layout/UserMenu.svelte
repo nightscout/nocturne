@@ -17,9 +17,15 @@
     isPlatformAdmin?: boolean;
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
+    /**
+     * Whether this host serves the cross-tenant dashboard rather than one tenant. Every account
+     * entry below points at /settings/*, which the authenticated layout bounces back to "/" on
+     * such a host, so they are hidden rather than left to silently do nothing.
+     */
+    tenantless?: boolean;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false, tenantless = false }: Props = $props();
 
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
@@ -106,22 +112,24 @@
           <DropdownMenu.Separator />
         {/if}
 
-        <DropdownMenu.Group>
-          <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
-            <User class="mr-2 h-4 w-4" />
-            <span>Account</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => goto("/settings")}>
-            <Settings class="mr-2 h-4 w-4" />
-            <span>Settings</span>
-          </DropdownMenu.Item>
-          {#if isPlatformAdmin}
-            <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
-              <Shield class="mr-2 h-4 w-4" />
-              <span>Admin</span>
+        {#if !tenantless}
+          <DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
+              <User class="mr-2 h-4 w-4" />
+              <span>Account</span>
             </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Group>
+            <DropdownMenu.Item onSelect={() => goto("/settings")}>
+              <Settings class="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenu.Item>
+            {#if isPlatformAdmin}
+              <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
+                <Shield class="mr-2 h-4 w-4" />
+                <span>Admin</span>
+              </DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Group>
+        {/if}
       {:else}
         <DropdownMenu.Group>
           <DropdownMenu.Item onSelect={() => (showRequestDialog = true)}>

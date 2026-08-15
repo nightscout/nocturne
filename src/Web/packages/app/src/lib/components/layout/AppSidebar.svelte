@@ -388,14 +388,17 @@
     <Sidebar.Trigger />
   </Sidebar.Header>
 
-  <!-- Glucose Widget (fixed, not scrollable) -->
-  <Sidebar.Group>
-    <Sidebar.GroupContent>
-      <SidebarGlucoseWidget />
-    </Sidebar.GroupContent>
-  </Sidebar.Group>
+  <!-- Glucose Widget (fixed, not scrollable). One tenant's latest reading, so there is nothing
+       for it to show on a host that resolves none. -->
+  {#if !tenantless}
+    <Sidebar.Group>
+      <Sidebar.GroupContent>
+        <SidebarGlucoseWidget />
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
 
-  <Sidebar.Separator />
+    <Sidebar.Separator />
+  {/if}
 
   <!-- Platform-admin access indicator: viewing a tenant you're NOT a member of,
        via a short-lived platform-access grant (distinct from the member switcher). -->
@@ -541,8 +544,11 @@
     <Sidebar.Menu>
       {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
+          <!-- The language choice still applies to this page; only persisting it needs a tenant
+               (the preferences write is tenant-scoped), so a tenantless host keeps the selector
+               and drops the write rather than losing the control entirely. -->
           <LanguageSelector
-            onLanguageChange={user
+            onLanguageChange={user && !tenantless
               ? (locale: string) =>
                   updateLanguagePreference({ preferredLanguage: locale })
               : undefined}
@@ -552,13 +558,14 @@
       <Sidebar.MenuItem
         class="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:flex-col"
       >
-        {#if user && !isGuestSession}
+        {#if user && !isGuestSession && !tenantless}
           <SidebarNotifications />
         {/if}
         <UserMenu
           {user}
           {isPlatformAdmin}
           {isGuestSession}
+          {tenantless}
           collapsed={sidebar.state === "collapsed"}
           class="flex-1 min-w-0"
         />

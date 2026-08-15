@@ -292,49 +292,49 @@
 
     {#if mode === "default"}
       {#if !tenantless}
-      <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
-           WebAuthn ceremony, so there is no server-side counterpart. -->
-      <form onsubmit={handleDiscoverableLogin}>
-        <Button
-          type="submit"
-          class="w-full h-12"
-          size="lg"
-          disabled={isLoading || isRedirecting || !passkeysSupported}
-        >
-          {#if isLoading}
-            <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-            Waiting for passkey...
-          {:else}
-            <Fingerprint class="mr-2 h-5 w-5" />
-            {signInMethodLabels.passkey}
-          {/if}
-        </Button>
-      </form>
+        <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
+             WebAuthn ceremony, so there is no server-side counterpart. -->
+        <form onsubmit={handleDiscoverableLogin}>
+          <Button
+            type="submit"
+            class="w-full h-12"
+            size="lg"
+            disabled={isLoading || isRedirecting || !passkeysSupported}
+          >
+            {#if isLoading}
+              <Loader2 class="mr-2 h-5 w-5 animate-spin" />
+              Waiting for passkey...
+            {:else}
+              <Fingerprint class="mr-2 h-5 w-5" />
+              {signInMethodLabels.passkey}
+            {/if}
+          </Button>
+        </form>
 
-      <!-- Secondary: username-based sign-in -->
-      <Button
-        variant="outline"
-        class="w-full"
-        disabled={isLoading || isRedirecting || !passkeysSupported}
-        onclick={() => switchMode("username")}
-      >
-        <User class="mr-2 h-4 w-4" />
-        {signInMethodLabels.username}
-      </Button>
+        <!-- Secondary: username-based sign-in -->
+        <Button
+          variant="outline"
+          class="w-full"
+          disabled={isLoading || isRedirecting || !passkeysSupported}
+          onclick={() => switchMode("username")}
+        >
+          <User class="mr-2 h-4 w-4" />
+          {signInMethodLabels.username}
+        </Button>
       {/if}
 
       {#if hasOidc && oidc}
         {#if !tenantless}
-        <div class="relative">
-          <div class="absolute inset-0 flex items-center">
-            <span class="w-full border-t"></span>
+          <div class="relative">
+            <div class="absolute inset-0 flex items-center">
+              <span class="w-full border-t"></span>
+            </div>
+            <div class="relative flex justify-center text-xs uppercase">
+              <span class="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
           </div>
-          <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-background px-2 text-muted-foreground">
-              Or continue with
-            </span>
-          </div>
-        </div>
         {/if}
 
         <div class="space-y-3">
