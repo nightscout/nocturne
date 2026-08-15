@@ -79,7 +79,11 @@ public class CookieSettings
     /// host-only cookie is never sent to that second host, so an underived value silently breaks
     /// platform access altogether; anything wider than the base domain broadcasts a superuser
     /// credential past the app. Tenants are always reached at a subdomain of the base domain, so
-    /// no deployment topology makes a third value correct.
+    /// no deployment topology makes a third value correct. Within it the grant is sent to every
+    /// host, including the <c>{token}.share.{base-domain}</c> names served to untrusted share
+    /// recipients, which is safe: the cookie is HttpOnly and Secure, and
+    /// <c>PlatformAccessCookieHandler</c> skips it unless the resolved tenant is the one it is
+    /// pinned to, so it confers nothing on a host belonging to any other tenant.
     /// <para>
     /// Retained as an override for an operator with a reason to narrow or move it. Setting it also
     /// moves <see cref="StateDomain"/>, which defaults from this value.

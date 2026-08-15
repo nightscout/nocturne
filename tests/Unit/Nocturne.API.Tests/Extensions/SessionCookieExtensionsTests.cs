@@ -236,19 +236,16 @@ public sealed class SessionCookieExtensionsTests
     {
         var options = new OidcOptions
         {
-            Cookie = new CookieSettings
-            {
-                SessionDomain = ".a.example",
-                StateDomain = ".b.example",
-                Domain = ".c.example",
-            },
+            Cookie = new CookieSettings { SessionDomain = ".a.example", StateDomain = ".b.example" },
         };
 
         SessionCookieExtensions.ApplyCookieDomainDefaults(options, "nocturne.run");
 
         options.Cookie.SessionDomain.Should().Be(".a.example");
-        options.Cookie.StateDomain.Should().Be(".b.example");
-        options.Cookie.Domain.Should().Be(".c.example");
+        options.Cookie.StateDomain.Should().Be(".b.example",
+            "an explicit state scope survives the derivation of Cookie.Domain, which it would " +
+            "otherwise have defaulted from");
+        options.Cookie.Domain.Should().Be(".nocturne.run");
     }
 
     [Fact]
