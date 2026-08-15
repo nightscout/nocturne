@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getOriginalProto } from '$lib/server/request-host';
-import { parseDashboardSlugs } from '$lib/server/tenantless-host';
 import { resolveSingleTenantLanding } from '$lib/utils/tenant-host';
 import { transformChartData, type TransformedChartData } from '$lib/utils/chart-data-transform';
 
@@ -13,18 +12,17 @@ const TOTAL_HOURS = 48;
 export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	const { apiClient } = locals;
 
-	const baseDomain = process.env.BASE_DOMAIN ?? null;
-	const { tenantless } = await parent();
+	const { tenantless, baseDomain, dashboardSlugs } = await parent();
 
 	// A tenantless host serves the cross-tenant overview instead of one tenant's dashboard, so
 	// there is no tenant whose chart data could be loaded here. The overview itself is fetched
 	// client-side by the same remote query /tenants uses.
 	if (tenantless) {
 		const landing = resolveSingleTenantLanding(
-			await getOverviewTenants(apiClient),
+			await getAccessibleTenants(apiClient),
 			baseDomain,
 			getOriginalProto(request) + ':',
-			parseDashboardSlugs(process.env.DASHBOARD_SLUGS)
+			dashboardSlugs
 		);
 		if (landing) throw redirect(303, landing);
 
@@ -73,15 +71,19 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 };
 
 /**
- * The tenants this subject can see, or an empty list if the overview cannot be fetched.
+ * The tenants this subject belongs to, or an empty list if the list cannot be fetched.
+ *
+ * The bare list, not the overview: all that is wanted here is how many there are and what the
+ * sole one is called, and the overview aggregates each tenant's latest glucose to answer that.
+ * TenantsOverview fetches the aggregate itself once the page renders.
+ *
  * A failure here must not block the dashboard: it only costs the single-tenant shortcut.
  */
-async function getOverviewTenants(apiClient: App.Locals['apiClient']) {
+async function getAccessibleTenants(apiClient: App.Locals['apiClient']) {
 	try {
-		const overview = await apiClient.myTenants.getOverview();
-		return overview.tenants ?? [];
+		return await apiClient.myTenants.getMyTenants();
 	} catch (err) {
-		console.error('Error loading tenants overview:', err);
+		console.error('Error loading the tenant list:', err);
 		return [];
 	}
 }

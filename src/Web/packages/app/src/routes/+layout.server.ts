@@ -26,11 +26,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   // reserved dashboard slug names no single tenant either.
   const host = getOriginalHost(request);
   const baseDomain = process.env.BASE_DOMAIN ?? null;
-  const { kind, slug } = classifyHost(
-    host,
-    baseDomain,
-    parseDashboardSlugs(process.env.DASHBOARD_SLUGS)
-  );
+  const dashboardSlugs = parseDashboardSlugs(process.env.DASHBOARD_SLUGS);
+  const { kind, slug } = classifyHost(host, baseDomain, dashboardSlugs);
   const tenantSlug = slug;
 
   // Resolved once here, for every route: the apex needs the API's answer (does a sole tenant
@@ -60,5 +57,6 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     tenantSlug,
     tenantless,
     baseDomain,
+    dashboardSlugs,
   };
 };
