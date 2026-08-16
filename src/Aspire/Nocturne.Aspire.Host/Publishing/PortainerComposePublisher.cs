@@ -421,26 +421,15 @@ public static class PortainerComposePublisherExtensions
             || watchtowerNode is not YamlMappingNode watchtower)
             return composeYaml;
 
-        var environment = watchtower.Children.TryGetValue(new YamlScalarNode("environment"), out var envNode)
-            && envNode is YamlMappingNode envMap
-                ? envMap
-                : new YamlMappingNode();
-        environment.Children[new YamlScalarNode("WATCHTOWER_LABEL_ENABLE")] =
-            new YamlScalarNode("true") { Style = ScalarStyle.DoubleQuoted };
-        watchtower.Children[new YamlScalarNode("environment")] = environment;
+        SetQuotedEntry(watchtower, "environment", "WATCHTOWER_LABEL_ENABLE", "true", "watchtower");
 
         foreach (var entry in services)
         {
             if (entry.Value is not YamlMappingNode service)
                 continue;
 
-            var labels = service.Children.TryGetValue(new YamlScalarNode("labels"), out var labelsNode)
-                && labelsNode is YamlMappingNode labelsMap
-                    ? labelsMap
-                    : new YamlMappingNode();
-            labels.Children[new YamlScalarNode(enableLabel)] =
-                new YamlScalarNode("true") { Style = ScalarStyle.DoubleQuoted };
-            service.Children[new YamlScalarNode("labels")] = labels;
+            var serviceName = ((YamlScalarNode)entry.Key).Value ?? "<unnamed>";
+            SetQuotedEntry(service, "labels", enableLabel, "true", serviceName);
         }
 
         var sb = new StringBuilder();
@@ -448,5 +437,28 @@ public static class PortainerComposePublisherExtensions
             yaml.Save(writer, assignAnchors: false);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Sets <paramref name="key"/> to <paramref name="value"/> in the mapping under
+    /// <paramref name="section"/> of <paramref name="owner"/>, creating the section when
+    /// absent. Values are double-quoted because Compose rejects YAML booleans under
+    /// labels. Compose also accepts `environment` and `labels` in list form, which Aspire
+    /// never emits — replacing one here would silently discard its entries, so refuse.
+    /// </summary>
+    internal static void SetQuotedEntry(
+        YamlMappingNode owner, string section, string key, string value, string ownerName)
+    {
+        owner.Children.TryGetValue(new YamlScalarNode(section), out var existing);
+
+        if (existing is not null and not YamlMappingNode)
+            throw new InvalidOperationException(
+                $"[compose] {ownerName}.{section} is a {existing.NodeType} node, not a mapping; "
+                + $"setting {key} would discard its entries.");
+
+        var mapping = existing as YamlMappingNode ?? new YamlMappingNode();
+        mapping.Children[new YamlScalarNode(key)] =
+            new YamlScalarNode(value) { Style = ScalarStyle.DoubleQuoted };
+        owner.Children[new YamlScalarNode(section)] = mapping;
     }
 }
