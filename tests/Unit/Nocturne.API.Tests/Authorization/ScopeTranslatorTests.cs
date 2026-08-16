@@ -45,6 +45,34 @@ public class ScopeTranslatorTests
         Assert.Contains(OAuthScopes.GlucoseReadWrite, scopes);
     }
 
+    [Theory]
+    [InlineData("api:entries:*", OAuthScopes.GlucoseReadWrite)]
+    [InlineData("api:treatments:*", OAuthScopes.TreatmentsReadWrite)]
+    [InlineData("api:devicestatus:*", OAuthScopes.DevicesReadWrite)]
+    [InlineData("api:food:*", OAuthScopes.FoodReadWrite)]
+    [InlineData("api:profile:*", OAuthScopes.TherapyReadWrite)]
+    [InlineData("api:activity:*", OAuthScopes.SleepReadWrite)]
+    public void FromPermissions_VerbWildcard_MapsToReadWrite(string permission, string expected)
+    {
+        // Nightscout's own roles are written with verb wildcards, so a subject migrated off one
+        // holds these and nothing else.
+        var scopes = ScopeTranslator.FromPermissions([permission]);
+
+        Assert.Contains(expected, scopes);
+        Assert.DoesNotContain(OAuthScopes.FullAccess, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_NightscoutReadableWildcard_MapsToAllReadScopes()
+    {
+        // "*:*:read" is the permission on Nightscout's seeded "readable" role.
+        var scopes = ScopeTranslator.FromPermissions(["*:*:read"]);
+
+        Assert.Contains(OAuthScopes.GlucoseRead, scopes);
+        Assert.Contains(OAuthScopes.TreatmentsRead, scopes);
+        Assert.DoesNotContain(OAuthScopes.GlucoseReadWrite, scopes);
+    }
+
     [Fact]
     public void FromPermissions_EntriesDelete_MapsToFullAccess()
     {

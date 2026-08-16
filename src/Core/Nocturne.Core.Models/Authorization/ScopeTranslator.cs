@@ -11,6 +11,32 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="Role"/>
 public static class ScopeTranslator
 {
+    private static readonly string[] ReadEverything =
+    [
+        OAuthScopes.GlucoseRead,
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.DevicesRead,
+        OAuthScopes.TherapyRead,
+        OAuthScopes.FoodRead,
+        OAuthScopes.AlertsRead,
+        OAuthScopes.ReportsRead,
+        OAuthScopes.IdentityRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead,
+    ];
+
+    private static readonly string[] WriteEverything =
+    [
+        OAuthScopes.GlucoseReadWrite,
+        OAuthScopes.TreatmentsReadWrite,
+        OAuthScopes.DevicesReadWrite,
+        OAuthScopes.TherapyReadWrite,
+        OAuthScopes.FoodReadWrite,
+        OAuthScopes.AlertsReadWrite,
+        OAuthScopes.SharingReadWrite,
+    ];
+
     /// <summary>
     /// Maps legacy trie permission strings to their equivalent OAuth scopes.
     /// Collapsing create/update into readwrite is intentional. The only lossy case:
@@ -60,40 +86,28 @@ public static class ScopeTranslator
         ["api:profile:update"] = [OAuthScopes.TherapyReadWrite],
         ["api:profile:delete"] = [OAuthScopes.FullAccess],
 
-        // Wildcard reads
-        ["api:*:read"] = [
-            OAuthScopes.GlucoseRead,
-            OAuthScopes.TreatmentsRead,
-            OAuthScopes.DevicesRead,
-            OAuthScopes.TherapyRead,
-            OAuthScopes.FoodRead,
-            OAuthScopes.AlertsRead,
-            OAuthScopes.ReportsRead,
-            OAuthScopes.IdentityRead,
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
+        // Verb wildcards. Nightscout's own default roles are written this way ("api:activity:*" on
+        // activity, "api:treatments:*" on the seeded careportal role), so a subject holding one had
+        // no scope at all until these were mapped. Collapsed to readwrite on the same basis as
+        // create/update above: delete stays gated behind "*".
+        ["api:entries:*"] = [OAuthScopes.GlucoseReadWrite],
+        ["api:treatments:*"] = [OAuthScopes.TreatmentsReadWrite],
+        ["api:devicestatus:*"] = [OAuthScopes.DevicesReadWrite],
+        ["api:food:*"] = [OAuthScopes.FoodReadWrite],
+        ["api:profile:*"] = [OAuthScopes.TherapyReadWrite],
+        ["api:activity:*"] = [
+            OAuthScopes.HeartRateReadWrite,
+            OAuthScopes.StepCountReadWrite,
+            OAuthScopes.SleepReadWrite,
         ],
 
+        // Wildcard reads. "*:*:read" is how Nightscout's own seeded "readable" role spells it.
+        ["api:*:read"] = ReadEverything,
+        ["*:*:read"] = ReadEverything,
+
         // Wildcard writes
-        ["api:*:create"] = [
-            OAuthScopes.GlucoseReadWrite,
-            OAuthScopes.TreatmentsReadWrite,
-            OAuthScopes.DevicesReadWrite,
-            OAuthScopes.TherapyReadWrite,
-            OAuthScopes.FoodReadWrite,
-            OAuthScopes.AlertsReadWrite,
-            OAuthScopes.SharingReadWrite,
-        ],
-        ["api:*:update"] = [
-            OAuthScopes.GlucoseReadWrite,
-            OAuthScopes.TreatmentsReadWrite,
-            OAuthScopes.DevicesReadWrite,
-            OAuthScopes.TherapyReadWrite,
-            OAuthScopes.FoodReadWrite,
-            OAuthScopes.AlertsReadWrite,
-            OAuthScopes.SharingReadWrite,
-        ],
+        ["api:*:create"] = WriteEverything,
+        ["api:*:update"] = WriteEverything,
         ["api:*:delete"] = [OAuthScopes.FullAccess],
 
         // Full wildcards
@@ -102,19 +116,7 @@ public static class ScopeTranslator
 
         // Named roles
         ["admin"] = [OAuthScopes.FullAccess],
-        ["readable"] = [
-            OAuthScopes.GlucoseRead,
-            OAuthScopes.TreatmentsRead,
-            OAuthScopes.DevicesRead,
-            OAuthScopes.TherapyRead,
-            OAuthScopes.FoodRead,
-            OAuthScopes.AlertsRead,
-            OAuthScopes.ReportsRead,
-            OAuthScopes.IdentityRead,
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
-        ],
+        ["readable"] = ReadEverything,
     };
 
     /// <summary>

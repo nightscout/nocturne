@@ -8,6 +8,7 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Services.Audit;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
@@ -1624,15 +1625,14 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
             UpdateOverallProgress();
 
-            // 3. Pre-load existing token hashes for duplicate detection
-            var existingHashes = await dbContext.Subjects
+            // 3. Pre-load existing subjects by token hash for duplicate detection
+            var existingSubjectIds = await dbContext.Subjects
                 .Where(s => s.AccessTokenHash != null)
-                .Select(s => s.AccessTokenHash!)
-                .ToHashSetAsync(ct);
+                .ToDictionaryAsync(s => s.AccessTokenHash!, s => s.Id, ct);
 
             // 4. Pre-load existing Nocturne roles by name
             var nocturneRoles = await dbContext.Roles
-                .ToDictionaryAsync(r => r.Name, r => r.Id, ct);
+                .ToDictionaryAsync(r => r.Name, r => r, ct);
 
             // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
             // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
@@ -1654,9 +1654,16 @@ internal class MigrationJob
                     }
 
                     var tokenHash = HashAccessToken(subject.AccessToken);
+                    var roles = await ResolveRolesAsync(dbContext, nocturneRoles, rolePermissions, subject.Roles, ct);
 
-                    if (existingHashes.Contains(tokenHash))
+                    if (existingSubjectIds.TryGetValue(tokenHash, out var existingSubjectId))
                     {
+                        // Re-importing repairs a subject that landed before memberships were
+                        // written, and is how an already-broken tenant recovers. The subject row
+                        // itself is left alone.
+                        await EnsureTenantMembershipAsync(dbContext, existingSubjectId, roles, ct);
+                        await dbContext.SaveChangesAsync(ct);
+
                         totalSkipped++;
                         continue;
                     }
@@ -1685,43 +1692,20 @@ internal class MigrationJob
                     dbContext.Subjects.Add(entity);
                     await dbContext.SaveChangesAsync(ct);
 
-                    // Assign roles
-                    foreach (var roleName in subject.Roles ?? [])
+                    foreach (var role in roles)
                     {
-                        if (roleName == "denied")
-                            continue;
-
-                        if (!nocturneRoles.TryGetValue(roleName, out var roleId))
-                        {
-                            // Custom Nightscout role: create it with fetched permissions
-                            var permissions = rolePermissions.GetValueOrDefault(roleName, []);
-                            var roleEntity = new RoleEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Name = roleName,
-                                Description = "Migrated from Nightscout",
-                                Permissions = permissions,
-                                IsSystemRole = false,
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow,
-                            };
-                            dbContext.Roles.Add(roleEntity);
-                            await dbContext.SaveChangesAsync(ct);
-                            roleId = roleEntity.Id;
-                            nocturneRoles[roleName] = roleId;
-                        }
-
                         dbContext.SubjectRoles.Add(new SubjectRoleEntity
                         {
                             SubjectId = entity.Id,
-                            RoleId = roleId,
+                            RoleId = role.Id,
                             AssignedAt = DateTime.UtcNow,
                         });
                     }
 
+                    await EnsureTenantMembershipAsync(dbContext, entity.Id, roles, ct);
                     await dbContext.SaveChangesAsync(ct);
 
-                    existingHashes.Add(tokenHash);
+                    existingSubjectIds[tokenHash] = entity.Id;
                     totalMigrated++;
                     UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, false);
                     UpdateOverallProgress();
@@ -1745,6 +1729,96 @@ internal class MigrationJob
         _logger.LogInformation(
             "Subject migration complete: {Migrated} migrated, {Skipped} skipped, {Failed} failed",
             totalMigrated, totalSkipped, totalFailed);
+    }
+
+    /// <summary>
+    /// Resolves a Nightscout subject's role names to Nocturne roles, creating any the instance does
+    /// not already have from the permissions fetched off the source. The <paramref name="knownRoles"/>
+    /// lookup is updated so each custom role is created once per run.
+    /// </summary>
+    /// <remarks>
+    /// "denied" is dropped: it is Nightscout's way of spelling "no access", carried instead by
+    /// <see cref="SubjectEntity.IsActive"/>, and a role row for it would grant nothing anyway.
+    /// </remarks>
+    private static async Task<List<RoleEntity>> ResolveRolesAsync(
+        NocturneDbContext dbContext,
+        Dictionary<string, RoleEntity> knownRoles,
+        Dictionary<string, List<string>> sourcePermissions,
+        List<string>? roleNames,
+        CancellationToken ct)
+    {
+        var resolved = new List<RoleEntity>();
+
+        foreach (var roleName in roleNames ?? [])
+        {
+            if (roleName == "denied")
+                continue;
+
+            if (!knownRoles.TryGetValue(roleName, out var role))
+            {
+                role = new RoleEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    Name = roleName,
+                    Description = "Migrated from Nightscout",
+                    Permissions = sourcePermissions.GetValueOrDefault(roleName, []),
+                    IsSystemRole = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                };
+                dbContext.Roles.Add(role);
+                await dbContext.SaveChangesAsync(ct);
+                knownRoles[roleName] = role;
+            }
+
+            resolved.Add(role);
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// Gives an imported subject a membership of the tenant being migrated into, if it has none.
+    /// Without it the subject authenticates and is then dropped to unauthenticated:
+    /// <c>AuthenticationMiddleware</c> requires a membership row for every credential type it does
+    /// not exempt, and a legacy access token is not exempt.
+    /// </summary>
+    /// <remarks>
+    /// The imported roles are carried as direct permissions rather than mapped onto the seed tenant
+    /// roles, which do not line up with Nightscout's — Viewer is narrower than <c>readable</c>,
+    /// Caretaker wider than <c>careportal</c> — and which have no answer at all for a custom
+    /// Nightscout role. <see cref="ScopeTranslator"/> drops anything it cannot translate, so a
+    /// permission with no Nocturne equivalent grants nothing.
+    /// </remarks>
+    private async Task EnsureTenantMembershipAsync(
+        NocturneDbContext dbContext,
+        Guid subjectId,
+        List<RoleEntity> roles,
+        CancellationToken ct)
+    {
+        var alreadyMember = await dbContext.TenantMembers
+            .AnyAsync(tm => tm.TenantId == _tenantId && tm.SubjectId == subjectId, ct);
+
+        if (alreadyMember)
+            return;
+
+        var scopes = ScopeTranslator.FromPermissions(roles.SelectMany(r => r.Permissions));
+
+        // A "*" grant is stored as the single superuser atom: NormalizeMemberPermissions expands it
+        // back to every scope, so spelling out the expansion would only bake today's scope list in.
+        List<string> permissions = scopes.Contains(TenantPermissions.Superuser)
+            ? [TenantPermissions.Superuser]
+            : [.. scopes];
+
+        dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+            DirectPermissions = permissions,
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
+        });
     }
 
     /// <summary>
