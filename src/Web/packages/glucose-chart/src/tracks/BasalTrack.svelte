@@ -6,7 +6,6 @@
     Area,
     Spline,
     Axis,
-    Text,
     Pattern,
     ChartClipPath,
     Highlight,
@@ -242,13 +241,14 @@
   />
 
   <!-- Basal track label -->
-  <Text
+  <text
     x={4}
     y={basalTrackTop + 12}
+    dy="-0.355em"
     class="text-[8px] fill-muted-foreground font-medium"
   >
     BASAL
-  </Text>
+  </text>
 
   <!-- Basal area - render each segment by origin with actual delivered rate -->
   {#if basalData.length > 0}

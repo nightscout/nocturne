@@ -14,21 +14,6 @@ const roots = [
 	fileURLToPath(new URL("../../../../../glucose-chart/src", import.meta.url)),
 ];
 
-/**
- * Label sites still awaiting conversion in a separate in-flight change. Each is
- * asserted to still be an offender, so the entry fails once that change lands
- * rather than quietly outliving it.
- */
-const pendingConversion = [
-	"lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte",
-	"lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte",
-	"lib/components/dashboard/glucose-chart/markers/TrackerExpirationMarker.svelte",
-	"lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte",
-	"markers/BolusMarker.svelte",
-	"markers/CarbMarker.svelte",
-	"tracks/BasalTrack.svelte",
-];
-
 function svelteFiles(dir: string): string[] {
 	const found: string[] = [];
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -68,21 +53,8 @@ describe("layerchart <Text> usage", () => {
 	});
 
 	it("never gives <Text> snippet children", () => {
-		const offenders = scanned
-			.filter((f) => f.withChildren > 0)
-			.map((f) => f.id)
-			.filter((id) => !pendingConversion.includes(id));
+		const offenders = scanned.filter((f) => f.withChildren > 0).map((f) => f.id);
 
 		expect(offenders).toEqual([]);
-	});
-
-	it("keeps the pending-conversion list free of stale entries", () => {
-		const stillOffending = scanned
-			.filter((f) => f.withChildren > 0)
-			.map((f) => f.id);
-
-		expect(pendingConversion.filter((id) => !stillOffending.includes(id))).toEqual(
-			[],
-		);
 	});
 });
