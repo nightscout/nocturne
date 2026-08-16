@@ -114,9 +114,10 @@ public partial class GitHubTranslationService(
             throw;
         }
 
+        var safeLocaleForLog = SanitizeForLog(request.Locale);
         logger.LogInformation(
             "Opened translation PR #{PrNumber} for {Locale}: {Applied} applied, {Unmatched} unmatched",
-            prNumber, request.Locale, result.Applied, result.Unmatched.Count);
+            prNumber, safeLocaleForLog, result.Applied, result.Unmatched.Count);
 
         return new TranslationContributionResponse
         {
@@ -450,5 +451,8 @@ public partial class GitHubTranslationService(
         public string HtmlUrl { get; init; } = "";
     }
 }
+
+    private static string SanitizeForLog(string value) =>
+        value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 
 public class TranslationContributionRejectedException(string message) : Exception(message);
