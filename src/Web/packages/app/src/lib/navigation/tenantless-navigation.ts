@@ -3,18 +3,14 @@
  *
  * Almost every page in the app reads or writes one tenant's data, and on a tenantless host there
  * is no tenant for the API to resolve — those pages would render a shell and then 404. The
- * tenantless surface is therefore whatever the API admits without a tenant, which today is the
- * cross-tenant overview and nothing else.
- *
+ * tenantless surface is therefore whatever the API admits without a tenant.
  */
 
 /**
  * Hrefs that are meaningful without a resolved tenant.
  *
- * The API's tenantless surface (TenantResolutionMiddleware.TenantlessAllowedPaths) admits the
- * cross-tenant overview and the session/auth endpoints, and nothing else that a page renders
- * from. Anything added here has to have its endpoints admitted there first, or the nav gains an
- * entry that 404s.
+ * Anything added here needs every endpoint the page renders from admitted in
+ * TenantResolutionMiddleware.TenantlessAllowedPaths first, or the nav gains an entry that 404s.
  */
 export const TENANTLESS_NAV_HREFS: readonly string[] = [
   "/", // the cross-tenant overview
@@ -22,8 +18,7 @@ export const TENANTLESS_NAV_HREFS: readonly string[] = [
   // its tenant-scoped half here.
   "/settings/appearance",
   // Passkeys, authenticators, linked identities, sessions and avatar — all keyed on the subject,
-  // none carrying a tenant column. The sign-in ceremonies that prove a factor stay tenant-gated,
-  // so this manages factors for a caller who is already authenticated.
+  // none carrying a tenant column.
   "/settings/account",
 ];
 

@@ -130,8 +130,6 @@ describe("preferenceCookieWrites", () => {
   });
 
   it("expires the host-scoped cookie before writing the widened one", () => {
-    // Both variants are presented under one Cookie header with no way to tell them apart, so a
-    // browser that stored the narrow cookie first must be converged onto the wide one.
     const [first, second] = preferenceCookieWrites("nocturne-language", "en", 60, ".example.com");
 
     expect(first).not.toContain("domain=");
@@ -141,7 +139,6 @@ describe("preferenceCookieWrites", () => {
   });
 
   it("never expires the cookie it is about to write when host-scoped", () => {
-    // Without a domain the two variants are the same cookie, so a leading expiry would delete it.
     const writes = preferenceCookieWrites("nocturne-language", "en", 60, null);
 
     expect(writes).toHaveLength(1);
@@ -161,8 +158,6 @@ describe("readCookieFrom", () => {
   });
 
   it("takes the newer of two same-name cookies, not the first", () => {
-    // A browser mid-widening holds a host-scoped and a base-domain variant with no way to tell
-    // them apart; RFC 6265 orders equal-path cookies oldest first.
     expect(readCookieFrom("nocturne-prefs=stale; nocturne-prefs=fresh", "nocturne-prefs"))
       .toBe("fresh");
   });
@@ -183,8 +178,6 @@ describe("readCookieFrom", () => {
 
 describe("resolveInitialLanguage", () => {
   it("adopts the shared cookie when this origin stored nothing", () => {
-    // The destructive case: localStorage is per-origin, so a first visit to a sibling subdomain
-    // reads nothing and would otherwise write the default over the whole base domain.
     expect(resolveInitialLanguage(null, "de")).toBe("de");
   });
 

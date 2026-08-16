@@ -260,20 +260,17 @@ describe("resolveCookieDomain", () => {
   });
 
   it("keeps a single-label host cookie host-only", () => {
-    // Browsers reject a Domain attribute on "localhost" outright.
     expect(resolveCookieDomain("localhost")).toBeNull();
     expect(resolveCookieDomain("localhost:1612")).toBeNull();
   });
 
   it("keeps a .localhost host cookie host-only", () => {
-    // Chromium does not reliably scope cookies across *.localhost names.
     expect(resolveCookieDomain("nocturne.localhost")).toBeNull();
     expect(resolveCookieDomain("nocturne.localhost:1612")).toBeNull();
     expect(resolveCookieDomain("NOCTURNE.LOCALHOST")).toBeNull();
   });
 
   it("keeps an IP-literal host cookie host-only", () => {
-    // A browser discards any cookie whose Domain is set on an IP host, losing the value.
     expect(resolveCookieDomain("192.168.1.10")).toBeNull();
     expect(resolveCookieDomain("192.168.1.10:1612")).toBeNull();
     expect(resolveCookieDomain("[::1]:1612")).toBeNull();

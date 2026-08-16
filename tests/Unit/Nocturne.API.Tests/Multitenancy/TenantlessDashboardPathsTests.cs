@@ -28,8 +28,6 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/permissions")]
     // The login page's provider buttons — the only sign-in affordance on a tenantless host.
     [InlineData("/api/auth/oidc/providers")]
-    // The caller's own units/format/theme, stored on the subject. The tiles render glucose in
-    // the units held here, so a 404 is a wrong reading, not a cosmetic default.
     [InlineData("/api/v4/user/preferences")]
     // The caller's own sign-in factors and linked identities, all keyed on SubjectId.
     [InlineData("/api/auth/passkey/credentials")]
@@ -41,7 +39,6 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/auth/totp/setup")]
     [InlineData("/api/auth/totp/verify-setup")]
     [InlineData("/api/auth/oidc/link/identities")]
-    // Linking is a full-page navigation, so a 404 loses the page rather than one control.
     [InlineData("/api/auth/oidc/link")]
     [InlineData("/api/auth/oidc/link/callback")]
     [InlineData("/api/v4/me/avatar")]
@@ -57,8 +54,7 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/chart-data/dashboard")]
     [InlineData("/api/v4/me/tenants/overview/extra")]
     [InlineData("/api/v4/me/permissions/grant")]
-    // The tenant's own display configuration, which is a different endpoint to the subject's
-    // preferences and must not be reachable off a tenant.
+    // The tenant's display configuration, a different endpoint to the subject's preferences.
     [InlineData("/api/v4/ui-settings")]
     [InlineData("/api/v4/settings/glucose-processing")]
     public void Tenant_scoped_paths_stay_gated(string path)
@@ -69,13 +65,9 @@ public sealed class TenantlessDashboardPathsTests
     [Fact]
     public void The_sign_in_ceremonies_stay_gated()
     {
-        // Enrolling a factor for an already-authenticated caller is subject-scoped; proving one to
-        // obtain a session is not. TotpController.Login gates on membership of the resolved
-        // tenant, and the passkey login paths likewise, so sign-in on a tenantless host stays
-        // identity-provider-only.
         // Asserted against POST, the only method each is served under: the DELETE that revokes an
         // authenticator is matched as a prefix, so asking "under any method" would answer for that
-        // instead. Routing has no DELETE here to reach.
+        // instead.
         foreach (var path in new[]
                  {
                      "/api/auth/totp/login",
@@ -92,8 +84,6 @@ public sealed class TenantlessDashboardPathsTests
     [Fact]
     public void Revoking_an_authenticator_is_admitted_without_admitting_its_sibling_login()
     {
-        // The revoke route carries the credential's id, so it can only be matched as a prefix —
-        // which the login path sits under. The method is what separates them.
         var totpCredential = "/api/auth/totp/0198f4a0-0000-7000-8000-000000000000";
 
         TenantResolutionMiddleware.IsTenantlessAllowed(totpCredential, HttpMethods.Delete)

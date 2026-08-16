@@ -54,8 +54,6 @@ public class TenantlessDemoSubjectCoverageTests
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
 
-            // The write is [DenyDemoSubject]: every demo visitor authenticates as the one shared
-            // demo subject, so a persisted change would follow every other visitor.
             ["UserPreferencesController.GetPreferences"] = "returns the caller's own units and formats, which for the demo subject are the demo account's public display defaults",
         };
 

@@ -944,7 +944,6 @@ export function getLanguage(): SupportedLocale {
 }
 
 if (browser) {
-  // Hydrate before writing back, as the display preferences do.
   const adopted = resolveInitialLanguage(
     localStorage.getItem(LANGUAGE_COOKIE_NAME),
     readCookie(LANGUAGE_COOKIE_NAME)
