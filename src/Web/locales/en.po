@@ -651,6 +651,8 @@ msgstr "Verification code"
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Cancel"
 msgstr "Cancel"
@@ -893,6 +895,7 @@ msgstr "Update role details and permissions."
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Name"
 msgstr "Name"
 
@@ -1806,6 +1809,7 @@ msgid "Display name"
 msgstr "Display name"
 
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your name"
@@ -3328,6 +3332,7 @@ msgstr "Safe to run multiple times"
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Done"
@@ -21851,3 +21856,121 @@ msgstr "Watchtower checks for image updates daily. To update manually:"
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Check the logs for error details:"
 msgstr "Check the logs for error details:"
+
+#: src/lib/components/layout/AppSidebar.svelte
+msgid "Translations"
+msgstr "Translations"
+
+#: src/routes/(authenticated)/settings/translations/+page.svelte
+msgid "Translations - Settings"
+msgstr "Translations - Settings"
+
+#: src/routes/(authenticated)/settings/translations/+page.svelte
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/> Translations"
+msgstr "<0/> Translations"
+
+#: src/routes/(authenticated)/settings/translations/+page.svelte
+msgid "Translate Nocturne into your language. Drafts are saved to your account, and submissions are proposed to the Nocturne project as a pull request with your name attached."
+msgstr "Translate Nocturne into your language. Drafts are saved to your account, and submissions are proposed to the Nocturne project as a pull request with your name attached."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Failed to load catalogs"
+msgstr "Failed to load catalogs"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Some drafts failed to save. Try again."
+msgstr "Some drafts failed to save. Try again."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Failed to submit the contribution."
+msgstr "Failed to submit the contribution."
+
+#. 0: localeValid ? getLanguageLabel(locale as SupportedLocale) \\: ""
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Translate {0} - Settings"
+msgstr "Translate {0} - Settings"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Unknown locale."
+msgstr "Unknown locale."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Saving…"
+msgstr "Saving…"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Draft save failed — edits retry on next change"
+msgstr "Draft save failed — edits retry on next change"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/> Clear drafts"
+msgstr "<0/> Clear drafts"
+
+#. 0: drafts.size || ""; 1: drafts.size === 1 ? "" \\: "s"
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/> Submit {0} draft{1}"
+msgstr "<0/> Submit {0} draft{1}"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/> Loading catalogs…"
+msgstr "<0/> Loading catalogs…"
+
+#. 0: submitResult.remaining; 1: submitResult.remaining === 1 ? "" \\: "s"
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "· {0} draft{1} kept (their messages changed upstream)"
+msgstr "· {0} draft{1} kept (their messages changed upstream)"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Contribution submitted"
+msgstr "Contribution submitted"
+
+#. 0: submitResult.applied; 1: submitResult.applied === 1 ? "" \\: "s"
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "{0} translation{1} proposed <0/>"
+msgstr "{0} translation{1} proposed <0/>"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "View the pull request"
+msgstr "View the pull request"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Submit translations"
+msgstr "Submit translations"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Your drafts are proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
+msgstr "Your drafts are proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "GitHub username (optional)"
+msgstr "GitHub username (optional)"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Used for commit co-author credit."
+msgstr "Used for commit co-author credit."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Email (optional)"
+msgstr "Email (optional)"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Note to reviewers (optional)"
+msgstr "Note to reviewers (optional)"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/> Submit"
+msgstr "<0/> Submit"
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Clear all drafts?"
+msgstr "Clear all drafts?"
+
+#. 0: drafts.size; 1: drafts.size === 1 ? "" \\: "s"; 2: getLanguageLabel(locale as SupportedLocale)
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "All {0} draft{1} for {2} will be deleted. This cannot be undone."
+msgstr "All {0} draft{1} for {2} will be deleted. This cannot be undone."
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "Clear drafts"
+msgstr "Clear drafts"

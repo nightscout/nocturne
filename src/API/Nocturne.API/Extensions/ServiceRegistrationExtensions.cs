@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Options;
 using Fido2NetLib;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
@@ -13,6 +16,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
@@ -111,6 +115,71 @@ public static class ServiceRegistrationExtensions
         context.Request.Host.Host.ToLowerInvariant();
 
     /// <summary>
+    /// Rate-limiting policy for the per-session translation draft store.
+    /// </summary>
+    public const string TranslationDraftsRateLimitPolicy = "translation-drafts";
+
+    /// <summary>Shared bucket for draft requests that present no credential.</summary>
+    internal const string AnonymousDraftPartition = "anonymous";
+
+    /// <summary>
+    /// Partition key for the translation-drafts limiter: the hashed credential
+    /// the request presents. Not the IP — <c>UseForwardedHeaders</c> takes
+    /// <c>RemoteIpAddress</c> from X-Forwarded-For with no trusted-proxy list,
+    /// so the sibling per-IP policies are the wrong model to copy here.
+    /// Hashing keeps no token as a dictionary key. Requests with no credential
+    /// share one fixed bucket, so an anonymous flood cannot evict an editor's.
+    /// Channel precedence follows the handler chain in
+    /// <c>AuthenticationMiddleware</c> and is pinned by
+    /// <c>TranslationDraftPartitionKeyTests</c>. Two residual bypasses remain,
+    /// each needing a platform-admin or api-secret credential to reach;
+    /// closing them needs partitioning after authentication.
+    /// </summary>
+    internal static string TranslationDraftPartitionKey(HttpContext context)
+    {
+        var cookie = context.RequestServices.GetRequiredService<IOptions<OidcOptions>>().Value.Cookie;
+        var credential =
+            context.Request.Cookies[cookie.AccessTokenName]
+            ?? context.Request.Cookies[cookie.RefreshTokenName]
+            ?? TokenCredential(context.Request);
+
+        return string.IsNullOrEmpty(credential)
+            ? AnonymousDraftPartition
+            : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(credential)));
+    }
+
+    /// <summary>
+    /// Reduces the Authorization header and <c>?token=</c> query parameter to
+    /// the one token the handlers would authenticate on, collapsing the
+    /// spellings they treat as one credential — hashing each separately would
+    /// give one caller a 60/min allowance per variant.
+    /// </summary>
+    private static string? TokenCredential(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(header)
+            && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var bearer = header["Bearer ".Length..].Trim();
+            if (!string.IsNullOrEmpty(bearer))
+            {
+                return bearer;
+            }
+        }
+
+        var queryToken = request.Query["token"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(queryToken))
+        {
+            return queryToken.StartsWith(DirectGrantTokenHandler.TokenPrefix, StringComparison.Ordinal)
+                ? queryToken
+                : DirectGrantTokenHandler.TokenPrefix + queryToken;
+        }
+
+        return string.IsNullOrEmpty(header) ? header : header.Trim();
+    }
+
+    /// <summary>
     /// Core API utility and calculation services (status, versioning, time queries,
     /// IOB/COB, predictions, statistics, etc.)
     /// </summary>
@@ -173,9 +242,10 @@ public static class ServiceRegistrationExtensions
         services.Configure<GitHubIssueOptions>(configuration.GetSection("GitHub"));
         services.AddSingleton<GitHubIssueService>();
 
-        // GitHub translation contribution PRs
+        // GitHub translation contribution PRs + per-user draft storage
         services.Configure<GitHubTranslationOptions>(configuration.GetSection("GitHub"));
-        services.AddSingleton<GitHubTranslationService>();
+        services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
+        services.AddScoped<ITranslationDraftService, TranslationDraftService>();
 
         return services;
     }
@@ -494,6 +564,27 @@ public static class ServiceRegistrationExtensions
                         {
                             PermitLimit = 10,
                             Window = TimeSpan.FromHours(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Translation drafts: 60 per session per minute, sliding. Autosave
+            // batches every 800ms while typing, so the ceiling has to clear
+            // normal editing while still bounding the per-call database work an
+            // editor session can force. Partitioned by credential rather than
+            // IP because the caller controls X-Forwarded-For; see
+            // TranslationDraftPartitionKey.
+            options.AddPolicy(
+                TranslationDraftsRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetSlidingWindowLimiter(
+                        partitionKey: TranslationDraftPartitionKey(context),
+                        factory: _ => new SlidingWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            SegmentsPerWindow = 6,
                             QueueLimit = 0,
                         }
                     )

@@ -36,8 +36,8 @@ public class ShareDataCategoriesGuardTests
         "state_spans", "system_events",
         "target_range_schedules", "tenant_alert_settings",
         "tenant_data_retention_config", "therapy_settings", "timezone_timeline", "tracker_definitions",
-        "tracker_instances", "tracker_notification_thresholds", "tracker_presets", "treatment_foods",
-        "user_food_favorites",
+        "tracker_instances", "tracker_notification_thresholds", "tracker_presets", "translation_drafts",
+        "treatment_foods", "user_food_favorites",
     };
 
     private static IReadOnlyList<Type> TenantScopedEntities() =>

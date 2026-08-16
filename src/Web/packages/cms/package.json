@@ -22,7 +22,9 @@
     "./editor/markdown": "./src/editor/markdown.ts",
     "./editor/extensions/svelte-component": "./src/editor/extensions/svelte-component.ts",
     "./editor/extensions/callout": "./src/editor/extensions/callout.ts",
-    "./editor/ContentEditor.svelte": "./src/editor/ContentEditor.svelte"
+    "./editor/ContentEditor.svelte": "./src/editor/ContentEditor.svelte",
+    "./translations": "./src/translations/index.ts",
+    "./translations/*.svelte": "./src/translations/*.svelte"
   },
   "peerDependencies": {
     "@nocturne/ui": ">=0.1.0",

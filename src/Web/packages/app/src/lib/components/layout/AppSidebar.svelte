@@ -32,6 +32,7 @@
     Terminal,
     TestTube,
     Palette,
+    Languages,
     Timer,
     Layers,
     ShieldCheck,
@@ -284,6 +285,11 @@
           icon: HeartPulse,
         },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
+        {
+          title: "Translations",
+          href: "/settings/translations",
+          icon: Languages,
+        },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         {
           title: "Data Quality",

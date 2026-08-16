@@ -598,6 +598,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CoachMarkStateEntity> CoachMarkStates { get; set; }
 
     /// <summary>
+    /// Gets or sets the TranslationDrafts table for per-user in-progress translations
+    /// </summary>
+    public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
+
+    /// <summary>
     /// Gets or sets the ReadAccessLog table for HIPAA read-access audit logging
     /// </summary>
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
@@ -3345,6 +3350,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<CoachMarkStateEntity>()
             .HasIndex(e => new { e.SubjectId, e.MarkKey })
             .IsUnique();
+
+        // TranslationDraftEntity: the logical key is unique via a functional
+        // index created with raw SQL in the migration (see AddTranslationDrafts);
+        // only the lookup index is declared here. Both lead with TenantId
+        // because a subject is a global membership scope and can hold drafts in
+        // more than one tenant.
+        modelBuilder
+            .Entity<TranslationDraftEntity>()
+            .HasIndex(e => new { e.TenantId, e.SubjectId, e.Locale });
 
     }
 

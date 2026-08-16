@@ -127,6 +127,7 @@
     "sveltekit-search-params": "^3.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@nocturne/cms": "workspace:*"
   }
 }

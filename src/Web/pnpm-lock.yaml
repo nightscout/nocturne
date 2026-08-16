@@ -55,6 +55,9 @@ importers:
       '@nocturne/bridge':
         specifier: workspace:*
         version: link:../bridge
+      '@nocturne/cms':
+        specifier: workspace:*
+        version: link:../cms
       '@nocturne/coach':
         specifier: workspace:*
         version: link:../coach

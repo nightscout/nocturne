@@ -112,7 +112,11 @@ public class V4WriteScopeGatingTests
         /// </summary>
         public const string ComputesAndReturns = "computes and returns, persists nothing";
 
-        /// <summary>Per-user or per-tenant presentation state with no patient observation in it.</summary>
+        /// <summary>
+        /// Per-user or per-tenant presentation or authoring state with no patient
+        /// observation in it: what the caller has seen, how they want it shown, and work
+        /// in progress they have not submitted anywhere.
+        /// </summary>
         public const string PresentationState = "presentation state, no patient data";
 
         /// <summary>
@@ -278,6 +282,13 @@ public class V4WriteScopeGatingTests
             // persist no tenant row, the same shape as SupportController above. The relay route is
             // additionally [AllowAnonymous] by design: it is the ingress for instances that have no
             // PAT of their own, so there is no credential whose scopes could be checked.
+            // The draft store holds the caller's own in-progress translations, keyed by their
+            // subject id, and nothing else reads it. SubmitDrafts opens the same upstream PR as
+            // SubmitContribution and then deletes the drafts it managed to apply.
+            ["TranslationsController.UpsertDrafts"] = NotDataCategory.PresentationState,
+            ["TranslationsController.ClearDrafts"] = NotDataCategory.PresentationState,
+            ["TranslationsController.SubmitDrafts"] = NotDataCategory.PresentationState,
+
             ["TranslationsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
             ["TranslationsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
         };

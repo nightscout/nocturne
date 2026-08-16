@@ -1,4 +1,5 @@
 using System.Text;
+using Nocturne.Core.Models.Translations;
 
 namespace Nocturne.API.Services;
 

@@ -7,6 +7,8 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
 using Nocturne.API.Services;
+using Nocturne.Core.Contracts.Translations;
+using Nocturne.Core.Models.Translations;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -17,20 +19,16 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// </summary>
 public class TranslationsControllerValidationTests
 {
-    private static TranslationsController CreateController()
-    {
-        var service = new GitHubTranslationService(
-            Mock.Of<IHttpClientFactory>(),
-            Options.Create(new GitHubTranslationOptions()),
-            NullLogger<GitHubTranslationService>.Instance);
-
-        return new TranslationsController(
-            service,
+    private static TranslationsController CreateController(
+        ITranslationDraftService? draftService = null) =>
+        new(
+            Mock.Of<ITranslationContributionService>(),
+            draftService ?? Mock.Of<ITranslationDraftService>(),
             NullLogger<TranslationsController>.Instance)
         {
             ProblemDetailsFactory = new TestProblemDetailsFactory(),
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
-    }
 
     private static TranslationContributionRequest Request(
         string locale = "fr",
@@ -96,16 +94,27 @@ public class TranslationsControllerValidationTests
 
     // --- entry caps -----------------------------------------------------
 
+    private const int MaxEntries = TranslationsController.MaxEntries;
+
+    [Fact]
+    public void The_Entry_Cap_Clears_A_Full_Locale_Drafts_Submit()
+    {
+        // A drafts submit sends every stored draft for the locale, so the
+        // per-locale draft cap has to fit inside the request cap.
+        MaxEntries.Should().BeGreaterThanOrEqualTo(
+            TranslationDraftService.MaxDraftsPerSubjectPerLocale);
+    }
+
     [Fact]
     public void Validate_Rejects_Empty_Entry_List()
     {
-        Reject(Request(entries: [])).Should().Be("Between 1 and 500 entries required");
+        Reject(Request(entries: [])).Should().Be($"Between 1 and {MaxEntries} entries required");
     }
 
     [Fact]
     public void Validate_Accepts_Exactly_The_Entry_Cap()
     {
-        var entries = Enumerable.Range(0, 500)
+        var entries = Enumerable.Range(0, MaxEntries)
             .Select(i => new TranslationEntryDto { MsgId = $"m{i}", Translations = ["t"] })
             .ToList();
 
@@ -115,11 +124,11 @@ public class TranslationsControllerValidationTests
     [Fact]
     public void Validate_Rejects_One_Entry_Over_The_Cap()
     {
-        var entries = Enumerable.Range(0, 501)
+        var entries = Enumerable.Range(0, MaxEntries + 1)
             .Select(i => new TranslationEntryDto { MsgId = $"m{i}", Translations = ["t"] })
             .ToList();
 
-        Reject(Request(entries: entries)).Should().Be("Between 1 and 500 entries required");
+        Reject(Request(entries: entries)).Should().Be($"Between 1 and {MaxEntries} entries required");
     }
 
     [Fact]
@@ -395,6 +404,106 @@ public class TranslationsControllerValidationTests
             gitHubUsername: "janedoe",
             email: "jane@example.com",
             note: "Reviewed against the app UI")).Should().BeNull();
+    }
+
+    // --- relay ceiling ----------------------------------------------------
+    // The relay is [AllowAnonymous], so raising the authenticated cap to fit a
+    // full-locale drafts submit must not raise the relay's with it: every
+    // accepted entry is regex-validated and then applied in a full catalog
+    // rewrite, on nobody's credential.
+
+    private static TranslationsController CreateRelayController()
+    {
+        var contributionService = new Mock<ITranslationContributionService>();
+        contributionService.SetupGet(s => s.AcceptsRelay).Returns(true);
+        contributionService
+            .Setup(s => s.SubmitAsync(
+                It.IsAny<TranslationContributionRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TranslationContributionResponse());
+
+        return new TranslationsController(
+            contributionService.Object,
+            Mock.Of<ITranslationDraftService>(),
+            NullLogger<TranslationsController>.Instance)
+        {
+            ProblemDetailsFactory = new TestProblemDetailsFactory(),
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+    }
+
+    private static List<TranslationEntryDto> Entries(int count) =>
+        [.. Enumerable.Range(0, count)
+            .Select(i => new TranslationEntryDto { MsgId = $"m{i}", Translations = ["t"] })];
+
+    [Fact]
+    public void The_Relay_Cap_Is_Lower_Than_The_Authenticated_Cap()
+    {
+        TranslationsController.MaxRelayEntries.Should().BeLessThan(TranslationsController.MaxEntries);
+    }
+
+    [Fact]
+    public async Task Relay_Accepts_Exactly_Its_Own_Cap()
+    {
+        var result = await CreateRelayController().AcceptRelayedContribution(
+            Request(entries: Entries(TranslationsController.MaxRelayEntries)), CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result).StatusCode.Should().Be(201);
+    }
+
+    [Fact]
+    public async Task Relay_Rejects_One_Entry_Over_Its_Own_Cap()
+    {
+        var result = await CreateRelayController().AcceptRelayedContribution(
+            Request(entries: Entries(TranslationsController.MaxRelayEntries + 1)), CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        ((ProblemDetails)problem.Value!).Detail.Should().Be(
+            $"Between 1 and {TranslationsController.MaxRelayEntries} entries required");
+    }
+
+    [Fact]
+    public async Task Relay_Rejects_A_Payload_The_Authenticated_Path_Accepts()
+    {
+        var entries = Entries(TranslationsController.MaxEntries);
+
+        Reject(Request(entries: entries)).Should().BeNull();
+
+        var result = await CreateRelayController().AcceptRelayedContribution(
+            Request(entries: entries), CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result.Result).StatusCode.Should().Be(400);
+    }
+
+    // --- draft limits ----------------------------------------------------
+
+    [Fact]
+    public async Task UpsertDrafts_Maps_The_Draft_Limit_To_400()
+    {
+        var draftService = new Mock<ITranslationDraftService>();
+        draftService
+            .Setup(s => s.UpsertDraftsAsync(
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<TranslationEntryDto>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TranslationDraftLimitExceededException("At most 5000 drafts per locale."));
+
+        var controller = CreateController(draftService.Object);
+        controller.HttpContext.Items["AuthContext"] = new Nocturne.Core.Models.Authorization.AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = Guid.NewGuid(),
+        };
+
+        var result = await controller.UpsertDrafts(
+            new UpsertTranslationDraftsRequest
+            {
+                Locale = "fr",
+                Entries = [new TranslationEntryDto { MsgId = "Hello", Translations = ["Bonjour"] }],
+            },
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        problem.StatusCode.Should().Be(400);
+        ((ProblemDetails)problem.Value!).Detail.Should().Be("At most 5000 drafts per locale.");
     }
 
     private sealed class TestProblemDetailsFactory : ProblemDetailsFactory
