@@ -38,7 +38,6 @@
 </script>
 
 {#if data.tenantless}
-  <!-- Apex / reserved dashboard slug: no tenant to show, so serve the cross-tenant overview. -->
   <TenantsOverview />
 {:else}
 <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">

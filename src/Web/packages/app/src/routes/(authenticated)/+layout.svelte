@@ -44,10 +44,8 @@
 
   const { data, children } = $props<{ data: LayoutData; children: any }>();
 
-  // A tenantless host (the apex of a multi-tenant install, or a reserved dashboard slug) resolves
-  // no tenant, so every tenant-scoped surface this shell mounts would render and then 404 against
-  // the API — forever, for every visitor, in the case of the polled ones. Read once: the host
-  // cannot change without a fresh load.
+  // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
+  // tenantless-navigation. Read once: the host cannot change without a fresh load.
   // svelte-ignore state_referenced_locally
   const tenantless: boolean = data.tenantless === true;
 
@@ -62,14 +60,10 @@
 
   // Create settings store in context for the entire app
   // This makes feature settings available on all pages including the main dashboard.
-  // The store is always in context so getSettingsStore() resolves everywhere; only the fetch of
-  // /api/v4/ui-settings, which is tenant-scoped, is withheld on a tenantless host.
   createSettingsStore(!tenantless);
 
   let commandPaletteOpen = $state(false);
 
-  // Coach-mark state is tenant-scoped, so on a tenantless host the adapter stays on its
-  // localStorage path rather than asking for marks no tenant owns.
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
 
   // Title/Favicon service for dynamic updates

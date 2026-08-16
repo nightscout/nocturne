@@ -7,7 +7,8 @@ using ConfigSameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 namespace Nocturne.API.Extensions;
 
 /// <summary>
-/// Shared cookie-writing logic for session token pairs issued by any auth flow.
+/// Shared cookie-writing logic for the auth cookies: the session token pairs issued by any auth
+/// flow, the OIDC state cookies, and the <c>Domain</c> attributes all of them are written with.
 /// </summary>
 public static class SessionCookieExtensions
 {
@@ -58,16 +59,9 @@ public static class SessionCookieExtensions
     /// still wins.
     /// </summary>
     /// <remarks>
-    /// Three scopes, one source. Session cookies widen so one sign-in carries across tenant
-    /// subdomains and the apex dashboard. The platform-access grant widens because it is minted
-    /// on the apex and redeemed on the tenant subdomain it is pinned to. State cookies widen so a
-    /// login begun on any host can be completed at the apex callback, which is the registered
-    /// redirect_uri.
-    /// <para>
     /// <see cref="CookieSettings.Domain"/> is defaulted before <see cref="CookieSettings.StateDomain"/>
     /// reads it, so an operator override moves both together while the derived value reaches both
     /// as well.
-    /// </para>
     /// </remarks>
     public static void ApplyCookieDomainDefaults(OidcOptions options, string? baseDomain)
     {
@@ -104,11 +98,6 @@ public static class SessionCookieExtensions
         var sameSite = MapSameSiteMode(options.Cookie.SameSite);
         var refreshExpiresAt = DateTimeOffset.UtcNow.Add(options.Session.RefreshTokenLifetime);
 
-        // Expire any host-scoped cookie of the same name before writing the domain-wide one.
-        // A client that authenticated before the domain was widened holds both, and the browser
-        // sends both under one Cookie header with no way for the server to tell them apart, so
-        // whichever the server reads is arbitrary. Clearing the narrow variant first makes every
-        // client converge on the domain-wide cookie after a single authenticated response.
         // Order matters: Response.Cookies.Delete strips already-appended Set-Cookie headers that
         // match by path, so deleting after appending would cancel the write we just made.
         ExpireHostScopedSessionCookies(response, options);
@@ -153,9 +142,8 @@ public static class SessionCookieExtensions
     /// </summary>
     public static void ClearSessionCookies(this HttpResponse response, OidcOptions options)
     {
-        // Sign-out must also drop the pre-widening host-scoped cookies, or the stale narrow
-        // cookie survives and re-authenticates the "signed-out" browser. First, for the same
-        // header-stripping reason as in the writer.
+        // Order matters: Response.Cookies.Delete strips already-appended Set-Cookie headers that
+        // match by path, so deleting after appending would cancel the deletes below.
         ExpireHostScopedSessionCookies(response, options);
 
         var cookieOptions = new CookieOptions
@@ -174,6 +162,14 @@ public static class SessionCookieExtensions
     /// <c>Domain</c> attribute. No-op when cookies are already host-scoped, which would otherwise
     /// emit an expiry for the very cookie being written.
     /// </summary>
+    /// <remarks>
+    /// A client that authenticated before the domain was widened holds both variants, and the
+    /// browser sends both under one <c>Cookie</c> header with no way for the server to tell them
+    /// apart, so whichever the server reads is arbitrary. Clearing the narrow variant alongside
+    /// every write makes every client converge on the domain-wide cookie after a single
+    /// authenticated response; doing it on sign-out too stops the stale narrow cookie surviving
+    /// and re-authenticating the "signed-out" browser.
+    /// </remarks>
     private static void ExpireHostScopedSessionCookies(HttpResponse response, OidcOptions options)
     {
         if (string.IsNullOrEmpty(options.Cookie.SessionDomain))
@@ -198,9 +194,8 @@ public static class SessionCookieExtensions
         DateTimeOffset expiresAt,
         OidcOptions options)
     {
-        // Same reason and same ordering as the session cookies: a browser holding a pre-widening
-        // host-only cookie of this name would otherwise send both, and the server cannot tell
-        // which it read. A stale one shadowing the fresh one costs a login attempt.
+        // Order matters: Response.Cookies.Delete strips already-appended Set-Cookie headers that
+        // match by path, so deleting after appending would cancel the write we just made.
         ExpireHostScopedStateCookie(response, name, options);
 
         response.Cookies.Append(name, state, new CookieOptions
@@ -229,6 +224,11 @@ public static class SessionCookieExtensions
         });
     }
 
+    /// <summary>
+    /// The state-cookie counterpart of <see cref="ExpireHostScopedSessionCookies"/>: a browser
+    /// holding a pre-widening host-only cookie of this name sends both, and a stale one shadowing
+    /// the fresh one costs a login attempt.
+    /// </summary>
     private static void ExpireHostScopedStateCookie(
         HttpResponse response, string name, OidcOptions options)
     {

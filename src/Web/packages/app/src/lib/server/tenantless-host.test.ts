@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_DASHBOARD_SLUGS,
-  apexResolvedTenant,
   classifyHost,
   isTenantlessHost,
   parseDashboardSlugs,
@@ -11,7 +9,6 @@ const BASE = "nocturne.run";
 
 describe("parseDashboardSlugs", () => {
   it("reserves nothing when unset, so reserving a slug stays opt-in", () => {
-    expect(DEFAULT_DASHBOARD_SLUGS).toEqual([]);
     expect(parseDashboardSlugs(undefined)).toEqual([]);
     expect(parseDashboardSlugs(null)).toEqual([]);
   });
@@ -123,27 +120,5 @@ describe("isTenantlessHost", () => {
       expect(isTenantlessHost("share", resolved)).toBe(false);
       expect(isTenantlessHost("unknown", resolved)).toBe(false);
     }
-  });
-});
-
-describe("apexResolvedTenant", () => {
-  it("reports the tenant the API resolved for this request", async () => {
-    await expect(apexResolvedTenant(async () => ({ tenantSlug: "theconen" }))).resolves.toBe(true);
-  });
-
-  it("reports no tenant when the status names none", async () => {
-    await expect(apexResolvedTenant(async () => ({ tenantSlug: null }))).resolves.toBe(false);
-    await expect(apexResolvedTenant(async () => ({}))).resolves.toBe(false);
-    await expect(apexResolvedTenant(async () => null)).resolves.toBe(false);
-  });
-
-  it("reports no tenant when status cannot be reached", async () => {
-    // Falling back to the dashboard is the recoverable direction: it renders for any signed-in
-    // subject, whereas the tenant app would render a shell over an API resolving nothing.
-    await expect(
-      apexResolvedTenant(async () => {
-        throw new Error("API unreachable");
-      })
-    ).resolves.toBe(false);
   });
 });

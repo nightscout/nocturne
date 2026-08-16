@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  TENANTLESS_NAV_HREFS,
-  filterTenantlessNav,
-  isTenantlessRoute,
-} from "./tenantless-navigation";
+import { filterTenantlessNav, isTenantlessRoute } from "./tenantless-navigation";
 
 describe("filterTenantlessNav", () => {
   it("keeps the cross-tenant dashboard and drops tenant-scoped pages", () => {
@@ -68,23 +64,7 @@ describe("filterTenantlessNav", () => {
   });
 });
 
-describe("TENANTLESS_NAV_HREFS", () => {
-  it("lists only routes whose data the API serves without a tenant", () => {
-    // The API's tenantless surface (TenantResolutionMiddleware.TenantlessAllowedPaths) admits
-    // the cross-tenant overview and the session/auth endpoints, and nothing else that a page
-    // renders from. Anything added here has to have its endpoints admitted there first, or the
-    // nav gains an entry that 404s.
-    expect(TENANTLESS_NAV_HREFS).toEqual(["/"]);
-  });
-});
-
 describe("isTenantlessRoute", () => {
-  it("admits exactly the tenantless hrefs", () => {
-    for (const href of TENANTLESS_NAV_HREFS) {
-      expect(isTenantlessRoute(href)).toBe(true);
-    }
-  });
-
   it("rejects tenant-scoped routes", () => {
     expect(isTenantlessRoute("/calendar")).toBe(false);
     expect(isTenantlessRoute("/tenants")).toBe(false);

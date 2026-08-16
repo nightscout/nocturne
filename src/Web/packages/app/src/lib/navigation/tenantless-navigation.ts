@@ -13,7 +13,14 @@
  * genuinely tenant-scoped, so they stay off the list until the API surface catches up.
  */
 
-/** Hrefs that are meaningful without a resolved tenant. */
+/**
+ * Hrefs that are meaningful without a resolved tenant.
+ *
+ * The API's tenantless surface (TenantResolutionMiddleware.TenantlessAllowedPaths) admits the
+ * cross-tenant overview and the session/auth endpoints, and nothing else that a page renders
+ * from. Anything added here has to have its endpoints admitted there first, or the nav gains an
+ * entry that 404s.
+ */
 export const TENANTLESS_NAV_HREFS: readonly string[] = [
   "/", // the cross-tenant overview
 ];

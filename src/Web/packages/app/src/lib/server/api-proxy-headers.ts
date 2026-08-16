@@ -25,10 +25,9 @@ export interface ProxyHeaderInput {
  * bypass per-tenant public access. Any client-supplied instance headers are stripped for the
  * same reason.
  *
- * On a share host it forwards no credentials at all. That host is anonymous for everyone,
- * including the owner of the data behind it, and since session cookies are scoped to
- * ".{base-domain}" the browser now presents them here — so the incoming Cookie header has to be
- * dropped, not merely left unread.
+ * On a share host it forwards no credentials at all (see authHandle). Here the incoming Cookie
+ * header has to be deleted rather than merely left unread, since it is passed through onward
+ * as-is.
  */
 export function buildProxyHeaders({
   requestHeaders,

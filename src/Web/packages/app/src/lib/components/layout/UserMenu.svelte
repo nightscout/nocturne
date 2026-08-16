@@ -18,9 +18,8 @@
     /** Whether the current session is a guest link session */
     isGuestSession?: boolean;
     /**
-     * Whether this host serves the cross-tenant dashboard rather than one tenant. Every account
-     * entry below points at /settings/*, which the authenticated layout bounces back to "/" on
-     * such a host, so they are hidden rather than left to silently do nothing.
+     * Whether this host serves the cross-tenant dashboard rather than one tenant. Hides the
+     * /settings/* entries below, which the route guard bounces back to "/" there.
      */
     tenantless?: boolean;
   }

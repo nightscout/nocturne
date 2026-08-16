@@ -9,38 +9,29 @@
  * - the apex (the base domain itself) — the dashboard only when it resolves no tenant.
  *   The API auto-resolves a sole tenant on the apex, which is how a single-tenant
  *   self-hosted install serves the whole app at https://nocturne.example.com/, so the
- *   hostname alone cannot decide this one. See apexResolvedTenant.
+ *   hostname alone cannot decide this one; the status endpoint answers it.
  *
  * Classification is suffix-based throughout, mirroring extractTenantSlug and the API's
  * SubdomainParser: `nocturne.example.com` is as valid a base domain as `example.com`, so
  * hostname label counts carry no meaning.
+ *
+ * Reserving a slug is opt-in, and only once first-run setup is complete. A reserved slug names no
+ * tenant, and the API answers a host that resolves no tenant with 404 whether the instance holds
+ * zero tenants or a thousand — so the fresh-install signal (the 503 from tenant resolution) never
+ * reaches the web app on such a host, and an operator who opens the reserved host on a brand-new
+ * instance is sent to sign in on an instance that has no accounts yet. Complete setup on the apex
+ * or on the tenant's own host first, then set DASHBOARD_SLUGS. Nothing is lost by leaving it
+ * unset: the apex serves the dashboard whenever it resolves no tenant either way.
  */
 
 import { extractTenantSlug, isShareHost } from "./request-host";
 
 /**
- * Reserved slugs that serve the dashboard rather than a tenant, when DASHBOARD_SLUGS is unset.
- *
- * Empty: reserving a slug is opt-in. A reserved slug is a host that offers only identity-provider
- * sign-in, so reserving one by default would hand every wildcard-DNS deployment two extra hosts
- * whose sign-in depends on the OIDC state cookie reaching the apex callback. The apex serves the
- * dashboard whenever it resolves no tenant either way, so nothing is lost by default.
- */
-export const DEFAULT_DASHBOARD_SLUGS: readonly string[] = [];
-
-/**
  * Parse the DASHBOARD_SLUGS env var (comma-separated). Unset or empty reserves nothing, so the
  * apex alone serves the dashboard.
- *
- * Reserve a slug only after first-run setup is complete. A reserved slug names no tenant, and the
- * API answers a host that resolves no tenant with 404 whether the instance holds zero tenants or
- * a thousand — so the fresh-install signal (the 503 from tenant resolution) never reaches the web
- * app on such a host, and an operator who opens the reserved host on a brand-new instance is sent
- * to sign in on an instance that has no accounts yet. Complete setup on the apex or on the
- * tenant's own host first, then set DASHBOARD_SLUGS.
  */
 export function parseDashboardSlugs(raw: string | null | undefined): string[] {
-  if (raw === null || raw === undefined) return [...DEFAULT_DASHBOARD_SLUGS];
+  if (!raw) return [];
   return raw
     .split(",")
     .map((slug) => slug.trim().toLowerCase())
@@ -61,7 +52,7 @@ export type HostKind = "apex" | "dashboard-slug" | "tenant" | "share" | "unknown
 export function classifyHost(
   host: string | null | undefined,
   baseDomain: string | null | undefined,
-  dashboardSlugs: readonly string[] = DEFAULT_DASHBOARD_SLUGS
+  dashboardSlugs: readonly string[] = []
 ): { kind: HostKind; slug: string | null } {
   if (!host || !baseDomain) return { kind: "unknown", slug: null };
 
@@ -99,24 +90,4 @@ export function isTenantlessHost(kind: HostKind, apexResolvesTenant: boolean): b
   if (kind === "dashboard-slug") return true;
   if (kind === "apex") return !apexResolvesTenant;
   return false;
-}
-
-/**
- * Whether the API resolved a tenant for this request, which on the apex means a sole tenant was
- * auto-resolved. Reported by the status endpoint because only the API can answer it: it is a
- * question about how many tenants exist, not about the hostname.
- *
- * An unreachable or erroring status call answers "no tenant", which serves the dashboard. That is
- * the safe direction — the dashboard renders for any signed-in subject, whereas the tenant app
- * would render a shell over an API that resolves nothing.
- */
-export async function apexResolvedTenant(
-  getStatus: () => Promise<{ tenantSlug?: string | null } | null | undefined>
-): Promise<boolean> {
-  try {
-    const status = await getStatus();
-    return !!status?.tenantSlug;
-  } catch {
-    return false;
-  }
 }

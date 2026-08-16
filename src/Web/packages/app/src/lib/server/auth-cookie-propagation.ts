@@ -65,9 +65,8 @@ export function propagateAuthCookies(
     if (!parsed) continue;
     if (!AUTH_COOKIE_SET.has(parsed.name)) continue;
 
-    // The pair is distinguished by the Domain attribute, so a host-scoped header that shares
-    // its name with a domain-wide one is the half the jar cannot hold. Passed through raw,
-    // attributes untouched, since nothing else in the request needs to observe it.
+    // The pair is distinguished by the Domain attribute, so the host-scoped header is the half
+    // routed to `emitRaw`.
     if (
       emitRaw &&
       parsed.domain === undefined &&

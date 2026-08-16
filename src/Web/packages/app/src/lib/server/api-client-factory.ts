@@ -28,9 +28,8 @@ export interface ServerHttpClientOptions {
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
   /**
-   * Sink for Set-Cookie headers that SvelteKit's name-keyed cookie jar cannot hold — the
-   * host-scoped half of a deliberate pair. A handler appends these to the outgoing response
-   * verbatim. See propagateAuthCookies.
+   * Sink for Set-Cookie headers SvelteKit's cookie jar cannot hold, appended verbatim to the
+   * outgoing response by a handler. See propagateAuthCookies.
    */
   rawSetCookies?: string[];
   signal?: AbortSignal;

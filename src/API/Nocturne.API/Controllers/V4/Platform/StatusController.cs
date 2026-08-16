@@ -58,11 +58,11 @@ public class StatusController : ControllerBase
         {
             var status = await _statusService.GetSystemStatusAsync();
 
-            // Stamped here rather than in the service, which caches its response per tenant, and
-            // stamped again on the error path below, which builds a document of its own. The web
-            // app reads this field to tell an apex that auto-resolved its sole tenant from one
-            // that resolved nothing; both come back as a normal response (the tenantless case is
-            // a "setup_required" document, not a throw), so the field has to be right here.
+            // Mutating the service's cached document is safe only because that cache is keyed per
+            // tenant, so every request stamps the same value. The web app reads this field to tell
+            // an apex that auto-resolved its sole tenant from one that resolved nothing; both come
+            // back as a normal response (the tenantless case is a "setup_required" document, not a
+            // throw), so the field has to be right here and on the error path below.
             status.TenantSlug = _tenantAccessor.Context?.Slug;
 
             _logger.LogDebug("Successfully generated V4 status response");

@@ -345,11 +345,9 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     );
   }
 
-  // Get auth tokens from cookies to forward to the backend. On a share host none are read:
-  // that host is anonymous for everyone (see authHandle), and the widened cookie domain means
-  // the browser now sends session cookies there. The API ignores them under ShareAccess, so
-  // this is belt-and-braces — but it also keeps a token rotation from being triggered by a
-  // page that is meant to be credential-free.
+  // Get auth tokens from cookies to forward to the backend. None are read on a share host (see
+  // authHandle), which also keeps a token rotation from being triggered by a page that is meant
+  // to be credential-free.
   const onShareHost = event.locals.isShareHost;
   const accessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
@@ -520,12 +518,10 @@ const resetBitsId: Handle = ({ event, resolve }) =>
  * Per-request facts every later handler shares, established before any of them run.
  *
  * The share-host classification is one of them: the auth handler, the /api proxy, and the API
- * client each have to stay credential-free there, and three separate readings of the same host
- * are three chances to drift.
+ * client each have to stay credential-free there (see authHandle), and three separate readings
+ * of the same host are three chances to drift.
  *
- * It also drains the raw Set-Cookie sink on the way out. SvelteKit's cookie jar keys by name, so
- * the API's deliberate same-name pairs (host-scoped expiry plus domain-wide value) can only be
- * carried in full by appending the second header to the finished response.
+ * It also drains the raw Set-Cookie sink on the way out; see propagateAuthCookies.
  */
 const requestContextHandle: Handle = async ({ event, resolve }) => {
   event.locals.isShareHost = isShareHost(getOriginalHost(event.request));

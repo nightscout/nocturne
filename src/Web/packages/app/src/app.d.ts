@@ -44,17 +44,11 @@ declare global {
 		type TenantStatus = TenantStatusResponse;
 		interface Locals {
 			apiClient: ApiClient;
-			/**
-			 * Whether this request arrived on a public share host ({token}.share.{base-domain}).
-			 * Computed once so the handlers that must stay credential-free there — the auth
-			 * handler, the /api proxy, and the API client — cannot drift apart.
-			 */
+			/** Whether this request arrived on a public share host ({token}.share.{base-domain}). */
 			isShareHost: boolean;
 			/**
-			 * Raw Set-Cookie headers to append verbatim to the outgoing response. SvelteKit's
-			 * cookie jar is keyed by name alone, so a deliberate pair of same-named cookies
-			 * (a host-scoped expiry alongside the domain-wide value) collapses to one; this
-			 * carries the variant the jar cannot hold. See auth-cookie-propagation.
+			 * Set-Cookie headers to append verbatim to the outgoing response, for the half of a
+			 * same-named pair SvelteKit's cookie jar cannot hold. See propagateAuthCookies.
 			 */
 			rawSetCookies: string[];
 			/**

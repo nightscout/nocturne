@@ -229,9 +229,6 @@ public class SessionCookieHandler : IAuthHandler
         };
     }
 
-    /// <summary>
-    /// Set session cookies in the response
-    /// </summary>
     private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
         context.Response.SetSessionCookies(
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);

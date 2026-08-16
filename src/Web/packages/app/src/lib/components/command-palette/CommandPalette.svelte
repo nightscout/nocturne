@@ -264,7 +264,7 @@
 <Command.Dialog bind:open>
   <Command.Input placeholder="Search commands..." bind:value={searchValue} />
 
-  <!-- The vitals strip reads one tenant's live glucose, which a tenantless host has none of. -->
+  <!-- The vitals strip reads one tenant's live glucose. -->
   {#if !tenantless}
     <CommandPaletteVitals />
   {/if}

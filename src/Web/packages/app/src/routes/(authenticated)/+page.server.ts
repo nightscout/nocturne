@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 		);
 		if (landing) throw redirect(303, landing);
 
-		return { tenantless: true, initialChartData: null };
+		return { initialChartData: null };
 	}
 
 	const now = Date.now();
@@ -62,7 +62,6 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	})();
 
 	return {
-		tenantless: false,
 		initialChartData,
 		streamed: {
 			historicalChartData: historicalDataPromise,

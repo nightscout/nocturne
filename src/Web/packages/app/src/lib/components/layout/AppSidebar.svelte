@@ -312,8 +312,7 @@
       ],
     });
 
-    // A tenantless host has no tenant for the API to resolve, so every tenant-scoped page
-    // would render and then 404. Trim to the cross-tenant surface.
+    // See tenantless-navigation for why the tenant-scoped pages come out.
     if (tenantless) {
       return filterTenantlessNav(items);
     }
@@ -388,8 +387,7 @@
     <Sidebar.Trigger />
   </Sidebar.Header>
 
-  <!-- Glucose Widget (fixed, not scrollable). One tenant's latest reading, so there is nothing
-       for it to show on a host that resolves none. -->
+  <!-- Glucose Widget (fixed, not scrollable). One tenant's latest reading. -->
   {#if !tenantless}
     <Sidebar.Group>
       <Sidebar.GroupContent>

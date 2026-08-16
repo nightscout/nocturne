@@ -84,10 +84,6 @@ public class CookieSettings
     /// recipients, which is safe: the cookie is HttpOnly and Secure, and
     /// <c>PlatformAccessCookieHandler</c> skips it unless the resolved tenant is the one it is
     /// pinned to, so it confers nothing on a host belonging to any other tenant.
-    /// <para>
-    /// Retained as an override for an operator with a reason to narrow or move it. Setting it also
-    /// moves <see cref="StateDomain"/>, which defaults from this value.
-    /// </para>
     /// </remarks>
     public string? Domain { get; set; }
 
@@ -96,12 +92,6 @@ public class CookieSettings
     /// only. Defaults to ".{base-domain}" so a session established on one tenant subdomain is
     /// also presented at the apex dashboard and at sibling tenants the subject belongs to.
     /// </summary>
-    /// <remarks>
-    /// Derived from the base domain, as <see cref="Domain"/> and <see cref="StateDomain"/> are.
-    /// Kept a separate knob from those so an operator can narrow one scope without dragging the
-    /// others with it: this one carries the ordinary session, <see cref="Domain"/> the
-    /// platform-access grant, and <see cref="StateDomain"/> the OIDC state cookies.
-    /// </remarks>
     public string? SessionDomain { get; set; }
 
     /// <summary>

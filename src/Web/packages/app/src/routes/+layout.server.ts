@@ -1,7 +1,6 @@
 import type { LayoutServerLoad } from "./$types";
 import { getOriginalHost } from "$lib/server/request-host";
 import {
-  apexResolvedTenant,
   classifyHost,
   isTenantlessHost,
   parseDashboardSlugs,
@@ -37,7 +36,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   // Children read `tenantless` from this layout's data via parent().
   const tenantless = isTenantlessHost(
     kind,
-    kind === "apex" ? await apexResolvedTenant(() => getRequestStatus(locals)) : false
+    kind === "apex" ? Boolean((await getRequestStatus(locals))?.tenantSlug) : false
   );
 
   // Display preferences for SSR, in the same precedence the browser applies them
