@@ -13,10 +13,7 @@ describe("filterTenantlessNav", () => {
     expect(filterTenantlessNav(items)).toEqual([{ title: "Dashboard", href: "/" }]);
   });
 
-  it("keeps only the subject-scoped page in the settings group", () => {
-    // Appearance carries the subject's own units/formats/theme. Account looks subject-scoped and
-    // its data is, but /api/auth/passkey/* and /api/auth/totp/* are not served off a tenant, so
-    // listing it would put an entry in the sidebar that 404s when opened.
+  it("keeps only the subject-scoped pages in the settings group", () => {
     const items = [
       {
         title: "Settings",
@@ -33,21 +30,22 @@ describe("filterTenantlessNav", () => {
     expect(filterTenantlessNav(items)).toEqual([
       {
         title: "Settings",
-        children: [{ title: "Appearance", href: "/settings/appearance" }],
+        children: [
+          { title: "Account", href: "/settings/account" },
+          { title: "Appearance", href: "/settings/appearance" },
+        ],
       },
     ]);
   });
 
-  it("admits the subject's own appearance page as a route", () => {
+  it("admits the subject's own settings pages as routes", () => {
     expect(isTenantlessRoute("/settings/appearance")).toBe(true);
+    expect(isTenantlessRoute("/settings/account")).toBe(true);
   });
 
   it("keeps the rest of settings off a tenantless host", () => {
-    // The tenant-scoped pages would render a shell and then 404, and account needs auth
-    // endpoints the API does not serve without a tenant.
     for (const href of [
       "/settings",
-      "/settings/account",
       "/settings/members",
       "/settings/profile",
       "/settings/trackers",
@@ -92,7 +90,6 @@ describe("isTenantlessRoute", () => {
     expect(isTenantlessRoute("/calendar")).toBe(false);
     expect(isTenantlessRoute("/tenants")).toBe(false);
     expect(isTenantlessRoute("/settings/members")).toBe(false);
-    expect(isTenantlessRoute("/settings/account")).toBe(false);
   });
 
   it("matches whole paths, not prefixes", () => {

@@ -162,10 +162,20 @@ describe("(authenticated) layout load — where each host situation lands", () =
     await expect(
       redirectLocation({
         host: BASE,
-        pathname: "/settings/account",
+        pathname: "/settings/members",
         ...populatedTenantless,
       })
     ).resolves.toBe("/");
+  });
+
+  it("leaves a subject-scoped route alone on a tenantless host", async () => {
+    await expect(
+      redirectLocation({
+        host: BASE,
+        pathname: "/settings/account",
+        ...populatedTenantless,
+      })
+    ).resolves.toBeNull();
   });
 
   it("sends a signed-out visitor to login before the tenantless route guard runs", async () => {

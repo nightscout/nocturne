@@ -37,18 +37,25 @@ public class TenantResolutionMiddleware
     /// <summary>
     /// A path served without a resolved tenant, optionally narrowed to a single HTTP method.
     /// </summary>
-    /// <param name="Path">The exact path, matched case-insensitively.</param>
+    /// <param name="Path">The path, matched case-insensitively.</param>
     /// <param name="Method">
     /// The only method admitted tenantlessly, or null to admit every method. Naming a method
     /// matters where a path carries both a cross-tenant read and a tenant-affecting write.
     /// </param>
-    private readonly record struct TenantlessPath(string Path, string? Method = null)
+    /// <param name="Prefix">
+    /// Whether <paramref name="Path"/> admits everything beneath it. Needed by controllers whose
+    /// routes carry an id segment; prefer an exact entry, which cannot admit a route added later.
+    /// </param>
+    private readonly record struct TenantlessPath(
+        string Path, string? Method = null, bool Prefix = false)
     {
         /// <summary>Admit every method on a path, which is the case for most of the list.</summary>
         public static implicit operator TenantlessPath(string path) => new(path);
 
         public bool Matches(string path, string? method) =>
-            Path.Equals(path, StringComparison.OrdinalIgnoreCase) &&
+            (Prefix
+                ? path.StartsWith(Path, StringComparison.OrdinalIgnoreCase)
+                : Path.Equals(path, StringComparison.OrdinalIgnoreCase)) &&
             (Method is null || method is null ||
              Method.Equals(method, StringComparison.OrdinalIgnoreCase));
     }
@@ -125,29 +132,47 @@ public class TenantResolutionMiddleware
         // tenant pin, so it can confer no tenant-scoped authority. POST only, matching the
         // only verb the endpoint serves.
         new TenantlessPath("/api/auth/oidc/refresh", HttpMethods.Post),
-    ];
+        // The subject's own sign-in factors and linked identities, as /settings/account manages
+        // them. Each is keyed on the caller's SubjectId, and the tables behind them
+        // (passkey_credentials, recovery_codes, totp_credentials, subject_oidc_identities,
+        // subject_avatars) carry no tenant column — one person's credential is the same credential
+        // in every tenant they belong to, so managing it from a tenant subdomain was arbitrary.
+        //
+        // The sign-in ceremonies are deliberately absent. TotpController.Login gates on membership
+        // of the resolved tenant and the passkey login/* paths likewise, so authenticating on a
+        // tenantless host remains identity-provider-only; these enrol and revoke factors for a
+        // caller who is already authenticated.
+        new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post),
+        new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post),
+        new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get),
+        new TenantlessPath("/api/auth/passkey/recovery/regenerate", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post),
+        new TenantlessPath("/api/auth/totp", HttpMethods.Get),
+        // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the
+        // sibling POST /login, which gates on membership of the resolved tenant, stays out.
+        new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true),
+        // GET the list and DELETE one by id; nothing else is routed beneath either.
+        new TenantlessPath("/api/auth/passkey/credentials", Prefix: true),
+        new TenantlessPath("/api/auth/oidc/link/identities", Prefix: true),
+        "/api/v4/me/avatar",
 
-    /// <summary>
-    /// Prefixes that are cross-tenant by design and must never be gated on
-    /// a resolved tenant. Admin tenant management (create, provision, member
-    /// management) operates on arbitrary tenants by ID and cannot rely on
-    /// subdomain resolution.
-    /// </summary>
-    private static readonly string[] TenantlessAllowedPrefixes =
-    [
-        // Platform-admin tenant-access grant: minted at the apex (operator is not on
-        // any tenant subdomain yet); the target tenant is resolved from the query string.
-        "/api/auth/platform-access",
-        "/api/v4/admin/demo/",
-        "/api/v4/admin/platform-settings",
-        "/api/v4/admin/tenants",
-        "/api/v4/dev-only/",
-        "/api/v4/platform/",
-        "/api/v4/setup/",
+        // Cross-tenant by design: these operate on arbitrary tenants by id and so cannot rely on
+        // subdomain resolution at all.
+        //
+        // Platform-admin tenant-access grant: minted at the apex (the operator is not on any
+        // tenant subdomain yet); the target tenant is resolved from the query string.
+        new TenantlessPath("/api/auth/platform-access", Prefix: true),
+        new TenantlessPath("/api/v4/admin/demo/", Prefix: true),
+        new TenantlessPath("/api/v4/admin/platform-settings", Prefix: true),
+        new TenantlessPath("/api/v4/admin/tenants", Prefix: true),
+        new TenantlessPath("/api/v4/dev-only/", Prefix: true),
+        new TenantlessPath("/api/v4/platform/", Prefix: true),
+        new TenantlessPath("/api/v4/setup/", Prefix: true),
         // Cross-tenant overview hub: authorizes a subject in-band and joins per-tenant groups
         // itself, so the connection is negotiated from the apex with no tenant. Prefix, not
         // exact path: SignalR appends /negotiate to the hub path.
-        "/hubs/overview",
+        new TenantlessPath("/hubs/overview", Prefix: true),
     ];
 
     /// <summary>
@@ -160,8 +185,7 @@ public class TenantResolutionMiddleware
     /// method, which is what a coverage sweep over the whole surface wants.
     /// </param>
     public static bool IsTenantlessAllowed(string path, string? method = null) =>
-        TenantlessAllowedPaths.Any(p => p.Matches(path, method)) ||
-        TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        TenantlessAllowedPaths.Any(p => p.Matches(path, method));
 
     public async Task InvokeAsync(HttpContext context)
     {

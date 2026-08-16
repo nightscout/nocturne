@@ -200,7 +200,7 @@ public partial class SetupController : ControllerBase
             tenant!, request.DisplayName.Trim(), normalizedUsername, ct);
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId, normalizedUsername, tenant!.Id);
+            subjectId, normalizedUsername);
 
         return Ok(new SetupOwnerOptionsResponse
         {

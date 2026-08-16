@@ -180,7 +180,7 @@ public class TenantController : ControllerBase
         if (!await IsCallerTenantOwnerAsync(id, ct))
             return Forbid();
 
-        var passkeys = await passkeyService.GetCredentialsAsync(subjectId, id);
+        var passkeys = await passkeyService.GetCredentialsAsync(subjectId);
         var oidcIdentities = await subjectService.GetLinkedOidcIdentitiesAsync(subjectId);
 
         return Ok(new SubjectCredentialsDto(

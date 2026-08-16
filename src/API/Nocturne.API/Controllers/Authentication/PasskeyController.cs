@@ -120,6 +120,7 @@ public class PasskeyController : ControllerBase
     /// subject id would let anyone enrol their own authenticator onto another account.
     /// </remarks>
     [HttpPost("register/options")]
+    [DenyDemoSubject]
     [AllowAnonymous]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
@@ -140,7 +141,7 @@ public class PasskeyController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, request.Username, tenantId);
+            subjectId.Value, request.Username);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -202,6 +203,7 @@ public class PasskeyController : ControllerBase
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
     /// </remarks>
     [HttpPost("register/complete")]
+    [DenyDemoSubject]
     [AllowAnonymous]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
@@ -267,7 +269,7 @@ public class PasskeyController : ControllerBase
         }
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subject.Id, subject.Username ?? subject.Name, _tenantAccessor.TenantId);
+            subject.Id, subject.Username ?? subject.Name);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -636,6 +638,7 @@ public class PasskeyController : ControllerBase
     /// List all passkey credentials for the authenticated user
     /// </summary>
     [HttpGet("credentials")]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(PasskeyCredentialListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -648,7 +651,7 @@ public class PasskeyController : ControllerBase
         }
 
         var tenantId = _tenantAccessor.TenantId;
-        var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value, tenantId);
+        var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value);
         var primaryFactorCount = await _subjectService.CountPrimaryAuthFactorsAsync(auth.SubjectId.Value);
 
         return Ok(new PasskeyCredentialListResponse
@@ -668,6 +671,7 @@ public class PasskeyController : ControllerBase
     /// Remove a passkey credential. Cannot remove the last credential if user has no OIDC link.
     /// </summary>
     [HttpDelete("credentials/{id:guid}")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -702,6 +706,7 @@ public class PasskeyController : ControllerBase
     /// Regenerate recovery codes for the authenticated user. Invalidates all existing codes.
     /// </summary>
     [HttpPost("recovery/regenerate")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetRecoveryStatus"])]
     [ProducesResponseType(typeof(RecoveryRegenerateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -725,6 +730,7 @@ public class PasskeyController : ControllerBase
     /// Get the count of remaining recovery codes for the authenticated user
     /// </summary>
     [HttpGet("recovery/status")]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(RecoveryStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -914,7 +920,7 @@ public class PasskeyController : ControllerBase
         await _dbContext.SaveChangesAsync();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username, tenant.Id);
+            subjectId.Value, username);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -1081,7 +1087,7 @@ public class PasskeyController : ControllerBase
 
         // Generate passkey registration options
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username, tenantId);
+            subjectId.Value, username);
 
         return Ok(new PasskeyOptionsResponse
         {

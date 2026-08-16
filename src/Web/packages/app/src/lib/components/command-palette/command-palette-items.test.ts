@@ -11,6 +11,7 @@ describe("paletteItemsFor", () => {
     // Everything else bounces back to "/" via the route guard, so Cmd-K must not advertise it.
     expect(paletteItemsFor(true).map((item) => item.id)).toEqual([
       "page-dashboard",
+      "settings-account",
       "settings-appearance",
     ]);
   });

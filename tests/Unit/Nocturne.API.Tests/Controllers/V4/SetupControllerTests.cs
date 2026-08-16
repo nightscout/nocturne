@@ -432,7 +432,7 @@ public class SetupControllerTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         // Act
@@ -665,7 +665,7 @@ public class SetupControllerTests : IDisposable
         // and lock the instance out permanently.
         var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
 
         await _controller.OwnerOptions(

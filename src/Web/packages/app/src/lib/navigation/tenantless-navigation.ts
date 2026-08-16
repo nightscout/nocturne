@@ -6,10 +6,6 @@
  * tenantless surface is therefore whatever the API admits without a tenant, which today is the
  * cross-tenant overview and nothing else.
  *
- * The account settings page stays off the list. It looks subject-scoped and its data is —
- * passkeys, TOTP authenticators and linked identities are all keyed on the subject with no tenant
- * column — but /api/auth/passkey/* and /api/auth/totp/* are not served off a tenant, and widening
- * authentication endpoints is a security-relevant change that deserves its own review.
  */
 
 /**
@@ -25,6 +21,10 @@ export const TENANTLESS_NAV_HREFS: readonly string[] = [
   // Subject-scoped half only (subjects.preferences / subjects.preferred_language); the page hides
   // its tenant-scoped half here.
   "/settings/appearance",
+  // Passkeys, authenticators, linked identities, sessions and avatar — all keyed on the subject,
+  // none carrying a tenant column. The sign-in ceremonies that prove a factor stay tenant-gated,
+  // so this manages factors for a caller who is already authenticated.
+  "/settings/account",
 ];
 
 interface NavLike {

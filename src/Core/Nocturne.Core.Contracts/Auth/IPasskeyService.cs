@@ -9,7 +9,7 @@ namespace Nocturne.Core.Contracts.Auth;
 public interface IPasskeyService
 {
     /// <summary>Generates registration options for creating a new passkey credential.</summary>
-    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username, Guid tenantId);
+    Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username);
 
     /// <summary>Validates the attestation response and stores the new passkey credential.</summary>
     /// <param name="expectedSubjectId">
@@ -32,7 +32,7 @@ public interface IPasskeyService
     Task<PasskeyAssertionResult> CompleteAssertionAsync(string assertionResponseJson, string challengeToken, Guid tenantId);
 
     /// <summary>Returns all registered passkey credentials for the specified subject.</summary>
-    Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId, Guid tenantId);
+    Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId);
 
     /// <summary>Removes a passkey credential from the specified subject.</summary>
     Task RemoveCredentialAsync(Guid credentialId, Guid subjectId, Guid tenantId);

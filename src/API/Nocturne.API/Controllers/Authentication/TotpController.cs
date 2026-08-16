@@ -93,6 +93,7 @@ public class TotpController : ControllerBase
     /// <response code="400">No primary factor configured, or user account not found.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("setup")]
+    [DenyDemoSubject]
     [RemoteCommand]
     [ProducesResponseType(typeof(TotpSetupResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -138,6 +139,7 @@ public class TotpController : ControllerBase
     /// <response code="400">Invalid code or challenge token.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("verify-setup")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(TotpVerifySetupResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -171,6 +173,7 @@ public class TotpController : ControllerBase
     /// <response code="200">List of TOTP credentials.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpGet]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TotpCredentialDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -203,6 +206,7 @@ public class TotpController : ControllerBase
     /// <response code="204">Credential removed.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpDelete("{id:guid}")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

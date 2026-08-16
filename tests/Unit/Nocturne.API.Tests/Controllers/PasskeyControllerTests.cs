@@ -206,7 +206,7 @@ public class PasskeyControllerTests : IDisposable
 
     private void StubRegistrationOptions(Guid subjectId, string username) =>
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username, _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
     #region Passkey enrolment is bound to the caller
@@ -219,7 +219,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(401);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never,
             "an anonymous caller must not be able to start an enrolment ceremony");
     }
@@ -247,7 +247,7 @@ public class PasskeyControllerTests : IDisposable
     {
         Authenticate();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
@@ -257,7 +257,7 @@ public class PasskeyControllerTests : IDisposable
         response.Options.Should().Contain("challenge");
         response.ChallengeToken.Should().Be("token-data");
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId),
+            s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser"),
             Times.Once);
     }
 
@@ -315,9 +315,9 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(callerId, "victim", _tenantId), Times.Once);
+            s => s.GenerateRegistrationOptionsAsync(callerId, "victim"), Times.Once);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(victimId, It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            s => s.GenerateRegistrationOptionsAsync(victimId, It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -334,7 +334,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner", _tenantId), Times.Once);
+            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner"), Times.Once);
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -407,7 +407,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(400);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -426,7 +426,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(400);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never,
             "an account that can still sign in must not be enrollable without a session");
     }
@@ -440,14 +440,14 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.CountPrimaryAuthFactorsAsync(orphanId))
             .ReturnsAsync(0);
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "orphan" });
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId),
+            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"),
             Times.Once,
             "the subject comes from the server's lookup, not from the request");
     }
@@ -466,7 +466,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>()),
             Times.Never);
     }
 
@@ -617,7 +617,7 @@ public class PasskeyControllerTests : IDisposable
         var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
         var inviteService = StubValidInvite();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "elsewhere", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "elsewhere"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.InviteOptions(
@@ -628,7 +628,7 @@ public class PasskeyControllerTests : IDisposable
         var victim = await _dbContext.Subjects.AsNoTracking().FirstAsync(s => s.Id == elsewhereId);
         victim.Name.Should().Be("elsewhere", "another tenant's member must not be renamed by an invite here");
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>()),
             Times.Never,
             "the ceremony must not be bound to another tenant's member");
         var subjects = await _dbContext.Subjects.AsNoTracking()
@@ -809,7 +809,7 @@ public class PasskeyControllerTests : IDisposable
     {
         var inviteService = StubValidInvite();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "invitee", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "invitee"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         Assert.IsType<OkObjectResult>((await _controller.InviteOptions(
@@ -855,7 +855,7 @@ public class PasskeyControllerTests : IDisposable
     {
         await AllowAccessRequestsAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "sam-smith", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "sam-smith"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         Assert.IsType<OkObjectResult>((await _controller.AccessRequestOptions(
@@ -906,7 +906,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<ConflictObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 

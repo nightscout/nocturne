@@ -100,7 +100,7 @@ public class PasskeyService : IPasskeyService
     }
 
     public async Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(
-        Guid subjectId, string username, Guid tenantId)
+        Guid subjectId, string username)
     {
         var existingCredentials = await _dbContext.PasskeyCredentials
             .Where(c => c.SubjectId == subjectId)
@@ -299,7 +299,7 @@ public class PasskeyService : IPasskeyService
         return new PasskeyAssertionResult(subject.Id, subject.Username ?? subject.Name, subject.Name);
     }
 
-    public async Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId, Guid tenantId)
+    public async Task<List<PasskeyCredentialInfo>> GetCredentialsAsync(Guid subjectId)
     {
         return await _dbContext.PasskeyCredentials
             .Where(c => c.SubjectId == subjectId)

@@ -50,7 +50,7 @@ public class PasskeyServiceTests
         var service = CreateService();
 
         // Act
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         // Assert - only returns credentials for the specified subject
         credentials.Should().HaveCount(2);
@@ -63,7 +63,7 @@ public class PasskeyServiceTests
     {
         var service = CreateService();
 
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         credentials.Should().BeEmpty();
     }
@@ -82,7 +82,7 @@ public class PasskeyServiceTests
         await _dbContext.SaveChangesAsync();
 
         var service = CreateService();
-        var credentials = await service.GetCredentialsAsync(_subjectId, _tenantId);
+        var credentials = await service.GetCredentialsAsync(_subjectId);
 
         credentials.Should().HaveCount(2);
         credentials[0].Label.Should().Be("Newer");
@@ -329,7 +329,7 @@ public class PasskeyServiceTests
         var victimSubjectId = Guid.CreateVersion7();
 
         // A challenge minted for the victim — as the old caller-supplied subjectId allowed.
-        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim", _tenantId);
+        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim");
 
         var act = () => service.CompleteRegistrationAsync(
             "{}", options.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
@@ -364,7 +364,7 @@ public class PasskeyServiceTests
     {
         var service = CreateService();
 
-        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId);
+        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser");
 
         var act = () => service.CompleteAssertionAsync("{}", registration.ChallengeToken, _tenantId);
 

@@ -31,6 +31,17 @@ public sealed class TenantlessDashboardPathsTests
     // The caller's own units/format/theme, stored on the subject. The tiles render glucose in
     // the units held here, so a 404 is a wrong reading, not a cosmetic default.
     [InlineData("/api/v4/user/preferences")]
+    // The caller's own sign-in factors and linked identities, all keyed on SubjectId.
+    [InlineData("/api/auth/passkey/credentials")]
+    [InlineData("/api/auth/passkey/register/options")]
+    [InlineData("/api/auth/passkey/register/complete")]
+    [InlineData("/api/auth/passkey/recovery/status")]
+    [InlineData("/api/auth/passkey/recovery/regenerate")]
+    [InlineData("/api/auth/totp")]
+    [InlineData("/api/auth/totp/setup")]
+    [InlineData("/api/auth/totp/verify-setup")]
+    [InlineData("/api/auth/oidc/link/identities")]
+    [InlineData("/api/v4/me/avatar")]
     public void The_tenantless_dashboard_paths_are_allowed(string path)
     {
         TenantResolutionMiddleware.IsTenantlessAllowed(path).Should().BeTrue();
@@ -50,6 +61,56 @@ public sealed class TenantlessDashboardPathsTests
     public void Tenant_scoped_paths_stay_gated(string path)
     {
         TenantResolutionMiddleware.IsTenantlessAllowed(path).Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_sign_in_ceremonies_stay_gated()
+    {
+        // Enrolling a factor for an already-authenticated caller is subject-scoped; proving one to
+        // obtain a session is not. TotpController.Login gates on membership of the resolved
+        // tenant, and the passkey login paths likewise, so sign-in on a tenantless host stays
+        // identity-provider-only.
+        // Asserted against POST, the only method each is served under: the DELETE that revokes an
+        // authenticator is matched as a prefix, so asking "under any method" would answer for that
+        // instead. Routing has no DELETE here to reach.
+        foreach (var path in new[]
+                 {
+                     "/api/auth/totp/login",
+                     "/api/auth/passkey/login/options",
+                     "/api/auth/passkey/login/complete",
+                     "/api/auth/passkey/login/discoverable/options",
+                 })
+        {
+            TenantResolutionMiddleware.IsTenantlessAllowed(path, HttpMethods.Post)
+                .Should().BeFalse(path);
+        }
+    }
+
+    [Fact]
+    public void Revoking_an_authenticator_is_admitted_without_admitting_its_sibling_login()
+    {
+        // The revoke route carries the credential's id, so it can only be matched as a prefix —
+        // which the login path sits under. The method is what separates them.
+        var totpCredential = "/api/auth/totp/0198f4a0-0000-7000-8000-000000000000";
+
+        TenantResolutionMiddleware.IsTenantlessAllowed(totpCredential, HttpMethods.Delete)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/totp/login", HttpMethods.Post)
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed(totpCredential, HttpMethods.Post)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Passkey_credentials_admit_the_id_route_and_nothing_outside_them()
+    {
+        TenantResolutionMiddleware
+            .IsTenantlessAllowed("/api/auth/passkey/credentials/0198f4a0-0000-7000-8000-000000000000")
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/passkey/recovery/verify")
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/auth/passkey/onboarding/complete")
+            .Should().BeFalse();
     }
 
     [Fact]
