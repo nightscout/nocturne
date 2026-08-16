@@ -37,5 +37,5 @@ public interface ITranslationDraftService
     /// the work is not lost.
     /// </summary>
     Task<TranslationDraftSubmitResult> SubmitDraftsAsync(
-        string locale, TranslationContributorDto contributor, string? note, CancellationToken ct = default);
+        string locale, ContributionContributorDto contributor, string? note, CancellationToken ct = default);
 }

@@ -20,7 +20,7 @@ public record UpsertTranslationDraftsRequest
 public record SubmitTranslationDraftsRequest
 {
     public required string Locale { get; init; }
-    public required TranslationContributorDto Contributor { get; init; }
+    public required ContributionContributorDto Contributor { get; init; }
     public string? Note { get; init; }
 }
 
@@ -54,19 +54,9 @@ public partial class TranslationsController(
     [GeneratedRegex("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?\\z")]
     private static partial Regex LocalePattern();
 
-    // GitHub's username grammar: alphanumeric and single hyphens, no
-    // leading/trailing hyphen, max 39 chars.
-    [GeneratedRegex("^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}\\z")]
-    private static partial Regex GitHubUsernamePattern();
-
-    // Conservative mailbox shape: the value lands inside a Co-authored-by
-    // trailer, so whitespace and angle brackets must be impossible.
-    [GeneratedRegex(@"^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\z")]
-    private static partial Regex EmailPattern();
-
     [HttpPost("contributions")]
     [RemoteCommand]
-    [EnableRateLimiting("translation-contributions")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.ContributionsRateLimitPolicy)]
     [ProducesResponseType(typeof(TranslationContributionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
@@ -93,7 +83,7 @@ public partial class TranslationsController(
     /// </summary>
     [HttpPost("relay")]
     [AllowAnonymous]
-    [EnableRateLimiting("translation-contributions")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.ContributionsRateLimitPolicy)]
     [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<ActionResult<TranslationContributionResponse>> AcceptRelayedContribution(
         [FromBody] TranslationContributionRequest request, CancellationToken ct)
@@ -120,7 +110,7 @@ public partial class TranslationsController(
         {
             return StatusCode(201, await submit());
         }
-        catch (TranslationContributionRejectedException ex)
+        catch (ContributionRejectedException ex)
         {
             return Problem(detail: ex.Message, statusCode: 422, title: "Unprocessable Entity");
         }
@@ -131,9 +121,6 @@ public partial class TranslationsController(
                 statusCode: 502, title: "Bad Gateway");
         }
     }
-
-    private static bool IsDisallowedControlChar(char c) =>
-        char.IsControl(c) && c is not '\n' and not '\t' and not '\r';
 
     [HttpGet("drafts")]
     [RemoteQuery]
@@ -199,7 +186,7 @@ public partial class TranslationsController(
     [HttpPost("drafts/submit")]
     // No Invalidates; see UpsertDrafts.
     [RemoteCommand]
-    [EnableRateLimiting("translation-contributions")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.ContributionsRateLimitPolicy)]
     [ProducesResponseType(typeof(TranslationDraftSubmitResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
@@ -220,7 +207,7 @@ public partial class TranslationsController(
             var result = await draftService.SubmitDraftsAsync(request.Locale, request.Contributor, request.Note, ct);
             return StatusCode(201, result);
         }
-        catch (TranslationContributionRejectedException ex)
+        catch (ContributionRejectedException ex)
         {
             return Problem(detail: ex.Message, statusCode: 422, title: "Unprocessable Entity");
         }
@@ -261,7 +248,7 @@ public partial class TranslationsController(
             // Translation values are written verbatim into the committed .po
             // file, and the catalog escaper only handles \\ \" \n \t \r — any
             // other control character would land raw in the catalog.
-            if (entry.Translations.Any(t => t.Any(IsDisallowedControlChar)))
+            if (entry.Translations.Any(t => t.Any(ContributionValidation.IsDisallowedControlChar)))
                 return Problem(detail: "Translations cannot contain control characters", statusCode: 400, title: "Bad Request");
             if (!seenKeys.Add((entry.Context ?? "", entry.MsgId)))
                 return Problem(detail: "Duplicate entry for the same msgid and context", statusCode: 400, title: "Bad Request");
@@ -270,27 +257,8 @@ public partial class TranslationsController(
         return null;
     }
 
-    private ObjectResult? ValidateContributor(TranslationContributorDto contributor, string? note)
-    {
-        // Contributor identity ends up in the commit message (Co-authored-by
-        // trailer) and PR body; control characters or trailer syntax in any
-        // of these fields would allow commit-metadata injection.
-        if (string.IsNullOrWhiteSpace(contributor.Name)
-            || contributor.Name.Length > 128
-            || contributor.Name.Any(char.IsControl))
-            return Problem(detail: "Contributor name is required, must be under 128 characters, and cannot contain control characters", statusCode: 400, title: "Bad Request");
-
-        if (contributor.GitHubUsername is { Length: > 0 } username
-            && !GitHubUsernamePattern().IsMatch(username))
-            return Problem(detail: "Invalid GitHub username", statusCode: 400, title: "Bad Request");
-
-        if (contributor.Email is { Length: > 0 } email
-            && (email.Length > 254 || !EmailPattern().IsMatch(email)))
-            return Problem(detail: "Invalid contributor email", statusCode: 400, title: "Bad Request");
-
-        if (note?.Length > 2000)
-            return Problem(detail: "Note must be under 2000 characters", statusCode: 400, title: "Bad Request");
-
-        return null;
-    }
+    private ObjectResult? ValidateContributor(ContributionContributorDto contributor, string? note) =>
+        ContributionValidation.ValidateContributor(contributor, note) is { } reason
+            ? Problem(detail: reason, statusCode: 400, title: "Bad Request")
+            : null;
 }

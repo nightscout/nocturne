@@ -20,6 +20,86 @@
   };
 
   const STORAGE_KEY = 'nocturne-studio-blog';
+  const CONTRIBUTOR_KEY = 'nocturne-studio-contributor';
+
+  interface Proposal {
+    slug: string;
+    title: string;
+    content: string;
+    resolve: () => void;
+  }
+
+  let proposal = $state<Proposal | null>(null);
+  let proposing = $state(false);
+  let proposeError = $state<string | null>(null);
+  let proposedPr = $state<{ url: string; number: number } | null>(null);
+  let contributorName = $state('');
+  let contributorGitHub = $state('');
+  let contributorEmail = $state('');
+  let proposalNote = $state('');
+
+  $effect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(CONTRIBUTOR_KEY) || '{}');
+      contributorName = stored.name ?? '';
+      contributorGitHub = stored.gitHubUsername ?? '';
+      contributorEmail = stored.email ?? '';
+    } catch {
+      // Ignore malformed stored contributor info.
+    }
+  });
+
+  async function submitProposal() {
+    if (!proposal) return;
+    proposing = true;
+    proposeError = null;
+    try {
+      localStorage.setItem(
+        CONTRIBUTOR_KEY,
+        JSON.stringify({
+          name: contributorName,
+          gitHubUsername: contributorGitHub,
+          email: contributorEmail,
+        }),
+      );
+      const res = await fetch('/studio/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: proposal.slug,
+          title: proposal.title,
+          content: proposal.content,
+          contributor: {
+            name: contributorName,
+            gitHubUsername: contributorGitHub || null,
+            email: contributorEmail || null,
+          },
+          note: proposalNote || null,
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(detail || 'Failed to propose the change');
+      }
+      const result = await res.json();
+      proposedPr = { url: result.prUrl ?? '', number: result.prNumber ?? 0 };
+      proposal.resolve();
+      proposal = null;
+    } catch (e) {
+      proposeError = e instanceof Error ? e.message : 'Failed to propose the change';
+    } finally {
+      proposing = false;
+    }
+  }
+
+  function cancelProposal() {
+    // Cancelling is a normal outcome (the local draft is kept), so resolve
+    // rather than reject: ContentEditor awaits publish without a catch and a
+    // rejection would surface as an unhandled promise rejection.
+    proposal?.resolve();
+    proposal = null;
+    proposeError = null;
+  }
 
   function getStorage(): Record<string, ContentData> {
     try {
@@ -106,28 +186,23 @@
     },
 
     async publish(id: string) {
-      // Load from localStorage (where edits live)
+      // "Publish" proposes the draft to the Nocturne repo as a pull request
+      // through the content-contribution relay. The local draft is kept: the
+      // published file only changes once the PR merges.
       const storage = getStorage();
       const item = storage[id];
       if (!item) return;
 
       const slug = String(item.metadata.slug || id);
+      const title = String(item.metadata.title || slug);
       const svxContent = toSvx(item.metadata, item.content);
 
-      const res = await fetch('/studio/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, content: svxContent }),
+      // Settle any dialog already open so its awaiting publish call cannot
+      // leak as a forever-pending promise.
+      proposal?.resolve();
+      await new Promise<void>((resolve) => {
+        proposal = { slug, title, content: svxContent, resolve };
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Failed to publish' }));
-        throw new Error(err.message || 'Failed to publish');
-      }
-
-      // Clear from localStorage after successful publish
-      delete storage[id];
-      setStorage(storage);
     },
 
     async create(metadata: Record<string, unknown>): Promise<string> {
@@ -150,4 +225,99 @@
   <title>Studio - Nocturne</title>
 </svelte:head>
 
+{#if proposedPr}
+  <div class="flex items-center justify-between gap-3 border-b border-border bg-muted/50 px-4 py-2 text-sm">
+    <span>
+      Proposed as pull request
+      {#if proposedPr.url}
+        <a
+          href={proposedPr.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-primary underline underline-offset-4"
+        >
+          #{proposedPr.number}
+        </a>
+      {/if}
+      — the post updates once the pull request merges.
+    </span>
+    <button
+      type="button"
+      class="text-muted-foreground hover:text-foreground"
+      onclick={() => (proposedPr = null)}
+    >
+      Dismiss
+    </button>
+  </div>
+{/if}
+
 <ContentEditor {config} {callbacks} components={portalComponents} previewComponentMap={previewComponents} />
+
+{#if proposal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg space-y-4 rounded-lg border border-border bg-background p-6 shadow-lg">
+      <div>
+        <h2 class="text-lg font-semibold">Propose as pull request</h2>
+        <p class="mt-1 text-sm text-muted-foreground">
+          "{proposal.title}" is proposed to the Nocturne project as a pull
+          request. Your name appears in the commit credit.
+        </p>
+      </div>
+      <div class="space-y-3">
+        <label class="block space-y-1 text-sm">
+          <span>Name</span>
+          <input
+            class="w-full rounded-md border border-input bg-background px-3 py-2"
+            bind:value={contributorName}
+            placeholder="Your name"
+          />
+        </label>
+        <label class="block space-y-1 text-sm">
+          <span>GitHub username (optional, used for commit co-author credit)</span>
+          <input
+            class="w-full rounded-md border border-input bg-background px-3 py-2"
+            bind:value={contributorGitHub}
+            placeholder="octocat"
+          />
+        </label>
+        <label class="block space-y-1 text-sm">
+          <span>Email (optional)</span>
+          <input
+            type="email"
+            class="w-full rounded-md border border-input bg-background px-3 py-2"
+            bind:value={contributorEmail}
+          />
+        </label>
+        <label class="block space-y-1 text-sm">
+          <span>Note to reviewers (optional)</span>
+          <textarea
+            class="w-full rounded-md border border-input bg-background px-3 py-2"
+            rows="3"
+            bind:value={proposalNote}
+          ></textarea>
+        </label>
+        {#if proposeError}
+          <p class="text-sm text-destructive">{proposeError}</p>
+        {/if}
+      </div>
+      <div class="flex justify-end gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-input px-4 py-2 text-sm"
+          onclick={cancelProposal}
+          disabled={proposing}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+          onclick={submitProposal}
+          disabled={proposing || contributorName.trim().length === 0}
+        >
+          {proposing ? 'Proposing…' : 'Propose'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

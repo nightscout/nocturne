@@ -16,6 +16,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.Core.Contracts.Content;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
@@ -118,6 +119,14 @@ public static class ServiceRegistrationExtensions
     /// Rate-limiting policy for the per-session translation draft store.
     /// </summary>
     public const string TranslationDraftsRateLimitPolicy = "translation-drafts";
+
+    /// <summary>
+    /// Rate-limiting policy shared by every contribution flow that opens an
+    /// upstream pull request (translations, CMS content). One bucket on
+    /// purpose: the cost being bounded is PRs on the upstream repository, not
+    /// requests to any one endpoint.
+    /// </summary>
+    public const string ContributionsRateLimitPolicy = "contributions";
 
     /// <summary>Shared bucket for draft requests that present no credential.</summary>
     internal const string AnonymousDraftPartition = "anonymous";
@@ -242,9 +251,10 @@ public static class ServiceRegistrationExtensions
         services.Configure<GitHubIssueOptions>(configuration.GetSection("GitHub"));
         services.AddSingleton<GitHubIssueService>();
 
-        // GitHub translation contribution PRs + per-user draft storage
-        services.Configure<GitHubTranslationOptions>(configuration.GetSection("GitHub"));
+        services.Configure<GitHubContributionOptions>(configuration.GetSection("GitHub"));
+        services.AddSingleton<GitHubPrClient>();
         services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
+        services.AddSingleton<IContentContributionService, GitHubContentService>();
         services.AddScoped<ITranslationDraftService, TranslationDraftService>();
 
         return services;
@@ -547,10 +557,10 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
-            // Translation contributions: 10 per IP per hour (each opens an
-            // upstream PR, directly or via the relay).
+            // Contributions: 10 per IP per hour (each opens an upstream PR,
+            // directly or via the relay).
             options.AddPolicy(
-                "translation-contributions",
+                ContributionsRateLimitPolicy,
                 context =>
                     RateLimitPartition.GetFixedWindowLimiter(
                         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",

@@ -40,7 +40,7 @@ public class TranslationsControllerValidationTests
         {
             Locale = locale,
             Entries = entries ?? [new TranslationEntryDto { MsgId = "Hello", Translations = ["Bonjour"] }],
-            Contributor = new TranslationContributorDto
+            Contributor = new ContributionContributorDto
             {
                 Name = name,
                 GitHubUsername = gitHubUsername,
@@ -394,7 +394,15 @@ public class TranslationsControllerValidationTests
     [Fact]
     public void Validate_Rejects_Note_Over_The_Length_Cap()
     {
-        Reject(Request(note: new string('n', 2001))).Should().Be("Note must be under 2000 characters");
+        Reject(Request(note: new string('n', 2001)))
+            .Should().StartWith("Note must be under 2000 characters");
+    }
+
+    [Fact]
+    public void Validate_Rejects_Control_Chars_In_The_Note()
+    {
+        Reject(Request(note: "line one\u0000line two"))
+            .Should().StartWith("Note must be under 2000 characters");
     }
 
     [Fact]

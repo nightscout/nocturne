@@ -291,6 +291,11 @@ public class V4WriteScopeGatingTests
 
             ["TranslationsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
             ["TranslationsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
+
+            // Same shape as the translation contribution routes: the content studio proposes a
+            // .svx file as an upstream pull request and stores nothing locally.
+            ["ContentContributionsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
+            ["ContentContributionsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
         };
 
     /// <summary>
