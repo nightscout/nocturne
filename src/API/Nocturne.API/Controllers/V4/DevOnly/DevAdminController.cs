@@ -27,6 +27,7 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 /// <seealso cref="IConnectorSyncService"/>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("Dev Only")]
 [Route("api/v4/dev-only/admin")]
 [AllowAnonymous]
 [AllowDuringSetup]

@@ -35,6 +35,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="UpsertDeviceEventRequest"/>
 /// <seealso cref="DeviceAgeController"/>
 [ApiController]
+[Tags("Devices")]
 [Route("api/v4/observations/device-events")]
 [RequireScope(OAuthScopes.DevicesRead)]
 [Produces("application/json")]

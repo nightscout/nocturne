@@ -35,6 +35,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="CreateBasalInjectionRequest"/>
 /// <seealso cref="UpdateBasalInjectionRequest"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/insulin/basal-injections")]
 [RequireScope(OAuthScopes.TreatmentsRead)]
 [Produces("application/json")]

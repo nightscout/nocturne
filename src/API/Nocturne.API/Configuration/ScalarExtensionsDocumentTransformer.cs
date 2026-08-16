@@ -15,18 +15,31 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
     {
         ["Concepts"] = ["Syncing"],
         ["Authentication & Identity"] = ["Authentication", "OIDC Discovery", "Identity"],
-        ["Health Data"] = ["Glucose", "Treatments", "Health", "Devices", "State Spans"],
+        ["Health Data"] = ["Glucose", "Treatments", "Health", "Sleep", "Devices", "State Spans"],
         ["Insights & Alerting"] = ["Analytics", "Current Therapy State", "Monitoring"],
-        ["Configuration"] = ["Profiles", "Coach Marks", "Connectors", "Metadata"],
+        ["Configuration"] =
+            ["Profiles", "Coach Marks", "Connectors", "Client Devices", "Timezone Timeline", "Metadata"],
         ["Administration"] = ["Platform", "PlatformAdmin", "TenantAdmin"],
+        // Only reachable in Development: DevOnlyExcludingControllerFeatureProvider drops these
+        // controllers everywhere else, and an unused group is filtered out below.
+        ["Development"] = ["Dev Only"],
     };
 
     private static readonly Dictionary<string, string[]> NightscoutTagGroups = new()
     {
-        ["Nightscout Legacy API"] = ["V1", "V2", "V3"],
+        ["Nightscout Legacy API"] = ["V1", "V2", "V3", "V3 Version"],
         ["Data Model"] =
             ["ns-model-entries", "ns-model-treatments", "ns-model-devicestatus", "ns-model-profile"],
     };
+
+    /// <summary>
+    /// The sidebar tag groups published for <paramref name="documentName"/>, keyed group name → tag
+    /// names. Exposed so <c>ScalarTagGroupTests</c> can assert that every tag a controller publishes
+    /// into a document is claimed by exactly one group: Scalar builds its navigation from
+    /// <c>x-tagGroups</c>, so an ungrouped tag's operations are in the spec but absent from the docs.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string[]> TagGroupsFor(string documentName) =>
+        documentName == "nightscout" ? NightscoutTagGroups : NocturneTagGroups;
 
     public Task TransformAsync(
         OpenApiDocument document,
@@ -35,9 +48,7 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
     {
         document.Extensions ??= new Dictionary<string, IOpenApiExtension>();
 
-        var groups = context.DocumentName == "nightscout"
-            ? NightscoutTagGroups
-            : NocturneTagGroups;
+        var groups = TagGroupsFor(context.DocumentName);
 
         var usedTags = CollectUsedTags(document);
 

@@ -22,6 +22,7 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 /// outside Development.
 /// </summary>
 [ApiController]
+[Tags("Dev Only")]
 [Route("api/v4/dev-only/auth")]
 [AllowAnonymous]
 [AllowDuringSetup]

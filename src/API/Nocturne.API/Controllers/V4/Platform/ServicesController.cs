@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// <seealso cref="IConnectorHealthService"/>
 /// <seealso cref="IConnectorSyncService"/>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/services")]
 [Produces("application/json")]
 [Authorize]

@@ -21,13 +21,13 @@ public static class ApiDocumentMembership
         InNocturneDocument(ControllerNamespace(description));
 
     /// <summary>The "nightscout" document: the V1–V3 Nightscout compatibility surface.</summary>
-    public static bool InNightscoutDocument(ApiDescription description)
-    {
-        var controllerNamespace = ControllerNamespace(description);
-        return InVersion(controllerNamespace, "V1")
-            || InVersion(controllerNamespace, "V2")
-            || InVersion(controllerNamespace, "V3");
-    }
+    public static bool InNightscoutDocument(string controllerNamespace) =>
+        InVersion(controllerNamespace, "V1")
+        || InVersion(controllerNamespace, "V2")
+        || InVersion(controllerNamespace, "V3");
+
+    public static bool InNightscoutDocument(ApiDescription description) =>
+        InNightscoutDocument(ControllerNamespace(description));
 
     private static bool InVersion(string controllerNamespace, string version) =>
         controllerNamespace.Contains($".Controllers.{version}.", StringComparison.Ordinal)

@@ -9,6 +9,7 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Platform;
 
 [ApiController]
+[Tags("Platform")]
 [Authorize]
 [Route("api/v4/support")]
 public class SupportController(

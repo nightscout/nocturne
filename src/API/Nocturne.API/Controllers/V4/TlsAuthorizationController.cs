@@ -29,6 +29,7 @@ namespace Nocturne.API.Controllers.V4;
 /// </para>
 /// </remarks>
 [ApiController]
+[Tags("Platform")]
 [AllowAnonymous]
 [Route("api/v4/platform/tls-authorize")]
 [Produces("application/json")]

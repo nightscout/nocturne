@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/me/tenants")]
 [Produces("application/json")]
 [Authorize]

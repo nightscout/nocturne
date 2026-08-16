@@ -24,6 +24,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 /// <c>com.medtronic.carepartner:/sso</c> custom-scheme redirect, so no web callback can receive the code.
 /// </summary>
 [ApiController]
+[Tags("Connectors")]
 [Route("api/v4/connectors/carelink/connect")]
 [Authorize]
 // Completing this flow writes the signed-in CareLink username and country into the tenant's
