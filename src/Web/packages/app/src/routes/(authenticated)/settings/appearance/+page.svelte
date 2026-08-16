@@ -136,16 +136,24 @@
     })
   );
 
+  /**
+   * This page carries two scopes: units, formats, theme, chart style, widgets and language live on
+   * the subject, while chart range, glucose processing and tracker pills are the tenant's. The
+   * endpoints behind the tenant half are not served on a host that resolves none, so its queries
+   * are never created rather than left to 404.
+   */
+  const tenantless = page.data.tenantless === true;
+
   // Glucose processing settings
-  const preferenceQuery = getPreference();
-  const sourceDefaultsQuery = getSourceDefaults();
+  const preferenceQuery = tenantless ? null : getPreference();
+  const sourceDefaultsQuery = tenantless ? null : getSourceDefaults();
   let glucoseProcessingPreference: string | null = $derived(
-    preferenceQuery.current?.preferredGlucoseProcessing ?? null,
+    preferenceQuery?.current?.preferredGlucoseProcessing ?? null,
   );
   let sourceDefaults: Array<{ match: string; field: string; processing: string }> =
     $derived(
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- zod types the rule fields as optional, but the API always returns them populated
-      (sourceDefaultsQuery.current?.rules ?? []) as Array<{
+      (sourceDefaultsQuery?.current?.rules ?? []) as Array<{
         match: string;
         field: string;
         processing: string;
@@ -156,8 +164,8 @@
   // Chart range and tracker pills persist server-side. They used to only mutate
   // the in-memory settings store, which nothing ever saved, so the dashboard
   // picked the change up live and then lost it on reload.
-  const uiSettingsQuery = getUiSettings();
-  const featureSettings = $derived(uiSettingsQuery.current?.features);
+  const uiSettingsQuery = tenantless ? null : getUiSettings();
+  const featureSettings = $derived(uiSettingsQuery?.current?.features);
   const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
   const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
 
@@ -175,7 +183,7 @@
       await store.reload();
     } catch {
       toast.error("Could not save. Check your connection and try again.");
-      await uiSettingsQuery.refresh();
+      await uiSettingsQuery?.refresh();
     }
   }
 </script>
@@ -644,31 +652,33 @@
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <FormLabel>Default chart range</FormLabel>
-            <Select
-              type="single"
-              value={String(focusHours)}
-              onValueChange={(value: string) =>
-                saveFeatures({ display: { focusHours: parseInt(value) } })}
-            >
-              <SelectTrigger>
-                <span>{focusHours} hours</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2">2 hours</SelectItem>
-                <SelectItem value="3">3 hours</SelectItem>
-                <SelectItem value="4">4 hours</SelectItem>
-                <SelectItem value="6">6 hours</SelectItem>
-                <SelectItem value="12">12 hours</SelectItem>
-                <SelectItem value="24">24 hours</SelectItem>
-              </SelectContent>
-            </Select>
+        {#if !tenantless}
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <FormLabel>Default chart range</FormLabel>
+              <Select
+                type="single"
+                value={String(focusHours)}
+                onValueChange={(value: string) =>
+                  saveFeatures({ display: { focusHours: parseInt(value) } })}
+              >
+                <SelectTrigger>
+                  <span>{focusHours} hours</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 hours</SelectItem>
+                  <SelectItem value="3">3 hours</SelectItem>
+                  <SelectItem value="4">4 hours</SelectItem>
+                  <SelectItem value="6">6 hours</SelectItem>
+                  <SelectItem value="12">12 hours</SelectItem>
+                  <SelectItem value="24">24 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
 
-        <Separator class="my-4" />
+          <Separator class="my-4" />
+        {/if}
 
         <!-- Glucose line visual style -->
         <div class="grid gap-4 @sm:grid-cols-2">
@@ -848,6 +858,7 @@
     </div>
 
 
+    {#if !tenantless}
     <!-- Glucose Processing -->
     <Card>
       <CardHeader>
@@ -961,6 +972,7 @@
         </p>
       </CardContent>
     </Card>
+    {/if}
 
     <!-- Browser Tab Settings (Favicon) -->
     <TitleFaviconSettings />

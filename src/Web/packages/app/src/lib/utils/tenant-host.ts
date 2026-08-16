@@ -19,18 +19,15 @@ export function tenantUrl(
 }
 
 /**
- * The `Domain` attribute that scopes a cookie to every host sharing the base domain, or null when
- * widening is unsafe and the cookie must stay host-only.
+ * The `Domain` attribute scoping a cookie to every host under the base domain, or null where a
+ * browser would reject or discard it: a single-label host, an IP literal, or a `*.localhost` name
+ * (Chromium does not reliably scope cookies across those).
  *
- * Mirrors the API's `SessionCookieExtensions.ResolveCookieDomain`, which does this for the session
- * cookies; the two must agree or a browser holds preferences at one scope and its session at
- * another. Three cases yield null: a single-label host ("localhost") cannot carry a Domain
- * attribute at all, Chromium does not reliably scope cookies across `*.localhost` names, and an IP
- * literal has no domain hierarchy to widen into — a browser discards any cookie whose Domain is set
- * on an IP host, which would lose the value rather than narrow it.
+ * Mirrors the API's `SessionCookieExtensions.ResolveCookieDomain`. The two must agree, or a
+ * browser holds its preferences at one scope and its session at another.
  */
 export function resolveCookieDomain(baseDomain: string | null | undefined): string | null {
-  // A Domain attribute is a bare hostname; a value carrying a port is discarded wholesale.
+  // A value carrying a port is discarded wholesale.
   const host = (baseDomain ?? "").split(":")[0]!;
   if (!host) return null;
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return null;

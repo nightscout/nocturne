@@ -7,9 +7,12 @@ describe("paletteItemsFor", () => {
     expect(paletteItemsFor(false)).toEqual(items);
   });
 
-  it("offers only the dashboard on a tenantless host", () => {
+  it("offers only the subject-scoped destinations on a tenantless host", () => {
     // Everything else bounces back to "/" via the route guard, so Cmd-K must not advertise it.
-    expect(paletteItemsFor(true).map((item) => item.id)).toEqual(["page-dashboard"]);
+    expect(paletteItemsFor(true).map((item) => item.id)).toEqual([
+      "page-dashboard",
+      "settings-appearance",
+    ]);
   });
 
   it("keeps no entry whose destination needs a resolved tenant", () => {
@@ -29,6 +32,6 @@ describe("paletteItemsFor", () => {
     expect(groups).toContain("actions");
 
     const tenantlessGroups = new Set(paletteItemsFor(true).map((item) => item.group));
-    expect(tenantlessGroups).toEqual(new Set(["pages"]));
+    expect(tenantlessGroups).toEqual(new Set(["pages", "settings"]));
   });
 });

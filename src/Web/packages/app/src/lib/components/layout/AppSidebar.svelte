@@ -532,11 +532,8 @@
     <Sidebar.Menu>
       {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
-          <!-- The language choice still applies to this page; only persisting it needs a tenant
-               (the preferences write is tenant-scoped), so a tenantless host keeps the selector
-               and drops the write rather than losing the control entirely. -->
           <LanguageSelector
-            onLanguageChange={user && !tenantless
+            onLanguageChange={user
               ? (locale: string) =>
                   updateLanguagePreference({ preferredLanguage: locale })
               : undefined}

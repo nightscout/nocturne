@@ -28,6 +28,9 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/me/permissions")]
     // The login page's provider buttons — the only sign-in affordance on a tenantless host.
     [InlineData("/api/auth/oidc/providers")]
+    // The caller's own units/format/theme, stored on the subject. The tiles render glucose in
+    // the units held here, so a 404 is a wrong reading, not a cosmetic default.
+    [InlineData("/api/v4/user/preferences")]
     public void The_tenantless_dashboard_paths_are_allowed(string path)
     {
         TenantResolutionMiddleware.IsTenantlessAllowed(path).Should().BeTrue();
@@ -40,6 +43,10 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/v4/chart-data/dashboard")]
     [InlineData("/api/v4/me/tenants/overview/extra")]
     [InlineData("/api/v4/me/permissions/grant")]
+    // The tenant's own display configuration, which is a different endpoint to the subject's
+    // preferences and must not be reachable off a tenant.
+    [InlineData("/api/v4/ui-settings")]
+    [InlineData("/api/v4/settings/glucose-processing")]
     public void Tenant_scoped_paths_stay_gated(string path)
     {
         TenantResolutionMiddleware.IsTenantlessAllowed(path).Should().BeFalse();

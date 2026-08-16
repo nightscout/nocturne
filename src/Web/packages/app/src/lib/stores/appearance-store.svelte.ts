@@ -128,19 +128,12 @@ export function registerPreferencesWriteThrough(
   writeThrough = fn;
 }
 
-/**
- * The `Domain` attribute preference cookies are written with, or null for host-only cookies.
- * Injected rather than derived because BASE_DOMAIN reaches the browser only through layout data.
- */
+/** Injected rather than derived: BASE_DOMAIN reaches the browser only through layout data. */
 let preferenceCookieDomain: string | null = null;
 
 /**
- * Tell the store which domain to scope preference cookies to, and migrate the cookies this
- * document already wrote at the narrower scope.
- *
- * The base domain is not knowable at module load, but the cookies are written there — that is the
- * point of them, hydrating before first paint. So the first write of every document is necessarily
- * host-scoped, and this widens it as soon as the layout supplies the answer.
+ * Scope preference cookies to the base domain, and rewrite the ones this document already wrote
+ * host-scoped: cookies are written at module load, before the layout can supply the domain.
  */
 export function registerPreferenceCookieDomain(
   baseDomain: string | null | undefined
@@ -676,18 +669,12 @@ function hasAnyLocalPreference(): boolean {
 // ==========================================
 
 /**
- * The `document.cookie` assignments that store one preference cookie, in the order they must be
- * made. Pure so the scoping rules below are testable without a DOM.
+ * The `document.cookie` assignments storing one preference cookie, in the order they must be made.
+ * Pure so the scoping rules are testable without a DOM.
  *
- * Preferences belong to the subject, not to a tenant, so their cookies are widened to the base
- * domain exactly as the session cookies are — otherwise a user who set mmol/L and a 24-hour clock
- * on their tenant's subdomain gets the defaults on the dashboard host until the server round-trip
- * lands, which is the pre-paint hydration these cookies exist to provide.
- *
- * A browser that stored the host-scoped cookie before the widening presents both variants under one
- * `Cookie` header with no way to tell them apart, so the host-scoped one is expired ahead of every
- * widened write and clients converge on a single cookie. With no domain to widen to there is only
- * ever one cookie, and expiring it first would be deleting the value about to be written.
+ * A browser that stored the cookie before it was widened presents both variants under one `Cookie`
+ * header with no way to tell them apart, so a widened write expires the host-scoped one first.
+ * Unwidened there is only one cookie, and that expiry would delete the value being written.
  */
 export function preferenceCookieWrites(
   name: string,

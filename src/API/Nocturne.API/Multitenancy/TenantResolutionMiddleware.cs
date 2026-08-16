@@ -83,6 +83,11 @@ public class TenantResolutionMiddleware
         // carries — empty for an ordinary subject, non-empty for one holding global roles.
         // Caller-scoped either way, so nothing about a tenant is exposed.
         "/api/v4/me/permissions",
+        // Units, time format, region, colour theme, chart style, language — stored on the subject
+        // (subjects.preferences / subjects.preferred_language) and read by SubjectId alone. Not
+        // only presentation: the dashboard tiles render glucose in the units held here, so a 404
+        // shows an mmol/L user their children's readings in mg/dL.
+        "/api/v4/user/preferences",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",

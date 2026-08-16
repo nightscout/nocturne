@@ -6,11 +6,10 @@
  * tenantless surface is therefore whatever the API admits without a tenant, which today is the
  * cross-tenant overview and nothing else.
  *
- * The account and appearance settings pages look subject-scoped and are not: they call
- * /api/auth/passkey/*, /api/v4/totp/*, and /api/v4/settings, none of which the API serves off a
- * tenant. Listing them would put two entries in the sidebar that 404 when opened. Widening the
- * auth endpoints to tenantless hosts is a security-relevant change, and /api/v4/settings is
- * genuinely tenant-scoped, so they stay off the list until the API surface catches up.
+ * The account settings page stays off the list. It looks subject-scoped and its data is —
+ * passkeys, TOTP authenticators and linked identities are all keyed on the subject with no tenant
+ * column — but /api/auth/passkey/* and /api/auth/totp/* are not served off a tenant, and widening
+ * authentication endpoints is a security-relevant change that deserves its own review.
  */
 
 /**
@@ -23,6 +22,9 @@
  */
 export const TENANTLESS_NAV_HREFS: readonly string[] = [
   "/", // the cross-tenant overview
+  // Subject-scoped half only (subjects.preferences / subjects.preferred_language); the page hides
+  // its tenant-scoped half here.
+  "/settings/appearance",
 ];
 
 interface NavLike {

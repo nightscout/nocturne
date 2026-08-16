@@ -6,6 +6,7 @@ using Nocturne.API.Controllers.V2;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Connectors;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Controllers.V4.Profiles;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -87,6 +88,10 @@ public class DemoSubjectGatedEndpointsTests
         // caller's. List stays open — see TheSessionListStaysOpenWhileRevocationDoesNot.
         { typeof(SessionsController), nameof(SessionsController.Revoke) },
         { typeof(SessionsController), nameof(SessionsController.RevokeOthers) },
+
+        // Units, formats and theme persist on the shared subject, so one visitor's choice
+        // follows every later one. The read stays open, as with the session list above.
+        { typeof(UserPreferencesController), nameof(UserPreferencesController.UpdatePreferences) },
     };
 
     [Theory]
