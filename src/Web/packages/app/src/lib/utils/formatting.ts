@@ -235,6 +235,18 @@ export function minutesAgo(from: number, to: number = Date.now()): string {
 // =============================================================================
 
 /**
+ * NSwag-generated fields typed `Date` arrive over the wire as ISO strings
+ * (the client's jsonParseReviver is a no-op) — coerce defensively, and return
+ * null rather than an Invalid Date so callers can take their empty branch
+ * instead of feeding NaN to Intl.
+ */
+export function toDate(value: Date | string | undefined | null): Date | null {
+  if (value == null) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Formats a date string to display date and time
  * @param dateStr - ISO date string or undefined
  * @returns Formatted date and time string, or fallback

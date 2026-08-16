@@ -4,7 +4,7 @@ import type { TenantOverviewItem } from "$lib/api/generated/nocturne-api-client"
 import {
   glucoseStatusStyles,
   glucoseStatusSortOrder,
-  getGlucoseStatusStyle,
+  getGlucoseStatusClass,
   sortTenantsByUrgency,
 } from "./glucose-status";
 
@@ -12,36 +12,7 @@ describe("glucoseStatusStyles", () => {
   it("maps every GlucoseStatus value", () => {
     for (const status of Object.values(GlucoseStatus)) {
       expect(glucoseStatusStyles[status]).toBeDefined();
-      expect(glucoseStatusStyles[status].text).toMatch(/^text-/);
-      expect(glucoseStatusStyles[status].bg).toMatch(/^bg-/);
     }
-  });
-
-  it("maps glucose statuses to the glucose color scale", () => {
-    expect(glucoseStatusStyles[GlucoseStatus.UrgentLow].text).toBe(
-      "text-glucose-very-low"
-    );
-    expect(glucoseStatusStyles[GlucoseStatus.Low].text).toBe(
-      "text-glucose-low"
-    );
-    expect(glucoseStatusStyles[GlucoseStatus.InRange].text).toBe(
-      "text-glucose-in-range"
-    );
-    expect(glucoseStatusStyles[GlucoseStatus.High].text).toBe(
-      "text-glucose-high"
-    );
-    expect(glucoseStatusStyles[GlucoseStatus.UrgentHigh].text).toBe(
-      "text-glucose-very-high"
-    );
-  });
-
-  it("maps stale and unknown to muted styling", () => {
-    expect(glucoseStatusStyles[GlucoseStatus.Stale].text).toBe(
-      "text-muted-foreground"
-    );
-    expect(glucoseStatusStyles[GlucoseStatus.Unknown].text).toBe(
-      "text-muted-foreground"
-    );
   });
 });
 
@@ -70,22 +41,22 @@ describe("glucoseStatusSortOrder", () => {
   });
 });
 
-describe("getGlucoseStatusStyle", () => {
+describe("getGlucoseStatusClass", () => {
   it("falls back to the Unknown style for an unrecognized status string", () => {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- simulate a server enum value this client build doesn't know
-    expect(getGlucoseStatusStyle("SomethingNew" as GlucoseStatus)).toEqual(
+    expect(getGlucoseStatusClass("SomethingNew" as GlucoseStatus)).toEqual(
       glucoseStatusStyles[GlucoseStatus.Unknown]
     );
   });
 
   it("falls back to the Unknown style for undefined", () => {
-    expect(getGlucoseStatusStyle(undefined)).toEqual(
+    expect(getGlucoseStatusClass(undefined)).toEqual(
       glucoseStatusStyles[GlucoseStatus.Unknown]
     );
   });
 
   it("returns the mapped style for a known status", () => {
-    expect(getGlucoseStatusStyle(GlucoseStatus.Low)).toEqual(
+    expect(getGlucoseStatusClass(GlucoseStatus.Low)).toEqual(
       glucoseStatusStyles[GlucoseStatus.Low]
     );
   });

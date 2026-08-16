@@ -5,8 +5,8 @@
     AlertRuleSeverity,
     type TenantOverviewItem,
   } from "$lib/api/generated/nocturne-api-client";
-  import { getGlucoseStatusStyle } from "$lib/utils/glucose-status";
-  import { bg, bgDelta, minutesAgo } from "$lib/utils/formatting";
+  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
+  import { bg, bgDelta, minutesAgo, toDate } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { tenantUrl } from "$lib/utils/tenant-host";
   import { Bell } from "lucide-svelte";
@@ -18,14 +18,11 @@
 
   const { tenant, baseDomain }: Props = $props();
 
-  const style = $derived(getGlucoseStatusStyle(tenant.status));
+  const statusClass = $derived(getGlucoseStatusClass(tenant.status));
   const directionInfo = $derived(
     tenant.latest?.direction ? getDirectionInfo(tenant.latest.direction) : null
   );
-  // NSwag parses without a date reviver, so lastReadingAt may be a string at runtime.
-  const lastReadingMs = $derived(
-    tenant.lastReadingAt ? new Date(tenant.lastReadingAt).getTime() : null
-  );
+  const lastReadingAt = $derived(toDate(tenant.lastReadingAt));
   const href = $derived(
     tenant.slug && baseDomain ? tenantUrl(tenant.slug, baseDomain) : null
   );
@@ -67,7 +64,7 @@
       <div class="flex items-baseline gap-2">
         {#if tenant.latest?.mgdl != null}
           <span
-            class="text-3xl font-bold tabular-nums {style.text}"
+            class="text-3xl font-bold tabular-nums {statusClass}"
             data-testid="bg-value"
           >
             {bg(tenant.latest.mgdl)}
@@ -97,8 +94,8 @@
         {/if}
       </div>
       <p class="mt-1 text-xs text-muted-foreground" data-testid="freshness">
-        {#if lastReadingMs !== null}
-          Last reading {minutesAgo(lastReadingMs)}
+        {#if lastReadingAt}
+          Last reading {minutesAgo(lastReadingAt.getTime())}
         {:else}
           No recent data
         {/if}

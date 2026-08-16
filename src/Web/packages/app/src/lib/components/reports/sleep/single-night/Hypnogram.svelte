@@ -4,14 +4,13 @@
   import type { ScaleTime } from "d3-scale";
   import { getActogramData } from "$api/actogram.remote";
   import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, toDate } from "$lib/utils/formatting";
   import { resolveChartColor } from "$lib/utils/chart-colors";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
   } from "$lib/utils/sleep-stages";
-  import { toDate } from "$lib/utils/sleep-format";
   import { BasalDeliveryOrigin } from "$lib/api";
   import type { SleepStageInterval, SleepDawnPhenomenon } from "$lib/api";
 

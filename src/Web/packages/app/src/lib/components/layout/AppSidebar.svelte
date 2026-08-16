@@ -212,7 +212,6 @@
       return items.filter((i) => guestNavTitles.has(i.title));
     }
 
-    // Cross-tenant overview: only meaningful when the user belongs to more than one tenant.
     if (totalTenantCount > 1) {
       items.push({
         title: "Tenants",
@@ -414,7 +413,8 @@
     </div>
   {/if}
 
-  <!-- Tenant switcher (only visible when multiple tenants are available, hidden for guests) -->
+  <!-- The switcher needs a host to navigate to, so unlike the Tenants nav item it stays gated
+       on baseDomain. -->
   {#if baseDomain && totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
       <p

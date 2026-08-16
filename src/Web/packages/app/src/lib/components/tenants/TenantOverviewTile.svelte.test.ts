@@ -55,7 +55,7 @@ describe("TenantOverviewTile", () => {
 
     await expect
       .element(page.getByTestId("tenant-tile-link"))
-      // The test runner's page has a dev-server port; tenantUrl preserves it.
+      // Protocol comes from the runner's page, so assert only the host part.
       .toHaveAttribute("href", expect.stringContaining("//alice.example.com"));
   });
 
@@ -144,6 +144,22 @@ describe("TenantOverviewTile", () => {
     });
 
     await expect.element(page.getByTestId("bg-value")).toHaveTextContent("—");
+    await expect
+      .element(page.getByTestId("freshness"))
+      .toHaveTextContent("No recent data");
+  });
+
+  it("shows the no-data copy when lastReadingAt is unparseable", async () => {
+    render(TenantOverviewTile, {
+      props: {
+        tenant: makeTenant({
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- NSwag types this Date, but the wire value is an unvalidated string
+          lastReadingAt: "not-a-timestamp" as unknown as Date,
+        }),
+        baseDomain: "example.com",
+      },
+    });
+
     await expect
       .element(page.getByTestId("freshness"))
       .toHaveTextContent("No recent data");

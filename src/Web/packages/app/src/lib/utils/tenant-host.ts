@@ -7,7 +7,6 @@
  * so it must never be re-derived or re-decorated on the client.
  */
 
-/** Build the root URL for a tenant subdomain. */
 export function tenantUrl(
   slug: string,
   baseDomain: string,

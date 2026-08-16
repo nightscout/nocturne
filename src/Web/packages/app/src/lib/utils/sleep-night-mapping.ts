@@ -7,7 +7,7 @@
  * one of 1am on the same night both land on the same display day.
  */
 
-import { toDate } from "./sleep-format";
+import { toDate } from "./formatting";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 
