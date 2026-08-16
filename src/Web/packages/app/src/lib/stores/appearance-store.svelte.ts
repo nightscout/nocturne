@@ -30,6 +30,7 @@ import supportedLocales from "../../../../../supportedLocales.json";
 import { WidgetId } from "../api/generated/nocturne-api-client";
 import type { UserDisplayPreferences } from "$lib/api";
 import { weekStartName } from "../components/calendar/calendar-date";
+import { resolveCookieDomain } from "../utils/tenant-host";
 
 // ==========================================
 // Type Definitions
@@ -125,6 +126,34 @@ export function registerPreferencesWriteThrough(
   fn: (prefs: UserDisplayPreferences) => unknown
 ): void {
   writeThrough = fn;
+}
+
+/**
+ * The `Domain` attribute preference cookies are written with, or null for host-only cookies.
+ * Injected rather than derived because BASE_DOMAIN reaches the browser only through layout data.
+ */
+let preferenceCookieDomain: string | null = null;
+
+/**
+ * Tell the store which domain to scope preference cookies to, and migrate the cookies this
+ * document already wrote at the narrower scope.
+ *
+ * The base domain is not knowable at module load, but the cookies are written there — that is the
+ * point of them, hydrating before first paint. So the first write of every document is necessarily
+ * host-scoped, and this widens it as soon as the layout supplies the answer.
+ */
+export function registerPreferenceCookieDomain(
+  baseDomain: string | null | undefined
+): void {
+  if (!browser) return;
+
+  const domain = resolveCookieDomain(baseDomain);
+  if (domain === preferenceCookieDomain) return;
+  preferenceCookieDomain = domain;
+
+  const prefs = readPrefsCookie();
+  if (prefs) writePrefsCookie(prefs);
+  syncLanguageCookie(preferredLanguage.current);
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -646,10 +675,46 @@ function hasAnyLocalPreference(): boolean {
 // Preference cookie helpers
 // ==========================================
 
-function writePrefsCookie(prefs: UserDisplayPreferences): void {
+/**
+ * The `document.cookie` assignments that store one preference cookie, in the order they must be
+ * made. Pure so the scoping rules below are testable without a DOM.
+ *
+ * Preferences belong to the subject, not to a tenant, so their cookies are widened to the base
+ * domain exactly as the session cookies are — otherwise a user who set mmol/L and a 24-hour clock
+ * on their tenant's subdomain gets the defaults on the dashboard host until the server round-trip
+ * lands, which is the pre-paint hydration these cookies exist to provide.
+ *
+ * A browser that stored the host-scoped cookie before the widening presents both variants under one
+ * `Cookie` header with no way to tell them apart, so the host-scoped one is expired ahead of every
+ * widened write and clients converge on a single cookie. With no domain to widen to there is only
+ * ever one cookie, and expiring it first would be deleting the value about to be written.
+ */
+export function preferenceCookieWrites(
+  name: string,
+  value: string,
+  maxAge: number,
+  domain: string | null
+): string[] {
+  const write = `${name}=${value};path=/;max-age=${maxAge};SameSite=Lax`;
+  if (!domain) return [write];
+
+  return [`${name}=;path=/;max-age=0;SameSite=Lax`, `${write};domain=${domain}`];
+}
+
+/** The one writer for every preference cookie, so a scope can never drift between them. */
+function writePreferenceCookie(name: string, value: string, maxAge: number): void {
   if (!browser) return;
-  const value = encodeURIComponent(JSON.stringify(prefs));
-  document.cookie = `${PREFS_COOKIE_NAME}=${value};path=/;max-age=${PREFS_COOKIE_MAX_AGE};SameSite=Lax`;
+  for (const assignment of preferenceCookieWrites(name, value, maxAge, preferenceCookieDomain)) {
+    document.cookie = assignment;
+  }
+}
+
+function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  writePreferenceCookie(
+    PREFS_COOKIE_NAME,
+    encodeURIComponent(JSON.stringify(prefs)),
+    PREFS_COOKIE_MAX_AGE
+  );
 }
 
 /** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
@@ -730,6 +795,8 @@ export const preferredLanguage = new LanguagePref();
 /** Cookie name for language preference - used by SSR */
 export const LANGUAGE_COOKIE_NAME = "nocturne-language";
 
+const LANGUAGE_COOKIE_MAX_AGE = 31536000; // 1 year
+
 /**
  * The language the browser will settle on, from the same sources in the same order:
  * a saved subject preference outranks the cookie that mirrors localStorage. SSR
@@ -757,8 +824,7 @@ export function hasLanguagePreference(): boolean {
  * Sync language preference to cookie for server-side access
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
-  if (!browser) return;
-  document.cookie = `${LANGUAGE_COOKIE_NAME}=${locale};path=/;max-age=31536000;SameSite=Lax`;
+  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
 }
 
 /**

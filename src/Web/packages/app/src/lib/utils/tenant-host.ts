@@ -18,6 +18,28 @@ export function tenantUrl(
   return `${protocol}//${slug}.${baseDomain}/`;
 }
 
+/**
+ * The `Domain` attribute that scopes a cookie to every host sharing the base domain, or null when
+ * widening is unsafe and the cookie must stay host-only.
+ *
+ * Mirrors the API's `SessionCookieExtensions.ResolveCookieDomain`, which does this for the session
+ * cookies; the two must agree or a browser holds preferences at one scope and its session at
+ * another. Three cases yield null: a single-label host ("localhost") cannot carry a Domain
+ * attribute at all, Chromium does not reliably scope cookies across `*.localhost` names, and an IP
+ * literal has no domain hierarchy to widen into — a browser discards any cookie whose Domain is set
+ * on an IP host, which would lose the value rather than narrow it.
+ */
+export function resolveCookieDomain(baseDomain: string | null | undefined): string | null {
+  // A Domain attribute is a bare hostname; a value carrying a port is discarded wholesale.
+  const host = (baseDomain ?? "").split(":")[0]!;
+  if (!host) return null;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return null;
+  if (!host.includes(".")) return null;
+  if (host.toLowerCase().endsWith(".localhost")) return null;
+
+  return `.${host}`;
+}
+
 /** A membership as the tenant list returns it. */
 export type TenantListEntry = Pick<
   TenantDto,

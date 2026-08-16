@@ -23,6 +23,7 @@ const {
   applyPreferences,
   collectPreferences,
   hasStoredPreferences,
+  preferenceCookieWrites,
 } = await import("./appearance-store.svelte");
 
 describe("appearance-store preference sync", () => {
@@ -109,5 +110,45 @@ describe("appearance-store preference sync", () => {
       expect(hasStoredPreferences({ glucoseUnits: "mmol" })).toBe(true);
       expect(hasStoredPreferences({ prediction: { minutes: 30 } })).toBe(true);
     });
+  });
+});
+
+describe("preferenceCookieWrites", () => {
+  it("writes one host-scoped cookie when there is no domain to widen to", () => {
+    expect(preferenceCookieWrites("nocturne-prefs", "v", 60, null)).toEqual([
+      "nocturne-prefs=v;path=/;max-age=60;SameSite=Lax",
+    ]);
+  });
+
+  it("scopes the cookie to the base domain so it crosses tenant subdomains", () => {
+    expect(preferenceCookieWrites("nocturne-prefs", "v", 60, ".example.com")).toEqual([
+      "nocturne-prefs=;path=/;max-age=0;SameSite=Lax",
+      "nocturne-prefs=v;path=/;max-age=60;SameSite=Lax;domain=.example.com",
+    ]);
+  });
+
+  it("expires the host-scoped cookie before writing the widened one", () => {
+    // Both variants are presented under one Cookie header with no way to tell them apart, so a
+    // browser that stored the narrow cookie first must be converged onto the wide one.
+    const [first, second] = preferenceCookieWrites("nocturne-language", "en", 60, ".example.com");
+
+    expect(first).not.toContain("domain=");
+    expect(first).toContain("max-age=0");
+    expect(second).toContain("domain=.example.com");
+    expect(second).toContain("max-age=60");
+  });
+
+  it("never expires the cookie it is about to write when host-scoped", () => {
+    // Without a domain the two variants are the same cookie, so a leading expiry would delete it.
+    const writes = preferenceCookieWrites("nocturne-language", "en", 60, null);
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toContain("max-age=0");
+  });
+
+  it("carries the name, value and lifetime it was given", () => {
+    expect(preferenceCookieWrites("nocturne-language", "fr", 31536000, null)).toEqual([
+      "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax",
+    ]);
   });
 });

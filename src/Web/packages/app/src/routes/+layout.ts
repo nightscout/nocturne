@@ -5,8 +5,10 @@ import { browser } from '$app/environment'
 import {
     preferredLanguage,
     isSupportedLocale,
+    registerPreferenceCookieDomain,
     registerPreferencesWriteThrough,
     reconcilePreferences,
+    setLanguage,
     type SupportedLocale,
 } from '$lib/stores/appearance-store.svelte'
 import { updateDisplayPreferences } from '$lib/api/user-preferences.remote'
@@ -23,6 +25,14 @@ export const load: LayoutLoad = async ({ url, data }) => {
     // Determine the locale to use
     let locale: SupportedLocale = 'en'
 
+    // Wire up per-user display-preference sync (units, time format, theme, chart style).
+    // Registering the backend write-through here keeps the store free of server-remote imports,
+    // and the cookie domain must be registered before anything below writes a cookie.
+    if (browser) {
+        registerPreferenceCookieDomain(data?.baseDomain)
+        registerPreferencesWriteThrough((prefs) => updateDisplayPreferences(prefs))
+    }
+
     if (queryLocale && isSupportedLocale(queryLocale)) {
         // 1. Query param override
         locale = queryLocale
@@ -34,21 +44,14 @@ export const load: LayoutLoad = async ({ url, data }) => {
         // sync localStorage to match (handles new device case)
         const userPreference = data?.user?.preferredLanguage
         if (userPreference && isSupportedLocale(userPreference) && userPreference !== preferredLanguage.current) {
-            preferredLanguage.current = userPreference
+            await setLanguage(userPreference)
             locale = userPreference
-            // Also update the cookie
-            document.cookie = `nocturne-language=${userPreference};path=/;max-age=31536000;SameSite=Lax`
         }
     }
 
-    // Wire up per-user display-preference sync (units, time format, theme, chart style).
-    // Registering the backend write-through here keeps the store free of server-remote imports.
-    if (browser) {
-        registerPreferencesWriteThrough((prefs) => updateDisplayPreferences(prefs))
-        if (data?.isAuthenticated) {
-            // Server preferences win across devices; an empty server blob seeds from local once.
-            reconcilePreferences(data?.user?.preferences)
-        }
+    if (browser && data?.isAuthenticated) {
+        // Server preferences win across devices; an empty server blob seeds from local once.
+        reconcilePreferences(data?.user?.preferences)
     }
 
     // WUCHALE-DISABLED: wuchale temporarily disabled — locale dynamic load skipped.

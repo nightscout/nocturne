@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  resolveCookieDomain,
   resolveSingleTenantLanding,
   resolveTenantSwitcher,
   tenantUrl,
@@ -240,5 +241,48 @@ describe("resolveTenantSwitcher", () => {
     expect(switcher.targets).toEqual([
       { id: "c", slug: "carol", displayName: null },
     ]);
+  });
+});
+
+describe("resolveCookieDomain", () => {
+  it("widens to every host under the base domain", () => {
+    expect(resolveCookieDomain("example.com")).toBe(".example.com");
+  });
+
+  it("widens a multi-label base domain to itself, not to its parent", () => {
+    // nocturne.example.com is as valid a base domain as example.com; widening to .example.com
+    // would hand the cookie to hosts of an unrelated deployment.
+    expect(resolveCookieDomain("nocturne.example.com")).toBe(".nocturne.example.com");
+  });
+
+  it("drops the port, which a Domain attribute cannot carry", () => {
+    expect(resolveCookieDomain("example.com:1612")).toBe(".example.com");
+  });
+
+  it("keeps a single-label host cookie host-only", () => {
+    // Browsers reject a Domain attribute on "localhost" outright.
+    expect(resolveCookieDomain("localhost")).toBeNull();
+    expect(resolveCookieDomain("localhost:1612")).toBeNull();
+  });
+
+  it("keeps a .localhost host cookie host-only", () => {
+    // Chromium does not reliably scope cookies across *.localhost names.
+    expect(resolveCookieDomain("nocturne.localhost")).toBeNull();
+    expect(resolveCookieDomain("nocturne.localhost:1612")).toBeNull();
+    expect(resolveCookieDomain("NOCTURNE.LOCALHOST")).toBeNull();
+  });
+
+  it("keeps an IP-literal host cookie host-only", () => {
+    // A browser discards any cookie whose Domain is set on an IP host, losing the value.
+    expect(resolveCookieDomain("192.168.1.10")).toBeNull();
+    expect(resolveCookieDomain("192.168.1.10:1612")).toBeNull();
+    expect(resolveCookieDomain("[::1]:1612")).toBeNull();
+  });
+
+  it("has no domain to widen to without a base domain", () => {
+    expect(resolveCookieDomain(null)).toBeNull();
+    expect(resolveCookieDomain(undefined)).toBeNull();
+    expect(resolveCookieDomain("")).toBeNull();
+    expect(resolveCookieDomain(":1612")).toBeNull();
   });
 });
