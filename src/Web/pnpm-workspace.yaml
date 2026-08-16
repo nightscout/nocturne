@@ -38,3 +38,7 @@ packageExtensions:
   "@microsoft/signalr":
     dependencies:
       tough-cookie: "*"
+
+minimumReleaseAgeExclude:
+  - '@wuchale/svelte@0.20.4'
+  - wuchale@0.25.6

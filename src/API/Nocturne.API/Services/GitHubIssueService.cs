@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -10,8 +9,8 @@ public class GitHubIssueOptions
 {
     public string? IssuesPat { get; set; }
     public string RelayUrl { get; set; } = "https://nocturne.run/api/v4/support/issues";
-    public string Owner { get; set; } = "nightscout";
-    public string Repo { get; set; } = "nocturne";
+    public string Owner { get; set; } = GitHubApi.DefaultOwner;
+    public string Repo { get; set; } = GitHubApi.DefaultRepo;
 
     /// <summary>
     /// Branch of <see cref="Repo"/> that screenshot attachments are committed
@@ -85,7 +84,7 @@ public class GitHubIssueService(
         var body = BuildIssueBody(request, imageUrls, images.Count);
         var label = TemplateLabels.GetValueOrDefault(request.Template, "bug");
 
-        using var client = CreateGitHubClient();
+        using var client = GitHubApi.CreateClient(httpClientFactory, options.Value.IssuesPat);
         var ghRequest = new GitHubCreateIssueRequest
         {
             Title = request.Title,
@@ -162,7 +161,7 @@ public class GitHubIssueService(
             return urls;
         }
 
-        using var client = CreateGitHubClient();
+        using var client = GitHubApi.CreateClient(httpClientFactory, options.Value.IssuesPat);
 
         foreach (var (fileName, _, imageContent) in images)
         {
@@ -291,20 +290,6 @@ public class GitHubIssueService(
         sb.AppendLine("</details>");
 
         return sb.ToString();
-    }
-
-    private HttpClient CreateGitHubClient()
-    {
-        var client = httpClientFactory.CreateClient();
-        client.BaseAddress = new Uri("https://api.github.com");
-        client.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("Nocturne", "1.0"));
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", options.Value.IssuesPat);
-        client.DefaultRequestHeaders.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
-        return client;
     }
 
     private record GitHubCreateIssueRequest

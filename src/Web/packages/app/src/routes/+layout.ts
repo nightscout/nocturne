@@ -1,7 +1,6 @@
+import locales from '../../../../supportedLocales.json'
 import { browser } from '$app/environment'
-// WUCHALE-DISABLED: wuchale temporarily disabled
-// import locales from '../../../../supportedLocales.json'
-// import { loadLocale } from 'wuchale/load-utils'
+import { loadLocale } from 'wuchale/load-utils'
 import {
     preferredLanguage,
     isSupportedLocale,
@@ -11,8 +10,8 @@ import {
 } from '$lib/stores/appearance-store.svelte'
 import { updateDisplayPreferences } from '$lib/api/user-preferences.remote'
 // so that the loaders are registered, only here, not required in nested ones (below)
-// import '../../../../locales/main.loader.svelte.js'
-// import '../../../../locales/js.loader.js'
+import '../../../../locales/main.loader.svelte.js'
+import '../../../../locales/js.loader.js'
 
 import type { LayoutLoad } from './$types'
 
@@ -51,8 +50,9 @@ export const load: LayoutLoad = async ({ url, data }) => {
         }
     }
 
-    // WUCHALE-DISABLED: wuchale temporarily disabled — locale dynamic load skipped.
-    void locale
+    if (browser && locales.includes(locale)) {
+        await loadLocale(locale)
+    }
 
     return data
 }

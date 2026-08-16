@@ -273,6 +273,13 @@ public class V4WriteScopeGatingTests
             ["NotificationsController.MarkAsRead"] = NotDataCategory.PresentationState,
             ["NotificationsController.MarkAllAsRead"] = NotDataCategory.PresentationState,
             ["NotificationsController.DismissNotification"] = NotDataCategory.PresentationState,
+
+            // Both open a pull request on the upstream repository through the GitHub API and
+            // persist no tenant row, the same shape as SupportController above. The relay route is
+            // additionally [AllowAnonymous] by design: it is the ingress for instances that have no
+            // PAT of their own, so there is no credential whose scopes could be checked.
+            ["TranslationsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
+            ["TranslationsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
         };
 
     /// <summary>
