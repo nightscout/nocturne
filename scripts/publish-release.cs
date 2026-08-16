@@ -31,9 +31,8 @@ try
         ["Aspire__OptionalServices__AspireDashboard__Enabled"] = "false",
         ["Aspire__OptionalServices__Scalar__Enabled"] = "false",
         ["Aspire__OptionalServices__Watchtower__Enabled"] = "true",
-        // The AppHost defaults to ephemeral Postgres when it detects a git worktree,
-        // which drops the named data volume. That's right for local development and
-        // catastrophic in a release bundle, so pin the released compose to persistent.
+        // The AppHost defaults to ephemeral Postgres in a git worktree, which drops the
+        // named data volume — never right for a release bundle.
         ["NOCTURNE_DB_PERSISTENCE"] = "persistent",
     };
 

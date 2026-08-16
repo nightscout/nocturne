@@ -399,15 +399,12 @@ public static class PortainerComposePublisherExtensions
     }
 
     /// <summary>
-    /// Restricts Watchtower to the containers in this compose file: it puts Watchtower
-    /// in label-only mode and stamps every service — including Watchtower itself, so it
-    /// still self-updates — with the enable label. Unscoped, Watchtower updates every
-    /// container on the Docker daemon it is pointed at, so a host running Nocturne
-    /// alongside other stacks would have those updated too.
-    ///
-    /// Labelling is done here rather than per-resource in the AppHost so any service
-    /// added to the bundle later is covered by construction. Returns the compose
-    /// unchanged when Watchtower is disabled.
+    /// Puts Watchtower in label-only mode and stamps every service in the compose —
+    /// Watchtower included, so it still self-updates — with the enable label. Unscoped,
+    /// Watchtower updates every container on the daemon, including other stacks sharing
+    /// the host. Labelling here rather than per-resource in the AppHost covers any
+    /// service added to the bundle later. Returns the compose unchanged when Watchtower
+    /// is disabled.
     /// </summary>
     private static string ScopeWatchtowerToStack(string composeYaml)
     {
