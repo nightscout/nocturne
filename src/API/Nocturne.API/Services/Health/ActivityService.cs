@@ -592,10 +592,12 @@ public class ActivityService : IActivityService
     {
         try
         {
+            var sanitizedFindForLog = find?.Replace("\r", string.Empty).Replace("\n", string.Empty);
+
             _logger.LogDebug(
                 "Counting activity records in {Categories} with find: {Find}",
                 string.Join(",", categories),
-                find);
+                sanitizedFindForLog);
 
             // Sleep sessions are merged into GetActivitiesAsync only when `find` is
             // empty or a sleep type; the count applies the same gate
