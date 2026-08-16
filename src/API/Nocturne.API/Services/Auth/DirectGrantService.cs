@@ -56,11 +56,13 @@ public interface IDirectGrantService
     /// </summary>
     /// <param name="dbContext">The tenant-scoped context to query.</param>
     /// <param name="subjectId">
-    /// When set, only grants issued to this subject; otherwise every grant on the context's tenant.
+    /// When set, only grants issued to this subject; when null, every grant on the context's
+    /// tenant. Passed explicitly so a caller cannot widen the read to the whole tenant by
+    /// omitting it.
     /// </param>
     /// <param name="ct">The cancellation token.</param>
     Task<List<DirectGrantDto>> ListAsync(
-        NocturneDbContext dbContext, Guid? subjectId = null, CancellationToken ct = default);
+        NocturneDbContext dbContext, Guid? subjectId, CancellationToken ct = default);
 
     /// <summary>
     /// Revokes a direct grant by setting its <c>RevokedAt</c> timestamp. Idempotent.
@@ -168,9 +170,8 @@ public class DirectGrantService : IDirectGrantService
         await _auditService.LogAsync(AuthAuditEventType.TokenIssued, subjectId, success: true,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: actor == null
-                ? JsonSerializer.Serialize(new { method = "direct_grant", grant_id = entity.Id })
-                : JsonSerializer.Serialize(new { method = "direct_grant", grant_id = entity.Id, issued_by = actor }));
+            detailsJson: AuditDetails(
+                actor, "issued_by", ("method", "direct_grant"), ("grant_id", entity.Id)));
 
         return DirectGrantCreationResult.Created(new CreateDirectGrantResponse
         {
@@ -184,7 +185,7 @@ public class DirectGrantService : IDirectGrantService
 
     /// <inheritdoc />
     public async Task<List<DirectGrantDto>> ListAsync(
-        NocturneDbContext dbContext, Guid? subjectId = null, CancellationToken ct = default)
+        NocturneDbContext dbContext, Guid? subjectId, CancellationToken ct = default)
     {
         return await dbContext.OAuthGrants
             .AsNoTracking()
@@ -228,7 +229,7 @@ public class DirectGrantService : IDirectGrantService
 
         if (grant.RevokedAt.HasValue)
         {
-            return true; // Already revoked, idempotent
+            return true;
         }
 
         grant.RevokedAt = DateTime.UtcNow;
@@ -241,11 +242,25 @@ public class DirectGrantService : IDirectGrantService
         await _auditService.LogAsync(AuthAuditEventType.TokenRevoked, grant.SubjectId, success: true,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: actor == null
-                ? JsonSerializer.Serialize(new { grant_id = grantId })
-                : JsonSerializer.Serialize(new { grant_id = grantId, revoked_by = actor }));
+            detailsJson: AuditDetails(actor, "revoked_by", ("grant_id", grantId)));
 
         return true;
+    }
+
+    /// <summary>
+    /// Serializes the audit details, appending <paramref name="actorKey"/> only when the action was
+    /// performed by someone other than the grant's own subject.
+    /// </summary>
+    private static string AuditDetails(
+        string? actor, string actorKey, params (string Key, object Value)[] fields)
+    {
+        var details = fields.ToDictionary(f => f.Key, f => f.Value);
+        if (actor != null)
+        {
+            details[actorKey] = actor;
+        }
+
+        return JsonSerializer.Serialize(details);
     }
 
     private static string Base64UrlEncode(byte[] bytes)

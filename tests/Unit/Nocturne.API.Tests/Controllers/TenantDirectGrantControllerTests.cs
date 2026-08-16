@@ -232,6 +232,67 @@ public class TenantDirectGrantControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task List_ExcludesGrantsBelongingToAnotherTenant()
+    {
+        var (_, otherGrantId) = await SeedGrantOnOtherTenantAsync();
+
+        var result = await _controller.List(_tenantId, CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var grants = Assert.IsType<List<DirectGrantDto>>(okResult.Value);
+        Assert.DoesNotContain(grants, g => g.Id == otherGrantId);
+    }
+
+    [Fact]
+    public async Task Revoke_GrantOnAnotherTenant_ReturnsNotFoundAndLeavesItActive()
+    {
+        var (otherTenantId, otherGrantId) = await SeedGrantOnOtherTenantAsync();
+
+        var result = await _controller.Revoke(_tenantId, otherGrantId, CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(404, objectResult.StatusCode);
+
+        await using var otherContext = new NocturneDbContext(_dbOptions) { TenantId = otherTenantId };
+        var grant = await otherContext.OAuthGrants.AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == otherGrantId);
+        Assert.NotNull(grant);
+        Assert.Null(grant!.RevokedAt);
+    }
+
+    /// <summary>
+    /// Creates a second tenant carrying one active direct grant, so a test can assert the
+    /// controller's reach stops at the tenant named in the route.
+    /// </summary>
+    private async Task<(Guid TenantId, Guid GrantId)> SeedGrantOnOtherTenantAsync()
+    {
+        var otherTenantId = Guid.CreateVersion7();
+        var grantId = Guid.CreateVersion7();
+
+        await using var context = new NocturneDbContext(_dbOptions) { TenantId = otherTenantId };
+        context.Tenants.Add(new TenantEntity
+        {
+            Id = otherTenantId,
+            Slug = "other",
+            DisplayName = "Other",
+            IsActive = true,
+        });
+        context.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = grantId,
+            SubjectId = _memberSubjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = ["glucose.read"],
+            Label = "Other Tenant Grant",
+            TokenHash = "hashother",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await context.SaveChangesAsync();
+
+        return (otherTenantId, grantId);
+    }
+
+    [Fact]
     public async Task Revoke_SetsRevokedAt()
     {
         var grantId = Guid.CreateVersion7();
@@ -286,7 +347,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
 
         _auditService.Verify(a => a.LogAsync(
-            It.IsAny<string>(), _memberSubjectId, true,
+            AuthAuditEventType.TokenIssued, _memberSubjectId, true,
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.Is<string?>(d => d != null && d.Contains("\"issued_by\":\"InstanceKey\"")),
             It.IsAny<Guid?>()));
@@ -294,7 +355,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         await _controller.Revoke(_tenantId, response.Id, CancellationToken.None);
 
         _auditService.Verify(a => a.LogAsync(
-            It.IsAny<string>(), _memberSubjectId, true,
+            AuthAuditEventType.TokenRevoked, _memberSubjectId, true,
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.Is<string?>(d => d != null && d.Contains("\"revoked_by\":\"InstanceKey\"")),
             It.IsAny<Guid?>()));

@@ -53,6 +53,7 @@ public class TenantDirectGrantController : ControllerBase
     /// </summary>
     /// <param name="tenantId">The tenant the grant is bound to.</param>
     /// <param name="request">The subject to issue the grant to, plus label and scopes.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>A <see cref="CreateDirectGrantResponse"/> containing the grant ID and the single-use plaintext token.</returns>
     [HttpPost]
     [RemoteCommand(Invalidates = ["List"])]
@@ -89,6 +90,8 @@ public class TenantDirectGrantController : ControllerBase
     /// Never returns the token itself.
     /// </summary>
     /// <param name="tenantId">The tenant whose grants to list.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The tenant's non-revoked direct grants, newest first.</returns>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DirectGrantDto>), StatusCodes.Status200OK)]
@@ -105,6 +108,7 @@ public class TenantDirectGrantController : ControllerBase
     /// </summary>
     /// <param name="tenantId">The tenant the grant belongs to.</param>
     /// <param name="grantId">The GUID of the grant to revoke.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns><c>204 No Content</c> on success (including when already revoked); <c>404 Not Found</c> if the grant does not exist on the tenant.</returns>
     [HttpDelete("{grantId:guid}")]
     [RemoteCommand(Invalidates = ["List"])]
