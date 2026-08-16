@@ -41,6 +41,9 @@ public sealed class TenantlessDashboardPathsTests
     [InlineData("/api/auth/totp/setup")]
     [InlineData("/api/auth/totp/verify-setup")]
     [InlineData("/api/auth/oidc/link/identities")]
+    // Linking is a full-page navigation, so a 404 loses the page rather than one control.
+    [InlineData("/api/auth/oidc/link")]
+    [InlineData("/api/auth/oidc/link/callback")]
     [InlineData("/api/v4/me/avatar")]
     public void The_tenantless_dashboard_paths_are_allowed(string path)
     {

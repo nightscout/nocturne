@@ -139,7 +139,6 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Username is required", statusCode: 400, title: "Bad Request");
         }
 
-        var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
             subjectId.Value, request.Username);
 
@@ -650,7 +649,6 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
-        var tenantId = _tenantAccessor.TenantId;
         var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value);
         var primaryFactorCount = await _subjectService.CountPrimaryAuthFactorsAsync(auth.SubjectId.Value);
 

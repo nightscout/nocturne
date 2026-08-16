@@ -30,7 +30,9 @@ export function resolveCookieDomain(baseDomain: string | null | undefined): stri
   // A value carrying a port is discarded wholesale.
   const host = (baseDomain ?? "").split(":")[0]!;
   if (!host) return null;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return null;
+  // Any all-numeric dotted form, not just four octets: the API uses IPAddress.TryParse, which
+  // also accepts shorthand such as "10.0.1".
+  if (/^\d+(\.\d+)*$/.test(host)) return null;
   if (!host.includes(".")) return null;
   if (host.toLowerCase().endsWith(".localhost")) return null;
 

@@ -717,13 +717,27 @@ export function parsePrefsCookie(
   }
 }
 
-function readPrefsCookie(): UserDisplayPreferences | null {
-  if (!browser) return null;
-  const match = document.cookie
+/**
+ * The value of a named cookie in a `document.cookie` header, taking the LAST of same-name rows.
+ *
+ * Through the widening transition a browser can hold both a host-scoped and a base-domain variant,
+ * indistinguishable in the header. RFC 6265 orders equal-path cookies oldest first, so the last is
+ * the newer of the two — taking the first would let a stale value win and then be written back as
+ * the widened one.
+ */
+export function readCookieFrom(header: string, name: string): string | null {
+  const match = header
     .split("; ")
-    .find((row) => row.startsWith(`${PREFS_COOKIE_NAME}=`));
-  if (!match) return null;
-  return parsePrefsCookie(match.slice(PREFS_COOKIE_NAME.length + 1));
+    .findLast((row) => row.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
+
+function readCookie(name: string): string | null {
+  return browser ? readCookieFrom(document.cookie, name) : null;
+}
+
+function readPrefsCookie(): UserDisplayPreferences | null {
+  return parsePrefsCookie(readCookie(PREFS_COOKIE_NAME));
 }
 
 // Hydrate synchronously from the cookie on load (before first paint) so a known
@@ -812,6 +826,22 @@ export function hasLanguagePreference(): boolean {
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
   writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
+}
+
+/**
+ * The language to start from, given what this origin stored and what the shared cookie carries.
+ *
+ * localStorage is per-origin while the cookie spans the base domain, so a first visit to a sibling
+ * subdomain has no stored value and must adopt the cookie's. Writing the default back instead
+ * would destroy the choice on every host, not merely fail to honour it on this one. A stored value
+ * is this device's own answer and wins; an unrecognised cookie is ignored.
+ */
+export function resolveInitialLanguage(
+  stored: string | null,
+  cookie: string | null
+): SupportedLocale | null {
+  if (stored !== null) return null;
+  return cookie && isSupportedLocale(cookie) ? cookie : null;
 }
 
 /**
@@ -913,7 +943,13 @@ export function getLanguage(): SupportedLocale {
   return preferredLanguage.current;
 }
 
-// Sync cookie on initial load in browser
 if (browser) {
+  // Hydrate before writing back, as the display preferences do.
+  const adopted = resolveInitialLanguage(
+    localStorage.getItem(LANGUAGE_COOKIE_NAME),
+    readCookie(LANGUAGE_COOKIE_NAME)
+  );
+  if (adopted) preferredLanguage.current = adopted;
+
   syncLanguageCookie(preferredLanguage.current);
 }

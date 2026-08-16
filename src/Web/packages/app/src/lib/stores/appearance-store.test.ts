@@ -24,6 +24,8 @@ const {
   collectPreferences,
   hasStoredPreferences,
   preferenceCookieWrites,
+  readCookieFrom,
+  resolveInitialLanguage,
 } = await import("./appearance-store.svelte");
 
 describe("appearance-store preference sync", () => {
@@ -150,5 +152,56 @@ describe("preferenceCookieWrites", () => {
     expect(preferenceCookieWrites("nocturne-language", "fr", 31536000, null)).toEqual([
       "nocturne-language=fr;path=/;max-age=31536000;SameSite=Lax",
     ]);
+  });
+});
+
+describe("readCookieFrom", () => {
+  it("reads a cookie out of the header", () => {
+    expect(readCookieFrom("a=1; nocturne-prefs=x; b=2", "nocturne-prefs")).toBe("x");
+  });
+
+  it("takes the newer of two same-name cookies, not the first", () => {
+    // A browser mid-widening holds a host-scoped and a base-domain variant with no way to tell
+    // them apart; RFC 6265 orders equal-path cookies oldest first.
+    expect(readCookieFrom("nocturne-prefs=stale; nocturne-prefs=fresh", "nocturne-prefs"))
+      .toBe("fresh");
+  });
+
+  it("does not match a cookie whose name merely starts the same", () => {
+    expect(readCookieFrom("nocturne-prefs-old=x", "nocturne-prefs")).toBeNull();
+  });
+
+  it("reads an empty value as empty rather than absent", () => {
+    expect(readCookieFrom("nocturne-prefs=", "nocturne-prefs")).toBe("");
+  });
+
+  it("finds nothing in an empty or unrelated header", () => {
+    expect(readCookieFrom("", "nocturne-prefs")).toBeNull();
+    expect(readCookieFrom("other=1", "nocturne-prefs")).toBeNull();
+  });
+});
+
+describe("resolveInitialLanguage", () => {
+  it("adopts the shared cookie when this origin stored nothing", () => {
+    // The destructive case: localStorage is per-origin, so a first visit to a sibling subdomain
+    // reads nothing and would otherwise write the default over the whole base domain.
+    expect(resolveInitialLanguage(null, "de")).toBe("de");
+  });
+
+  it("keeps this origin's stored language over the cookie", () => {
+    expect(resolveInitialLanguage(JSON.stringify("fr"), "de")).toBeNull();
+  });
+
+  it("keeps a stored language even when it matches the cookie", () => {
+    expect(resolveInitialLanguage(JSON.stringify("de"), "de")).toBeNull();
+  });
+
+  it("ignores a cookie naming a locale that is not supported", () => {
+    expect(resolveInitialLanguage(null, "klingon")).toBeNull();
+  });
+
+  it("adopts nothing when there is no cookie either", () => {
+    expect(resolveInitialLanguage(null, null)).toBeNull();
+    expect(resolveInitialLanguage(null, "")).toBeNull();
   });
 });

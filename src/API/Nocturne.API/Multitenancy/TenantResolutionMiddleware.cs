@@ -149,12 +149,22 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post),
         new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post),
         new TenantlessPath("/api/auth/totp", HttpMethods.Get),
-        // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the
-        // sibling POST /login, which gates on membership of the resolved tenant, stays out.
+        // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
+        // /login, which gates on membership of the resolved tenant, is not admitted under the POST
+        // it is served on. Asked without a method this prefix answers for its own DELETE, so a
+        // coverage sweep sees /login as reachable; routing has no DELETE there to reach.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true),
         // GET the list and DELETE one by id; nothing else is routed beneath either.
         new TenantlessPath("/api/auth/passkey/credentials", Prefix: true),
         new TenantlessPath("/api/auth/oidc/link/identities", Prefix: true),
+        // Linking an identity is a full-page navigation, so a 404 loses the page rather than
+        // failing one control. It reads its tenant slug as a nullable off HttpContext.Items purely
+        // to route the callback home, which on a tenantless host is where the caller already is —
+        // the same shape as the login/callback pair above.
+        new TenantlessPath("/api/auth/oidc/link", HttpMethods.Get),
+        new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get),
+        // GET is [AllowAnonymous] and serves any subject's picture by id on every tenant host
+        // already; it is admitted here because the page renders through it.
         "/api/v4/me/avatar",
 
         // Cross-tenant by design: these operate on arbitrary tenants by id and so cannot rely on
