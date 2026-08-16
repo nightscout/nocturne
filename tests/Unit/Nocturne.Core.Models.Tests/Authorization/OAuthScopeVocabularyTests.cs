@@ -109,6 +109,8 @@ public class OAuthScopeVocabularyTests
             "api:*:read", "api:*:create", "api:*:update", "api:*:delete",
             "api:entries:read", "api:entries:create", "api:treatments:update",
             "api:devicestatus:create", "api:food:update", "api:profile:create",
+            "api:entries:*", "api:treatments:*", "api:devicestatus:*", "api:food:*",
+            "api:profile:*", "api:activity:*", "*:*:read",
             "readable",
         ];
 

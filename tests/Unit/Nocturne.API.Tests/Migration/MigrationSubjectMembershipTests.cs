@@ -22,8 +22,9 @@ namespace Nocturne.API.Tests.Migration;
 /// </summary>
 public class MigrationSubjectMembershipTests
 {
-    private const string ReadableToken = "reader-a1b2c3d4e5f6a7b8";
+    private const string ReaderToken = "reader-a1b2c3d4e5f6a7b8";
     private const string AdminToken = "boss-1111222233334444";
+    private const string DeniedToken = "gone-9999888877776666";
 
     /// <summary>
     /// Stands in for the source Nightscout instance, serving its two authorization endpoints.
@@ -49,13 +50,19 @@ public class MigrationSubjectMembershipTests
                         "_id": "5f1a00000000000000000001",
                         "name": "Reader",
                         "roles": ["readable", "logger"],
-                        "accessToken": "{{ReadableToken}}"
+                        "accessToken": "{{ReaderToken}}"
                       },
                       {
                         "_id": "5f1a00000000000000000002",
                         "name": "Boss",
                         "roles": ["admin"],
                         "accessToken": "{{AdminToken}}"
+                      },
+                      {
+                        "_id": "5f1a00000000000000000003",
+                        "name": "Gone",
+                        "roles": ["denied"],
+                        "accessToken": "{{DeniedToken}}"
                       }
                     ]
                     """,
@@ -89,13 +96,19 @@ public class MigrationSubjectMembershipTests
         public void SetTenant(TenantContext? tenant) => Context = tenant;
     }
 
-    private static ServiceProvider BuildProvider(string databaseName) =>
-        new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(databaseName))
+    private static ServiceProvider BuildProvider()
+    {
+        // Named once, outside the options lambda: the lambda runs per context, so generating the
+        // name there would give every context its own store.
+        var database = $"migration-membership-{Guid.NewGuid():N}";
+
+        return new ServiceCollection()
+            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory, StubHttpClientFactory>()
             .BuildServiceProvider();
+    }
 
     /// <summary>
     /// Runs a subjects-only API migration to completion against <see cref="NightscoutStub"/> and
@@ -133,18 +146,18 @@ public class MigrationSubjectMembershipTests
         return tenant.TenantId;
     }
 
-    private static async Task<TenantMemberEntity> MemberForAsync(
-        NocturneDbContext db, Guid tenantId, string accessTokenName)
+    private static async Task<TenantMemberEntity?> MemberForAsync(
+        NocturneDbContext db, Guid tenantId, string subjectName)
     {
-        var subject = await db.Subjects.SingleAsync(s => s.Name == accessTokenName);
-        return await db.TenantMembers.SingleAsync(
+        var subject = await db.Subjects.SingleAsync(s => s.Name == subjectName);
+        return await db.TenantMembers.SingleOrDefaultAsync(
             tm => tm.TenantId == tenantId && tm.SubjectId == subject.Id);
     }
 
     [Fact]
-    public async Task Imported_subject_becomes_a_member_holding_its_Nightscout_permissions()
+    public async Task Imported_subject_becomes_a_member_holding_exactly_its_Nightscout_permissions()
     {
-        await using var provider = BuildProvider($"migration-membership-{Guid.NewGuid():N}");
+        await using var provider = BuildProvider();
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
@@ -152,16 +165,29 @@ public class MigrationSubjectMembershipTests
 
         var member = await MemberForAsync(db, tenantId, "Reader");
 
-        // "readable" carries the read scopes; the custom "logger" role's "api:treatments:*" is what
-        // lets it write treatments back.
-        member.DirectPermissions.Should().Contain(
-            [TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsReadWrite]);
+        // "readable" ("*:*:read") carries the reads; the custom "logger" role's "api:treatments:*"
+        // is what lets it write treatments back. Asserted exclusively: the risk in translating a
+        // legacy grant is granting more than the source did, which a containment check would miss.
+        member!.DirectPermissions.Should().BeEquivalentTo([
+            TenantPermissions.GlucoseRead,
+            TenantPermissions.TreatmentsRead,
+            TenantPermissions.TreatmentsReadWrite,
+            TenantPermissions.DevicesRead,
+            TenantPermissions.TherapyRead,
+            TenantPermissions.FoodRead,
+            TenantPermissions.AlertsRead,
+            TenantPermissions.ReportsRead,
+            TenantPermissions.IdentityRead,
+            TenantPermissions.HeartRateRead,
+            TenantPermissions.StepCountRead,
+            TenantPermissions.SleepRead,
+        ]);
     }
 
     [Fact]
     public async Task Imported_membership_grants_scopes_on_the_legacy_access_token()
     {
-        await using var provider = BuildProvider($"migration-membership-{Guid.NewGuid():N}");
+        await using var provider = BuildProvider();
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
@@ -169,18 +195,21 @@ public class MigrationSubjectMembershipTests
 
         // The other half of the round trip: what MemberScopeMiddleware makes of the membership when
         // the imported token authenticates. An empty result is the 401 this migration used to cause.
+        var member = await MemberForAsync(db, tenantId, "Reader");
         var resolved = MemberScopeResolver.Resolve(
-            (await MemberForAsync(db, tenantId, "Reader")).DirectPermissions!.ToHashSet(),
+            member!.DirectPermissions!.ToHashSet(),
             AuthType.LegacyAccessToken,
             new HashSet<string>());
 
-        resolved.Should().Contain(OAuthScopes.GlucoseRead);
+        resolved.Should().Contain([OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite]);
+        resolved.Should().NotContain([
+            OAuthScopes.FullAccess, TenantPermissions.MembersManage, TenantPermissions.SharingManage]);
     }
 
     [Fact]
     public async Task A_Nightscout_admin_is_imported_as_a_superuser_member()
     {
-        await using var provider = BuildProvider($"migration-membership-{Guid.NewGuid():N}");
+        await using var provider = BuildProvider();
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
@@ -189,16 +218,63 @@ public class MigrationSubjectMembershipTests
         var member = await MemberForAsync(db, tenantId, "Boss");
 
         // Stored as the bare atom rather than the expansion, so the grant tracks the scope list.
-        member.DirectPermissions.Should().Equal(TenantPermissions.Superuser);
+        member!.DirectPermissions.Should().Equal(TenantPermissions.Superuser);
     }
 
     [Fact]
-    public async Task Re_importing_repairs_a_subject_that_has_no_membership()
+    public async Task A_denied_subject_gets_no_membership()
     {
-        await using var provider = BuildProvider($"migration-membership-{Guid.NewGuid():N}");
+        await using var provider = BuildProvider();
+        var tenantId = await RunSubjectMigrationAsync(provider);
 
-        // A subject as an earlier migration left it: imported, with the matching token hash, and
-        // with no membership of the tenant it was imported into.
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+
+        // Nightscout's "denied" grants nothing, so a membership would only put a member on the
+        // tenant's member list who cannot do anything.
+        (await MemberForAsync(db, tenantId, "Gone")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_source_role_does_not_inherit_a_same_named_local_roles_permissions()
+    {
+        await using var provider = BuildProvider();
+
+        // The instance already has a role called "logger" that grants everything. The source's
+        // "logger" is a narrow custom role; the name collision must not widen the import.
+        using (var seedScope = provider.CreateScope())
+        {
+            var seed = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            seed.Roles.Add(new RoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "logger",
+                Description = "Local role that happens to share the name",
+                Permissions = ["*"],
+                IsSystemRole = false,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var tenantId = await RunSubjectMigrationAsync(provider);
+
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+
+        var member = await MemberForAsync(db, tenantId, "Reader");
+
+        member!.DirectPermissions.Should().NotContain(TenantPermissions.Superuser);
+        member.DirectPermissions.Should().Contain(TenantPermissions.TreatmentsReadWrite);
+    }
+
+    [Fact]
+    public async Task A_subject_whose_token_is_already_known_is_left_untouched()
+    {
+        await using var provider = BuildProvider();
+
+        // Subjects are global and carry no tenant, so a token hash can match a subject another
+        // tenant imported. Duplicate detection stays a plain skip: granting on a hash match would
+        // let one tenant's migration attach a subject it does not own.
         var strandedId = Guid.CreateVersion7();
         using (var seedScope = provider.CreateScope())
         {
@@ -207,7 +283,7 @@ public class MigrationSubjectMembershipTests
             {
                 Id = strandedId,
                 Name = "Reader",
-                AccessTokenHash = Sha256Hex(ReadableToken),
+                AccessTokenHash = Sha256Hex(ReaderToken),
                 IsActive = true,
                 ApprovalStatus = "Approved",
             });
@@ -219,11 +295,9 @@ public class MigrationSubjectMembershipTests
         using var scope = provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
-        // Repaired in place: the duplicate token must not produce a second subject.
         db.Subjects.Should().ContainSingle(s => s.Name == "Reader");
-        var member = await db.TenantMembers.SingleAsync(
-            tm => tm.TenantId == tenantId && tm.SubjectId == strandedId);
-        member.DirectPermissions.Should().Contain(TenantPermissions.GlucoseRead);
+        (await db.TenantMembers.AnyAsync(
+            tm => tm.TenantId == tenantId && tm.SubjectId == strandedId)).Should().BeFalse();
     }
 
     private static string Sha256Hex(string value) => Convert.ToHexStringLower(

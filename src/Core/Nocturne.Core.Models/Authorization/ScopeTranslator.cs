@@ -86,10 +86,9 @@ public static class ScopeTranslator
         ["api:profile:update"] = [OAuthScopes.TherapyReadWrite],
         ["api:profile:delete"] = [OAuthScopes.FullAccess],
 
-        // Verb wildcards. Nightscout's own default roles are written this way ("api:activity:*" on
-        // activity, "api:treatments:*" on the seeded careportal role), so a subject holding one had
-        // no scope at all until these were mapped. Collapsed to readwrite on the same basis as
-        // create/update above: delete stays gated behind "*".
+        // Verb wildcards, which is how Nightscout's own seeded roles are written ("api:activity:*"
+        // on activity, "api:treatments:*" on careportal). Collapsed to readwrite on the same basis
+        // as create/update above: delete stays gated behind "*".
         ["api:entries:*"] = [OAuthScopes.GlucoseReadWrite],
         ["api:treatments:*"] = [OAuthScopes.TreatmentsReadWrite],
         ["api:devicestatus:*"] = [OAuthScopes.DevicesReadWrite],
