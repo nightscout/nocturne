@@ -276,6 +276,42 @@ public class FoodsControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFoods_WithoutCount_ReadsNoMoreThanTheCeiling()
+    {
+        var controller = CreateController(null);
+
+        await controller.GetFoods();
+
+        VerifyCatalogRead(count: V4ReadLimits.MaxPageSize, skip: 0);
+    }
+
+    [Fact]
+    public async Task GetFoods_CountAtCeiling_ReachesServiceUnchanged()
+    {
+        var controller = CreateController(null);
+
+        await controller.GetFoods(count: V4ReadLimits.MaxPageSize, skip: 0);
+
+        VerifyCatalogRead(count: V4ReadLimits.MaxPageSize, skip: 0);
+    }
+
+    [Fact]
+    public async Task GetFoods_CountAboveCeiling_IsClamped()
+    {
+        var controller = CreateController(null);
+
+        await controller.GetFoods(count: V4ReadLimits.MaxPageSize + 1, skip: -1);
+
+        VerifyCatalogRead(count: V4ReadLimits.MaxPageSize, skip: 0);
+    }
+
+    private void VerifyCatalogRead(int count, int skip) =>
+        _foodServiceMock.Verify(
+            x => x.GetFoodAsync(null, count, skip, It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+
+    [Fact]
     public async Task GetRecentFoods_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var controller = CreateController(null);

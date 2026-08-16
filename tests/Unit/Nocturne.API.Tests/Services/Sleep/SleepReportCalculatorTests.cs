@@ -674,6 +674,28 @@ public class SleepReportCalculatorTests
         summary.DisplayDate.Should().Be("2026-01-15");
     }
 
+    [Fact]
+    public void ComputeNightSummary_DisplayDate_ResolvesMisCasedTimezoneId()
+    {
+        // ETC/GMT-11 is UTC+11, the same offset as Sydney in January, mis-cased the
+        // way connectors store it. Linux looks up /usr/share/zoneinfo/<id> literally,
+        // so an exact lookup misses (and throws) where the shared resolver recovers
+        // the intended zone; falling back to UTC would key this night to Jan 14.
+        var session = new SleepSession
+        {
+            Id           = Guid.NewGuid().ToString(),
+            StartTime    = new DateTime(2026, 1, 15, 11, 0, 0, DateTimeKind.Utc),
+            EndTime      = new DateTime(2026, 1, 15, 19, 0, 0, DateTimeKind.Utc),
+            Timezone     = "ETC/GMT-11",
+            TotalSleepMs = 480L * 60_000,
+            Source       = SleepSource.Oura,
+        };
+
+        var summary = API.Services.Sleep.SleepReportCalculator.ComputeNightSummary(session, [], _thresholds);
+
+        summary.DisplayDate.Should().Be("2026-01-15");
+    }
+
     // ── Weekly Summaries ──────────────────────────────────────────────────
 
     // 2026-05-04, -11, -18 are Mondays.

@@ -15,6 +15,9 @@ public static class NSwagDocumentConfiguration
         settings.DocumentName = "nocturne";
         settings.Title = "Nocturne API";
         settings.Version = "0.0.1";
+        settings.Description =
+            "Modern C# rewrite of the Nightscout API. v1-v3 are 1:1 compatible with the legacy "
+            + "JavaScript implementation; v4 is new.";
 
         settings.AddOperationFilter(context =>
             ApiDocumentMembership.InNocturneDocument(context.ControllerType.Namespace ?? string.Empty));

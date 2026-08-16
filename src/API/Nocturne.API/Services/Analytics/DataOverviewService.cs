@@ -214,7 +214,16 @@ public class DataOverviewService : IDataOverviewService
                 DateTimeOffset.FromUnixTimeMilliseconds(globalMax.Value),
                 tz
             );
-            years = Enumerable.Range(minLocal.Year, maxLocal.Year - minLocal.Year + 1).ToArray();
+
+            // Some uploaders emit future-dated records, and the range is derived from a
+            // bare MAX() over every table — so one bad row would otherwise stretch the
+            // list to its year and open the report on a century of empty ones. Clamping
+            // both ends keeps the range non-empty when every record is future-dated.
+            var currentYear = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Year;
+            var minYear = Math.Min(minLocal.Year, currentYear);
+            var maxYear = Math.Min(maxLocal.Year, currentYear);
+
+            years = Enumerable.Range(minYear, maxYear - minYear + 1).ToArray();
         }
 
         return new DataOverviewYearsResponse

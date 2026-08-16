@@ -18,7 +18,8 @@
  * `setPreferencesContext`), so SSR emits the same units/formats hydration will.
  *
  * Language keeps its own dedicated cookie + backend path (used by SSR locale
- * resolution).
+ * resolution), so it travels in the request context's own slot rather than as a
+ * field of the preferences blob.
  */
 
 import { browser } from "$app/environment";
@@ -81,25 +82,35 @@ const syncedRegistry = new Map<string, SyncedPref<unknown>>();
 const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
 
 /**
- * Publish this request's preference payloads, highest precedence first, for the
- * duration of one server render. The store's `$state` is module-scoped and so
- * shared by every concurrent SSR request; reading preferences from component
- * context instead is what keeps one user's units out of another's HTML.
- * Layers mirror the browser's own resolution order (backend blob over cookie),
- * each contributing only the fields it defines.
+ * One request's preference sources: the display-preference payloads, highest
+ * precedence first and each contributing only the fields it defines, plus the
+ * display language, which is stored apart from the blob and so gets its own slot.
  */
-export function setPreferencesContext(layers: () => UserDisplayPreferences[]): void {
-  setContext(PREFERENCES_CONTEXT_KEY, layers);
+export interface RequestPreferences {
+  layers: UserDisplayPreferences[];
+  language?: SupportedLocale;
 }
 
-function requestPreferences(): UserDisplayPreferences[] {
+/**
+ * Publish this request's preference sources for the duration of one server render.
+ * The store's `$state` is module-scoped and so shared by every concurrent SSR
+ * request; reading preferences from component context instead is what keeps one
+ * user's units out of another's HTML. Every source mirrors the browser's own
+ * resolution order, so SSR output equals the first client render.
+ */
+export function setPreferencesContext(preferences: () => RequestPreferences): void {
+  setContext(PREFERENCES_CONTEXT_KEY, preferences);
+}
+
+function requestPreferences(): RequestPreferences | null {
   try {
-    return getContext<(() => UserDisplayPreferences[]) | undefined>(
-      PREFERENCES_CONTEXT_KEY
-    )?.() ?? [];
+    return (
+      getContext<(() => RequestPreferences) | undefined>(PREFERENCES_CONTEXT_KEY)?.() ??
+      null
+    );
   } catch {
     // getContext throws outside a component — server loads and module scope have no request.
-    return [];
+    return null;
   }
 }
 
@@ -176,7 +187,7 @@ class SyncedPref<T> {
 
   get current(): T {
     if (!browser) {
-      for (const prefs of requestPreferences()) {
+      for (const prefs of requestPreferences()?.layers ?? []) {
         const value = this._read(prefs);
         if (value !== undefined && value !== null) return value;
       }
@@ -690,18 +701,48 @@ if (browser) {
 /** Re-export supported locales for external use */
 export { supportedLocales };
 
+const DEFAULT_LANGUAGE: SupportedLocale = "en";
+
 /**
  * Language preference - stored in localStorage and synced to cookie for SSR.
- * Kept as a dedicated PersistedState (not part of the display-preferences blob)
- * because server-side locale resolution reads its own cookie + subject column.
+ * Kept out of the display-preferences blob because server-side locale resolution
+ * reads its own cookie + subject column; server-side reads therefore take the
+ * request context's language slot rather than a `UserDisplayPreferences` field.
  */
-export const preferredLanguage = new PersistedState<SupportedLocale>(
-  "nocturne-language",
-  "en"
-);
+class LanguagePref {
+  private _persisted = new PersistedState<SupportedLocale>(
+    "nocturne-language",
+    DEFAULT_LANGUAGE
+  );
+
+  get current(): SupportedLocale {
+    if (!browser) return requestPreferences()?.language ?? DEFAULT_LANGUAGE;
+    return this._persisted.current;
+  }
+
+  set current(locale: SupportedLocale) {
+    this._persisted.current = locale;
+  }
+}
+
+export const preferredLanguage = new LanguagePref();
 
 /** Cookie name for language preference - used by SSR */
 export const LANGUAGE_COOKIE_NAME = "nocturne-language";
+
+/**
+ * The language the browser will settle on, from the same sources in the same order:
+ * a saved subject preference outranks the cookie that mirrors localStorage. SSR
+ * output only matches hydration while this order matches the client's.
+ */
+export function resolveLanguage(
+  ...candidates: (string | null | undefined)[]
+): SupportedLocale {
+  for (const candidate of candidates) {
+    if (candidate && isSupportedLocale(candidate)) return candidate;
+  }
+  return DEFAULT_LANGUAGE;
+}
 
 /**
  * Check if user has explicitly set a language preference

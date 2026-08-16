@@ -50,6 +50,11 @@ public class V4ReadLimitClampTests
 {
     private const int Ceiling = V4ReadLimits.MaxPageSize;
     private const int AboveCeiling = V4ReadLimits.MaxPageSize + 1;
+    private const int MergedWindow = V4ReadLimits.MaxMergedPageWindow;
+
+    /// <summary>The bounds of the date range that selects a range read's own branch.</summary>
+    private static readonly DateTime RangeFrom = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime RangeTo = RangeFrom.AddDays(30);
 
     // ── State spans ─────────────────────────────────────────────────
 
@@ -98,18 +103,62 @@ public class V4ReadLimitClampTests
     }
 
     [Fact]
-    public async Task StateSpanActivities_LimitAboveCeiling_IsClampedInTheReportedPage()
+    public async Task StateSpanActivities_LimitAboveWindow_IsClampedInTheReportedPage()
     {
         var service = new Mock<IStateSpanService>();
         var controller = new StateSpansController(service.Object);
 
-        var result = await controller.GetActivities(limit: AboveCeiling, offset: -1);
+        var result = await controller.GetActivities(limit: MergedWindow + 1, offset: -1);
 
         var page = result.Result.Should().BeOfType<OkObjectResult>().Subject
             .Value.Should().BeOfType<PaginatedResponse<StateSpan>>().Subject;
-        page.Pagination.Limit.Should().Be(Ceiling);
+        page.Pagination.Limit.Should().Be(MergedWindow);
         page.Pagination.Offset.Should().Be(0);
     }
+
+    [Fact]
+    public async Task StateSpanActivities_LimitAboveWindow_FetchesEachCategoryOnlyToTheWindow()
+    {
+        var service = new Mock<IStateSpanService>();
+        var controller = new StateSpansController(service.Object);
+
+        await controller.GetActivities(limit: MergedWindow + 1, offset: 0);
+
+        VerifyActivityCategoriesFetched(service, MergedWindow);
+    }
+
+    [Fact]
+    public async Task StateSpanActivities_OffsetInsideWindow_FetchesOnlyAsDeepAsThePageReaches()
+    {
+        var service = new Mock<IStateSpanService>();
+        var controller = new StateSpansController(service.Object);
+
+        await controller.GetActivities(limit: 100, offset: 50);
+
+        VerifyActivityCategoriesFetched(service, 150);
+    }
+
+    [Fact]
+    public async Task StateSpanActivities_OffsetPastWindow_FetchesNothingRatherThanReopeningIt()
+    {
+        var service = new Mock<IStateSpanService>();
+        var controller = new StateSpansController(service.Object);
+
+        var result = await controller.GetActivities(limit: 100, offset: MergedWindow * 10);
+
+        var page = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PaginatedResponse<StateSpan>>().Subject;
+        page.Data.Should().BeEmpty();
+        VerifyActivityCategoriesFetched(service, 0);
+    }
+
+    /// <summary>The categories <c>/state-spans/activities</c> merges.</summary>
+    private const int ActivityCategoryCount = 3;
+
+    private static void VerifyActivityCategoriesFetched(Mock<IStateSpanService> service, int count) =>
+        service.Verify(s => s.GetStateSpansAsync(
+            It.IsAny<StateSpanCategory?>(), null, null, null, null, null,
+            count, 0, true, It.IsAny<CancellationToken>()), Times.Exactly(ActivityCategoryCount));
 
     /// <summary>The <c>/state-spans</c> sub-routes that pre-filter by a single category.</summary>
     private const int CategorySubRouteCount = 8;
@@ -272,6 +321,46 @@ public class V4ReadLimitClampTests
         service.Verify(s => s.GetHeartRatesAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task HeartRates_DateRangeWithoutCount_ReadsNoMoreThanTheCeiling()
+    {
+        var service = new Mock<IHeartRateService>();
+        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+
+        var result = await controller.GetHeartRates(from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyHeartRateRangeFetched(service, Ceiling, 0);
+    }
+
+    [Fact]
+    public async Task HeartRates_DateRangeCountAtCeiling_ReachesServiceUnchanged()
+    {
+        var service = new Mock<IHeartRateService>();
+        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+
+        var result = await controller.GetHeartRates(count: Ceiling, skip: 0, from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyHeartRateRangeFetched(service, Ceiling, 0);
+    }
+
+    [Fact]
+    public async Task HeartRates_DateRangeCountAboveCeiling_IsClamped()
+    {
+        var service = new Mock<IHeartRateService>();
+        var controller = new HeartRateController(service.Object, Mock.Of<ILogger<HeartRateController>>());
+
+        var result = await controller.GetHeartRates(count: AboveCeiling, skip: -1, from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyHeartRateRangeFetched(service, Ceiling, 0);
+    }
+
+    private static void VerifyHeartRateRangeFetched(Mock<IHeartRateService> service, int count, int skip) =>
+        service.Verify(s => s.GetHeartRatesByDateRangeAsync(
+            RangeFrom, RangeTo, count, skip, It.IsAny<CancellationToken>()), Times.Once);
+
     // ── Step count ──────────────────────────────────────────────────
 
     [Fact]
@@ -297,6 +386,46 @@ public class V4ReadLimitClampTests
         result.Result.Should().BeOfType<OkObjectResult>();
         service.Verify(s => s.GetStepCountsAsync(Ceiling, 0, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task StepCounts_DateRangeWithoutCount_ReadsNoMoreThanTheCeiling()
+    {
+        var service = new Mock<IStepCountService>();
+        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+
+        var result = await controller.GetStepCounts(from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyStepCountRangeFetched(service, Ceiling, 0);
+    }
+
+    [Fact]
+    public async Task StepCounts_DateRangeCountAtCeiling_ReachesServiceUnchanged()
+    {
+        var service = new Mock<IStepCountService>();
+        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+
+        var result = await controller.GetStepCounts(count: Ceiling, skip: 0, from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyStepCountRangeFetched(service, Ceiling, 0);
+    }
+
+    [Fact]
+    public async Task StepCounts_DateRangeCountAboveCeiling_IsClamped()
+    {
+        var service = new Mock<IStepCountService>();
+        var controller = new StepCountController(service.Object, Mock.Of<ILogger<StepCountController>>());
+
+        var result = await controller.GetStepCounts(count: AboveCeiling, skip: -1, from: RangeFrom, to: RangeTo);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        VerifyStepCountRangeFetched(service, Ceiling, 0);
+    }
+
+    private static void VerifyStepCountRangeFetched(Mock<IStepCountService> service, int count, int skip) =>
+        service.Verify(s => s.GetStepCountsByDateRangeAsync(
+            RangeFrom, RangeTo, count, skip, It.IsAny<CancellationToken>()), Times.Once);
 
     // ── Compatibility analyses ──────────────────────────────────────
 

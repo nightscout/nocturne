@@ -1,9 +1,11 @@
 import type { LayoutServerLoad } from "./$types";
 import { extractTenantSlug, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import {
+  LANGUAGE_COOKIE_NAME,
   PREFS_COOKIE_NAME,
   hasStoredPreferences,
   parsePrefsCookie,
+  resolveLanguage,
 } from "$lib/stores/appearance-store.svelte";
 
 /**
@@ -28,9 +30,14 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
     cookiePrefs,
   ].filter((prefs) => prefs !== null && prefs !== undefined);
+  const displayLanguage = resolveLanguage(
+    locals.isAuthenticated ? locals.user?.preferredLanguage : null,
+    cookies.get(LANGUAGE_COOKIE_NAME)
+  );
 
   return {
     displayPreferences,
+    displayLanguage,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
     effectivePermissions: locals.effectivePermissions ?? [],

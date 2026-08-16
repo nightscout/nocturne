@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -22,8 +24,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// time-in-range, glycemic variability, GMI, GRI, basal/bolus ratios, and AID system metrics.
 /// </summary>
 /// <remarks>
-/// Several computation endpoints accept large payloads (up to 100 MB) to accommodate
-/// 90-day datasets. These are decorated with <c>[RequestSizeLimit(100 * 1024 * 1024)]</c>.
+/// Several computation endpoints accept large payloads and are decorated with
+/// <c>[RequestSizeLimit(ComputeBodyLimitBytes)]</c>.
 ///
 /// <c>GET /periods</c> and <c>GET /basal-analysis</c> fetch data directly from the database
 /// using the injected V4 repositories, apply profile-based scheduled-basal fallback when no
@@ -44,6 +46,13 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Produces("application/json")]
 public class StatisticsController : ControllerBase
 {
+    /// <summary>
+    /// Body ceiling for the actions that compute over a caller-supplied collection. A report
+    /// covering a year posts every reading in the range in one body, so the bound is set by the
+    /// longest range a report can ask for rather than by a typical request.
+    /// </summary>
+    public const int ComputeBodyLimitBytes = 100 * 1024 * 1024;
+
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
     private readonly IProfileProjectionService _profileProjectionService;
@@ -114,6 +123,7 @@ public class StatisticsController : ControllerBase
     /// <param name="values">Array of glucose values in mg/dL</param>
     /// <returns>Basic glucose statistics including mean, median, percentiles, etc.</returns>
     [HttpPost("basic-stats")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<BasicGlucoseStats> CalculateBasicStats([FromBody] double[] values)
     {
@@ -134,6 +144,7 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing glucose values and entries</param>
     /// <returns>Comprehensive glycemic variability metrics</returns>
     [HttpPost("glycemic-variability")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<GlycemicVariability> CalculateGlycemicVariability(
         [FromBody] GlycemicVariabilityRequest request
@@ -159,9 +170,10 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing entries and optional thresholds</param>
     /// <returns>Time in range metrics including percentages, durations, and episodes</returns>
     [HttpPost("time-in-range")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     [RemoteQuery]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<TimeInRangeMetrics> CalculateTimeInRange(
         [FromBody] TimeInRangeRequest request
     )
@@ -186,8 +198,9 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing entries and optional bins</param>
     /// <returns>Collection of distribution data points</returns>
     [HttpPost("glucose-distribution")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<DistributionDataPoint>> CalculateGlucoseDistribution(
         [FromBody] GlucoseDistributionRequest request
     )
@@ -212,9 +225,10 @@ public class StatisticsController : ControllerBase
     /// <param name="entries">Array of sensor glucose readings</param>
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     [RemoteQuery]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
         [FromBody] SensorGlucose[] entries
     )
@@ -236,6 +250,7 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing boluses and carb intakes</param>
     /// <returns>Treatment summary with totals and counts</returns>
     [HttpPost("treatment-summary")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<TreatmentSummary> CalculateTreatmentSummary(
         [FromBody] TreatmentSummaryRequest request
@@ -261,6 +276,7 @@ public class StatisticsController : ControllerBase
     /// <param name="dailyDataPoints">Array of daily data points</param>
     /// <returns>Overall averages or null if no data</returns>
     [HttpPost("overall-averages")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<OverallAverages> CalculateOverallAverages(
         [FromBody] DayData[] dailyDataPoints
@@ -287,8 +303,9 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing sensor glucose readings, boluses, carb intakes, and configuration</param>
     /// <returns>Comprehensive glucose analytics</returns>
     [HttpPost("comprehensive-analytics")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<GlucoseAnalytics> AnalyzeGlucoseData(
         [FromBody] GlucoseAnalyticsRequest request
     )
@@ -315,8 +332,9 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing sensor glucose readings, boluses, carb intakes, population type, and configuration</param>
     /// <returns>Extended glucose analytics with modern clinical metrics</returns>
     [HttpPost("extended-analytics")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB - needed for large datasets (90+ days)
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<ExtendedGlucoseAnalytics> AnalyzeGlucoseDataExtended(
         [FromBody] ExtendedGlucoseAnalyticsRequest request
     )
@@ -511,6 +529,7 @@ public class StatisticsController : ControllerBase
     /// <param name="timeInRange">Time in range metrics</param>
     /// <returns>GRI with score, zone, and interpretation</returns>
     [HttpPost("gri")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<GlycemicRiskIndex> CalculateGRI([FromBody] TimeInRangeMetrics timeInRange)
     {
@@ -531,6 +550,7 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing analytics and population type</param>
     /// <returns>Clinical target assessment with actionable insights</returns>
     [HttpPost("clinical-assessment")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<ClinicalTargetAssessment> AssessAgainstTargets(
         [FromBody] ClinicalAssessmentRequest request
@@ -556,6 +576,7 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing entries and optional period settings</param>
     /// <returns>Data sufficiency assessment</returns>
     [HttpPost("data-sufficiency")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<DataSufficiencyAssessment> AssessDataSufficiency(
         [FromBody] DataSufficiencyRequest request
@@ -702,6 +723,7 @@ public class StatisticsController : ControllerBase
     /// <param name="treatment">Treatment to validate</param>
     /// <returns>True if treatment data is valid</returns>
     [HttpPost("validate/treatment")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<bool> ValidateTreatmentData([FromBody] Treatment treatment)
     {
@@ -722,6 +744,7 @@ public class StatisticsController : ControllerBase
     /// <param name="treatments">Array of treatments to clean</param>
     /// <returns>Cleaned collection of treatments</returns>
     [HttpPost("clean/treatments")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
     public ActionResult<IEnumerable<Treatment>> CleanTreatmentData(
         [FromBody] Treatment[] treatments
@@ -975,8 +998,9 @@ public class StatisticsController : ControllerBase
     /// <param name="request">Request containing sensor glucose readings, device events, and analysis parameters</param>
     /// <returns>Site change impact analysis with averaged glucose patterns</returns>
     [HttpPost("site-change-impact")]
+    [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(OAuthScopes.ReportsRead)]
-    [RequestSizeLimit(100 * 1024 * 1024)] // 100 MB
+    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<SiteChangeImpactAnalysis> CalculateSiteChangeImpact(
         [FromBody] SiteChangeImpactRequest request
     )

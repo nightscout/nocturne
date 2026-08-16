@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Group } from "layerchart";
   import { Syringe } from "lucide-svelte";
 
   interface Props {
@@ -15,10 +14,7 @@
   const lineHeight = $derived(lineBottom - lineTop);
 </script>
 
-<!-- Native SVG throughout: layerchart 2.x marks each call registerMark(), and this
-     marker renders once per basal injection, so a per-segment Rect loop cost O(N^2).
-     A single dashed <line> plus native pill/label/hit-area register nothing. -->
-<Group x={xPos} y={lineTop}>
+<g transform="translate({xPos}, {lineTop})">
   <!-- Dashed vertical line spanning the chart height -->
   <line
     x1={0}
@@ -29,10 +25,10 @@
     stroke-dasharray="4 4"
     class="stroke-indigo-500/60 dark:stroke-indigo-400/60"
   />
-</Group>
+</g>
 
 <!-- Icon and label at the top -->
-<Group x={xPos} y={lineTop - 2}>
+<g transform="translate({xPos}, {lineTop - 2})">
   <!-- Background pill -->
   <rect
     x={-26}
@@ -62,10 +58,10 @@
   >
     {units.toFixed(1)}U
   </text>
-</Group>
+</g>
 
 <!-- Tooltip-style hover area -->
-<Group x={xPos} y={lineTop}>
+<g transform="translate({xPos}, {lineTop})">
   <rect
     x={-8}
     y={0}
@@ -79,4 +75,4 @@
       <title>{units.toFixed(1)}U basal injection</title>
     {/if}
   </rect>
-</Group>
+</g>

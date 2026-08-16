@@ -34,6 +34,8 @@ public class DataOverviewServiceTests : IDisposable
     private const long Dec31_2024_23h = 1735686000000L;
     // 2025-01-01 01:00:00 UTC = 1735693200000
     private const long Jan1_2025_01h = 1735693200000L;
+    // A far-future timestamp, of the kind buggy uploaders emit.
+    private static readonly DateTime June15_2162_Noon = new(2162, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
     public DataOverviewServiceTests()
     {
@@ -122,6 +124,51 @@ public class DataOverviewServiceTests : IDisposable
         var result = await _service.GetAvailableYearsAsync();
 
         result.Years.Should().BeEquivalentTo([2023, 2024, 2025]);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_FutureDatedRecord_StopsAtCurrentYear()
+    {
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Mgdl = 120.0,
+            DataSource = "dexcom"
+        });
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = June15_2162_Noon,
+            Mgdl = 120.0,
+            DataSource = "dexcom"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetAvailableYearsAsync();
+
+        var currentYear = DateTime.UtcNow.Year;
+        result.Years.Should().BeEquivalentTo(
+            Enumerable.Range(2024, currentYear - 2024 + 1));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_OnlyFutureDatedRecords_ReturnsCurrentYearOnly()
+    {
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = June15_2162_Noon,
+            Mgdl = 120.0,
+            DataSource = "dexcom"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetAvailableYearsAsync();
+
+        result.Years.Should().ContainSingle().Which.Should().Be(DateTime.UtcNow.Year);
     }
 
     [Fact]

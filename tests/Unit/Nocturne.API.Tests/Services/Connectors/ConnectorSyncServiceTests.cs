@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -8,6 +10,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -46,6 +49,15 @@ public class ConnectorSyncServiceTests
         // Mirrors the production registration (Program.cs) — the sync scope resolves
         // the mutable scoped AuditContext to mark it system for the sync's duration.
         services.AddScoped<IAuditContext, AuditContext>();
+
+        // A real NocturneDbContext: the sync scope stamps its AuditContext property, which the
+        // mutation interceptor prefers over the ambient context. Sqlite rather than InMemory so
+        // the relational model builds; no connection is ever opened because nothing queries.
+        services.AddScoped(_ => new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>()
+                .UseSqlite("DataSource=:memory:")
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .Options));
 
         foreach (var executor in executors)
         {
@@ -139,6 +151,26 @@ public class ConnectorSyncServiceTests
 
         // Assert
         capturedIsSystemMutation.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_SystemAttributesTheScopeInjectedDbContext()
+    {
+        // Writes on the scope's directly-injected context are attributed by that context's own
+        // AuditContext, not the ambient one, so it needs stamping too.
+        IAuditContext? captured = null;
+        var executor = CreateMockExecutor(
+            "test",
+            onSyncScope: sp => captured = sp.GetRequiredService<NocturneDbContext>().AuditContext);
+        var sut = CreateService(BuildProvider(executor));
+
+        // Act
+        await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        // Assert
+        captured.Should().NotBeNull();
+        captured!.IsSystem.Should().BeTrue();
+        captured.Endpoint.Should().Be("connector:test");
     }
 
     [Fact]

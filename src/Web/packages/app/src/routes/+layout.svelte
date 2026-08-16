@@ -33,7 +33,10 @@
 
   let { children, data } = $props();
 
-  setPreferencesContext(() => data.displayPreferences ?? []);
+  setPreferencesContext(() => ({
+    layers: data.displayPreferences ?? [],
+    language: data.displayLanguage,
+  }));
 </script>
 
 <ModeWatcher />

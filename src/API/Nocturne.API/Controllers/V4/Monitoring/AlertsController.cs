@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
@@ -108,6 +109,11 @@ public class AlertsController : ControllerBase
     /// Get paginated history of resolved excursions. Test fires are excluded
     /// by default; pass <paramref name="includeTest"/> = true to include them.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="pageSize"/> is capped at <see cref="V4ReadLimits.MaxOrdinalPageSize"/> and
+    /// <paramref name="page"/> at the page that reaches the last record within
+    /// <see cref="V4ReadLimits.MaxPageSize"/>; both are clamped rather than rejected.
+    /// </remarks>
     [HttpGet("history")]
     [RemoteQuery]
     [ProducesResponseType(typeof(AlertHistoryResponse), StatusCodes.Status200OK)]
@@ -118,9 +124,8 @@ public class AlertsController : ControllerBase
         [FromQuery] bool includeTest = false,
         CancellationToken ct = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 1;
-        if (pageSize > 100) pageSize = 100;
+        pageSize = V4ReadLimits.ClampPageSize(pageSize);
+        page = V4ReadLimits.ClampPageNumber(page, pageSize);
 
         await using var db = await _contextFactory.CreateAsync(ct);
 

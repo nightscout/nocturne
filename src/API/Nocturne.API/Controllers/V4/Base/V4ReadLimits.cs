@@ -38,6 +38,17 @@ public static class V4ReadLimits
     public const int MaxMergedPageWindow = 10_000;
 
     /// <summary>
+    /// Maximum records one page of a page-numbered V4 read may return.
+    /// </summary>
+    /// <remarks>
+    /// Three orders of magnitude below <see cref="MaxPageSize"/>, because a route addressing a page
+    /// by ordinal exists to back a paged table rather than a bulk export: the alert-history pages
+    /// ask for 25 and 50 rows, and pairing a larger page with a page number would also let a caller
+    /// reach much further into the table for the same clamp.
+    /// </remarks>
+    public const int MaxOrdinalPageSize = 100;
+
+    /// <summary>
     /// Maximum span, in days, between the <c>from</c> and <c>to</c> bounds of a V4 range read.
     /// </summary>
     /// <remarks>
@@ -59,6 +70,27 @@ public static class V4ReadLimits
     /// </summary>
     public static int ClampMergedPage(int limit, int offset) =>
         Math.Clamp(limit, 0, MaxMergedPageWindow - Math.Min(ClampOffset(offset), MaxMergedPageWindow));
+
+    /// <summary>
+    /// Clamp a caller-supplied page size on a page-numbered read to <see cref="MaxOrdinalPageSize"/>.
+    /// </summary>
+    /// <remarks>
+    /// The floor is one rather than zero: a page-numbered read reports a page count derived from the
+    /// page size, so a zero page size has no meaning on this shape.
+    /// </remarks>
+    public static int ClampPageSize(int pageSize) => Math.Clamp(pageSize, 1, MaxOrdinalPageSize);
+
+    /// <summary>
+    /// Clamp a caller-supplied 1-based page number so the offset it implies stays within the first
+    /// <see cref="MaxPageSize"/> records.
+    /// </summary>
+    /// <remarks>
+    /// A page number is multiplied by the page size to reach an offset, so leaving it unbounded
+    /// leaves the skip unbounded — and past <see cref="int"/> it wraps negative. Pass
+    /// <paramref name="pageSize"/> already through <see cref="ClampPageSize"/>.
+    /// </remarks>
+    public static int ClampPageNumber(int page, int pageSize) =>
+        Math.Clamp(page, 1, MaxPageSize / Math.Clamp(pageSize, 1, MaxPageSize));
 
     /// <summary>
     /// Whether a range read's bounds are further apart than <see cref="MaxDateSpanDays"/>.

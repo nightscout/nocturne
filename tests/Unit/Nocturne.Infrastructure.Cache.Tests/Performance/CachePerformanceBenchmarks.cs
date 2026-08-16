@@ -96,7 +96,6 @@ public class CachePerformanceBenchmarks : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Performance")]
     [Trait("Category", "Cache")]
     public async Task CacheHitRatePerformance_Should_ExceedEightyPercent()
     {

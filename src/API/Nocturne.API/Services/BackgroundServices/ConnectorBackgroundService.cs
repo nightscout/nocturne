@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -358,16 +357,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
         tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
-        // Populate audit context so mutations are attributed to this connector
-        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        dbContext.AuditContext = SystemAuditContext.ForService($"connector:{ConnectorName}");
+        // Attribute this connector's mutations to the connector rather than to a human actor.
+        using var systemScope = SystemAuditScope.PushForScope(
+            scope.ServiceProvider, $"connector:{ConnectorName}");
 
-        // TenantDbContextFactory stamps the scoped IAuditContext onto every context it
-        // creates for the V4 repositories, and in a background scope that context is a
-        // blank user context (IsSystem = false) — without this push, their writes are
-        // audited as null-attributed user mutations instead of being skipped as system.
-        using var systemScope = SystemAuditScope.Push(
-            scope.ServiceProvider.GetRequiredService<IAuditContext>());
+        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
         // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is pooled and the
         // CarrierResettingDbContextFactory leases it with TenantId reset to Guid.Empty; the scoped

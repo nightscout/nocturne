@@ -1,13 +1,15 @@
 <script lang="ts">
+  // Per-span geometry is native SVG: layerchart marks register with the chart on
+  // mount and its mark deriveds re-run over every mark, so one AnnotationRange
+  // per temp basal / step cost O(N^2). Pattern is not a mark and stays.
   import {
     Area,
     Spline,
     Axis,
     Text,
-    Group,
+    Pattern,
     ChartClipPath,
     Highlight,
-    AnnotationRange,
     AnnotationLine,
     AnnotationPoint,
   } from "layerchart";
@@ -147,31 +149,38 @@
   <ChartClipPath>
     <!-- Temp basal span indicators (shown in basal track when basal is visible) -->
     {#each tempBasalSpans as span (span.id)}
-      <AnnotationRange
-        x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
-        y={[basalScale(maxBasalRate * 0.9), basalScale(maxBasalRate * 0.7)]}
+      {@const spanLeft = context.xScale(span.displayStart)}
+      {@const spanUpper = context.yScale(basalScale(maxBasalRate * 0.9))}
+      {@const spanLower = context.yScale(basalScale(maxBasalRate * 0.7))}
+      {@const labelX = spanLeft + 4}
+      {@const labelY = context.yScale(basalScale(maxBasalRate * 0.8))}
+      <rect
+        x={spanLeft}
+        y={Math.min(spanUpper, spanLower)}
+        width={context.xScale(span.displayEnd) - spanLeft}
+        height={Math.abs(spanLower - spanUpper)}
         fill={span.color}
         class="opacity-40"
       />
       <!-- Show temp basal rate label -->
       {#if span.rate !== null}
-        <Group
-          x={context.xScale(span.displayStart)}
-          y={context.yScale(basalScale(maxBasalRate * 0.8))}
+        <text
+          x={labelX}
+          y={labelY}
+          dy="-0.355em"
+          class="text-[7px] fill-insulin-basal font-medium"
         >
-          <Text x={4} y={0} class="text-[7px] fill-insulin-basal font-medium">
-            {span.rate.toFixed(2)}U/h
-          </Text>
-        </Group>
+          {span.rate.toFixed(2)}U/h
+        </text>
       {:else if span.percent !== null}
-        <Group
-          x={context.xScale(span.displayStart)}
-          y={context.yScale(basalScale(maxBasalRate * 0.8))}
+        <text
+          x={labelX}
+          y={labelY}
+          dy="-0.355em"
+          class="text-[7px] fill-insulin-basal font-medium"
         >
-          <Text x={4} y={0} class="text-[7px] fill-insulin-basal font-medium">
-            {span.percent}%
-          </Text>
-        </Group>
+          {span.percent}%
+        </text>
       {/if}
     {/each}
   </ChartClipPath>
@@ -179,17 +188,21 @@
   <!-- Stale basal data indicator -->
   {#if staleBasalData}
     <ChartClipPath>
-      <AnnotationRange
-        x={[staleBasalData.start.getTime(), staleBasalData.end.getTime()]}
-        y={[basalScale(maxBasalRate), basalZero]}
-        pattern={{
-          size: 8,
-          lines: {
-            rotate: -45,
-            opacity: 0.1,
-          },
-        }}
-      />
+      {@const staleLeft = context.xScale(staleBasalData.start)}
+      {@const staleWidth = context.xScale(staleBasalData.end) - staleLeft}
+      {@const staleTop = context.yScale(basalScale(maxBasalRate))}
+      {@const staleBottom = context.yScale(basalZero)}
+      <Pattern size={8} lines={{ rotate: -45, opacity: 0.1 }}>
+        {#snippet children({ pattern }: { pattern: string })}
+          <rect
+            x={staleLeft}
+            y={Math.min(staleTop, staleBottom)}
+            width={staleWidth}
+            height={Math.abs(staleBottom - staleTop)}
+            fill={pattern}
+          />
+        {/snippet}
+      </Pattern>
     </ChartClipPath>
     <AnnotationLine
       x={staleBasalData.start}
@@ -245,19 +258,25 @@
       {@const fillColor = segment.points[0].fillColor}
       {@const strokeColor = segment.points[0].strokeColor}
       {#if pattern}
-        <!-- Use AnnotationRange for segments with patterns (Inferred) -->
-        {#each segment.points as point, pointIdx}
-          {#if pointIdx < segment.points.length - 1}
-            {@const nextPoint = segment.points[pointIdx + 1]}
-            <AnnotationRange
-              x={[point.timestamp ?? 0, nextPoint.timestamp ?? 0]}
-              y={[basalScale(point.rate ?? 0), basalZero]}
-              fill={fillColor}
-              {pattern}
-              style="opacity: {opacity}"
-            />
-          {/if}
-        {/each}
+        <!-- Hatched step rects for segments with patterns (Inferred) -->
+        <Pattern size={pattern.size} lines={pattern.lines}>
+          {#snippet children({ pattern: patternFill }: { pattern: string })}
+            {#each segment.points.slice(0, -1) as point, pointIdx (pointIdx)}
+              {@const nextPoint = segment.points[pointIdx + 1]}
+              {@const left = context.xScale(new Date(point.timestamp ?? 0))}
+              {@const top = context.yScale(basalScale(point.rate ?? 0))}
+              {@const bottom = context.yScale(basalZero)}
+              {@const step = {
+                x: left,
+                y: Math.min(top, bottom),
+                width: context.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
+                height: Math.abs(bottom - top),
+              }}
+              <rect {...step} fill={fillColor} style="opacity: {opacity}" />
+              <rect {...step} fill={patternFill} style="opacity: {opacity}" />
+            {/each}
+          {/snippet}
+        </Pattern>
       {:else}
         <!-- Use Area for segments without patterns -->
         <Area

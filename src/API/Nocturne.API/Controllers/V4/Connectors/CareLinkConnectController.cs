@@ -1,3 +1,4 @@
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,6 +12,7 @@ using Nocturne.Connectors.CareLink.Services;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Connectors;
 
@@ -44,8 +46,9 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Scope carried by a desktop link token. Deliberately outside the OAuth scope vocabulary:
     /// MemberScopeMiddleware intersects member permissions with token scopes, so the resulting
-    /// PermissionTrie is empty and every permission-gated endpoint denies the token — it only
-    /// authenticates plain <c>[Authorize]</c> endpoints such as this controller's.
+    /// PermissionTrie and granted-scope set are both empty and every permission- or scope-gated
+    /// endpoint denies the token — it reaches nothing beyond the two flow actions below, which
+    /// recognise it from the credential's own scope list.
     /// </summary>
     private const string DesktopTokenScope = "connectors:carelink:connect";
     private static readonly TimeSpan DesktopTokenLifetime = TimeSpan.FromMinutes(10);
@@ -87,9 +90,13 @@ public partial class CareLinkConnectController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(CareLinkConnectStartResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CareLinkConnectStartResponse>> Start(
         [FromBody] CareLinkConnectStartRequest request, CancellationToken ct)
     {
+        if (!CanConfigureConnectors())
+            return Forbid();
+
         var server = string.IsNullOrWhiteSpace(request.Server) ? "EU" : request.Server.Trim().ToUpperInvariant();
         if (server != "EU" && server != "US")
             return BadRequest(new { message = "Server must be 'EU' or 'US'." });
@@ -119,9 +126,13 @@ public partial class CareLinkConnectController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(typeof(CareLinkConnectCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CareLinkConnectCompleteResponse>> Complete(
         [FromBody] CareLinkConnectCompleteRequest request, CancellationToken ct)
     {
+        if (!CanConfigureConnectors())
+            return Forbid();
+
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { message = "Both code and state are required." });
 
@@ -186,6 +197,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// </summary>
     [HttpPost("desktop-token")]
     [RemoteCommand]
+    [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(CareLinkDesktopTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<CareLinkDesktopTokenResponse> DesktopToken()
@@ -225,6 +237,19 @@ public partial class CareLinkConnectController : ControllerBase
             ExpiresInSeconds = (int)DesktopTokenLifetime.TotalSeconds,
         });
     }
+
+    /// <summary>
+    /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
+    /// token as the connector secret and writes the signed-in account into the connector
+    /// configuration, so it takes the same <see cref="TenantPermissions.TenantSettings"/> as the
+    /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
+    /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
+    /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
+    /// </summary>
+    private bool CanConfigureConnectors() =>
+        TenantPermissions.HasPermission(
+            HttpContext.GetGrantedScopes(), TenantPermissions.TenantSettings)
+        || HttpContext.GetAuthContext()?.Scopes.Contains(DesktopTokenScope) == true;
 
     /// <summary>
     /// Writes what the sign-in established into the connector configuration: the region whose tokens

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
@@ -12,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/connectors/myfitnesspal/settings")]
+[RequireScope(TenantPermissions.TenantSettings)]
 public class MyFitnessPalSettingsController : ControllerBase
 {
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
