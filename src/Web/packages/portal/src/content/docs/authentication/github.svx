@@ -4,6 +4,7 @@ title: Sign in with GitHub
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import PlatformAdminNote from '$lib/components/docs/PlatformAdminNote.svelte';
 </script>
 
 # Sign in with GitHub
@@ -40,8 +41,10 @@ Replace `your-instance.com` with your actual Nocturne domain.
 
 ## 3. Add the provider in Nocturne
 
-1. Sign in to your Nocturne instance as an admin
-2. Go to **Settings > Admin > OIDC Providers**
+<PlatformAdminNote />
+
+1. Sign in to your Nocturne instance as a platform admin
+2. Go to **Settings > Administration** (`/settings/admin`) and open the **Identity Providers** tab
 3. Click **Add Provider** and fill in:
 
 | Field | Value |

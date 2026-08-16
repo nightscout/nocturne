@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -16,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// </remarks>
 /// <seealso cref="IActogramReportService"/>
 /// <seealso cref="ActogramReportData"/>
+/// <seealso cref="ActogramReadScopeGuard"/>
 [ApiController]
 [Tags("Analytics")]
 [Route("api/v4/[controller]")]
@@ -43,6 +48,11 @@ public class ActogramController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet]
     [RemoteQuery]
+    [RequireScope(
+        OAuthScopes.GlucoseRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead)]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     [ProducesResponseType(typeof(ActogramReportData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -59,7 +69,7 @@ public class ActogramController : ControllerBase
         try
         {
             var result = await _service.GetAsync(startTime, endTime, cancellationToken);
-            return Ok(result);
+            return Ok(ActogramReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
         }
         catch (Exception ex)
         {

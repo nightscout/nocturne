@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
@@ -124,12 +125,12 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
-        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
-            return badChannel;
-
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
             return badTracker;
@@ -199,10 +200,10 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
-        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
-            return badChannel;
-
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
             return badTracker;
@@ -382,10 +383,17 @@ public class AlertRulesController : ControllerBase
     [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        // Held to the same rules as a save: a preview that accepted a destination the editor
+        // would refuse to store would report success for a channel that cannot deliver.
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
+
         var tenantId = db.TenantId;
 
         // Synthesise channel snapshots with provisional ids — none of them point to a
@@ -438,13 +446,17 @@ public class AlertRulesController : ControllerBase
     #region Helpers
 
     /// <summary>
-    /// Rejects a channel list that contains a <c>device_action</c> channel whose destination is not
-    /// a valid device kind, or whose metadata requests a capability that is unknown or not allowed
-    /// for that kind — otherwise a typo'd kind/capability would silently never actuate. Returns a
-    /// 400 <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels
-    /// are valid.
+    /// Fills in a DM channel's destination from the caller's linked identity on that channel's
+    /// platform and rejects a channel list whose destinations cannot deliver: a
+    /// <c>device_action</c> channel naming an unknown kind or capability, a channel type with no
+    /// delivery path, a channel type that needs a destination and was given none, or a destination
+    /// the platform adapter cannot address. Nothing downstream inspects a destination, so an
+    /// unrejected one becomes a channel that stores fine and never delivers. Returns a 400
+    /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are
+    /// valid.
     /// </summary>
-    private ActionResult? RejectInvalidDeviceActionChannels(List<CreateAlertRuleChannelRequest>? channels)
+    private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
+        List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, CancellationToken ct)
     {
         if (channels is null)
         {
@@ -453,45 +465,129 @@ public class AlertRulesController : ControllerBase
 
         foreach (var ch in channels)
         {
-            if (ch.ChannelType != ChannelType.DeviceAction)
+            if (ch.ChannelType == ChannelType.DeviceAction)
             {
+                if (RejectInvalidDeviceActionChannel(ch) is { } badDevice)
+                {
+                    return badDevice;
+                }
+
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
+            if (ChannelDestinations.SupersededBy(ch.ChannelType) is { } replacements)
             {
                 return BadRequest(new
                 {
-                    message = $"A device_action channel's destination must be a device kind "
-                        + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
+                    message = $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
+                        + $"{string.Join(" or ", replacements.Select(WireName))} instead.",
                 });
             }
 
-            var requested = DeviceCapabilities.ParseRequestedCapabilities(
-                ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
-            foreach (var capability in requested)
+            if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
+                && string.IsNullOrWhiteSpace(ch.Destination))
             {
-                if (!DeviceCapabilities.IsKnown(capability))
+                var platform = ChannelDestinations.PlatformOf(ch.ChannelType)!;
+                ch.Destination = await ResolveLinkedPlatformUserIdAsync(db, platform, ct);
+                if (ch.Destination is null)
                 {
+                    var name = char.ToUpperInvariant(platform[0]) + platform[1..];
                     return BadRequest(new
                     {
-                        message = $"Unknown device capability '{capability}'.",
+                        message = $"No linked {name} account for this user. Link {name} under "
+                            + $"Connectors & Apps, or enter a {name} user ID as the destination.",
                     });
                 }
+            }
 
-                if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
+            if (ChannelDestinations.RequiresDestination(ch.ChannelType)
+                && string.IsNullOrWhiteSpace(ch.Destination))
+            {
+                return BadRequest(new
                 {
-                    return BadRequest(new
-                    {
-                        message = $"Capability '{capability}' is not available on "
-                            + $"device kind '{ch.Destination}'.",
-                    });
-                }
+                    message = $"A {WireName(ch.ChannelType)} channel requires a destination.",
+                });
+            }
+
+            if (!ChannelDestinations.IsWellFormed(ch.ChannelType, ch.Destination))
+            {
+                return BadRequest(new
+                {
+                    message = $"A {WireName(ch.ChannelType)} channel's destination must be "
+                        + $"{ChannelDestinations.DescribeDestination(ch.ChannelType)}; "
+                        + $"got '{ch.Destination}'.",
+                });
             }
         }
 
         return null;
     }
+
+    private ActionResult? RejectInvalidDeviceActionChannel(CreateAlertRuleChannelRequest ch)
+    {
+        if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
+        {
+            return BadRequest(new
+            {
+                message = $"A device_action channel's destination must be a device kind "
+                    + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
+            });
+        }
+
+        var requested = DeviceCapabilities.ParseRequestedCapabilities(
+            ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
+        foreach (var capability in requested)
+        {
+            if (!DeviceCapabilities.IsKnown(capability))
+            {
+                return BadRequest(new
+                {
+                    message = $"Unknown device capability '{capability}'.",
+                });
+            }
+
+            if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
+            {
+                return BadRequest(new
+                {
+                    message = $"Capability '{capability}' is not available on "
+                        + $"device kind '{ch.Destination}'.",
+                });
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the platform user ID linked to the calling subject within this tenant, or null when
+    /// the subject has no active link on that platform. Resolution happens here rather than at
+    /// delivery because a dispatch runs from the background orchestrator, where there is no caller
+    /// to attribute a DM to — and a rule carries no owner of its own.
+    /// </summary>
+    private async Task<string?> ResolveLinkedPlatformUserIdAsync(
+        NocturneDbContext db, string platform, CancellationToken ct)
+    {
+        var subjectId = HttpContext?.GetSubjectId();
+        if (subjectId is null)
+        {
+            return null;
+        }
+
+        var tenantId = db.TenantId;
+        return await db.ChatIdentityDirectory
+            .Where(d => d.TenantId == tenantId
+                        && d.NocturneUserId == subjectId.Value
+                        && d.Platform == platform
+                        && d.IsActive)
+            .OrderBy(d => d.CreatedAt)
+            .Select(d => d.PlatformUserId)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
+    private static string WireName(ChannelType channelType) =>
+        JsonSerializer.Serialize(channelType).Trim('"');
 
     private static AlertRuleChannelEntity BuildChannel(
         CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder) => new()

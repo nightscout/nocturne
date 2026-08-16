@@ -230,14 +230,14 @@ internal sealed class DataFetchStage(
         var heartRateList = (await heartRateService.GetHeartRatesByDateRangeAsync(
             MillsToDateTime(startTime)!.Value,
             MillsToDateTime(endTime)!.Value,
-            cancellationToken
+            cancellationToken: cancellationToken
         )).ToList();
 
         // Step count data
         var stepCountList = (await stepCountService.GetStepCountsByDateRangeAsync(
             MillsToDateTime(startTime)!.Value,
             MillsToDateTime(endTime)!.Value,
-            cancellationToken
+            cancellationToken: cancellationToken
         )).ToList();
 
         // Sleep sessions

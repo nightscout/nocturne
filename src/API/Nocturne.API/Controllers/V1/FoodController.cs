@@ -79,23 +79,6 @@ public class FoodController : ControllerBase
     }
 
     /// <summary>
-    /// Alternative endpoint with .json extension for compatibility
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Array of food records</returns>
-    [HttpGet("~/api/v1/food.json")]
-    [NightscoutEndpoint("/api/v1/food.json")]
-    [ProducesResponseType(typeof(Food[]), 200)]
-    [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.FoodRead)]
-    public async Task<ActionResult<Food[]>> GetFoodJson(
-        CancellationToken cancellationToken = default
-    )
-    {
-        return await GetFood(cancellationToken);
-    }
-
-    /// <summary>
     /// Get regular food records only (type="food")
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>

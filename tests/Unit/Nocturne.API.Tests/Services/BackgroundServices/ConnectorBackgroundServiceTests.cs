@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -802,6 +803,251 @@ public class ConnectorBackgroundServiceTests
         // Sync count should remain at 2 because the nudge was debounced
         // and the 60-minute interval hasn't elapsed
         Assert.Equal(2, syncCount);
+    }
+
+    /// <summary>
+    /// A listener that has died must be evicted from the tracking dictionary and disposed so the next
+    /// supervision pass can replace it, and the loss of real-time delivery must be visible in the log.
+    /// </summary>
+    [Fact]
+    public async Task ListenerNeedsStart_DeadClient_EvictsDisposesAndLogs()
+    {
+        var logger = new MessageRecordingLogger();
+        var sut = new SupervisedListenerService(logger, TimeSpan.Zero);
+        var tenantId = Guid.NewGuid();
+        var client = new FakeListenerClient { IsAlive = false };
+        sut.Clients[tenantId] = client;
+
+        var needsStart = await sut.ListenerNeedsStartAsync(tenantId);
+
+        Assert.True(needsStart);
+        Assert.False(sut.Clients.ContainsKey(tenantId));
+        Assert.Equal(1, client.DisposeCount);
+        Assert.Contains(logger.Messages, m => m.Contains("no longer connected"));
+    }
+
+    /// <summary>
+    /// A tenant whose listener is still connected must be left exactly as it is — no eviction, no
+    /// dispose, and no second client registered on top of it.
+    /// </summary>
+    [Fact]
+    public async Task ListenerNeedsStart_LiveClient_LeavesItRegistered()
+    {
+        var logger = new MessageRecordingLogger();
+        var sut = new SupervisedListenerService(logger, TimeSpan.Zero);
+        var tenantId = Guid.NewGuid();
+        var client = new FakeListenerClient { IsAlive = true };
+        sut.Clients[tenantId] = client;
+
+        var needsStart = await sut.ListenerNeedsStartAsync(tenantId);
+
+        Assert.False(needsStart);
+        Assert.Same(client, sut.Clients[tenantId]);
+        Assert.Equal(0, client.DisposeCount);
+        Assert.Empty(logger.Messages);
+    }
+
+    /// <summary>
+    /// A tenant with no tracked listener at all — never started, or evicted by an earlier pass — needs one.
+    /// </summary>
+    [Fact]
+    public async Task ListenerNeedsStart_NoTrackedClient_RequestsStart()
+    {
+        var sut = new SupervisedListenerService(NullLogger.Instance, TimeSpan.Zero);
+
+        Assert.True(await sut.ListenerNeedsStartAsync(Guid.NewGuid()));
+    }
+
+    /// <summary>
+    /// Once the supervision interval has elapsed the poll loop re-runs listener startup, which is what
+    /// replaces a socket that exhausted its reconnection budget.
+    /// </summary>
+    [Fact]
+    public async Task SuperviseRealtimeListeners_AfterInterval_RunsListenerStartupAgain()
+    {
+        var sut = new SupervisedListenerService(NullLogger.Instance, TimeSpan.Zero);
+
+        await sut.SuperviseOnceAsync(CancellationToken.None);
+        await sut.SuperviseOnceAsync(CancellationToken.None);
+
+        Assert.Equal(2, sut.StartCount);
+    }
+
+    /// <summary>
+    /// Supervision is coarser than the one-minute poll tick, so a permanently unreachable upstream is
+    /// not reconnected on every cycle.
+    /// </summary>
+    [Fact]
+    public async Task SuperviseRealtimeListeners_WithinInterval_DoesNotRunListenerStartupAgain()
+    {
+        var sut = new SupervisedListenerService(NullLogger.Instance, TimeSpan.FromMinutes(5));
+
+        await sut.SuperviseOnceAsync(CancellationToken.None);
+        await sut.SuperviseOnceAsync(CancellationToken.None);
+
+        Assert.Equal(1, sut.StartCount);
+    }
+
+    /// <summary>
+    /// The poll loop itself must run listener supervision: before the first sync cycle at startup,
+    /// and again on later ticks — that repeat is what replaces a listener that dies mid-lifetime.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_RunsListenerSupervisionFromThePollLoop()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var serviceProvider = BuildServiceProvider(
+            connStr,
+            BuildEnabledConfigMock(),
+            new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 });
+
+        var sut = new PollLoopWiringService(serviceProvider);
+        await sut.StartAsync(CancellationToken.None);
+        try
+        {
+            var winner = await Task.WhenAny(sut.SecondSupervisionPass, Task.Delay(TimeSpan.FromSeconds(10)));
+            winner.Should().Be(sut.SecondSupervisionPass,
+                "the poll loop must re-run listener supervision on later ticks, not just once before the loop");
+        }
+        finally
+        {
+            await sut.StopAsync(CancellationToken.None);
+        }
+
+        sut.Events.TryPeek(out var first);
+        first.Should().Be("listeners", "listener startup must precede the first sync cycle");
+    }
+
+    /// <summary>
+    /// Runs the real ExecuteAsync poll loop with test-fast intervals, recording listener-startup
+    /// passes and sync cycles in order.
+    /// </summary>
+    private sealed class PollLoopWiringService(IServiceProvider serviceProvider)
+        : ConnectorBackgroundService<TestConnectorConfig>(serviceProvider, NullLogger.Instance)
+    {
+        private readonly TaskCompletionSource _secondSupervisionPass =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _listenerStartCount;
+
+        public ConcurrentQueue<string> Events { get; } = new();
+
+        public Task SecondSupervisionPass => _secondSupervisionPass.Task;
+
+        protected override string ConnectorName => "TestConnector";
+
+        protected override TimeSpan StartupDelay => TimeSpan.Zero;
+
+        protected override TimeSpan PollInterval => TimeSpan.FromMilliseconds(20);
+
+        protected override TimeSpan RealtimeSupervisionInterval => TimeSpan.Zero;
+
+        protected override Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
+        {
+            Events.Enqueue("listeners");
+            if (Interlocked.Increment(ref _listenerStartCount) >= 2)
+                _secondSupervisionPass.TrySetResult();
+            return Task.CompletedTask;
+        }
+
+        protected override Task<SyncResult> PerformSyncAsync(
+            IServiceProvider scopeProvider,
+            TestConnectorConfig config,
+            CancellationToken cancellationToken,
+            ISyncProgressReporter? progressReporter = null)
+        {
+            Events.Enqueue("sync");
+            return Task.FromResult(new SyncResult { Success = true });
+        }
+    }
+
+    /// <summary>
+    /// Stand-in for a real-time client whose liveness the test controls.
+    /// </summary>
+    private sealed class FakeListenerClient
+    {
+        public bool IsAlive { get; init; }
+
+        public int DisposeCount { get; private set; }
+
+        public Task DisposeAsync()
+        {
+            DisposeCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Exposes the base class's real-time supervision hooks and counts listener-startup passes.
+    /// </summary>
+    private sealed class SupervisedListenerService(ILogger logger, TimeSpan supervisionInterval)
+        : ConnectorBackgroundService<TestConnectorConfig>(new ServiceCollection().BuildServiceProvider(), logger)
+    {
+        private int _startCount;
+
+        public ConcurrentDictionary<Guid, FakeListenerClient> Clients { get; } = new();
+
+        public int StartCount => _startCount;
+
+        protected override string ConnectorName => "TestConnector";
+
+        protected override TimeSpan RealtimeSupervisionInterval => supervisionInterval;
+
+        protected override Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _startCount);
+            return Task.CompletedTask;
+        }
+
+        protected override Task<SyncResult> PerformSyncAsync(
+            IServiceProvider scopeProvider,
+            TestConnectorConfig config,
+            CancellationToken cancellationToken,
+            ISyncProgressReporter? progressReporter = null)
+            => throw new NotSupportedException();
+
+        public Task<bool> ListenerNeedsStartAsync(Guid tenantId)
+            => ListenerNeedsStartAsync(Clients, tenantId, "test-tenant", c => c.IsAlive, c => c.DisposeAsync());
+
+        /// <summary>
+        /// Invokes the private supervision pass the poll loop runs each tick, via reflection.
+        /// </summary>
+        public async Task SuperviseOnceAsync(CancellationToken ct)
+        {
+            var method = typeof(ConnectorBackgroundService<TestConnectorConfig>)
+                .GetMethod("SuperviseRealtimeListenersAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            await (Task)method.Invoke(this, [ct])!;
+        }
+    }
+
+    /// <summary>
+    /// Records formatted log messages so tests can assert on what was reported.
+    /// </summary>
+    private sealed class MessageRecordingLogger : ILogger
+    {
+        private readonly List<string> _messages = [];
+
+        public IReadOnlyList<string> Messages
+        {
+            get { lock (_messages) return _messages.ToList(); }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lock (_messages)
+                _messages.Add(formatter(state, exception));
+        }
     }
 
     /// <summary>

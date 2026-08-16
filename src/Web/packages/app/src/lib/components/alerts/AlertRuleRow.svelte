@@ -22,6 +22,8 @@
 
   interface Props {
     rule: AlertRuleResponse;
+    /** Whether the viewer holds alerts.readwrite; gates the mutating actions. */
+    canManage: boolean;
     isToggling: boolean;
     isDeleting: boolean;
     isTesting: boolean;
@@ -35,6 +37,7 @@
 
   let {
     rule,
+    canManage,
     isToggling,
     isDeleting,
     isTesting,
@@ -120,12 +123,14 @@
 
   <!-- Per-row actions -->
   <div class="flex items-center gap-1 shrink-0">
-    <Switch
-      checked={rule.isEnabled ?? false}
-      onCheckedChange={onToggleEnabled}
-      disabled={isToggling}
-      aria-label="Enable rule"
-    />
+    {#if canManage}
+      <Switch
+        checked={rule.isEnabled ?? false}
+        onCheckedChange={onToggleEnabled}
+        disabled={isToggling}
+        aria-label="Enable rule"
+      />
+    {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props }: { props: Record<string, unknown> })}
@@ -145,21 +150,23 @@
         <DropdownMenu.Item onclick={onEdit}>
           <Pencil class="h-4 w-4 mr-2" /> Edit
         </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onclick={onTestFire}
-          disabled={isTesting || !rule.isEnabled}
-        >
-          {#if isTesting}
-            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-          {:else}
-            <Zap class="h-4 w-4 mr-2" />
-          {/if}
-          Test fire
-        </DropdownMenu.Item>
+        {#if canManage}
+          <DropdownMenu.Item
+            onclick={onTestFire}
+            disabled={isTesting || !rule.isEnabled}
+          >
+            {#if isTesting}
+              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+            {:else}
+              <Zap class="h-4 w-4 mr-2" />
+            {/if}
+            Test fire
+          </DropdownMenu.Item>
+        {/if}
         <!-- Managed rules live and die with their tracker threshold (the server
              returns 409 on DELETE) — hide the delete action; editing channels
              etc. stays available. -->
-        {#if !rule.managedBy}
+        {#if canManage && !rule.managedBy}
           <DropdownMenu.Separator />
           <AlertDialog.Root>
             <AlertDialog.Trigger>

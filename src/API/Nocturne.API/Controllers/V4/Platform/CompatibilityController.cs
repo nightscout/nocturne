@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Models;
@@ -136,6 +137,9 @@ public class CompatibilityController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        count = V4ReadLimits.ClampLimit(count);
+        skip = V4ReadLimits.ClampOffset(skip);
+
         try
         {
             var analyses = await _repository.GetAnalysesAsync(

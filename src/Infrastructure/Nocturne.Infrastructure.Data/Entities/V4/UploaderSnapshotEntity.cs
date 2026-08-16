@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.UploaderSnapshot
 /// </summary>
 [Table("uploader_snapshots")]
-public class UploaderSnapshotEntity : ITenantScoped, ISoftDeletable, IV4Entity, ISystemTimestamped
+public class UploaderSnapshotEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

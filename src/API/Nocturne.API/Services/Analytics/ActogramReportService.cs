@@ -93,13 +93,13 @@ public sealed class ActogramReportService : IActogramReportService
         var stepRecords = await _stepCountService.GetStepCountsByDateRangeAsync(
             fromDt,
             toDt,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
         var heartRateRecords = await _heartRateService.GetHeartRatesByDateRangeAsync(
             fromDt,
             toDt,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
         var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);

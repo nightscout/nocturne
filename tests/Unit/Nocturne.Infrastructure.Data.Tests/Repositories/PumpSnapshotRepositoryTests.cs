@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -21,7 +22,7 @@ public class PumpSnapshotRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantA;
-        _repository = new PumpSnapshotRepository(new TestTenantDbContextFactory(_context), NullLogger<PumpSnapshotRepository>.Instance);
+        _repository = new PumpSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
     }
 
     public void Dispose()
@@ -64,6 +65,24 @@ public class PumpSnapshotRepositoryTests : IDisposable
             });
         }
         await _context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetAsync_FiltersBySource()
+    {
+        // The list read advertises a source filter on GET /api/v4/device-status/pump; dropping the
+        // predicate returned every connector's snapshots under a single connector's name.
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedSourceAsync(TenantA,
+            (t1, "carelink"),
+            (t2, "nightscout"));
+
+        var carelink = await _repository.GetAsync(null, null, device: null, source: "carelink");
+        carelink.Should().ContainSingle().Which.Timestamp.Should().Be(t1);
+
+        var unfiltered = await _repository.GetAsync(null, null, device: null, source: null);
+        unfiltered.Should().HaveCount(2);
     }
 
     [Fact]

@@ -17,7 +17,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="IBGCheckRepository"/>
 /// <seealso cref="ICalibrationRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
+public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>, IDeviceAttributedRepository<SensorGlucose>
 {
     /// <summary>
     /// Retrieve a page of <see cref="SensorGlucose"/> records filtered by time range, device, source, and origin.
@@ -170,19 +170,6 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
     /// last-seen timestamp per combination. Drives the "discovered sources" device-registration UI.
     /// </summary>
     Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default);
-
-    /// <summary>
-    /// Returns unattributed readings (<c>PatientDeviceId == null</c>) within the time window, capped at
-    /// <paramref name="limit"/>. Used to back-stamp attribution when a device is registered from a discovered source.
-    /// </summary>
-    Task<IReadOnlyList<SensorGlucose>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default);
-
-    /// <summary>
-    /// Persists <see cref="SensorGlucose.PatientDeviceId"/> for the given record ids in one batch.
-    /// Ids absent for this tenant are ignored.
-    /// </summary>
-    /// <returns>The number of rows updated.</returns>
-    Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default);
 
     /// <summary>
     /// Delete all records within the given time range.

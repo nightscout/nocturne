@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
@@ -94,6 +95,10 @@ public class NutritionController : ControllerBase, IWriteScopedController
     {
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
+
+        limit = V4ReadLimits.ClampLimit(limit);
+        offset = V4ReadLimits.ClampOffset(offset);
+
         var descending = sort == "timestamp_desc";
         var data = await _carbIntakeRepo.GetAsync(from, to, device, source, limit, offset, descending, ct: ct);
         var total = await _carbIntakeRepo.CountAsync(from, to, ct);

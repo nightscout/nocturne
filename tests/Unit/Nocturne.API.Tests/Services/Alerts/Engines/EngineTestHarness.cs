@@ -60,7 +60,8 @@ internal static class EngineTestHarness
         services.AddSingleton<ConditionEvaluatorRegistry>();
         var provider = services.BuildServiceProvider();
 
-        var tracker = new ExcursionTracker(trackerRepo, time, NullLogger<ExcursionTracker>.Instance);
+        var tracker = new ExcursionTracker(
+            trackerRepo, new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
         var engine = new ManagedAlertEngine(
             provider.GetRequiredService<ConditionEvaluatorRegistry>(),
             tracker,
@@ -74,11 +75,13 @@ internal static class EngineTestHarness
         IConditionTimerStore timerStore,
         InMemoryTrackerRepository trackerRepo)
     {
-        var tracker = new ExcursionTracker(trackerRepo, time, NullLogger<ExcursionTracker>.Instance);
+        var gate = new AlertRuleEvaluationGate();
+        var tracker = new ExcursionTracker(trackerRepo, gate, time, NullLogger<ExcursionTracker>.Instance);
         return new RustBackedAlertEngine(
             timerStore,
             trackerRepo,
             tracker,
+            gate,
             time,
             NullLogger<RustBackedAlertEngine>.Instance);
     }

@@ -61,7 +61,6 @@ public class ProfileDecomposerTests
             carbRatioScheduleRepo.Object,
             sensitivityScheduleRepo.Object,
             targetRangeScheduleRepo.Object,
-            auditContext,
             NullLogger<ProfileDecomposer>.Instance);
 
         var profile = new Profile

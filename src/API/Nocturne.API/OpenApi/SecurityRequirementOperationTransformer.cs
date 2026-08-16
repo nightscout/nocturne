@@ -1,12 +1,12 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.OpenApi;
 
 /// <summary>
-/// Attaches per-operation security requirements based on [Authorize] / [AllowAnonymous] attributes.
+/// Attaches per-operation security requirements to the runtime documents.
 /// Nocturne endpoints get oauth2|bearer|instanceKey; Nightscout endpoints get apiSecret.
 /// </summary>
 public sealed class SecurityRequirementOperationTransformer : IOpenApiOperationTransformer
@@ -20,21 +20,8 @@ public sealed class SecurityRequirementOperationTransformer : IOpenApiOperationT
         if (actionDescriptor is null)
             return Task.CompletedTask;
 
-        var methodInfo = actionDescriptor.MethodInfo;
-        var controllerType = actionDescriptor.ControllerTypeInfo;
-
-        var allowAnonymous =
-            methodInfo.GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true).Length > 0
-            || controllerType.GetCustomAttributes(typeof(AllowAnonymousAttribute), inherit: true).Length > 0;
-
-        if (allowAnonymous)
-            return Task.CompletedTask;
-
-        var hasAuthorize =
-            methodInfo.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Length > 0
-            || controllerType.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true).Length > 0;
-
-        if (!hasAuthorize)
+        if (!SecuritySchemeDefinitions.RequiresAuthorization(
+                actionDescriptor.MethodInfo, actionDescriptor.ControllerTypeInfo))
             return Task.CompletedTask;
 
         var document = context.Document;
@@ -45,15 +32,16 @@ public sealed class SecurityRequirementOperationTransformer : IOpenApiOperationT
             operation.Security ??= [];
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("oauth2", document)] = ["*"],
+                [new OpenApiSecuritySchemeReference(SecuritySchemeDefinitions.OAuth2, document)] =
+                    [OAuthScopes.FullAccess],
             });
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("bearer", document)] = [],
+                [new OpenApiSecuritySchemeReference(SecuritySchemeDefinitions.Bearer, document)] = [],
             });
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("instanceKey", document)] = [],
+                [new OpenApiSecuritySchemeReference(SecuritySchemeDefinitions.InstanceKey, document)] = [],
             });
         }
         else if (context.DocumentName == "nightscout")
@@ -61,7 +49,7 @@ public sealed class SecurityRequirementOperationTransformer : IOpenApiOperationT
             operation.Security ??= [];
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("apiSecret", document)] = [],
+                [new OpenApiSecuritySchemeReference(SecuritySchemeDefinitions.ApiSecret, document)] = [],
             });
         }
 

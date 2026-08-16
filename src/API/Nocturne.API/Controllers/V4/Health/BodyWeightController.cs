@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -58,6 +59,9 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
         CancellationToken cancellationToken = default
     )
     {
+        count = V4ReadLimits.ClampLimit(count);
+        skip = V4ReadLimits.ClampOffset(skip);
+
         try
         {
             var records = await _bodyWeightService.GetBodyWeightsAsync(count, skip, cancellationToken);

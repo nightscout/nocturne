@@ -149,8 +149,9 @@ jobs:
   # run reliably on GitHub-hosted runners where Docker is available. Other
   # integration projects stay deferred until their fixtures/references are fixed.
   # Typechecks the Svelte library packages that have no build step and no generated API
-  # client, so this needs nothing but pnpm. @nocturne/app and @nocturne/portal are excluded
-  # because their checks depend on the NSwag/Zod codegen and belong with the .NET build.
+  # client, and runs the pure-node vitest suites, so this needs nothing but pnpm.
+  # @nocturne/app and @nocturne/portal are excluded because their checks depend on the
+  # NSwag/Zod codegen and belong with the .NET build.
   #
   # Only glucose-chart and coach are listed. @nocturne/ui and @nocturne/cms still run
   # svelte-check-native, which silently discovers zero files on Linux (see the note on their
@@ -178,6 +179,8 @@ jobs:
       - name: Typecheck library packages
         run: |
           pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
+      - name: Bot unit tests
+        run: pnpm --filter @nocturne/bot run test
 
   integration-db:
     runs-on: ubuntu-latest

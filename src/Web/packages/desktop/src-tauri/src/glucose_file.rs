@@ -6,20 +6,9 @@
 
 use std::path::PathBuf;
 
-/// Returns `%LOCALAPPDATA%\Nocturne\glucose.json`, falling back to
-/// `%USERPROFILE%\AppData\Local\Nocturne\glucose.json` when `LOCALAPPDATA` is unset.
+/// Returns `%LOCALAPPDATA%\Nocturne\glucose.json`.
 pub fn glucose_file_path() -> PathBuf {
-    let base = std::env::var("LOCALAPPDATA")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let mut p = std::env::var("USERPROFILE").map(PathBuf::from).unwrap_or_default();
-            p.push("AppData");
-            p.push("Local");
-            p
-        });
-    base.join("Nocturne").join("glucose.json")
+    crate::app_dir::nocturne_dir().join("glucose.json")
 }
 
 /// Writes `bytes` to the glucose file via a temp-file + atomic rename, so a reader never observes

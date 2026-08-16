@@ -9,6 +9,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "bot:register-discord-commands": "node dist/scripts/register-discord-commands.js"
   },
   "author": "Nocturne Project",
@@ -29,7 +31,8 @@
   "devDependencies": {
     "@types/node": "^20.10.6",
     "typescript": "^5.3.3",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5",
+    "vitest": "^4.1.6"
   },
   "engines": {
     "node": ">=24"

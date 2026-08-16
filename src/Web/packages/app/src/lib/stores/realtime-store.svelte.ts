@@ -115,6 +115,10 @@ export class RealtimeStore {
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
   private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // refetch if no data for 5 min while visible
 
+  /** Pending refetch of the records the backend derives from devicestatus. */
+  private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly DECOMPOSITION_REFRESH_MS = 3_000;
+
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
   deviceStatuses = $state.raw<DeviceStatus[]>([]);
@@ -131,7 +135,7 @@ export class RealtimeStore {
   deviceEvents = $state.raw<DeviceEvent[]>([]);
   apsSnapshots = $state.raw<ApsSnapshot[]>([]);
 
-  /** Latest pump reservoir (units). Fetched once at init; not yet pushed via the realtime channel. */
+  /** Latest pump reservoir (units), null when the pump reports no numeric level. */
   currentReservoir = $state<number | null>(null);
 
   /** Connection state (with safe initialization) */
@@ -581,9 +585,7 @@ export class RealtimeStore {
           .slice(0, 100);
       }
 
-      // The backend decomposes devicestatus into an ApsSnapshot asynchronously.
-      // Wait briefly then fetch the latest snapshot so pills update in real time.
-      setTimeout(() => this.refreshLatestApsSnapshot(), 3000);
+      this.scheduleDecompositionRefresh();
     }
   }
 
@@ -868,6 +870,10 @@ export class RealtimeStore {
   /** Cleanup */
   destroy(): void {
     this.clearDisconnectNotice();
+    if (this.decompositionRefreshTimer) {
+      clearTimeout(this.decompositionRefreshTimer);
+      this.decompositionRefreshTimer = null;
+    }
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }
@@ -912,6 +918,32 @@ export class RealtimeStore {
     if (this.backgroundPollInterval) {
       clearInterval(this.backgroundPollInterval);
       this.backgroundPollInterval = null;
+    }
+  }
+
+  /**
+   * Queue a refetch of the records the backend derives from a devicestatus write
+   * (APS snapshots, pump snapshots), which it decomposes asynchronously. Uploaders
+   * post devicestatus in bursts, so an already-pending refresh absorbs the burst
+   * rather than firing once per document.
+   */
+  private scheduleDecompositionRefresh(): void {
+    if (this.decompositionRefreshTimer) return;
+
+    this.decompositionRefreshTimer = setTimeout(() => {
+      this.decompositionRefreshTimer = null;
+      void this.refreshLatestApsSnapshot();
+      void this.refreshCurrentReservoir();
+    }, RealtimeStore.DECOMPOSITION_REFRESH_MS);
+  }
+
+  /** Re-read the pump reservoir from the current therapy state. */
+  private async refreshCurrentReservoir(): Promise<void> {
+    try {
+      const therapyState = await getApiClient().currentTherapyState.getCurrentTherapyState();
+      this.currentReservoir = therapyState?.reservoir ?? null;
+    } catch {
+      // Non-critical — the reservoir pill keeps its last value until the next refresh.
     }
   }
 
@@ -970,6 +1002,7 @@ export class RealtimeStore {
       // Fetch all data types since last received using existing API methods
       const backfillFromDate = new Date(backfillFrom);
       const nowDate = new Date();
+      const reservoirRefresh = this.refreshCurrentReservoir();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
         apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
@@ -980,6 +1013,7 @@ export class RealtimeStore {
         apiClient.deviceEvent.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.apsSnapshot.getAll(backfillFromDate, nowDate, 20).then((r) => r.data ?? []).catch(() => []),
       ]);
+      await reservoirRefresh;
 
       let backfilledCount = 0;
 

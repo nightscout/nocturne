@@ -464,14 +464,10 @@ internal class MigrationJob
 
         // Attribute the imported records to the migration rather than to a human actor. A backfill
         // writes one row per historical treatment/entry, and without this every one of them also
-        // appends a mutation_audit_log row. The property covers writes made on this scope's own
-        // context; the pushed scope covers the contexts ITenantDbContextFactory creates for the V4
-        // repositories and decomposers. Mirrors ConnectorBackgroundService.
-        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().AuditContext =
-            SystemAuditContext.ForService(AuditEndpoint);
+        // appends a mutation_audit_log row. Mirrors ConnectorBackgroundService.
         return new SystemAttributedScope(
             scope,
-            SystemAuditScope.Push(scope.ServiceProvider.GetRequiredService<IAuditContext>()));
+            SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint));
     }
 
     /// <summary>

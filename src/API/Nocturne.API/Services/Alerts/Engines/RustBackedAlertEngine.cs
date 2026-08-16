@@ -27,6 +27,7 @@ internal sealed class RustBackedAlertEngine(
     IConditionTimerStore timerStore,
     IAlertTrackerRepository trackerRepository,
     IExcursionTracker excursionTracker,
+    AlertRuleEvaluationGate gate,
     TimeProvider timeProvider,
     ILogger<RustBackedAlertEngine> logger)
     : IAlertEvaluationEngine
@@ -38,6 +39,10 @@ internal sealed class RustBackedAlertEngine(
         AlertEngineOptions options,
         CancellationToken ct)
     {
+        // This adapter owns the tracker-state read-modify-write itself (the managed tracker's
+        // own lease never covers it), so it takes the same per-rule lease.
+        using var lease = await gate.AcquireAsync(rule.Id, ct);
+
         // The snapshot doesn't carry ConfirmationReadings/HysteresisMinutes; the managed
         // tracker loads the rule row per evaluation, so mirror that here.
         var ruleRow = await trackerRepository.GetRuleAsync(rule.Id, ct);

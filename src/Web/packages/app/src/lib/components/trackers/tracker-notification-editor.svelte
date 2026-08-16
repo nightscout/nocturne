@@ -4,7 +4,7 @@
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import { DurationInput } from "$lib/components/ui/duration-input";
-  import { Plus, Trash2 } from "lucide-svelte";
+  import { Plus, Trash2, Bell } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { NotificationUrgency } from "$api";
   import type { TrackerNotification } from "./types";
@@ -154,7 +154,23 @@
             />
           </div>
 
-          <div class="flex-shrink-0 pt-5">
+          <div class="flex-shrink-0 pt-5 flex items-center gap-1">
+            <!-- New tab: this editor lives in a dialog, so in-place navigation
+                 would discard the tracker edits made so far. -->
+            {#if notification.alertRuleId}
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-9 text-muted-foreground"
+                href="/alerts/{notification.alertRuleId}"
+                target="_blank"
+                rel="noopener"
+                title="Configure delivery channels for this threshold"
+              >
+                <Bell class="h-4 w-4" />
+                Channels
+              </Button>
+            {/if}
             <Button
               variant="ghost"
               size="icon"
@@ -182,7 +198,7 @@
   {/if}
 
   <p class="text-xs text-muted-foreground">
-    Each threshold is delivered through a managed alert rule. Channels can be
-    configured on the Alerts page.
+    Each threshold is delivered through a managed alert rule. Use Channels to
+    open that rule; a new threshold gets its rule after the tracker is saved.
   </p>
 </div>

@@ -497,31 +497,15 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     public async Task<IReadOnlyList<SensorGlucose>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.SensorGlucose.AsNoTracking().Where(e => e.PatientDeviceId == null);
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-
-        var entities = await query
-            .OrderByDescending(e => e.Timestamp)
-            .Take(limit)
-            .ToListAsync(ct);
+        var entities = await ctx.GetUnattributedAsync<SensorGlucoseEntity>(from, to, limit, ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
     }
 
     /// <inheritdoc />
     public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
     {
-        if (patientDeviceIdByRecordId.Count == 0) return 0;
-
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var ids = patientDeviceIdByRecordId.Keys.ToList();
-        var entities = await ctx.SensorGlucose.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.PatientDeviceId = patientDeviceIdByRecordId[entity.Id];
-
-        return entities.Count > 0 ? await ctx.SaveChangesAsync(ct) : 0;
+        return await ctx.SetPatientDeviceIdsAsync<SensorGlucoseEntity>(patientDeviceIdByRecordId, ct);
     }
 
     /// <summary>

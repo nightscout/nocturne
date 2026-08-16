@@ -25,6 +25,13 @@ namespace Nocturne.API.Middleware;
 /// <seealso cref="Attributes.NightscoutEndpointAttribute"/>
 public class JsonExtensionMiddleware
 {
+    /// <summary>
+    /// Prefixes whose <c>.json</c> suffix is part of the real route rather than a legacy
+    /// Nightscout content-negotiation hint: the OpenAPI documents served by <c>MapOpenApi</c>,
+    /// and the OIDC key set that both discovery documents advertise as <c>jwks_uri</c>.
+    /// </summary>
+    private static readonly string[] LiteralJsonPrefixes = ["/openapi", "/.well-known"];
+
     private readonly RequestDelegate _next;
     private readonly ILogger<JsonExtensionMiddleware> _logger;
 
@@ -49,11 +56,12 @@ public class JsonExtensionMiddleware
     {
         var path = context.Request.Path.Value;
 
-        // Check if the path ends with .json (skip /openapi paths — MapOpenApi expects .json)
         if (
             !string.IsNullOrEmpty(path)
             && path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            && !path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase)
+            && !LiteralJsonPrefixes.Any(prefix =>
+                path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            )
         )
         {
             // Remove the .json extension

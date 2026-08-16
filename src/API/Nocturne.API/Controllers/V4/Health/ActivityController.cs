@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Health;
@@ -39,6 +40,10 @@ public class ActivityController : ControllerBase
     /// <summary>
     /// Get activity records with pagination
     /// </summary>
+    /// <remarks>
+    /// This read merges four sources in memory, so the page is bounded by
+    /// <see cref="V4ReadLimits.ClampMergedPage"/> rather than the plain page-size ceiling.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Activity>), StatusCodes.Status200OK)]
@@ -47,6 +52,9 @@ public class ActivityController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
+        offset = V4ReadLimits.ClampOffset(offset);
+        limit = V4ReadLimits.ClampMergedPage(limit, offset);
+
         var records = await _activityService.GetActivitiesAsync(
             count: limit, skip: offset, cancellationToken: cancellationToken);
         var total = (int)await _activityService.CountActivitiesAsync(cancellationToken: cancellationToken);

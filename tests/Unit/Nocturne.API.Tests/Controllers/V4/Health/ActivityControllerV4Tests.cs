@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Health;
@@ -32,6 +33,59 @@ public class ActivityControllerV4Tests
 
     private void GrantScopes(params string[] scopes) =>
         _controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
+
+    [Fact]
+    public async Task GetActivities_LimitAtWindow_ReachesServiceUnchanged()
+    {
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 0, CancellationToken.None);
+
+        VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow, skip: 0);
+    }
+
+    [Fact]
+    public async Task GetActivities_LimitAboveWindow_IsClampedToWindow()
+    {
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow + 1, 0, CancellationToken.None);
+
+        VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow, skip: 0);
+    }
+
+    [Fact]
+    public async Task GetActivities_OffsetInsideWindow_LeavesOnlyTheRemainder()
+    {
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, 1, CancellationToken.None);
+
+        VerifyFetched(count: V4ReadLimits.MaxMergedPageWindow - 1, skip: 1);
+    }
+
+    [Fact]
+    public async Task GetActivities_OffsetAtWindow_LeavesNothing()
+    {
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, V4ReadLimits.MaxMergedPageWindow, CancellationToken.None);
+
+        VerifyFetched(count: 0, skip: V4ReadLimits.MaxMergedPageWindow);
+    }
+
+    [Fact]
+    public async Task GetActivities_OffsetPastWindow_LeavesNothingRatherThanReopeningIt()
+    {
+        const int past = V4ReadLimits.MaxMergedPageWindow * 10;
+
+        await _controller.GetActivities(V4ReadLimits.MaxMergedPageWindow, past, CancellationToken.None);
+
+        VerifyFetched(count: 0, skip: past);
+    }
+
+    [Fact]
+    public async Task GetActivities_NegativeOffset_IsNormalizedToZero()
+    {
+        await _controller.GetActivities(100, -1, CancellationToken.None);
+
+        VerifyFetched(count: 100, skip: 0);
+    }
+
+    private void VerifyFetched(int count, int skip) =>
+        _service.Verify(x => x.GetActivitiesAsync(null, count, skip, It.IsAny<CancellationToken>()), Times.Once);
 
     [Fact]
     public async Task CreateActivities_SleepRecordWithoutSleepScope_ReturnsForbidden()

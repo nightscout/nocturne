@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
@@ -22,7 +21,6 @@ using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
-using OpenApi.Remote.Processors;
 using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
@@ -172,47 +170,13 @@ builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 
 // ── OpenAPI document generation ──────────────────────────────────────
-// NSwag generates the "nocturne" spec at BUILD TIME for TypeScript client codegen.
-// Microsoft OpenAPI serves specs at RUNTIME for Scalar interactive docs.
+// Microsoft OpenAPI serves specs at RUNTIME for Scalar interactive docs. The build-time NSwag
+// spec that feeds TypeScript and SDK codegen is configured in NSwagDocumentConfiguration, which
+// the application host never reaches — NSwag boots the app through NSwagStartup.
 
-// NSwag (build-time only — used by nswag.json MSBuild target for TS client generation)
-builder.Services.AddOpenApiDocument(config =>
-{
-    config.DocumentName = "nocturne";
-
-    config.AddOperationFilter(ctx =>
-    {
-        var ns = ctx.ControllerType.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V4.")
-            || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.Authentication")
-            || ns == "Nocturne.API.Controllers";
-    });
-
-    config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
-    config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
-    config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
-    config.OperationProcessors.Add(new SummaryToDescriptionOperationProcessor());
-
-    config.PostProcess = document =>
-    {
-        document.Info.Version = "0.0.1";
-        document.Info.Title = "Nocturne API";
-    };
-});
-
-// Microsoft OpenAPI (runtime — serves specs for Scalar docs UI)
 builder.Services.AddOpenApi("nocturne", options =>
 {
-    options.ShouldInclude = desc =>
-    {
-        var ns = (desc.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)
-            ?.ControllerTypeInfo.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V4.")
-            || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.Authentication")
-            || ns == "Nocturne.API.Controllers";
-    };
+    options.ShouldInclude = ApiDocumentMembership.InNocturneDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
@@ -223,17 +187,7 @@ builder.Services.AddOpenApi("nocturne", options =>
 
 builder.Services.AddOpenApi("nightscout", options =>
 {
-    options.ShouldInclude = desc =>
-    {
-        var ns = (desc.ActionDescriptor as Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)
-            ?.ControllerTypeInfo.Namespace ?? string.Empty;
-        return ns.Contains(".Controllers.V1.")
-            || ns.EndsWith(".Controllers.V1", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.V2.")
-            || ns.EndsWith(".Controllers.V2", StringComparison.Ordinal)
-            || ns.Contains(".Controllers.V3.")
-            || ns.EndsWith(".Controllers.V3", StringComparison.Ordinal);
-    };
+    options.ShouldInclude = ApiDocumentMembership.InNightscoutDocument;
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
@@ -392,8 +346,8 @@ app.UseRouting();
 // Ahead of the documentation branch below, which jumps straight to its endpoint and would
 // otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
 // UseRouting to have run. Everything without a policy passes through untouched, and every
-// policy that exists partitions on the remote address alone, so none of their accounting
-// depends on running after UseAuthorization.
+// policy that exists partitions on pre-auth request data (the remote address or the Host),
+// so none of their accounting depends on running after UseAuthorization.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
@@ -616,9 +570,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     using (var scope = app.Services.CreateScope())
     {
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var platformOptions = scope.ServiceProvider.GetRequiredService<IOptions<PlatformOptions>>();
-        var bootstrap = new PlatformAdminBootstrapService(db, platformOptions);
+        var bootstrap = scope.ServiceProvider.GetRequiredService<PlatformAdminBootstrapService>();
         await bootstrap.BootstrapAsync(CancellationToken.None);
     }
 }
@@ -689,25 +641,7 @@ internal class NSwagStartup
         services.AddControllers()
             .AddApplicationPart(typeof(Nocturne.API.Program).Assembly);
 
-        // NSwag schema extraction: register only the "nocturne" document (V4 + root controllers).
-        // nswag.json targets documentName "nocturne" so only this document is emitted.
-        services.AddOpenApiDocument(config =>
-        {
-            config.DocumentName = "nocturne";
-
-            config.AddOperationFilter(ctx =>
-            {
-                var ns = ctx.ControllerType.Namespace ?? string.Empty;
-                return ns.Contains(".Controllers.V4.")
-                    || ns.EndsWith(".Controllers.V4", StringComparison.Ordinal)
-                    || ns.Contains(".Controllers.Authentication")
-                    || ns == "Nocturne.API.Controllers";
-            });
-
-            config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
-            config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
-            config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
-        });
+        services.AddOpenApiDocument(NSwagDocumentConfiguration.Configure);
     }
 
     public void Configure(IApplicationBuilder app)

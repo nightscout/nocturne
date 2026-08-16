@@ -102,6 +102,47 @@ describe("TrackerNotificationEditor", () => {
 			.toBeVisible();
 	});
 
+	it("links each threshold to its own managed alert rule", async () => {
+		render(TrackerNotificationEditor, {
+			notifications: [
+				{
+					urgency: NotificationUrgency.Info,
+					hours: 24,
+					description: "First",
+					alertRuleId: "11111111-1111-1111-1111-111111111111",
+				},
+				{
+					urgency: NotificationUrgency.Warn,
+					hours: 48,
+					description: "Second",
+					alertRuleId: "22222222-2222-2222-2222-222222222222",
+				},
+			],
+		});
+
+		const links = page.getByRole("link", { name: /Channels/i });
+		await expect.element(links.first()).toHaveAttribute(
+			"href",
+			"/alerts/11111111-1111-1111-1111-111111111111",
+		);
+		await expect.element(links.nth(1)).toHaveAttribute(
+			"href",
+			"/alerts/22222222-2222-2222-2222-222222222222",
+		);
+	});
+
+	it("omits the channels link for a threshold with no managed rule yet", async () => {
+		render(TrackerNotificationEditor, {
+			notifications: [
+				{ urgency: NotificationUrgency.Info, hours: 24, description: "Unsaved" },
+			],
+		});
+
+		await expect
+			.element(page.getByRole("link", { name: /Channels/i }))
+			.not.toBeInTheDocument();
+	});
+
 	it("renders remove buttons for each notification", async () => {
 		render(TrackerNotificationEditor, {
 			notifications: [

@@ -60,20 +60,57 @@ public static class DemoDeviceLifecycle
         {
             for (var d = backfillDays + kind.CycleDays; d >= 0; d--)
             {
-                var day = localToday.AddDays(-d);
-                var dayNumber = (int)(day.Ticks / TimeSpan.TicksPerDay);
-                if ((dayNumber % kind.CycleDays + kind.CycleDays) % kind.CycleDays != kind.Phase)
+                var local = ChangeTimeOn(localToday.AddDays(-d), kind.Tracker.TriggerEventType);
+                if (local is null || local > DateTime.Now)
                     continue;
-
-                var jitter = DayScenarios.RngFor(day, $"device:{kind.Tracker.TriggerEventType}");
-                var local = day.AddHours(kind.HourOfDay).AddMinutes(jitter.Next(-90, 90));
-                if (local > DateTime.Now)
-                    continue;
-                events.Add(new DeviceChangeEvent(kind.Tracker.TriggerEventType, local.ToUniversalTime()));
+                events.Add(new DeviceChangeEvent(kind.Tracker.TriggerEventType, local.Value.ToUniversalTime()));
             }
         }
 
         return events.OrderBy(e => e.TimestampUtc).ToList();
+    }
+
+    /// <summary>
+    /// The local change time of the given kind on <paramref name="localDay"/>,
+    /// or null when that calendar day is not a change day. The single source of
+    /// the day-number modulo anchoring and per-day jitter, so consumable levels
+    /// in device status and the calibration schedule agree with the seeded
+    /// DeviceEvents.
+    /// </summary>
+    public static DateTime? ChangeTimeOn(DateTime localDay, string eventType)
+    {
+        var kind = Kinds.FirstOrDefault(k => k.Tracker.TriggerEventType == eventType);
+        if (kind is null)
+            return null;
+
+        var day = localDay.Date;
+        var dayNumber = (int)(day.Ticks / TimeSpan.TicksPerDay);
+        if ((dayNumber % kind.CycleDays + kind.CycleDays) % kind.CycleDays != kind.Phase)
+            return null;
+
+        var jitter = DayScenarios.RngFor(day, $"device:{eventType}");
+        return day.AddHours(kind.HourOfDay).AddMinutes(jitter.Next(-90, 90));
+    }
+
+    /// <summary>
+    /// Time since the most recent change of the given kind at or before
+    /// <paramref name="localTime"/>.
+    /// </summary>
+    public static TimeSpan TimeSinceLastChange(DateTime localTime, string eventType)
+    {
+        var kind = Kinds.FirstOrDefault(k => k.Tracker.TriggerEventType == eventType);
+        if (kind is null)
+            return TimeSpan.Zero;
+
+        for (var back = 0; back <= kind.CycleDays * 2; back++)
+        {
+            var changeAt = ChangeTimeOn(localTime.Date.AddDays(-back), eventType);
+            if (changeAt is not null && changeAt <= localTime)
+                return localTime - changeAt.Value;
+        }
+
+        // Unreachable with a valid phase; degrade to one full cycle.
+        return TimeSpan.FromDays(kind.CycleDays);
     }
 
     /// <summary>

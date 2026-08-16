@@ -183,18 +183,20 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     }
 
     /// <summary>
-    /// Get the count of active notifications for a user from a specific source
+    /// Get the active notifications for a user from a specific source, oldest first
     /// </summary>
     /// <param name="userId">The user ID</param>
     /// <param name="source">The notification source</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Count of active notifications from the source</returns>
-    public async Task<int> GetActiveCountBySourceAsync(
+    /// <returns>Active notifications from the source, ordered by creation time ascending</returns>
+    public virtual async Task<List<InAppNotificationEntity>> GetActiveBySourceAsync(
         string userId, string source, CancellationToken cancellationToken = default)
     {
         return await _context.InAppNotifications
             .Where(n => n.UserId == userId && n.Source == source && !n.IsArchived)
-            .CountAsync(cancellationToken);
+            .OrderBy(n => n.CreatedAt)
+            .ThenBy(n => n.Id)
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>

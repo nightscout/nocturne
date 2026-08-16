@@ -93,6 +93,88 @@ public class V4ReadOnlyControllerBaseTests
     }
 
     [Fact]
+    public async Task GetAll_LimitAtCeiling_ReachesRepositoryUnchanged()
+    {
+        StubRepository();
+
+        await _controller.GetAll(null, null, V4ReadLimits.MaxPageSize, 0, "timestamp_desc", null, null);
+
+        _repo.Verify(r => r.GetAsync(null, null, null, null, V4ReadLimits.MaxPageSize, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAll_LimitAboveCeiling_IsClampedInBothQueryAndPagination()
+    {
+        StubRepository();
+
+        var result = await _controller.GetAll(null, null, V4ReadLimits.MaxPageSize + 1, 0, "timestamp_desc", null, null);
+
+        _repo.Verify(r => r.GetAsync(null, null, null, null, V4ReadLimits.MaxPageSize, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<PaginatedResponse<ReadOnlyTestRecord>>().Subject;
+        response.Pagination.Limit.Should().Be(V4ReadLimits.MaxPageSize);
+    }
+
+    [Fact]
+    public async Task GetAll_NegativeOffset_IsNormalizedToZero()
+    {
+        StubRepository();
+
+        await _controller.GetAll(null, null, 100, -1, "timestamp_desc", null, null);
+
+        _repo.Verify(r => r.GetAsync(null, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAll_DateSpanAtMaximum_IsAccepted()
+    {
+        var to = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays);
+        _repo.Setup(r => r.GetAsync(from, to, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _repo.Setup(r => r.CountAsync(from, to, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+
+        var result = await _controller.GetAll(from, to, 100, 0, "timestamp_desc", null, null);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetAll_DateSpanOneMillisecondOverMaximum_ReturnsBadRequest()
+    {
+        var to = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var from = to.AddDays(-V4ReadLimits.MaxDateSpanDays).AddMilliseconds(-1);
+
+        var result = await _controller.GetAll(from, to, 100, 0, "timestamp_desc", null, null);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        _repo.Verify(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAll_OpenEndedRange_IsNotSpanChecked()
+    {
+        var from = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _repo.Setup(r => r.GetAsync(from, null, null, null, 100, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _repo.Setup(r => r.CountAsync(from, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
+
+        var result = await _controller.GetAll(from, null, 100, 0, "timestamp_desc", null, null);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private void StubRepository()
+    {
+        _repo.Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _repo.Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+    }
+
+    [Fact]
     public async Task GetById_Found_ReturnsOk()
     {
         var id = Guid.NewGuid();

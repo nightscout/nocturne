@@ -5098,17 +5098,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("hours");
 
-                    b.Property<int>("MaxRepeats")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_repeats");
-
                     b.Property<bool>("PushEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("push_enabled");
-
-                    b.Property<int>("RepeatIntervalMins")
-                        .HasColumnType("integer")
-                        .HasColumnName("repeat_interval_mins");
 
                     b.Property<bool>("RespectQuietHours")
                         .HasColumnType("boolean")
@@ -6596,6 +6588,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_device_events_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+                    b.HasIndex("TenantId", "EventType", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_device_events_tenant_event_type_timestamp");
 
                     b.ToTable("device_events");
                 });

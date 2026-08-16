@@ -4,6 +4,7 @@
   import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
   import * as alarmState from "$lib/stores/alarm-state.svelte";
+  import { setPreferencesContext } from "$lib/stores/appearance-store.svelte";
   import AlarmActiveView from "$lib/components/settings/alarm-preview/AlarmActiveView.svelte";
   import EmergencyOverlay from "$lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
 
@@ -30,7 +31,12 @@
     isEmergencyView = true;
   }
 
-  let { children } = $props();
+  let { children, data } = $props();
+
+  setPreferencesContext(() => ({
+    layers: data.displayPreferences ?? [],
+    language: data.displayLanguage,
+  }));
 </script>
 
 <ModeWatcher />

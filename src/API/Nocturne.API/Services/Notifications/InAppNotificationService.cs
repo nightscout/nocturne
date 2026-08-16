@@ -26,6 +26,13 @@ public class InAppNotificationService : IInAppNotificationService
     private readonly ILogger<InAppNotificationService> _logger;
 
     /// <summary>
+    /// Most active notifications one source may hold for a user at once. A create that would
+    /// exceed it archives the source's oldest active notifications as
+    /// <see cref="NotificationArchiveReason.Superseded"/>.
+    /// </summary>
+    public const int MaxActiveNotificationsPerSource = 10;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InAppNotificationService"/> class.
     /// </summary>
     /// <param name="repository">The notification repository</param>
@@ -87,16 +94,9 @@ public class InAppNotificationService : IInAppNotificationService
         var resolvedActions = actions ?? template?.DefaultActions;
         var resolvedConditions = resolutionConditions ?? template?.DefaultResolutionConditions;
 
-        var resolvedSourceForRateLimit = source ?? template?.Source;
-        if (resolvedSourceForRateLimit != null)
+        if (resolvedSource != null)
         {
-            var activeCount = await _repository.GetActiveCountBySourceAsync(
-                userId, resolvedSourceForRateLimit, cancellationToken);
-            if (activeCount >= 10)
-            {
-                throw new InvalidOperationException(
-                    $"Rate limit exceeded: source '{resolvedSourceForRateLimit}' has {activeCount} active notifications for user");
-            }
+            await SupersedeOldestOverCapAsync(userId, resolvedSource, cancellationToken);
         }
 
         var entity = new InAppNotificationEntity
@@ -155,6 +155,30 @@ public class InAppNotificationService : IInAppNotificationService
         }
 
         return dto;
+    }
+
+    /// <summary>
+    /// Archives a source's oldest active notifications so that one more create leaves the source
+    /// at <see cref="MaxActiveNotificationsPerSource"/>.
+    /// </summary>
+    private async Task SupersedeOldestOverCapAsync(
+        string userId,
+        string source,
+        CancellationToken cancellationToken
+    )
+    {
+        var active = await _repository.GetActiveBySourceAsync(userId, source, cancellationToken);
+        var overflow = active.Count - (MaxActiveNotificationsPerSource - 1);
+
+        for (var i = 0; i < overflow; i++)
+        {
+            await ArchiveNotificationAsync(
+                active[i].Id,
+                NotificationArchiveReason.Superseded,
+                userId,
+                cancellationToken
+            );
+        }
     }
 
     /// <inheritdoc />

@@ -43,7 +43,10 @@ public class Program
         builder.Services.AddHttpClient("DemoAdmin", client =>
         {
             client.BaseAddress = new Uri(apiUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromMinutes(5); // Backfill can be slow
+            // The full server-side seed (90 days of glucose, treatments, and
+            // device status through the ingestion services) runs inside one
+            // request.
+            client.Timeout = TimeSpan.FromMinutes(20);
             if (!string.IsNullOrEmpty(instanceKeyHash))
             {
                 client.DefaultRequestHeaders.Add("X-Instance-Key", instanceKeyHash);

@@ -47,41 +47,6 @@ public class StatusController : ControllerBase
     }
 
     /// <summary>
-    /// Get the current system status as JSON.
-    /// This is the .json suffix variant that always returns JSON (Nightscout compatibility).
-    /// </summary>
-    /// <returns>Status response in JSON format</returns>
-    [HttpGet("~/api/v1/status.json")]
-    [NightscoutEndpoint("/api/v1/status.json")]
-    [Produces("application/json")]
-    public async Task<IActionResult> GetStatusJson()
-    {
-        _logger.LogDebug(
-            "Status.json endpoint requested from {RemoteIpAddress}",
-            HttpContext.Connection.RemoteIpAddress
-        );
-
-        try
-        {
-            var status = await _statusService.GetSystemStatusAsync();
-            return Ok(status);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating status.json response");
-            return Ok(
-                new StatusResponse
-                {
-                    Status = "error",
-                    Name = "Nocturne",
-                    Version = "unknown",
-                    ServerTime = DateTime.UtcNow,
-                }
-            );
-        }
-    }
-
-    /// <summary>
     /// Get the current system status.
     /// Returns JSON when Accept header includes application/json (Nightscout client behavior),
     /// otherwise returns HTML for browser access.

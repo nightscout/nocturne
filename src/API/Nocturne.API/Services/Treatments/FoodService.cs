@@ -61,8 +61,8 @@ public class FoodService : IFoodService
     /// <inheritdoc />
     public async Task<IEnumerable<Food>> GetFoodAsync(
         string? find = null,
-        int? count = null,
-        int? skip = null,
+        int count = 100,
+        int skip = 0,
         CancellationToken cancellationToken = default
     )
     {
@@ -74,8 +74,13 @@ public class FoodService : IFoodService
                 count,
                 skip
             );
-            // Note: MongoDB service doesn't support find/count/skip parameters for food yet
-            return await _food.GetFoodAsync(cancellationToken);
+            return await _food.GetFoodWithAdvancedFilterAsync(
+                count,
+                skip,
+                find,
+                reverseResults: false,
+                cancellationToken
+            );
         }
         catch (Exception ex)
         {

@@ -5,13 +5,16 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 
@@ -28,17 +31,27 @@ public sealed record SampleDataSeedResult(
     int TrackerDefinitions,
     int TrackerInstances,
     int AlertRules,
-    int AlertExcursions);
+    int AlertExcursions,
+    int DeviceStatuses,
+    int Profiles,
+    int Foods,
+    int StateSpans,
+    int Notifications);
 
 /// <summary>
-/// Populates a tenant with realistic sample data using the demo service's oref
-/// pharmacokinetic generator plus the scenario-correlated health generators:
-/// CGM entries, treatments, device-change events, sleep sessions, heart rate,
-/// step counts, consumable trackers, and alert rules with historical alarm
-/// firings derived from the generated glucose itself. Everything is written
-/// through the normal ingestion services and repositories so device
-/// attribution, the v4 canonical glucose stream, and RLS tenant context are
-/// handled exactly like production writes.
+/// Populates a tenant with realistic sample data covering every data type the
+/// platform can hold, driven by the demo service's unified oref simulation
+/// timeline: CGM entries, fingersticks and calibrations, treatments (boluses,
+/// carbs, temp basals, BG checks, notes), Trio-style device status (APS
+/// snapshots with predictions, pump reservoir/battery, phone battery), the
+/// therapy profile, device-change events, sleep, heart rate, steps, consumable
+/// trackers, alert rules with alarm history and their in-app notifications,
+/// state spans (pump mode, overrides, exercise, illness, travel), the food
+/// library with per-meal attribution, patient record and devices, body weight,
+/// the timezone timeline, a clock face, and a DND-window example. Everything
+/// writes through the normal ingestion services and decomposers so device
+/// attribution, the v4 canonical streams, and RLS tenant context are handled
+/// exactly like production writes.
 ///
 /// Two callers: the dev-only admin endpoints (Development, dataSource
 /// "dev-sample") and the demo admin endpoint the demo container invokes after
@@ -55,14 +68,22 @@ public class SampleDataSeeder
     private readonly IStepCountService _stepCountService;
     private readonly ITrackerRepository _trackerRepository;
     private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly IProfileWriteService _profileWriteService;
+    private readonly IDeviceStatusDecomposer _deviceStatusDecomposer;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SampleDataSeeder> _logger;
 
     private const int BatchSize = 500;
     private const int MaxDays = 90;
 
+    /// <summary>Device status cadence: one document per 15 minutes of history.</summary>
+    private const int DeviceStatusMinutes = 15;
+
     /// <summary>Most recent alarm episodes to materialize as excursions/instances.</summary>
     private const int MaxAlarmEpisodes = 40;
+
+    /// <summary>Most recent alarm episodes to mirror as in-app notifications.</summary>
+    private const int MaxAlarmNotifications = 6;
 
     /// <summary>
     /// Default source for dev seeding. The generator stamps records with
@@ -82,6 +103,8 @@ public class SampleDataSeeder
         IStepCountService stepCountService,
         ITrackerRepository trackerRepository,
         IRuleScopeClassifier scopeClassifier,
+        IProfileWriteService profileWriteService,
+        IDeviceStatusDecomposer deviceStatusDecomposer,
         ILoggerFactory loggerFactory,
         ILogger<SampleDataSeeder> logger)
     {
@@ -94,16 +117,18 @@ public class SampleDataSeeder
         _stepCountService = stepCountService;
         _trackerRepository = trackerRepository;
         _scopeClassifier = scopeClassifier;
+        _profileWriteService = profileWriteService;
+        _deviceStatusDecomposer = deviceStatusDecomposer;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
 
     /// <summary>
     /// Generates and persists <paramref name="days"/> days of sample data.
-    /// <paramref name="ownerSubjectId"/> owns the seeded tracker definitions
-    /// and instances; when null, trackers are skipped (they are per-user).
-    /// With <paramref name="includeGlucose"/> false, entries/treatments are
-    /// assumed already present (the demo container streams them itself) and
+    /// <paramref name="ownerSubjectId"/> owns the seeded tracker definitions,
+    /// clock faces, food favorites, and notifications; when null, those
+    /// per-user types are skipped. With <paramref name="includeGlucose"/>
+    /// false, entries/treatments/device status are assumed already present and
     /// alarm history derives from the stored glucose instead of the generated
     /// stream. Re-seeding is idempotent for every type except
     /// entries/treatments, which append.
@@ -126,53 +151,113 @@ public class SampleDataSeeder
         _tenantAccessor.SetTenant(tenant);
         _db.TenantId = tenant.TenantId;
 
+        var config = new DemoModeConfiguration { BackfillDays = days };
+
         // The episode tracker rides along with the glucose stream so alarm
         // history matches the lows/highs actually visible on the chart.
         var episodeTracker = new DemoAlertSeeds.GlucoseEpisodeTracker(DemoAlertSeeds.Defaults);
 
+        // Seed the therapy profile before glucose so scheduled-basal context
+        // exists from the first record.
+        var profilesCreated = await SeedProfileAsync(config, ct);
+
         var entryCount = 0;
         var treatmentCount = 0;
+        var deviceStatusCount = 0;
+        var mealCarbLinks = new List<(DateTime Time, string MealName)>();
+
         if (includeGlucose)
         {
-            var config = new DemoModeConfiguration { BackfillDays = days };
             var generator = new DemoDataGenerator(
                 Options.Create(config),
                 _loggerFactory.CreateLogger<DemoDataGenerator>(),
                 _loggerFactory);
 
-            var entries = generator.GenerateHistoricalEntries()
-                .Select(e =>
-                {
-                    e.DataSource = dataSource;
-                    episodeTracker.Observe(
-                        DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).UtcDateTime, e.Sgv);
-                    return e;
-                });
-
-            foreach (var batch in entries.Chunk(BatchSize))
-            {
-                var created = await _entryService.CreateEntriesAsync(batch, cancellationToken: ct);
-                entryCount += created.Count();
-            }
-
-            // "Scheduled Basal" is a demo-service event type the treatment
-            // decomposer doesn't recognize — it decomposes to nothing and logs
-            // a warning per record.
-            var treatments = generator.GenerateHistoricalTreatments()
-                .Where(t => t.EventType != "Scheduled Basal")
-                .Select(t =>
-                {
-                    t.DataSource = dataSource;
-                    return t;
-                });
-
+            var entryBatch = new List<Entry>(BatchSize);
+            var treatmentBatch = new List<Treatment>(BatchSize);
+            var statusBatch = new List<DeviceStatus>(BatchSize);
             var requestedTreatments = 0;
-            foreach (var batch in treatments.Chunk(BatchSize))
+
+            async Task FlushEntriesAsync()
             {
-                requestedTreatments += batch.Length;
-                var created = await _treatmentService.CreateTreatmentsAsync(batch, ct);
-                treatmentCount += created.Count();
+                if (entryBatch.Count == 0) return;
+                // Backfill origin: a 90-day seed must not broadcast tens of
+                // thousands of records over SignalR from one request.
+                var created = await _entryService.CreateEntriesAsync(
+                    entryBatch, WriteOrigin.Backfill, ct);
+                entryCount += created.Count();
+                entryBatch.Clear();
             }
+
+            async Task FlushTreatmentsAsync()
+            {
+                if (treatmentBatch.Count == 0) return;
+                requestedTreatments += treatmentBatch.Count;
+                var created = await _treatmentService.CreateTreatmentsAsync(treatmentBatch, ct);
+                treatmentCount += created.Count();
+                treatmentBatch.Clear();
+            }
+
+            async Task FlushStatusesAsync()
+            {
+                foreach (var status in statusBatch)
+                {
+                    await _deviceStatusDecomposer.DecomposeAsync(
+                        status, dataSource, WriteOrigin.Backfill, ct);
+                    deviceStatusCount++;
+                }
+                statusBatch.Clear();
+            }
+
+            foreach (var step in generator.GenerateHistoricalTimeline())
+            {
+                ct.ThrowIfCancellationRequested();
+
+                step.Entry.DataSource = dataSource;
+                episodeTracker.Observe(
+                    DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
+                entryBatch.Add(step.Entry);
+                foreach (var extra in step.ExtraEntries)
+                {
+                    extra.DataSource = dataSource;
+                    entryBatch.Add(extra);
+                }
+
+                foreach (var treatment in step.Treatments)
+                {
+                    treatment.DataSource = dataSource;
+                    treatmentBatch.Add(treatment);
+                    if (treatment.EventType == "Carbs" && treatment.FoodType is { Length: > 0 })
+                        mealCarbLinks.Add((DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime, treatment.FoodType));
+                }
+
+                if (step.Time.Minute % DeviceStatusMinutes == 0)
+                {
+                    var status = DemoDeviceStatusGenerator.Create(
+                        step.Time,
+                        step.Entry.Sgv ?? step.Entry.Mgdl,
+                        step.Iob,
+                        step.Cob,
+                        step.TempBasalRate,
+                        step.TempBasalDuration,
+                        step.EffectiveIsf,
+                        step.EffectiveCarbRatio,
+                        config.TargetGlucose,
+                        DemoTherapyProfile.ScheduledRateAt(step.Time, config.BasalRate),
+                        step.Scenario);
+                    // Deterministic legacy id so re-seeding updates in place.
+                    status.Id = status.Mills.ToString("x24");
+                    statusBatch.Add(status);
+                }
+
+                if (entryBatch.Count >= BatchSize) await FlushEntriesAsync();
+                if (treatmentBatch.Count >= BatchSize) await FlushTreatmentsAsync();
+                if (statusBatch.Count >= BatchSize) await FlushStatusesAsync();
+            }
+
+            await FlushEntriesAsync();
+            await FlushTreatmentsAsync();
+            await FlushStatusesAsync();
 
             // CreateTreatmentsAsync decomposes each treatment into its v4 canonical
             // records and swallows per-record decomposition failures, returning only
@@ -191,8 +276,8 @@ public class SampleDataSeeder
         }
         else
         {
-            // Replay the stored stream (the demo container posted it over v1)
-            // so seeded alarm history matches the chart exactly.
+            // Replay the stored stream so seeded alarm history matches the
+            // chart exactly.
             var since = DateTime.UtcNow.AddDays(-days);
             var stored = _db.SensorGlucose
                 .AsNoTracking()
@@ -233,18 +318,50 @@ public class SampleDataSeeder
         var (alertRules, alertExcursions) =
             await SeedAlertsAsync(tenant.TenantId, episodeTracker.Episodes, ct);
 
+        var foodCount = await SeedFoodsAsync(mealCarbLinks, ownerSubjectId, ct);
+        var stateSpanCount = await SeedStateSpansAsync(localToday, days, dataSource, ct);
+        await SeedPatientProfileAsync(ct);
+        await SeedBodyWeightAsync(localToday, days, dataSource, ct);
+        await SeedTimezoneTimelineAsync(localToday, days, ct);
+        await SeedDndWindowAsync(localToday, ct);
+        var clockFaces = await SeedClockFacesAsync(ownerSubjectId, ct);
+        var notificationCount = await SeedNotificationsAsync(
+            ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
+
         _logger.LogInformation(
             "Seeded tenant {Slug} ({Days} days): {Entries} entries, {Treatments} treatments, "
-            + "{DeviceChanges} device changes, {Sleep} sleep sessions, {HeartRates} heart rates, "
-            + "{Steps} step buckets, {TrackerDefs} tracker definitions, {TrackerInstances} tracker instances, "
-            + "{AlertRules} alert rules, {Excursions} alarm excursions",
-            tenant.Slug, days, entryCount, treatmentCount, deviceTreatments.Count, sleepCount,
-            heartRateCount, stepCount, trackerDefinitions, trackerInstances, alertRules, alertExcursions);
+            + "{DeviceStatuses} device statuses, {Profiles} profiles, {DeviceChanges} device changes, "
+            + "{Sleep} sleep sessions, {HeartRates} heart rates, {Steps} step buckets, "
+            + "{TrackerDefs} tracker definitions, {TrackerInstances} tracker instances, "
+            + "{AlertRules} alert rules, {Excursions} alarm excursions, {Foods} foods, "
+            + "{StateSpans} state spans, {ClockFaces} clock faces, {Notifications} notifications",
+            tenant.Slug, days, entryCount, treatmentCount, deviceStatusCount, profilesCreated,
+            deviceTreatments.Count, sleepCount, heartRateCount, stepCount, trackerDefinitions,
+            trackerInstances, alertRules, alertExcursions, foodCount, stateSpanCount, clockFaces,
+            notificationCount);
 
         return new SampleDataSeedResult(
             entryCount, treatmentCount, sleepCount, heartRateCount, stepCount,
             deviceTreatments.Count, trackerDefinitions, trackerInstances,
-            alertRules, alertExcursions);
+            alertRules, alertExcursions, deviceStatusCount, profilesCreated,
+            foodCount, stateSpanCount, notificationCount);
+    }
+
+    /// <summary>
+    /// Seeds the Nightscout profile document through the profile write service
+    /// (which decomposes it into TherapySettings plus the basal/carb-ratio/
+    /// sensitivity/target schedules), unless the demo profile already exists.
+    /// </summary>
+    private async Task<int> SeedProfileAsync(DemoModeConfiguration config, CancellationToken ct)
+    {
+        var exists = await _db.TherapySettings
+            .AnyAsync(t => t.ProfileName == DemoTherapyProfile.ProfileName, ct);
+        if (exists)
+            return 0;
+
+        await _profileWriteService.CreateProfilesAsync(
+            [DemoTherapyProfile.BuildProfile(config, DateTime.UtcNow)], ct);
+        return 1;
     }
 
     /// <summary>
@@ -477,5 +594,402 @@ public class SampleDataSeeder
         await _db.SaveChangesAsync(ct);
 
         return (rulesCreated, excursionsCreated);
+    }
+
+    /// <summary>
+    /// The food library (found-or-created by name), favorites for the owner,
+    /// and per-meal food attribution lines linking library foods to the carb
+    /// intakes the generated meals decomposed into. Attribution is rebuilt from
+    /// the meal timestamps, so re-seeding stays consistent.
+    /// </summary>
+    private async Task<int> SeedFoodsAsync(
+        List<(DateTime Time, string MealName)> mealCarbLinks, Guid? ownerSubjectId, CancellationToken ct)
+    {
+        var foodsByName = new Dictionary<string, FoodEntity>(StringComparer.OrdinalIgnoreCase);
+        var created = 0;
+
+        var position = 0;
+        foreach (var seed in DemoLifestyleSeeds.FoodLibrary)
+        {
+            position++;
+            var food = await _db.Foods.FirstOrDefaultAsync(f => f.Name == seed.Name, ct);
+            if (food is null)
+            {
+                food = new FoodEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = _db.TenantId,
+                    Name = seed.Name,
+                    Category = seed.Category,
+                    Subcategory = seed.Subcategory,
+                    Portion = seed.Portion,
+                    Unit = seed.Unit,
+                    Carbs = seed.Carbs,
+                    Protein = seed.Protein,
+                    Fat = seed.Fat,
+                    Energy = seed.Energy,
+                    Position = position,
+                };
+                _db.Foods.Add(food);
+                created++;
+            }
+
+            foodsByName[seed.Name] = food;
+        }
+        await _db.SaveChangesAsync(ct);
+
+        // Favorites: the snacks and one dinner, owned by the demo member.
+        if (ownerSubjectId is { } owner)
+        {
+            var userId = owner.ToString();
+            var favoriteNames = new[] { "Jelly beans", "Muesli bar", "Homemade pizza slices" };
+            foreach (var name in favoriteNames)
+            {
+                if (!foodsByName.TryGetValue(name, out var food))
+                    continue;
+                var exists = await _db.UserFoodFavorites
+                    .AnyAsync(f => f.UserId == userId && f.FoodId == food.Id, ct);
+                if (!exists)
+                {
+                    _db.UserFoodFavorites.Add(new UserFoodFavoriteEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = _db.TenantId,
+                        UserId = userId,
+                        FoodId = food.Id,
+                    });
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+
+        // Food attribution on the meals' carb intakes (~60% of meals, as a
+        // realistic user would log). Meal timestamps identify the intakes.
+        if (mealCarbLinks.Count > 0)
+        {
+            var mealTimes = mealCarbLinks.Select(m => m.Time).ToList();
+            var intakes = await _db.CarbIntakes
+                .Where(c => mealTimes.Contains(c.Timestamp))
+                .Select(c => new { c.Id, c.Timestamp, c.Carbs })
+                .ToListAsync(ct);
+            var linkedIntakeIds = intakes.Select(i => i.Id).ToList();
+            await _db.TreatmentFoods
+                .Where(tf => linkedIntakeIds.Contains(tf.CarbIntakeId))
+                .ExecuteDeleteAsync(ct);
+
+            foreach (var (time, mealName) in mealCarbLinks)
+            {
+                // Deterministic rolls key on the meal's local calendar day,
+                // like every other demo stream (the UTC day differs east of
+                // Greenwich).
+                var localMeal = time.ToLocalTime();
+                if (DayScenarios.Roll(localMeal.Date, $"food-link:{localMeal.Hour}", 100) >= 60)
+                    continue;
+
+                var intake = intakes.FirstOrDefault(i => i.Timestamp == time);
+                if (intake is null)
+                    continue;
+
+                foreach (var seed in DemoLifestyleSeeds.MealFoodsFor(localMeal.Date, mealName))
+                {
+                    if (!foodsByName.TryGetValue(seed.Name, out var food))
+                        continue;
+                    _db.TreatmentFoods.Add(new TreatmentFoodEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = _db.TenantId,
+                        CarbIntakeId = intake.Id,
+                        FoodId = food.Id,
+                        Portions = seed.Carbs > 0 ? Math.Round((decimal)(intake.Carbs / seed.Carbs), 2) : 1,
+                        Carbs = (decimal)intake.Carbs,
+                    });
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return created;
+    }
+
+    /// <summary>
+    /// State spans for the window: pump mode with manual/exercise windows, the
+    /// active profile, workout overrides and temporary targets, illness runs,
+    /// and the travel span. Spans carrying our data source are wiped and
+    /// rebuilt (idempotent re-seed).
+    /// </summary>
+    private async Task<int> SeedStateSpansAsync(
+        DateTime localToday, int days, string dataSource, CancellationToken ct)
+    {
+        await _db.StateSpans
+            .Where(s => s.Source == dataSource)
+            .ExecuteDeleteAsync(ct);
+
+        var spans = DemoLifestyleSeeds.BuildSpans(localToday, days);
+        foreach (var seed in spans)
+        {
+            _db.StateSpans.Add(new StateSpanEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                Category = seed.Category.ToString(),
+                State = seed.State,
+                StartTimestamp = seed.StartLocal.ToUniversalTime(),
+                EndTimestamp = seed.EndLocal?.ToUniversalTime(),
+                Source = dataSource,
+                MetadataJson = seed.Metadata is null ? null : JsonSerializer.Serialize(seed.Metadata),
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+
+        return spans.Count;
+    }
+
+    /// <summary>
+    /// The patient record singleton, the device roster (CGM, pod, meter), and
+    /// the current insulin — the /settings/patient page and device attribution
+    /// context. Created only when absent.
+    /// </summary>
+    private async Task SeedPatientProfileAsync(CancellationToken ct)
+    {
+        if (!await _db.PatientRecords.AnyAsync(ct))
+        {
+            _db.PatientRecords.Add(new PatientRecordEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                PreferredName = "Demo",
+                DiabetesType = "type1",
+                DiagnosisDate = new DateOnly(2014, 3, 12),
+                DateOfBirth = new DateOnly(1992, 4, 17),
+                Timezone = DemoTherapyProfile.LocalIanaTimezone(),
+            });
+        }
+
+        var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid)[]
+        {
+            ("cgm", "Dexcom", "G7", null),
+            ("pump", "Insulet", "Omnipod DASH", DemoDeviceStatusGenerator.DeviceName),
+            ("meter", "Ascensia", "Contour Next One", null),
+        };
+        foreach (var (category, manufacturer, model, aid) in deviceSeeds)
+        {
+            var exists = await _db.PatientDevices
+                .AnyAsync(d => d.Manufacturer == manufacturer && d.Model == model, ct);
+            if (!exists)
+            {
+                _db.PatientDevices.Add(new PatientDeviceEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = _db.TenantId,
+                    DeviceCategory = category,
+                    Manufacturer = manufacturer,
+                    Model = model,
+                    AidAlgorithm = aid,
+                    StartDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(-8)),
+                    IsCurrent = true,
+                });
+            }
+        }
+
+        if (!await _db.PatientInsulins.AnyAsync(ct))
+        {
+            _db.PatientInsulins.Add(new PatientInsulinEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                InsulinCategory = "RapidActing",
+                Name = "Humalog",
+                IsCurrent = true,
+                Dia = 4.0,
+                Peak = 75,
+                Curve = "rapid-acting",
+                Concentration = 100,
+                Role = "Bolus",
+                IsPrimary = true,
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Weekly Sunday-morning weigh-ins with a deterministic sync key.</summary>
+    private async Task SeedBodyWeightAsync(
+        DateTime localToday, int days, string dataSource, CancellationToken ct)
+    {
+        var existing = (await _db.BodyWeights
+                .AsNoTracking()
+                .Where(w => w.DataSource == dataSource)
+                .Select(w => w.SyncIdentifier)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        for (var d = 0; d <= days; d++)
+        {
+            var day = localToday.AddDays(-d);
+            if (day.DayOfWeek != DayOfWeek.Sunday)
+                continue;
+
+            var syncId = $"demo-weight-{day:yyyy-MM-dd}";
+            if (existing.Contains(syncId))
+                continue;
+
+            var weighIn = day.AddHours(7).AddMinutes(DayScenarios.Roll(day, "weigh-in", 40));
+            if (weighIn > DateTime.Now)
+                continue;
+
+            _db.BodyWeights.Add(new BodyWeightEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                Mills = new DateTimeOffset(weighIn).ToUnixTimeMilliseconds(),
+                WeightKg = (decimal)DemoLifestyleSeeds.WeightKgOn(day),
+                Device = "Demo Scale",
+                DataSource = dataSource,
+                SyncIdentifier = syncId,
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// The timezone timeline: home zone from the window start, with a
+    /// five-day trip (matching the Travel state span) three weeks back.
+    /// EffectiveFrom is a local wall-clock value (Kind=Unspecified), matching
+    /// <c>TimezoneTimelineService</c>. Created only when the timeline is empty.
+    /// </summary>
+    private async Task SeedTimezoneTimelineAsync(DateTime localToday, int days, CancellationToken ct)
+    {
+        if (await _db.TimezoneTimeline.AnyAsync(ct))
+            return;
+
+        var home = DemoTherapyProfile.LocalIanaTimezone();
+        var windowStart = localToday.AddDays(-days);
+        var tripStart = localToday.AddDays(-DemoLifestyleSeeds.TripStartDaysAgo).AddHours(14);
+        var tripEnd = tripStart.AddDays(DemoLifestyleSeeds.TripLengthDays).AddHours(-4);
+
+        _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _db.TenantId,
+            EffectiveFrom = DateTime.SpecifyKind(windowStart, DateTimeKind.Unspecified),
+            Timezone = home,
+        });
+
+        if (tripStart > windowStart && tripEnd < DateTime.Now)
+        {
+            _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                EffectiveFrom = DateTime.SpecifyKind(tripStart, DateTimeKind.Unspecified),
+                Timezone = DemoLifestyleSeeds.TripTimezone,
+            });
+            _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _db.TenantId,
+                EffectiveFrom = DateTime.SpecifyKind(tripEnd, DateTimeKind.Unspecified),
+                Timezone = home,
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// One historical, already-cleared DND window so the alerts pages show a
+    /// worked example without suppressing the demo's live alerts.
+    /// </summary>
+    private async Task SeedDndWindowAsync(DateTime localToday, CancellationToken ct)
+    {
+        if (await _db.DndWindows.AnyAsync(ct))
+            return;
+
+        var start = localToday.AddDays(-1).AddHours(22.5);
+        _db.DndWindows.Add(new DndWindowEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _db.TenantId,
+            Scope = DndScope.All,
+            StartedAt = start.ToUniversalTime(),
+            EndsAt = start.AddHours(8.5).ToUniversalTime(),
+            ClearedAt = start.AddHours(8.2).ToUniversalTime(),
+            ClearedBy = "demo",
+            Source = "web",
+        });
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>The default clock face for the owner, found-or-created by name.</summary>
+    private async Task<int> SeedClockFacesAsync(Guid? ownerSubjectId, CancellationToken ct)
+    {
+        if (ownerSubjectId is not { } owner)
+            return 0;
+
+        var userId = owner.ToString();
+        var exists = await _db.ClockFaces.AnyAsync(c => c.UserId == userId, ct);
+        if (exists)
+            return 0;
+
+        _db.ClockFaces.Add(new ClockFaceEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _db.TenantId,
+            UserId = userId,
+            Name = "Bedside Clock",
+            ConfigJson = DemoLifestyleSeeds.DefaultClockFaceConfigJson,
+        });
+        await _db.SaveChangesAsync(ct);
+        return 1;
+    }
+
+    /// <summary>
+    /// In-app notifications mirroring the most recent seeded alarm episodes
+    /// (read where the excursion was acknowledged), so /notifications shows the
+    /// same story as /alerts/history. Rebuilt per seed via the data source tag.
+    /// </summary>
+    private async Task<int> SeedNotificationsAsync(
+        Guid? ownerSubjectId,
+        Guid tenantId,
+        IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
+        CancellationToken ct)
+    {
+        if (ownerSubjectId is not { } owner)
+            return 0;
+
+        var userId = owner.ToString();
+        await _db.InAppNotifications
+            .Where(n => n.UserId == userId && n.Source == "sample-seed")
+            .ExecuteDeleteAsync(ct);
+
+        var created = 0;
+        foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmNotifications))
+        {
+            var rng = DayScenarios.RngFor(episode.StartUtc.Date, $"ack:{episode.RuleName}");
+            var acknowledged = rng.NextDouble() < 0.7;
+
+            _db.InAppNotifications.Add(new InAppNotificationEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                UserId = userId,
+                Type = "alert.firing",
+                Category = NotificationCategory.Alert,
+                Urgency = episode.RuleName.Contains("Urgent", StringComparison.OrdinalIgnoreCase)
+                    ? NotificationUrgency.Urgent
+                    : NotificationUrgency.Warn,
+                Icon = "bell",
+                Source = "sample-seed",
+                Title = episode.RuleName,
+                Subtitle = $"Resolved after {(episode.EndUtc - episode.StartUtc).TotalMinutes:0} minutes",
+                CreatedAt = episode.StartUtc,
+                ReadAt = acknowledged ? episode.StartUtc.AddMinutes(rng.Next(2, 12)) : null,
+            });
+            created++;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return created;
     }
 }

@@ -15,7 +15,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="BolusKind"/>
 /// <seealso cref="IBolusCalculationRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IBolusRepository : IV4Repository<Bolus>
+public interface IBolusRepository : IV4Repository<Bolus>, IDeviceAttributedRepository<Bolus>
 {
     /// <summary>
     /// Retrieve a page of <see cref="Bolus"/> records filtered by time range, device, source, origin, and kind.

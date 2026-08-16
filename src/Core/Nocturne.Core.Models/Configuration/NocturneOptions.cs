@@ -134,11 +134,6 @@ public class ApiSettingsOptions
     public int DefaultPageSize { get; set; } = 50;
 
     /// <summary>
-    /// Maximum allowed page size.
-    /// </summary>
-    public int MaxPageSize { get; set; } = 1000;
-
-    /// <summary>
     /// Enable Swagger/OpenAPI documentation.
     /// </summary>
     public bool EnableSwagger { get; set; } = true;

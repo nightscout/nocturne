@@ -370,22 +370,13 @@ internal static class SleepReportCalculator
     {
         var localStart = session.StartTime;
 
-        if (!string.IsNullOrWhiteSpace(session.Timezone))
+        // Resolve through the shared helper rather than FindSystemTimeZoneById: it
+        // recovers the mis-cased ids connectors emit, and it does not throw on the
+        // ones it cannot resolve — an unresolvable id keys on UTC.
+        if (TimeZoneHelper.TryGetTimeZoneInfoFromId(session.Timezone, out var tz))
         {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById(session.Timezone);
-                localStart = TimeZoneInfo.ConvertTimeFromUtc(
-                    DateTime.SpecifyKind(session.StartTime, DateTimeKind.Utc), tz);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                // Unresolvable timezone id — key on UTC.
-            }
-            catch (InvalidTimeZoneException)
-            {
-                // Corrupt timezone data — key on UTC.
-            }
+            localStart = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(session.StartTime, DateTimeKind.Utc), tz);
         }
 
         return localStart.AddHours(-12).Date;

@@ -30,7 +30,8 @@ public sealed class ScenarioRunner
         var time = new ManualTimeProvider();
         var timerStore = new RecordingTimerStore();
         var trackerRepo = new InMemoryTrackerRepository(rules);
-        var tracker = new ExcursionTracker(trackerRepo, time, NullLogger<ExcursionTracker>.Instance);
+        var tracker = new ExcursionTracker(
+            trackerRepo, new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
 
         // Mirrors AlertReplayService.BuildReplayServices: the evaluator set comes from the
         // single AddAlertEvaluators registration so the corpus can never drift behind the

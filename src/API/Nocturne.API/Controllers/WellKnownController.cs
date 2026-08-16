@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -64,7 +65,6 @@ public class WellKnownController : ControllerBase
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 UserinfoEndpoint = $"{baseUrl}/auth/userinfo",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
-                RegistrationEndpoint = null,
                 ScopesSupported = new[] { "openid", "profile", "email", "offline_access" },
                 ResponseTypesSupported = new[]
                 {
@@ -184,24 +184,71 @@ public class WellKnownController : ControllerBase
 /// OpenID Connect Discovery Document
 /// See: https://openid.net/specs/openid-connect-discovery-1_0.html
 /// </summary>
+/// <remarks>
+/// Discovery metadata member names are fixed by the specifications, so every member is pinned
+/// with <see cref="JsonPropertyNameAttribute"/> rather than left to the camelCase policy MVC
+/// applies by default. Pinning them on the model also keeps the generated OpenAPI schema — and
+/// therefore the generated clients — describing the names that actually go on the wire.
+///
+/// Discovery also requires absent optional metadata to be omitted rather than sent as
+/// <c>null</c>, so every optional member carries <see cref="JsonIgnoreAttribute"/> with
+/// <see cref="JsonIgnoreCondition.WhenWritingNull"/>.
+/// </remarks>
 public class OpenIdConfiguration
 {
+    [JsonPropertyName("issuer")]
     public string Issuer { get; set; } = string.Empty;
+
+    [JsonPropertyName("authorization_endpoint")]
     public string AuthorizationEndpoint { get; set; } = string.Empty;
+
+    [JsonPropertyName("token_endpoint")]
     public string TokenEndpoint { get; set; } = string.Empty;
+
+    [JsonPropertyName("userinfo_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? UserinfoEndpoint { get; set; }
+
+    [JsonPropertyName("jwks_uri")]
     public string JwksUri { get; set; } = string.Empty;
+
+    [JsonPropertyName("registration_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RegistrationEndpoint { get; set; }
+
+    [JsonPropertyName("end_session_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EndSessionEndpoint { get; set; }
+
+    [JsonPropertyName("scopes_supported")]
     public string[] ScopesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("response_types_supported")]
     public string[] ResponseTypesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("response_modes_supported")]
     public string[] ResponseModesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("grant_types_supported")]
     public string[] GrantTypesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("subject_types_supported")]
     public string[] SubjectTypesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("id_token_signing_alg_values_supported")]
     public string[] IdTokenSigningAlgValuesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("token_endpoint_auth_methods_supported")]
     public string[] TokenEndpointAuthMethodsSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("claims_supported")]
     public string[] ClaimsSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("code_challenge_methods_supported")]
     public string[] CodeChallengeMethodsSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("service_documentation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceDocumentation { get; set; }
 }
 
@@ -232,19 +279,51 @@ public class JsonWebKey
 /// </summary>
 public class OAuthAuthorizationServerMetadata
 {
+    [JsonPropertyName("issuer")]
     public string Issuer { get; set; } = string.Empty;
+
+    [JsonPropertyName("authorization_endpoint")]
     public string AuthorizationEndpoint { get; set; } = string.Empty;
+
+    [JsonPropertyName("token_endpoint")]
     public string TokenEndpoint { get; set; } = string.Empty;
+
+    [JsonPropertyName("device_authorization_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DeviceAuthorizationEndpoint { get; set; }
+
+    [JsonPropertyName("revocation_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RevocationEndpoint { get; set; }
+
+    [JsonPropertyName("introspection_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? IntrospectionEndpoint { get; set; }
+
+    [JsonPropertyName("registration_endpoint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RegistrationEndpoint { get; set; }
+
+    [JsonPropertyName("jwks_uri")]
     public string JwksUri { get; set; } = string.Empty;
+
+    [JsonPropertyName("response_types_supported")]
     public string[] ResponseTypesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("grant_types_supported")]
     public string[] GrantTypesSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("token_endpoint_auth_methods_supported")]
     public string[] TokenEndpointAuthMethodsSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("scopes_supported")]
     public OAuthScope[] ScopesSupported { get; set; } = Array.Empty<OAuthScope>();
+
+    [JsonPropertyName("code_challenge_methods_supported")]
     public string[] CodeChallengeMethodsSupported { get; set; } = Array.Empty<string>();
+
+    [JsonPropertyName("service_documentation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceDocumentation { get; set; }
 }
 

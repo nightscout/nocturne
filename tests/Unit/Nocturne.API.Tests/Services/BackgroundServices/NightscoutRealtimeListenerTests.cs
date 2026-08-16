@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -11,6 +12,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using SocketIOClient;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -204,7 +206,48 @@ public class NightscoutRealtimeListenerTests
         Assert.DoesNotContain(logger.Exceptions, ex => ex is UriFormatException);
     }
 
+    /// <summary>
+    /// A socket that exhausts its reconnection budget stops trying and reports Connected == false, but
+    /// stays in the tracking dictionary. A repeat listener-startup pass must evict and dispose it so a
+    /// fresh client can take its place, rather than treating the tenant as already covered.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_TrackedClientDisconnected_EvictsDeadClient()
+    {
+        // Arrange — one tenant with an already-tracked client that is not connected
+        var (cleanup, connectionString, tenantId) = CreateSqliteDbWithTenantId(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "http://127.0.0.1:9",
+        };
+
+        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var sut = new NightscoutConnectorBackgroundService(
+            serviceProvider,
+            NullLogger<NightscoutConnectorBackgroundService>.Instance);
+
+        var dead = new SocketIO(new Uri("http://127.0.0.1:9"));
+        SocketClients(sut)[tenantId] = dead;
+
+        // Act
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        // Assert — the dead client is gone (the replacement connect fails; the tenant polls meanwhile)
+        Assert.DoesNotContain(dead, SocketClients(sut).Values);
+    }
+
     #region Helpers
+
+    /// <summary>
+    /// Reaches the private per-tenant Socket.IO client dictionary.
+    /// </summary>
+    private static ConcurrentDictionary<Guid, SocketIO> SocketClients(NightscoutConnectorBackgroundService sut)
+        => (ConcurrentDictionary<Guid, SocketIO>)typeof(NightscoutConnectorBackgroundService)
+            .GetField("_socketClients", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(sut)!;
 
     /// <summary>
     /// Captures exceptions passed to the logger so tests can assert on how a failure surfaced.
@@ -267,9 +310,17 @@ public class NightscoutRealtimeListenerTests
     /// </summary>
     private static (IDisposable cleanup, string connectionString) CreateSqliteDb(bool addTenant)
     {
+        var (cleanup, connectionString, _) = CreateSqliteDbWithTenantId(addTenant);
+        return (cleanup, connectionString);
+    }
+
+    /// <inheritdoc cref="CreateSqliteDb"/>
+    private static (IDisposable cleanup, string connectionString, Guid tenantId) CreateSqliteDbWithTenantId(bool addTenant)
+    {
         var dbPath = Path.Combine(Path.GetTempPath(), $"NsRealtimeTest_{Guid.NewGuid():N}.db");
         var connectionString = $"Data Source={dbPath}";
         var cleanup = new TempFileCleanup(dbPath);
+        var tenantId = Guid.Empty;
 
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(connectionString)
@@ -291,14 +342,14 @@ public class NightscoutRealtimeListenerTests
 
         if (addTenant)
         {
-            var tenantId = Guid.NewGuid();
+            tenantId = Guid.NewGuid();
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO tenants (Id, slug, display_name, is_active, allow_access_requests, sys_created_at, sys_updated_at) VALUES ({0}, {1}, {2}, 1, 1, {3}, {4})",
                 tenantId.ToString(), "test-tenant", "Test Tenant",
                 DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
         }
 
-        return (cleanup, connectionString);
+        return (cleanup, connectionString, tenantId);
     }
 
     /// <summary>

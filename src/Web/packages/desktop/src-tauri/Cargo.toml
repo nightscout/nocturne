@@ -12,6 +12,10 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-deep-link = "2"
+# The "deep-link" feature makes the second instance's argv reach the deep-link plugin's
+# on_open_url handler in the first instance instead of dying with the process.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"

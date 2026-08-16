@@ -28,7 +28,8 @@ public class ExcursionTrackerTests
         _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
 
         var logger = new Mock<ILogger<ExcursionTracker>>();
-        _tracker = new ExcursionTracker(_mockRepo.Object, _timeProvider, logger.Object);
+        _tracker = new ExcursionTracker(
+            _mockRepo.Object, new AlertRuleEvaluationGate(), _timeProvider, logger.Object);
 
         _defaultRule = new AlertRule
         {

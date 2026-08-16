@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -22,7 +23,7 @@ public class ApsSnapshotRepositoryBulkCreateTests : IDisposable
         var dbName = $"aps_snapshot_bulk_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new ApsSnapshotRepository(new TestTenantDbContextFactory(_context), NullLogger<ApsSnapshotRepository>.Instance);
+        _repository = new ApsSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
     }
 
     public void Dispose()

@@ -39,16 +39,16 @@ public class PropertiesServiceTests
 
         _mockDeviceAgeService = new Mock<IDeviceAgeService>();
         _mockDeviceAgeService
-            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 10, Days = 0, Hours = 10 });
         _mockDeviceAgeService
-            .Setup(x => x.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SensorAgeInfo());
         _mockDeviceAgeService
-            .Setup(x => x.GetInsulinAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetInsulinAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo { Found = true, Age = 30, Days = 1, Hours = 6 });
         _mockDeviceAgeService
-            .Setup(x => x.GetBatteryAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBatteryAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo());
 
         _service = new PropertiesService(
@@ -161,7 +161,7 @@ public class PropertiesServiceTests
         // zero/false members from typed objects. Age fields are legitimately zero right
         // after a site change, so they must be projected as dictionaries to reach clients.
         _mockDeviceAgeService
-            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DeviceAgeInfo { Found = false, Age = 0, Days = 0, Hours = 0, Level = 0 });
         _mockDDataService
             .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -191,13 +191,13 @@ public class PropertiesServiceTests
         await _service.GetPropertiesAsync(new[] { "iob" }, CancellationToken.None);
 
         _mockDeviceAgeService.Verify(
-            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()),
+            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         await _service.GetPropertiesAsync(new[] { "cage" }, CancellationToken.None);
 
         _mockDeviceAgeService.Verify(
-            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<CancellationToken>()),
+            x => x.GetCannulaAgeAsync(It.IsAny<DeviceAgePreferences>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

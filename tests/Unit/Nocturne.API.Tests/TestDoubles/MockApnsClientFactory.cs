@@ -3,7 +3,7 @@ using System.Text.Json;
 using dotAPNS;
 using Nocturne.API.Services.Notifications;
 
-namespace Nocturne.API.Tests.Integration.Infrastructure;
+namespace Nocturne.API.Tests.TestDoubles;
 
 /// <summary>
 /// Mock implementation of IApnsClientFactory for testing

@@ -83,14 +83,20 @@ public class NightscoutPerTypeCursorTests
         MaxCount = MaxCount,
     };
 
-    /// <summary>Extracts the <c>find[created_at][$gte]</c> lower bound from a recorded request URL.</summary>
-    private static DateTime ExtractGte(string url)
+    /// <summary>
+    /// Recovers the cursor a request's <c>find[created_at][$gte]</c> bound was derived from. The
+    /// wire bound is widened by the max-UTC-offset envelope so offset-formatted created_at values
+    /// still fall inside it; these tests are about which cursor each data type picks, not the
+    /// envelope.
+    /// </summary>
+    private static DateTime ExtractCursor(string url)
     {
         var decoded = Uri.UnescapeDataString(url);
         var match = Regex.Match(decoded, @"\$gte\]=([^&]+)");
         match.Success.Should().BeTrue($"request URL should carry a created_at lower bound: {decoded}");
         return DateTime.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
-            .ToUniversalTime();
+            .ToUniversalTime()
+            .Add(TimeSpan.FromHours(14));
     }
 
     private static string TreatmentsUrl(SequentialMockHandler handler) =>
@@ -165,9 +171,9 @@ public class NightscoutPerTypeCursorTests
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
 
-        var gte = ExtractGte(TreatmentsUrl(handler));
+        var cursor = ExtractCursor(TreatmentsUrl(handler));
         // Catch-up resumes from the latest treatment minus a small overlap, independent of glucose.
-        gte.Should().BeCloseTo(treatmentLatest.AddMinutes(-5), TimeSpan.FromMinutes(1));
+        cursor.Should().BeCloseTo(treatmentLatest.AddMinutes(-5), TimeSpan.FromMinutes(1));
     }
 
     [Fact]
@@ -191,8 +197,8 @@ public class NightscoutPerTypeCursorTests
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
 
-        var gte = ExtractGte(TreatmentsUrl(handler));
-        gte.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
+        var cursor = ExtractCursor(TreatmentsUrl(handler));
+        cursor.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -212,8 +218,8 @@ public class NightscoutPerTypeCursorTests
 
         await service.SyncDataAsync(request, config, CancellationToken.None);
 
-        var gte = ExtractGte(DeviceStatusUrl(handler));
-        gte.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
+        var cursor = ExtractCursor(DeviceStatusUrl(handler));
+        cursor.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
     }
 
     private static HttpResponseMessage JsonResponse<T>(T data) =>

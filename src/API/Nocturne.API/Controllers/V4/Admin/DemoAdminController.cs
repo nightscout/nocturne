@@ -234,13 +234,15 @@ public class DemoAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Seeds the demo tenant with the non-glucose sample set: device changes,
-    /// sleep sessions, heart rate, step counts, consumable trackers, and alert
-    /// rules with alarm history. Called by the demo background service after
-    /// each regenerate; entries/treatments arrive separately via the streaming
-    /// v1 posts. Idempotent — trackers, sleep, activity, and alarm history
-    /// upsert or rebuild rather than duplicate. Trackers are owned by the demo
-    /// tenant's Public subject, which anonymous visitors browse as.
+    /// Seeds the demo tenant with the full sample set — glucose, treatments,
+    /// device status, therapy profile, device changes, sleep, activity,
+    /// trackers, alert rules with alarm history and notifications, foods,
+    /// state spans, patient record, body weight, timezone timeline, clock
+    /// face, and a DND example. Called by the demo background service after
+    /// each reset. Idempotent — every type upserts or rebuilds rather than
+    /// duplicates, except entries/treatments which append (the demo resets
+    /// before seeding). Per-user types are owned by the demo tenant's Public
+    /// subject, which anonymous visitors browse as.
     /// </summary>
     [HttpPost("seed-extras")]
     [ProducesResponseType(typeof(SampleDataSeedResult), StatusCodes.Status200OK)]
@@ -267,54 +269,10 @@ public class DemoAdminController : ControllerBase
             request?.Days ?? 7,
             publicSubjectId,
             DataSources.DemoService,
-            includeGlucose: false,
+            includeGlucose: request?.IncludeGlucose ?? true,
             ct);
 
         return Ok(seeded);
-    }
-
-    /// <summary>
-    /// Ensures a demo PatientInsulin record exists for the demo tenant.
-    /// Creates a default rapid-acting insulin (Humalog) if none exists.
-    /// </summary>
-    [HttpPost("ensure-insulin")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> EnsureInsulin(CancellationToken ct)
-    {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
-        if (tenant is null)
-            return NotFound();
-
-        db.TenantId = tenant.Id;
-
-        var exists = await db.PatientInsulins.AnyAsync(ct);
-        if (exists)
-            return Ok(new { created = false });
-
-        var insulin = new PatientInsulinEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenant.Id,
-            InsulinCategory = "RapidActing",
-            Name = "Humalog",
-            IsCurrent = true,
-            Dia = 4.0,
-            Peak = 75,
-            Curve = "rapid-acting",
-            Concentration = 100,
-            Role = "Bolus",
-            IsPrimary = true,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
-        };
-
-        db.PatientInsulins.Add(insulin);
-        await db.SaveChangesAsync(ct);
-
-        return Ok(new { created = true });
     }
 
     private static DemoStateDto ToDto(TenantEntity tenant, bool alreadyExisted) => new(
@@ -351,4 +309,4 @@ public record DemoDeleteResultDto(long DeletedCount);
 
 public record DemoResetResultDto(Guid TenantId);
 
-public record DemoSeedExtrasDto(int Days = 7);
+public record DemoSeedExtrasDto(int Days = 7, bool IncludeGlucose = true);

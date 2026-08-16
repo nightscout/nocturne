@@ -71,8 +71,7 @@ public class MealMatchingService : IMealMatchingService
 
         foreach (var entry in pendingEntries)
         {
-            // One entry that cannot be processed — most often the notification source hitting its
-            // active-notification cap — must not abandon the rest of the batch.
+            // One entry that cannot be processed must not abandon the rest of the batch.
             try
             {
                 await ProcessFoodEntryAsync(userId, entry, settings, ct);

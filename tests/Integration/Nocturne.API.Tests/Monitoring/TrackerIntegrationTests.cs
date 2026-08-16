@@ -61,8 +61,6 @@ public class TrackerIntegrationTests : AspireIntegrationTestBase
                 hours = 648,
                 pushEnabled = true,
                 displayOrder = 0,
-                repeatIntervalMins = 60,
-                maxRepeats = 3,
                 respectQuietHours = true
             }
         }

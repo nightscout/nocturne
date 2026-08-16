@@ -59,6 +59,12 @@ public class ShareReadSurfaceReachabilityTests
             ["Nocturne.API.Controllers.V4.Health.StepCountController"] = OAuthScopes.StepCountRead,
             ["Nocturne.API.Controllers.V4.Analytics.SensorIntegrityController"] = OAuthScopes.ReportsRead,
             ["Nocturne.API.Controllers.V4.Analytics.StatisticsController"] = OAuthScopes.ReportsRead,
+            ["Nocturne.API.Controllers.V4.Analytics.DataOverviewController"] = OAuthScopes.ReportsRead,
+            // Backs the steps and heart-rate reports, which are not member-only, so its gate must
+            // admit a share holding any one of its categories;
+            // ActogramReadScopeGuard empties the rest. Listed against glucose because the default
+            // share grant is glucose-only and the report still renders its glucose overlay.
+            ["Nocturne.API.Controllers.V4.Analytics.ActogramController"] = OAuthScopes.GlucoseRead,
             // Feeds the data quality report. Its rows are hidden from shares by RLS
             // (compression_low_suggestions has no ShareDataCategories entry), so the gate decides
             // error-vs-empty-list, not what a share can see.
@@ -66,12 +72,20 @@ public class ShareReadSurfaceReachabilityTests
         };
 
     /// <summary>
-    /// Reads that serve the share surface through <c>[AllowAnonymous]</c> plus the
-    /// <c>HasPermissions</c> fallback rather than a scope gate, keyed <c>Controller.Action</c>.
-    /// The tracker tables carry no <see cref="ShareDataCategories"/> category, so RLS hides their
-    /// rows from a share and the endpoints return the public-visibility set — but they must stay
-    /// reachable, because the calendar renders them beside glucose a share can see.
+    /// Reads that serve the share surface through the <c>HasPermissions</c> fallback rather than a
+    /// scope gate, keyed <c>Controller.Action</c>. The tracker tables carry no
+    /// <see cref="ShareDataCategories"/> category, so RLS hides their rows from a share and the
+    /// endpoints return the public-visibility set — but they must stay reachable, because the
+    /// calendar renders them beside glucose a share can see.
     /// </summary>
+    /// <remarks>
+    /// Reachability here means the absence of an <see cref="IAuthorizeData"/> requirement, not the
+    /// presence of <c>[AllowAnonymous]</c>. The fallback policy admits the share subject on its own
+    /// (its trie carries the tenant's public read scopes) while rejecting a bare unauthenticated
+    /// caller, whose trie is empty — so leaning on the fallback keeps the share working and closes
+    /// the anonymous read that <c>[AllowAnonymous]</c> left open on a private tenant. Either shape
+    /// passes; an authentication requirement is what 401s every share.
+    /// </remarks>
     private static readonly string[] AnonymouslyReachableReads =
     [
         "TrackersController.GetDefinitions",
@@ -103,8 +117,14 @@ public class ShareReadSurfaceReachabilityTests
                 continue;
             }
 
+            // [AllowAnonymous] on the action wins over anything on the controller, so only look at
+            // the class when the action has not opted out.
+            var gates = action.GetCustomAttributes(inherit: true).OfType<IAuthorizeData>().ToList();
             if (!action.GetCustomAttributes(inherit: true).OfType<AllowAnonymousAttribute>().Any())
-                offenders.Add($"{name}: lost [AllowAnonymous], so every public share 401s on it");
+                gates.AddRange(type.GetCustomAttributes(inherit: true).OfType<IAuthorizeData>());
+
+            if (gates.Count > 0)
+                offenders.Add($"{name}: carries an authentication requirement, so every public share 401s on it");
         }
 
         offenders.Should().BeEmpty(

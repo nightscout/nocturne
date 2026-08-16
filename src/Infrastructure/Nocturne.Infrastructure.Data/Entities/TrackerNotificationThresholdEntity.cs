@@ -83,18 +83,6 @@ public class TrackerNotificationThresholdEntity : ITenantScoped
     public bool VibrateEnabled { get; set; } = false;
 
     /// <summary>
-    /// Repeat interval in minutes (0 = no repeat)
-    /// </summary>
-    [Column("repeat_interval_mins")]
-    public int RepeatIntervalMins { get; set; } = 0;
-
-    /// <summary>
-    /// Maximum number of repeats (0 = unlimited until acknowledged)
-    /// </summary>
-    [Column("max_repeats")]
-    public int MaxRepeats { get; set; } = 3;
-
-    /// <summary>
     /// Whether this notification respects quiet hours
     /// </summary>
     [Column("respect_quiet_hours")]

@@ -306,19 +306,16 @@ public static class ConnectorEnvironmentVariables
     public const string MyLifeTempBasalConsolidationWindowMinutes = "CONNECT_MYLIFE_TEMP_BASAL_CONSOLIDATION_WINDOW_MINUTES";
 
     /// <summary>
-    /// Platform identifier sent to the MyLife API (e.g., "android", "ios").
+    /// Numeric platform identifier sent as the appPlatform argument of the MyLife Login
+    /// SOAP request. Defaults to 2.
     /// </summary>
     public const string MyLifeAppPlatform = "CONNECT_MYLIFE_APP_PLATFORM";
 
     /// <summary>
-    /// App version string sent to the MyLife API for compatibility negotiation.
+    /// Numeric app version sent as the appVersion argument of the MyLife Login SOAP request
+    /// for compatibility negotiation. Defaults to 20403.
     /// </summary>
     public const string MyLifeAppVersion = "CONNECT_MYLIFE_APP_VERSION";
-
-    /// <summary>
-    /// Number of months of historical data to sync on the initial MyLife import.
-    /// </summary>
-    public const string MyLifeSyncMonths = "CONNECT_MYLIFE_SYNC_MONTHS";
 
     // ========================================================================
     // Nightscout Source Configuration

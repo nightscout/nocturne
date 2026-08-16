@@ -32,6 +32,8 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
   let connectedUsername = $state<string | null>(null);
+  /** Server address of a link opened from the browser, held until the user confirms it. */
+  let pendingServer = $state<string | null>(null);
 
   function describeError(e: unknown): string {
     const err = e as CommandError;
@@ -58,11 +60,32 @@
       serverUrl = info.serverUrl;
       phase = "ready";
       linkCodeInput = "";
+      pendingServer = null;
     } catch (e) {
       error = describeError(e);
     } finally {
       busy = false;
     }
+  }
+
+  async function acceptPendingLink() {
+    busy = true;
+    error = null;
+    try {
+      const info = await invoke<LinkInfo>("confirm_pending_link");
+      serverUrl = info.serverUrl;
+      phase = "ready";
+    } catch (e) {
+      error = describeError(e);
+    } finally {
+      pendingServer = null;
+      busy = false;
+    }
+  }
+
+  async function rejectPendingLink() {
+    pendingServer = null;
+    await invoke("discard_pending_link");
   }
 
   async function startConnect() {
@@ -110,6 +133,19 @@
   }
 
   onMount(() => {
+    // A link opened while the app was closed is already waiting by the time this mounts.
+    invoke<string | null>("pending_link_server")
+      .then((server) => {
+        if (server) pendingServer = server;
+      })
+      .catch(() => {});
+    const unlistenPending = listen<string>("link-code-received", (event) => {
+      pendingServer = event.payload;
+      error = null;
+    });
+    const unlistenRejected = listen<string>("link-code-rejected", (event) => {
+      error = event.payload;
+    });
     const unlistenCode = listen<string>("carelink-code", (event) => {
       completeConnect(event.payload);
     });
@@ -121,6 +157,8 @@
       }
     });
     return () => {
+      unlistenPending.then((fn) => fn());
+      unlistenRejected.then((fn) => fn());
       unlistenCode.then((fn) => fn());
       unlistenClosed.then((fn) => fn());
     };
@@ -131,6 +169,29 @@
   <Alert variant="destructive">
     <AlertDescription>{error}</AlertDescription>
   </Alert>
+{/if}
+
+{#if pendingServer}
+  <Card>
+    <CardHeader>
+      <CardTitle class="flex items-center gap-2">
+        <Link2 class="h-4 w-4" /> Link this app?
+      </CardTitle>
+      <CardDescription>
+        A link code was opened from your browser. Check the address below — only continue if it is
+        your own Nocturne site.
+      </CardDescription>
+    </CardHeader>
+    <CardContent class="space-y-3">
+      <div class="bg-muted rounded px-2 py-1 font-mono text-xs break-all">{pendingServer}</div>
+      <div class="flex items-center gap-2">
+        <Button onclick={acceptPendingLink} disabled={busy}>
+          {busy ? "Linking…" : "Link this site"}
+        </Button>
+        <Button variant="ghost" size="sm" onclick={rejectPendingLink} disabled={busy}>Cancel</Button>
+      </div>
+    </CardContent>
+  </Card>
 {/if}
 
 {#if phase === "link"}

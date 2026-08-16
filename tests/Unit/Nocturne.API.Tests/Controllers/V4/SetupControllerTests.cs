@@ -5,10 +5,12 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -37,6 +39,7 @@ public class SetupControllerTests : IDisposable
     private readonly Mock<ISessionService> _sessionService;
     private readonly Mock<ISubjectService> _subjectService;
     private readonly Mock<IOidcAuthService> _oidcAuthService;
+    private readonly PlatformOptions _platformOptions;
     private readonly SetupController _controller;
 
     public SetupControllerTests()
@@ -77,6 +80,14 @@ public class SetupControllerTests : IDisposable
                 return ctx;
             });
 
+        // A real instance, not a mock: the platform-admin grant is part of the
+        // behaviour under test, and BootstrapAsync is not virtual.
+        _platformOptions = new PlatformOptions();
+        var platformAdminBootstrap = new PlatformAdminBootstrapService(
+            dbFactory.Object,
+            Options.Create(_platformOptions),
+            NullLogger<PlatformAdminBootstrapService>.Instance);
+
         _controller = new SetupController(
             _tenantService.Object,
             _passkeyService.Object,
@@ -88,6 +99,7 @@ public class SetupControllerTests : IDisposable
             _oidcAuthService.Object,
             Options.Create(new OperatorConfiguration()),
             new Mock<IHttpClientFactory>().Object,
+            platformAdminBootstrap,
             new Mock<ILogger<SetupController>>().Object);
 
         _controller.ControllerContext = new ControllerContext
@@ -311,8 +323,9 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<ConflictObjectResult>();
     }
 
-    // OwnerOptions scenarios whose outcome depends on RLS rather than on the guard logic live
-    // in the integration suite: SQLite has no policies for the pinned reads to be gated by.
+    // Sole-tenant paths run here because PinTenantAsync no-ops off Postgres. What SQLite
+    // cannot reproduce is RLS, so tests that depend on rows being filtered by tenant
+    // belong in the integration suite.
 
     // ── Soft-lock scenario: the full sequence ─────────────────────────────
 
@@ -623,10 +636,258 @@ public class SetupControllerTests : IDisposable
         result.Should().BeOfType<ConflictObjectResult>();
     }
 
-    // OwnerOidc scenarios that require a sole tenant (e.g. validation of empty
-    // username/ProviderId) are covered by the integration suite.
+    // OwnerOidc field-validation cases (empty username, empty ProviderId) are left to
+    // the integration suite; the sole-tenant guard itself is exercised above.
+
+    // ── Platform admin bootstrap ─────────────────────────────────────────
+
+    [Fact]
+    public async Task OwnerComplete_WhenFirstOwnerRegistersPasskey_GrantsPlatformAdmin()
+    {
+        // The fresh-install lockout: the startup bootstrap pass ran against an empty
+        // database, so the owner created by setup kept is_platform_admin = false and
+        // /settings/admin redirected to /settings until the API was restarted.
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<OkObjectResult>();
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OwnerOptions_BeforeCeremonyCompletes_DoesNotGrantPlatformAdmin()
+    {
+        // An abandoned WebAuthn ceremony must not leave a credential-less subject holding
+        // the flag: that would suppress every later grant, including the startup pass,
+        // and lock the instance out permanently.
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenPlatformAdminAlreadyExists_DoesNotGrantToOwner()
+    {
+        // An existing platform admin means this is not a fresh install, so setup must
+        // not hand the flag to whoever completes it.
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        await SeedPlatformAdminAsync();
+        StubPasskeyCompletion(subjectId);
+
+        await CompleteOwnerSetupAsync();
+
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WhenAdminSubjectIdsConfigured_LeavesOwnerWithoutPlatformAdmin()
+    {
+        // Operators who pin Platform:AdminSubjectIds own the decision outright.
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        _platformOptions.AdminSubjectIds.Add(Guid.CreateVersion7());
+        StubPasskeyCompletion(subjectId);
+
+        await CompleteOwnerSetupAsync();
+
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenFirstOwnerLinksIdentity_GrantsPlatformAdmin()
+    {
+        // The OIDC setup path completes in the callback, not OwnerOidc, so it needs the
+        // same grant — this is the path a self-hoster using Google login takes.
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                "auth-code", "expected-state", "expected-state",
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(
+                subjectId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 }));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenCallbackFails_DoesNotGrantPlatformAdmin()
+    {
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Failed("invalid_grant"));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenSetupAlreadyComplete_DoesNotProcessTheCallback()
+    {
+        // Every sibling setup endpoint dead-ends once an owner holds credentials. Without the
+        // same guard here this callback stays live for the life of the instance, and it links
+        // an identity and issues a session for whatever subject the state names.
+        await SeedConfiguredTenantAsync("established", "Established");
+        SetOidcStateCookieOnRequest("expected-state");
+
+        var result = await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Contain("setup_already_complete");
+        _oidcAuthService.Verify(
+            s => s.HandleSetupCallbackAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenTheCallbackNamesANonOwnerSubject_DoesNotGrantPlatformAdmin()
+    {
+        // The grant re-derives eligibility instead of trusting the subject it is handed, so a
+        // subject that does not hold the tenant's owner role gets nothing.
+        await SeedSoleTenantWithOwnerRoleAsync();
+        var bystanderId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = bystanderId, Name = "Bystander", Username = "bystander",
+            IsActive = true, IsSystemSubject = false,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                "auth-code", "expected-state", "expected-state",
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(
+                bystanderId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 }));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        var bystander = await FreshContext().Subjects.SingleAsync(s => s.Id == bystanderId);
+        bystander.IsPlatformAdmin.Should().BeFalse();
+    }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private NocturneDbContext FreshContext() => new(_dbOptions);
+
+    /// <summary>
+    /// Drives the passkey completion step with the mocks it needs to reach the grant.
+    /// </summary>
+    private Task<IActionResult> CompleteOwnerSetupAsync() =>
+        _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-token",
+            },
+            CancellationToken.None);
+
+    private void StubPasskeyCompletion(Guid subjectId)
+    {
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+        _recoveryCodeService
+            .Setup(s => s.GenerateCodesAsync(subjectId))
+            .ReturnsAsync(["code-1", "code-2"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 3600));
+    }
+
+    private void SetOidcStateCookieOnRequest(string state) =>
+        _controller.ControllerContext.HttpContext.Request.Headers.Cookie =
+            $".Nocturne.OidcState={state}";
+
+    /// <summary>
+    /// Seeds a subject that already holds platform admin, making the instance an
+    /// established one rather than a fresh install.
+    /// </summary>
+    private async Task SeedPlatformAdminAsync()
+    {
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Existing Admin",
+            Username = "existing-admin",
+            IsActive = true,
+            IsSystemSubject = true,
+            IsPlatformAdmin = true,
+        });
+        await _dbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds the state a fresh install reaches after tenant creation and a first pass
+    /// through owner setup: a sole tenant whose credential-less member holds the owner
+    /// role. <see cref="ITenantService.AddMemberAsync"/> is mocked, so the membership
+    /// and its role link are written directly.
+    /// </summary>
+    private async Task<(Guid TenantId, Guid SubjectId)> SeedSoleTenantWithOwnerRoleAsync()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
+        var memberId = Guid.CreateVersion7();
+        var ownerRoleId = Guid.CreateVersion7();
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = "Owner", Username = "owner",
+            IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = memberId, TenantId = tenantId, SubjectId = subjectId,
+        });
+        _dbContext.Set<TenantRoleEntity>().Add(new TenantRoleEntity
+        {
+            Id = ownerRoleId, TenantId = tenantId, Name = "Owner", Slug = "owner", IsSystem = true,
+        });
+        _dbContext.Set<TenantMemberRoleEntity>().Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantMemberId = memberId, TenantRoleId = ownerRoleId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        return (tenantId, subjectId);
+    }
 
     /// <summary>
     /// Seeds the sole tenant plus the credential-less owner subject and membership that

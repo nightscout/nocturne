@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
@@ -179,11 +180,14 @@ public class TrackersController : ControllerBase, IWriteScopedController
     #region Definitions
 
     /// <summary>
-    /// Get all tracker definitions. Returns public trackers for unauthenticated users,
-    /// or all visible trackers for authenticated users.
+    /// Get all tracker definitions: the caller's own plus any Public-visibility tracker.
+    /// Gated by the fallback authorization policy (no <c>[AllowAnonymous]</c>): a bare
+    /// unauthenticated request on a tenant subdomain carries an empty permission trie and is
+    /// rejected, so a private tenant exposes no tracker anonymously. A public-share subject is
+    /// admitted by the policy but reads nothing here — tracker tables are not in
+    /// <see cref="ShareDataCategories"/>, so the share RLS policy hides them.
     /// </summary>
     [HttpGet("definitions")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto[]>> GetDefinitions(
@@ -222,7 +226,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto>> GetDefinition(Guid id)
@@ -305,8 +308,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
                         AudioEnabled = threshold.AudioEnabled,
                         AudioSound = threshold.AudioSound,
                         VibrateEnabled = threshold.VibrateEnabled,
-                        RepeatIntervalMins = threshold.RepeatIntervalMins,
-                        MaxRepeats = threshold.MaxRepeats,
                         RespectQuietHours = threshold.RespectQuietHours,
                     }
                 );
@@ -415,8 +416,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
                         AudioEnabled = t.AudioEnabled,
                         AudioSound = t.AudioSound,
                         VibrateEnabled = t.VibrateEnabled,
-                        RepeatIntervalMins = t.RepeatIntervalMins,
-                        MaxRepeats = t.MaxRepeats,
                         RespectQuietHours = t.RespectQuietHours,
                     })
                     .ToList(),
@@ -477,7 +476,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get active tracker instances
     /// </summary>
     [HttpGet("instances")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetActiveInstances()
@@ -494,17 +492,20 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get completed tracker instances (history). Matches <see cref="GetActiveInstances"/> and
     /// <see cref="GetUpcomingInstances"/>: a caller carrying no subject reads the public-visibility
-    /// instances only. <c>[Authorize]</c> here instead 401'd the calendar for every public share,
-    /// which renders history alongside the active and upcoming instances.
+    /// instances only, and the fallback authorization policy (no <c>[AllowAnonymous]</c>) rejects a
+    /// bare unauthenticated request, so a private tenant exposes no history anonymously. The public
+    /// share subject is still admitted by the policy, so the calendar keeps rendering history
+    /// alongside the active and upcoming instances — <c>[Authorize]</c> is what 401'd it.
     /// </summary>
     [HttpGet("instances/history")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetInstanceHistory(
         [FromQuery] int limit = 100
     )
     {
+        limit = V4ReadLimits.ClampLimit(limit);
+
         var userId = HttpContext.GetSubjectIdString();
         var instances = await _repository.GetCompletedInstancesAsync(
             userId,
@@ -519,7 +520,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// Get upcoming tracker expirations for calendar
     /// </summary>
     [HttpGet("instances/upcoming")]
-    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(TrackerInstanceDto[]), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerInstanceDto[]>> GetUpcomingInstances(
@@ -854,9 +854,13 @@ public class NotificationThresholdDto
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; }
     public bool RespectQuietHours { get; set; }
+
+    /// <summary>
+    /// The managed alert rule that delivers this threshold. Null until the sync service
+    /// has run, so callers must treat it as optional.
+    /// </summary>
+    public Guid? AlertRuleId { get; set; }
 
     public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
         new()
@@ -871,9 +875,8 @@ public class NotificationThresholdDto
             AudioEnabled = entity.AudioEnabled,
             AudioSound = entity.AudioSound,
             VibrateEnabled = entity.VibrateEnabled,
-            RepeatIntervalMins = entity.RepeatIntervalMins,
-            MaxRepeats = entity.MaxRepeats,
             RespectQuietHours = entity.RespectQuietHours,
+            AlertRuleId = entity.AlertRuleId,
         };
 }
 
@@ -1061,9 +1064,11 @@ public class CreateTrackerDefinitionRequest
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <summary>
-    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
+    /// Visibility level for this tracker: Public or Private. Defaults to Private so a tracker is
+    /// never made Public by omission; the owner opts into Public explicitly. RoleRestricted is
+    /// rejected.
     /// </summary>
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
@@ -1114,7 +1119,8 @@ public class UpdateTrackerDefinitionRequest
     public DashboardVisibility? DashboardVisibility { get; set; }
 
     /// <summary>
-    /// Visibility level for this tracker: Public or Private. RoleRestricted is rejected.
+    /// Visibility level for this tracker: Public or Private. Null keeps the current value, so an
+    /// update never defaults a tracker to Public by omission. RoleRestricted is rejected.
     /// </summary>
     public TrackerVisibility? Visibility { get; set; }
 
@@ -1146,8 +1152,6 @@ public class CreateNotificationThresholdRequest
     public bool AudioEnabled { get; set; }
     public string? AudioSound { get; set; }
     public bool VibrateEnabled { get; set; }
-    public int RepeatIntervalMins { get; set; }
-    public int MaxRepeats { get; set; } = 3;
     public bool RespectQuietHours { get; set; } = true;
 }
 

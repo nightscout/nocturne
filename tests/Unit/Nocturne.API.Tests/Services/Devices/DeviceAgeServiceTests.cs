@@ -40,6 +40,7 @@ public class DeviceAgeServiceTests
                 It.Is<DeviceEventType[]>(types =>
                     types.Contains(DeviceEventType.SiteChange) &&
                     types.Contains(DeviceEventType.CannulaChange)),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(deviceEvent);
 
@@ -65,6 +66,7 @@ public class DeviceAgeServiceTests
         _repositoryMock
             .Setup(r => r.GetLatestByEventTypesAsync(
                 It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((DeviceEvent?)null);
 
@@ -107,12 +109,14 @@ public class DeviceAgeServiceTests
         _repositoryMock
             .Setup(r => r.GetLatestByEventTypesAsync(
                 It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorStart)),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(sensorStartEvent);
 
         _repositoryMock
             .Setup(r => r.GetLatestByEventTypesAsync(
                 It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorChange)),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(sensorChangeEvent);
 
@@ -147,6 +151,7 @@ public class DeviceAgeServiceTests
                 It.Is<DeviceEventType[]>(types =>
                     types.Contains(DeviceEventType.InsulinChange) &&
                     types.Contains(DeviceEventType.ReservoirChange)),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(deviceEvent);
 
@@ -181,6 +186,7 @@ public class DeviceAgeServiceTests
             .Setup(r => r.GetLatestByEventTypesAsync(
                 It.Is<DeviceEventType[]>(types =>
                     types.Contains(DeviceEventType.PumpBatteryChange)),
+                It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(deviceEvent);
 
@@ -195,5 +201,121 @@ public class DeviceAgeServiceTests
         result.Days.Should().Be(14);
         result.Hours.Should().Be(4);
         result.Level.Should().Be(1); // 340h is above warn (336) but below urgent (360)
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetCannulaAgeAsync_WithPatientDeviceId_UsesThatDevicesEvent()
+    {
+        // Arrange
+        var pumpId = Guid.NewGuid();
+        var scopedEvent = new DeviceEvent
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTime.UtcNow.AddHours(-30),
+            EventType = DeviceEventType.SiteChange,
+            PatientDeviceId = pumpId
+        };
+        var otherPumpEvent = new DeviceEvent
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTime.UtcNow.AddHours(-2),
+            EventType = DeviceEventType.SiteChange,
+            PatientDeviceId = Guid.NewGuid()
+        };
+
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(otherPumpEvent);
+
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                pumpId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(scopedEvent);
+
+        // Act
+        var result = await _service.GetCannulaAgeAsync(new DeviceAgePreferences(), pumpId);
+
+        // Assert
+        result.Age.Should().Be(30);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSensorAgeAsync_WithPatientDeviceId_ScopesBothEventTypeLookups()
+    {
+        // Arrange
+        var sensorId = Guid.NewGuid();
+
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceEvent
+            {
+                Id = Guid.NewGuid(),
+                Timestamp = DateTime.UtcNow.AddHours(-2),
+                EventType = DeviceEventType.SensorChange,
+                PatientDeviceId = Guid.NewGuid()
+            });
+
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorStart)),
+                sensorId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeviceEvent
+            {
+                Id = Guid.NewGuid(),
+                Timestamp = DateTime.UtcNow.AddHours(-100),
+                EventType = DeviceEventType.SensorStart,
+                PatientDeviceId = sensorId
+            });
+
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.Is<DeviceEventType[]>(types => types.Contains(DeviceEventType.SensorChange)),
+                sensorId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeviceEvent?)null);
+
+        // Act
+        var result = await _service.GetSensorAgeAsync(new DeviceAgePreferences(), sensorId);
+
+        // Assert
+        result.Min.Should().Be("Sensor Start");
+        result.SensorStart.Found.Should().BeTrue();
+        result.SensorStart.Age.Should().Be(100);
+        result.SensorChange.Found.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetBatteryAgeAsync_WithNoPatientDeviceId_QueriesTenantWide()
+    {
+        // Arrange
+        _repositoryMock
+            .Setup(r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DeviceEvent?)null);
+
+        // Act
+        await _service.GetBatteryAgeAsync(new DeviceAgePreferences());
+
+        // Assert
+        _repositoryMock.Verify(
+            r => r.GetLatestByEventTypesAsync(
+                It.IsAny<DeviceEventType[]>(),
+                null,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

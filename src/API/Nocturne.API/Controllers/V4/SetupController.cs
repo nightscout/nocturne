@@ -45,6 +45,7 @@ public partial class SetupController : ControllerBase
     private readonly IOidcAuthService _oidcAuthService;
     private readonly OperatorConfiguration _operatorConfig;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
     private readonly ILogger<SetupController> _logger;
 
     public SetupController(
@@ -58,6 +59,7 @@ public partial class SetupController : ControllerBase
         IOidcAuthService oidcAuthService,
         IOptions<OperatorConfiguration> operatorConfig,
         IHttpClientFactory httpClientFactory,
+        PlatformAdminBootstrapService platformAdminBootstrap,
         ILogger<SetupController> logger)
     {
         _tenantService = tenantService;
@@ -70,6 +72,7 @@ public partial class SetupController : ControllerBase
         _oidcAuthService = oidcAuthService;
         _operatorConfig = operatorConfig.Value;
         _httpClientFactory = httpClientFactory;
+        _platformAdminBootstrap = platformAdminBootstrap;
         _logger = logger;
     }
 
@@ -239,6 +242,8 @@ public partial class SetupController : ControllerBase
                 request.AttestationResponseJson, request.ChallengeToken, tenant!.Id,
                 expectedSubjectId: ownerSubjectId.Value);
 
+            await GrantFirstOwnerPlatformAdminAsync(credResult.SubjectId);
+
             // Generate recovery codes
             var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
 
@@ -351,6 +356,16 @@ public partial class SetupController : ControllerBase
             return Redirect("/setup?error=missing_parameters");
         }
 
+        // The sibling setup endpoints all gate on this; without it the callback is the one
+        // setup route that stays live on an established instance, and it both links an
+        // identity and issues a session for whatever subject the state names.
+        var (_, setupClosed) = await GetSoleTenantWithoutOwnerAsync(ct);
+        if (setupClosed != null)
+        {
+            ClearOidcStateCookie();
+            return Redirect("/setup?error=setup_already_complete");
+        }
+
         var expectedState = Request.Cookies[_oidcOptions.Cookie.StateCookieName];
         ClearOidcStateCookie();
 
@@ -369,6 +384,9 @@ public partial class SetupController : ControllerBase
                 result.Error, result.ErrorDescription);
             return Redirect($"/setup?error={Uri.EscapeDataString(result.Error ?? "unknown")}");
         }
+
+        if (result.SubjectId is { } oidcOwnerSubjectId)
+            await GrantFirstOwnerPlatformAdminAsync(oidcOwnerSubjectId);
 
         // Temporary bridge: construct SessionTokenPair from OidcTokenResponse until
         // OidcAuthService is migrated to ISessionService.
@@ -551,6 +569,25 @@ public partial class SetupController : ControllerBase
         await _subjectService.AssignRoleAsync(subjectId, "admin");
 
         return subjectId;
+    }
+
+    /// <summary>
+    /// Grants the new owner platform admin now that it holds a credential. The startup
+    /// bootstrap pass ran against an empty database on a fresh install, so without this
+    /// the owner cannot reach /settings/admin until the API restarts.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately called from the completion paths rather than
+    /// <see cref="EnsureOwnerSubjectAsync"/>: an abandoned WebAuthn ceremony would
+    /// otherwise leave a credential-less subject holding the flag, which then suppresses
+    /// every later grant — including the startup pass — and locks the instance out for good.
+    /// </remarks>
+    private async Task GrantFirstOwnerPlatformAdminAsync(Guid subjectId)
+    {
+        // Not the request token: a client that disconnects mid-response would otherwise
+        // abort the grant and leave the owner locked out of the admin UI.
+        await _platformAdminBootstrap.EnsureFirstOwnerIsPlatformAdminAsync(
+            subjectId, CancellationToken.None);
     }
 
     private void SetOidcStateCookie(string state, DateTimeOffset expiresAt)

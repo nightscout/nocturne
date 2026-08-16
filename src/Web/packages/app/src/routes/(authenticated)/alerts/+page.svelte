@@ -1,5 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { toast } from "svelte-sonner";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     getRules,
     deleteRule,
@@ -36,6 +39,18 @@
   import { isDndActiveNow } from "$lib/components/alerts/dnd";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
 
+  const effectivePermissions: string[] = $derived(
+    (page.data as any).effectivePermissions ?? [],
+  );
+  // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
+  // clearing the manual mute — is gated on alerts.readwrite server-side.
+  const canManageAlerts = $derived(
+    effectivePermissions.includes("*") ||
+      effectivePermissions.includes("alerts.readwrite"),
+  );
+  const NEEDS_ALERTS_READWRITE =
+    "Changing alerts requires the alerts.readwrite permission.";
+
   // ---- Queries ----
   const rulesQuery = getRules();
   const activeAlertsQuery = getActiveAlerts();
@@ -55,6 +70,8 @@
     try {
       await toggleRule(ruleId);
       await rulesQuery.refresh();
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, NEEDS_ALERTS_READWRITE));
     } finally {
       togglingRuleId = null;
     }
@@ -65,6 +82,8 @@
     try {
       await deleteRule(ruleId);
       await rulesQuery.refresh();
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, NEEDS_ALERTS_READWRITE));
     } finally {
       deletingRuleId = null;
     }
@@ -74,6 +93,8 @@
     testingRuleId = ruleId;
     try {
       await testFire(ruleId);
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, NEEDS_ALERTS_READWRITE));
     } finally {
       testingRuleId = null;
     }
@@ -94,6 +115,8 @@
         dndScheduleEnd: current.dndScheduleEnd,
       });
       await dndQuery.refresh();
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, NEEDS_ALERTS_READWRITE));
     } finally {
       disablingDnd = false;
     }
@@ -112,6 +135,8 @@
           ),
         ),
       );
+    } catch (err) {
+      toast.error(remoteErrorMessage(err, NEEDS_ALERTS_READWRITE));
     } finally {
       acknowledging = false;
     }
@@ -142,11 +167,13 @@
         <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you're notified.</p>
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <Button onclick={newRule}>
-        <Plus class="h-4 w-4 mr-2" /> New rule
-      </Button>
-    </div>
+    {#if canManageAlerts}
+      <div class="flex items-center gap-2">
+        <Button onclick={newRule}>
+          <Plus class="h-4 w-4 mr-2" /> New rule
+        </Button>
+      </div>
+    {/if}
   </div>
 
   <svelte:boundary>
@@ -193,7 +220,7 @@
     <!-- Do Not Disturb notice, shown only while a manual mute is in effect. -->
     {#if dnd && isDndActiveNow(dnd)}
       <DndNoticeStrip
-        onDisableDnd={() => handleDisableDnd(dnd)}
+        onDisableDnd={canManageAlerts ? () => handleDisableDnd(dnd) : undefined}
         {disablingDnd}
       />
     {/if}
@@ -239,20 +266,22 @@
               <AlertTriangle class="h-5 w-5 shrink-0" />
               <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>
-            <Button
-              class="@sm:shrink-0"
-              variant="outline"
-              size="sm"
-              onclick={handleAcknowledge}
-              disabled={acknowledging || activeAlerts.every((a) => a.acknowledgedAt)}
-            >
-              {#if acknowledging}
-                <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-              {:else}
-                <Check class="h-4 w-4 mr-2" />
-              {/if}
-              Acknowledge all
-            </Button>
+            {#if canManageAlerts}
+              <Button
+                class="@sm:shrink-0"
+                variant="outline"
+                size="sm"
+                onclick={handleAcknowledge}
+                disabled={acknowledging || activeAlerts.every((a) => a.acknowledgedAt)}
+              >
+                {#if acknowledging}
+                  <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                {:else}
+                  <Check class="h-4 w-4 mr-2" />
+                {/if}
+                Acknowledge all
+              </Button>
+            {/if}
           </div>
         </CardHeader>
         <CardContent class="space-y-2">
@@ -293,15 +322,18 @@
             <Bell class="mx-auto h-8 w-8 opacity-50" />
             <p class="mt-2 text-sm font-medium">No alert rules yet</p>
             <p class="mt-1 text-xs">Add a rule so Nocturne can notify you when glucose goes out of range.</p>
-            <Button class="mt-3" size="sm" onclick={newRule}>
-              <Plus class="h-4 w-4 mr-2" /> New rule
-            </Button>
+            {#if canManageAlerts}
+              <Button class="mt-3" size="sm" onclick={newRule}>
+                <Plus class="h-4 w-4 mr-2" /> New rule
+              </Button>
+            {/if}
           </div>
         {:else}
           <div class="space-y-2">
             {#each rules as rule (rule.id)}
               <AlertRuleRow
                 {rule}
+                canManage={canManageAlerts}
                 isToggling={togglingRuleId === rule.id}
                 isDeleting={deletingRuleId === rule.id}
                 isTesting={testingRuleId === rule.id}

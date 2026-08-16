@@ -197,7 +197,7 @@
         </p>
         <p class="text-xs text-muted-foreground">
           The desktop app opens the CareLink sign-in in its own window and captures the code
-          automatically — no developer tools needed. Generate a link code and paste it into the app.
+          automatically — no developer tools needed. Generate a link code and open it in the app.
         </p>
         <a
           href={DESKTOP_DOWNLOAD_URL}
@@ -214,7 +214,11 @@
           </Button>
         {:else}
           <div class="rounded bg-muted px-2 py-1 font-mono text-xs break-all">{desktopLinkCode}</div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <Button size="sm" href={desktopLinkCode}>
+              <Monitor class="h-3.5 w-3.5 mr-1" />
+              Open in the desktop app
+            </Button>
             <Button variant="outline" size="sm" onclick={copyDesktopLinkCode}>
               <Copy class="h-3.5 w-3.5 mr-1" />
               {desktopCopied ? "Copied" : "Copy"}
@@ -223,6 +227,10 @@
               Expires in {desktopExpiresMinutes} minutes.
             </span>
           </div>
+          <p class="text-xs text-muted-foreground">
+            If nothing opens, the app isn't installed yet — copy the code and paste it into the app
+            instead.
+          </p>
         {/if}
       </div>
     {/if}

@@ -36,6 +36,11 @@
     ]
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["nocturne-connect"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/nightscout/nocturne/releases/download/companion-latest/latest.json"

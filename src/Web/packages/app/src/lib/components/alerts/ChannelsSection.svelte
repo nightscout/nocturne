@@ -5,13 +5,15 @@
   import * as Popover from "$lib/components/ui/popover";
   import { Plus, Bell, X } from "lucide-svelte";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
+  import { getChannelStatuses } from "$api/generated/systems.generated.remote";
   import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
   import { ChannelType, AlertRuleSeverity } from "$api-clients";
-  import type { DeviceCapabilityCatalog } from "$api-clients";
+  import type { ChannelStatusEntry, DeviceCapabilityCatalog } from "$api-clients";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import type { ChannelDef } from "./types";
   import {
     CHANNEL_META,
+    destinationError,
     findChannelMeta,
     type ChannelMetaEntry,
   } from "./channelMeta";
@@ -32,6 +34,21 @@
     linkedPlatformsQuery.current?.platforms ?? [],
   );
 
+  // The API decides which kinds may be added and which of them need a destination
+  // typed in; this table only says how to present them.
+  const statusQuery = getChannelStatuses();
+  const statuses = $derived<Map<string, ChannelStatusEntry>>(
+    new Map(
+      (statusQuery.current?.channels ?? []).map((c) => [c.channelType as string, c]),
+    ),
+  );
+  const statusPending = $derived(
+    statusQuery.current == null && statusQuery.error == null,
+  );
+  const statusFailed = $derived(
+    statusQuery.current == null && statusQuery.error != null,
+  );
+
   const catalogQuery = getCapabilityCatalog();
   const catalog = $derived<DeviceCapabilityCatalog | null>(
     catalogQuery.current ?? null,
@@ -40,6 +57,20 @@
   function isLinked(opt: ChannelMetaEntry): boolean {
     return !opt.platform || linkedPlatforms.includes(opt.platform);
   }
+
+  function isOffered(opt: ChannelMetaEntry): boolean {
+    return statuses.get(opt.type as string)?.offered === true;
+  }
+
+  function needsDestination(channelType: ChannelType | undefined): boolean {
+    return statuses.get(channelType as string)?.requiresDestination === true;
+  }
+
+  // Every entry is listed but disabled until the API has answered, so the menu never
+  // silently shrinks to nothing while the query is in flight or after it fails.
+  const channelOptions = $derived(
+    statusPending || statusFailed ? CHANNEL_META : CHANNEL_META.filter(isOffered),
+  );
 
   function addChannel(opt: ChannelMetaEntry): void {
     const isDevice = opt.type === ChannelType.DeviceAction;
@@ -128,7 +159,8 @@
             index={i}
           />
         {:else}
-          {#if opt?.destinationRequired}
+          {#if opt && needsDestination(ch.channelType)}
+            {@const error = destinationError(opt, ch.destination)}
             <div class="space-y-1.5">
               <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
               <Input
@@ -136,12 +168,29 @@
                 type="text"
                 class="h-8 text-sm"
                 placeholder={opt.destinationPlaceholder}
+                aria-invalid={error != null}
+                aria-describedby={error != null
+                  ? `channel-dest-error-${i}`
+                  : opt.destinationHelper
+                    ? `channel-dest-helper-${i}`
+                    : undefined}
                 value={ch.destination}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                   channels[i].destination = e.currentTarget.value;
                 }}
               />
+              {#if error}
+                <p id="channel-dest-error-{i}" class="text-xs text-status-warning">
+                  {error}
+                </p>
+              {:else if opt.destinationHelper}
+                <p id="channel-dest-helper-{i}" class="text-xs text-muted-foreground">
+                  {opt.destinationHelper}
+                </p>
+              {/if}
             </div>
+          {:else if opt?.destinationHelper}
+            <p class="text-xs text-muted-foreground">{opt.destinationHelper}</p>
           {/if}
           <div class="space-y-1.5">
             <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>
@@ -177,7 +226,7 @@
     </Popover.Trigger>
     <Popover.Content class="w-80 p-1" align="start">
       <div class="max-h-96 overflow-y-auto">
-        {#each CHANNEL_META as o (o.type)}
+        {#each channelOptions as o (o.type)}
           {@const Glyph = o.icon ?? Bell}
           {@const linked = isLinked(o)}
           {@const catalogFailed =
@@ -186,6 +235,8 @@
             catalogQuery.error != null}
           {@const catalogPending =
             o.isDeviceAction === true && catalog === null && !catalogFailed}
+          {@const pending = statusPending || catalogPending}
+          {@const unavailable = statusFailed || catalogFailed}
           <Popover.Close>
             {#snippet child({ props })}
               <Button
@@ -193,7 +244,7 @@
                 type="button"
                 variant="ghost"
                 class="flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
-                disabled={catalogPending || catalogFailed}
+                disabled={pending || unavailable}
                 title={linked
                   ? undefined
                   : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
@@ -213,11 +264,11 @@
                 <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
                   <span class="flex items-center gap-1.5">
                     <span class="text-sm font-medium">{o.label}</span>
-                    {#if catalogPending}
+                    {#if pending}
                       <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                         Loading
                       </span>
-                    {:else if catalogFailed}
+                    {:else if unavailable}
                       <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                         Unavailable
                       </span>

@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
@@ -210,4 +211,24 @@ public class NutritionControllerTests : IDisposable
 
         result.Result.Should().BeOfType<NotFoundResult>();
     }
+
+    [Fact]
+    public async Task GetCarbIntakes_LimitAtCeiling_ReachesRepositoryUnchanged()
+    {
+        await CreateController().GetCarbIntakes(null, null, V4ReadLimits.MaxPageSize, 0);
+
+        VerifyCarbIntakesFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    [Fact]
+    public async Task GetCarbIntakes_LimitAboveCeiling_IsClamped()
+    {
+        await CreateController().GetCarbIntakes(null, null, V4ReadLimits.MaxPageSize + 1, -1);
+
+        VerifyCarbIntakesFetched(V4ReadLimits.MaxPageSize, 0);
+    }
+
+    private void VerifyCarbIntakesFetched(int limit, int offset) =>
+        _repoMock.Verify(r => r.GetAsync(
+            null, null, null, null, limit, offset, true, false, null, null, It.IsAny<CancellationToken>()), Times.Once);
 }

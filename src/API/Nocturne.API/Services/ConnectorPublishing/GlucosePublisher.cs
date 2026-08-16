@@ -78,7 +78,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _patientDeviceStamper.StampAsync(recordList, [DeviceCategory.CGM], source, cancellationToken);
+            await _patientDeviceStamper.StampAsync(recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             await _alertEvaluator.EvaluateAsync(cancellationToken);

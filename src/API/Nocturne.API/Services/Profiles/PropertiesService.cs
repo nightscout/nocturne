@@ -586,10 +586,10 @@ public class PropertiesService : IPropertiesService
             // properties endpoint reports the service defaults.
             var prefs = new DeviceAgePreferences();
 
-            var sensor = await _deviceAgeService.GetSensorAgeAsync(prefs, cancellationToken);
+            var sensor = await _deviceAgeService.GetSensorAgeAsync(prefs, ct: cancellationToken);
 
             properties["cage"] = ToAgeDictionary(
-                await _deviceAgeService.GetCannulaAgeAsync(prefs, cancellationToken));
+                await _deviceAgeService.GetCannulaAgeAsync(prefs, ct: cancellationToken));
             properties["sage"] = new Dictionary<string, object?>
             {
                 ["Sensor Start"] = ToAgeDictionary(sensor.SensorStart),
@@ -597,9 +597,9 @@ public class PropertiesService : IPropertiesService
                 ["min"] = sensor.Min,
             };
             properties["iage"] = ToAgeDictionary(
-                await _deviceAgeService.GetInsulinAgeAsync(prefs, cancellationToken));
+                await _deviceAgeService.GetInsulinAgeAsync(prefs, ct: cancellationToken));
             properties["bage"] = ToAgeDictionary(
-                await _deviceAgeService.GetBatteryAgeAsync(prefs, cancellationToken));
+                await _deviceAgeService.GetBatteryAgeAsync(prefs, ct: cancellationToken));
         }
         catch (Exception ex)
         {

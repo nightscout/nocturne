@@ -42,7 +42,34 @@ public class BotHealthServiceTests
         _sut.Record(["discord", "telegram"]);
         var statuses = _sut.GetChannelStatuses();
         statuses.First(s => s.ChannelType == ChannelType.DiscordDm).Status.Should().Be(ChannelStatus.Available);
-        statuses.First(s => s.ChannelType == ChannelType.Telegram).Status.Should().Be(ChannelStatus.Available);
+        statuses.First(s => s.ChannelType == ChannelType.TelegramGroup).Status.Should().Be(ChannelStatus.Available);
+    }
+
+    [Fact]
+    public void GetChannelStatuses_AfterHeartbeat_EveryChannelOnAPlatformIsReported()
+    {
+        _sut.Record(["slack"]);
+        var statuses = _sut.GetChannelStatuses();
+        statuses.First(s => s.ChannelType == ChannelType.SlackDm).Status.Should().Be(ChannelStatus.Available);
+        statuses.First(s => s.ChannelType == ChannelType.SlackChannel).Status.Should().Be(ChannelStatus.Available);
+    }
+
+    [Fact]
+    public void GetChannelStatuses_CarriesTheDestinationRulesForTheEditor()
+    {
+        var statuses = _sut.GetChannelStatuses();
+
+        var slackChannel = statuses.First(s => s.ChannelType == ChannelType.SlackChannel);
+        slackChannel.Offered.Should().BeTrue();
+        slackChannel.RequiresDestination.Should().BeTrue();
+
+        var slackDm = statuses.First(s => s.ChannelType == ChannelType.SlackDm);
+        slackDm.Offered.Should().BeTrue();
+        slackDm.RequiresDestination.Should().BeFalse();
+        slackDm.RequiresLink.Should().BeTrue();
+
+        statuses.First(s => s.ChannelType == ChannelType.Telegram).Offered.Should().BeFalse();
+        statuses.First(s => s.ChannelType == ChannelType.WhatsApp).Offered.Should().BeFalse();
     }
 
     [Fact]

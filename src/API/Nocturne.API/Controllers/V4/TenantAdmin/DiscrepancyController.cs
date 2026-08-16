@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -124,7 +125,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="overallMatch">Filter by overall match type (optional)</param>
     /// <param name="fromDate">Start date for filter (optional)</param>
     /// <param name="toDate">End date for filter (optional)</param>
-    /// <param name="count">Number of results to return (default: 100, max: 1000)</param>
+    /// <param name="count">Number of results to return (default: 100, capped at <see cref="V4ReadLimits.MaxPageSize"/>)</param>
     /// <param name="skip">Number of results to skip for pagination (default: 0)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of detailed discrepancy analyses</returns>
@@ -152,6 +153,8 @@ public class DiscrepancyController : ControllerBase
             {
                 return Problem(detail: "Skip must be non-negative", statusCode: 400, title: "Bad Request");
             }
+
+            count = V4ReadLimits.ClampLimit(count);
 
             _logger.LogDebug(
                 "Retrieving discrepancy analyses: path={RequestPath}, match={OverallMatch}, count={Count}, skip={Skip}",

@@ -67,7 +67,7 @@ public static class LegacyReadLimits
     /// </remarks>
     /// <remarks>
     /// Governs the v1 routes only. <c>/api/v4/activity</c> reaches the same four-source fan-out
-    /// with no ceiling of its own; capping it is queued separately, because v4 should not import a
+    /// under its own ceiling in <c>V4ReadLimits</c>, which v4 owns so that it need not import a
     /// legacy-compat helper.
     /// </remarks>
     public const int MaxMergedCount = 10_000;

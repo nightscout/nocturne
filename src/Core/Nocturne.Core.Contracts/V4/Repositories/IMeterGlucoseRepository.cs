@@ -14,7 +14,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="MeterGlucose"/>
 /// <seealso cref="IBGCheckRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IMeterGlucoseRepository : IV4Repository<MeterGlucose>
+public interface IMeterGlucoseRepository : IV4Repository<MeterGlucose>, IDeviceAttributedRepository<MeterGlucose>
 {
     /// <summary>Retrieve a page of <see cref="MeterGlucose"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>

@@ -69,13 +69,20 @@ public class HeartRateService
     public async Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
         DateTime from,
         DateTime to,
+        int? count = null,
+        int skip = 0,
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await EntitySet
+        var query = EntitySet
             .Where(h => h.Timestamp >= from && h.Timestamp < to)
             .OrderBy(h => h.Timestamp)
-            .ToListAsync(cancellationToken);
+            .Skip(skip);
+
+        if (count is { } take)
+            query = query.Take(take);
+
+        var entities = await query.ToListAsync(cancellationToken);
 
         return entities.Select(ToDomainModel);
     }
