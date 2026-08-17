@@ -55,9 +55,10 @@ public class DirectGrantControllerTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        var auditService = new Mock<IAuthAuditService>();
+        var auditService = new AuthAuditService(
+            _dbContext, new Mock<ILogger<AuthAuditService>>().Object);
         var directGrantService = new DirectGrantService(
-            auditService.Object, new Mock<ILogger<DirectGrantService>>().Object);
+            auditService, new Mock<ILogger<DirectGrantService>>().Object);
 
         _controller = new DirectGrantController(_dbContext, directGrantService);
 
@@ -81,6 +82,29 @@ public class DirectGrantControllerTests : IDisposable
     {
         _dbContext.Dispose();
         _connection.Dispose();
+    }
+
+    /// <summary>
+    /// The self-service path has no actor distinct from the subject, so the row must attribute the
+    /// action to that one subject on both axes.
+    /// </summary>
+    [Fact]
+    public async Task Create_AttributesTheAuditRowToTheSubjectAsBothActorAndSubject()
+    {
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Self Service",
+            Scopes = ["glucose.read"],
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var row = await _dbContext.AuthAuditLog.AsNoTracking().SingleAsync();
+        Assert.Equal(AuthAuditEventType.TokenIssued, row.EventType);
+        Assert.Equal(_subjectId, row.SubjectId);
+        Assert.Equal(_subjectId, row.ActorSubjectId);
+        Assert.Null(row.ActorCredential);
+        Assert.Equal(_testTenantId, row.TenantId);
     }
 
     [Fact]

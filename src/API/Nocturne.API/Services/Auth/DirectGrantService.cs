@@ -35,9 +35,9 @@ public interface IDirectGrantService
     /// <param name="ipAddress">The caller's IP address, for the audit trail.</param>
     /// <param name="userAgent">The caller's user agent, for the audit trail.</param>
     /// <param name="actor">
-    /// Who performed the action when it was not the grant's own subject — a platform admin's
-    /// subject ID or an auth type like <c>InstanceKey</c>. Recorded in the audit details; leave
-    /// null on the self-service path, where the subject acts for themselves.
+    /// Who performed the action when it was not the grant's own subject. Leave null on the
+    /// self-service path, where the subject acts for themselves; supplying an actor also files the
+    /// event under <see cref="AuthAuditEventType.PlatformAdminGrantIssued"/>.
     /// </param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created grant, or an error message describing the invalid input.</returns>
@@ -48,7 +48,7 @@ public interface IDirectGrantService
         IReadOnlyCollection<string>? scopes,
         string? ipAddress,
         string? userAgent,
-        string? actor = null,
+        AuthAuditActor? actor = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -84,7 +84,7 @@ public interface IDirectGrantService
         Guid? subjectId,
         string? ipAddress,
         string? userAgent,
-        string? actor = null,
+        AuthAuditActor? actor = null,
         CancellationToken ct = default);
 }
 
@@ -121,7 +121,7 @@ public class DirectGrantService : IDirectGrantService
         IReadOnlyCollection<string>? scopes,
         string? ipAddress,
         string? userAgent,
-        string? actor = null,
+        AuthAuditActor? actor = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(label))
@@ -167,11 +167,14 @@ public class DirectGrantService : IDirectGrantService
             "DirectGrantAudit: {Event} grant_id={GrantId} subject_id={SubjectId} scopes={Scopes}",
             "direct_grant_created", entity.Id, subjectId, string.Join(" ", normalizedScopes));
 
-        await _auditService.LogAsync(AuthAuditEventType.TokenIssued, subjectId, success: true,
+        await _auditService.LogAsync(
+            actor is null ? AuthAuditEventType.TokenIssued : AuthAuditEventType.PlatformAdminGrantIssued,
+            subjectId, success: true,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: AuditDetails(
-                actor, "issued_by", ("method", "direct_grant"), ("grant_id", entity.Id)));
+            detailsJson: JsonSerializer.Serialize(new { method = "direct_grant", grant_id = entity.Id }),
+            actor: actor,
+            tenantId: TargetTenant(dbContext));
 
         return DirectGrantCreationResult.Created(new CreateDirectGrantResponse
         {
@@ -213,7 +216,7 @@ public class DirectGrantService : IDirectGrantService
         Guid? subjectId,
         string? ipAddress,
         string? userAgent,
-        string? actor = null,
+        AuthAuditActor? actor = null,
         CancellationToken ct = default)
     {
         var grant = await dbContext.OAuthGrants
@@ -239,29 +242,24 @@ public class DirectGrantService : IDirectGrantService
             "DirectGrantAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",
             "direct_grant_revoked", grantId, grant.SubjectId);
 
-        await _auditService.LogAsync(AuthAuditEventType.TokenRevoked, grant.SubjectId, success: true,
+        await _auditService.LogAsync(
+            actor is null ? AuthAuditEventType.TokenRevoked : AuthAuditEventType.PlatformAdminGrantRevoked,
+            grant.SubjectId, success: true,
             ipAddress: ipAddress,
             userAgent: userAgent,
-            detailsJson: AuditDetails(actor, "revoked_by", ("grant_id", grantId)));
+            detailsJson: JsonSerializer.Serialize(new { grant_id = grantId }),
+            actor: actor,
+            tenantId: TargetTenant(dbContext));
 
         return true;
     }
 
     /// <summary>
-    /// Serializes the audit details, appending <paramref name="actorKey"/> only when the action was
-    /// performed by someone other than the grant's own subject.
+    /// The tenant the grant belongs to, taken from the context it was created on, or null on an
+    /// unpinned context.
     /// </summary>
-    private static string AuditDetails(
-        string? actor, string actorKey, params (string Key, object Value)[] fields)
-    {
-        var details = fields.ToDictionary(f => f.Key, f => f.Value);
-        if (actor != null)
-        {
-            details[actorKey] = actor;
-        }
-
-        return JsonSerializer.Serialize(details);
-    }
+    private static Guid? TargetTenant(NocturneDbContext dbContext) =>
+        dbContext.TenantId == Guid.Empty ? null : dbContext.TenantId;
 
     private static string Base64UrlEncode(byte[] bytes)
     {

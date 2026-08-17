@@ -36,7 +36,9 @@ public class AuthAuditService : IAuthAuditService
     public async Task LogAsync(string eventType, Guid? subjectId, bool success,
         string? ipAddress = null, string? userAgent = null,
         string? errorMessage = null, string? detailsJson = null,
-        Guid? refreshTokenId = null)
+        Guid? refreshTokenId = null,
+        AuthAuditActor? actor = null,
+        Guid? tenantId = null)
     {
         try
         {
@@ -45,6 +47,10 @@ public class AuthAuditService : IAuthAuditService
                 Id = Guid.CreateVersion7(),
                 EventType = eventType,
                 SubjectId = subjectId,
+                // No explicit actor means the subject acted for themselves.
+                ActorSubjectId = actor is null ? subjectId : actor.SubjectId,
+                ActorCredential = actor?.Credential,
+                TenantId = tenantId,
                 Success = success,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,

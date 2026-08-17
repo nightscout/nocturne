@@ -1062,6 +1062,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_auth_audit_log_subject_created")
             .IsDescending(false, true);
 
+        modelBuilder
+            .Entity<AuthAuditLogEntity>()
+            .HasIndex(a => new { a.ActorSubjectId, a.CreatedAt })
+            .HasDatabaseName("ix_auth_audit_log_actor_subject_created")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<AuthAuditLogEntity>()
+            .HasIndex(a => new { a.ActorCredential, a.CreatedAt })
+            .HasDatabaseName("ix_auth_audit_log_actor_credential_created")
+            .IsDescending(false, true);
+
         // DataSourceMetadata indexes - optimized for device lookups
         modelBuilder
             .Entity<DataSourceMetadataEntity>()
@@ -2832,6 +2844,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasOne(e => e.RefreshToken)
                 .WithMany()
                 .HasForeignKey(e => e.RefreshTokenId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity
+                .HasOne<SubjectEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.ActorSubjectId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
