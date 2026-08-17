@@ -1719,7 +1719,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_basal_injections_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<BasalInjectionEntity>()
@@ -2651,8 +2651,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder
             .Entity<FoodEntity>()
             .Property(f => f.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
@@ -2662,8 +2661,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
             .Property(e => e.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
@@ -2673,8 +2671,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder
             .Entity<TreatmentFoodEntity>()
             .Property(tf => tf.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder
             .Entity<UserFoodFavoriteEntity>()
@@ -2684,20 +2681,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder
             .Entity<SettingsEntity>()
             .Property(s => s.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder
             .Entity<StepCountEntity>()
             .Property(s => s.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder
             .Entity<HeartRateEntity>()
             .Property(h => h.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP")
-            .ValueGeneratedOnAddOrUpdate();
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         // Configure required fields and defaults
         modelBuilder.Entity<FoodEntity>().Property(f => f.Type).HasDefaultValue("food");
@@ -2748,10 +2742,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RefreshTokenEntity>(entity =>
         {
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
                 .HasOne(e => e.Subject)
@@ -2765,10 +2756,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Per-user display preferences stored as a JSONB blob (semantic comparison is
             // applied by the relational jsonb-string value-comparer configured above).
@@ -2789,10 +2777,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.Property(e => e.IsSystemRole).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         // Configure SubjectRole (many-to-many) relationships
@@ -2828,10 +2813,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         // Configure Auth Audit Log entity relationships and defaults
@@ -2947,10 +2929,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.RedirectUris).HasDefaultValue("[]");
             entity.Property(e => e.IsKnown).HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         // Configure OAuth Grant entity
@@ -3072,15 +3051,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
             entity.Property(e => e.ConfigJson).HasDefaultValue("{}");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity
-                .Property(e => e.SysUpdatedAt)
-                .HasDefaultValueSql("CURRENT_TIMESTAMP")
-                .ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.SysUpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         // Configure TenantMember relationships

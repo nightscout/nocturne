@@ -1,6 +1,7 @@
+using System.Data.Common;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 
@@ -11,19 +12,24 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// <c>NocturneDbContext.UpdateTimestamps</c>, driven by the timestamp marker interfaces
 /// (<see cref="ISystemTimestamped"/>, <see cref="ISystemCreated"/>,
 /// <see cref="IEntityTimestamped"/>, <see cref="IEntityCreated"/>) plus a small set of
-/// entity-specific columns. EF InMemory runs the SaveChanges override, so timestamp
-/// stamping is exercised end to end.
+/// entity-specific columns.
+///
+/// The store is in-memory SQLite, not EF InMemory: only a relational provider honours
+/// <c>HasDefaultValueSql</c> and store-generated value configuration, so a column that
+/// SaveChanges stamps but the provider then discards from the UPDATE is visible here.
 /// </summary>
-public class UpdateTimestampsTests
+public class UpdateTimestampsTests : IDisposable
 {
     // A clearly-stale sentinel so a freshly-stamped utcNow value is unambiguously newer.
     private static readonly DateTime Stale = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
+    private readonly List<DbConnection> _connections = [];
+
     [Fact]
     public async Task SystemTimestamped_StampsBothOnInsert_AndBumpsUpdatedOnModify()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
         var id = Guid.CreateVersion7();
         var before = DateTime.UtcNow;
 
@@ -57,8 +63,8 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task SystemTimestamped_UnchangedTrackedRow_IsNotBumpedByAnotherRowsSave()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
         var idA = Guid.CreateVersion7();
         var idB = Guid.CreateVersion7();
 
@@ -86,8 +92,8 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task SystemTimestamped_TimestampOnlyModification_KeepsTheAssignedValue()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
         var id = Guid.CreateVersion7();
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
@@ -115,13 +121,20 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task SystemCreated_StampsCreatedOnInsertOnly()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var foodId = Guid.CreateVersion7();
         var before = DateTime.UtcNow;
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
         {
-            ctx.UserFoodFavorites.Add(new UserFoodFavoriteEntity { Id = Guid.CreateVersion7(), SysCreatedAt = Stale });
+            ctx.Foods.Add(new FoodEntity { Id = foodId });
+            ctx.UserFoodFavorites.Add(new UserFoodFavoriteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                FoodId = foodId,
+                SysCreatedAt = Stale,
+            });
             await ctx.SaveChangesAsync();
         }
 
@@ -155,8 +168,8 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task ClockFace_StampsAllFourConventions()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
         var before = DateTime.UtcNow;
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
@@ -186,8 +199,8 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task ConnectorConfiguration_StampsLastModifiedOnInsert()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
         var before = DateTimeOffset.UtcNow;
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
@@ -223,13 +236,22 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task OAuthRefreshToken_StampsIssuedAtOnInsert()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+        var subjectId = Guid.CreateVersion7();
+        var grantId = Guid.CreateVersion7();
         var before = DateTime.UtcNow;
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
         {
-            ctx.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity { Id = Guid.CreateVersion7(), IssuedAt = Stale });
+            ctx.Subjects.Add(new SubjectEntity { Id = subjectId });
+            ctx.OAuthGrants.Add(new OAuthGrantEntity { Id = grantId, TenantId = tenantId, SubjectId = subjectId });
+            ctx.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                GrantId = grantId,
+                IssuedAt = Stale,
+            });
             await ctx.SaveChangesAsync();
         }
 
@@ -256,8 +278,8 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task TenantScoped_InheritsTenantFromContextOnInsert()
     {
-        var options = NewStore();
         var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
         {
@@ -288,9 +310,9 @@ public class UpdateTimestampsTests
     [Fact]
     public async Task TenantScoped_CrossTenantModify_Throws()
     {
-        var options = NewStore();
         var ownerTenant = Guid.NewGuid();
         var otherTenant = Guid.NewGuid();
+        var options = NewStore(ownerTenant, otherTenant);
         var id = Guid.CreateVersion7();
 
         await using (var ctx = new NocturneDbContext(options) { TenantId = ownerTenant })
@@ -309,9 +331,39 @@ public class UpdateTimestampsTests
             "modifying a row owned by another tenant must fail closed");
     }
 
-    private static DbContextOptions<NocturneDbContext> NewStore() =>
-        new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase($"update_timestamps_{Guid.NewGuid()}")
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+    /// <summary>
+    /// Creates an isolated SQLite store with the schema applied and the supplied tenants
+    /// seeded (every ITenantScoped table carries an FK to <c>tenants</c>, which a relational
+    /// provider actually enforces).
+    /// </summary>
+    private DbContextOptions<NocturneDbContext> NewStore(params Guid[] tenantIds)
+    {
+        var connection = new SqliteConnection("Filename=:memory:");
+        connection.Open();
+        _connections.Add(connection);
+
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite(connection)
+            .EnableSensitiveDataLogging()
             .Options;
+
+        using var seed = new NocturneDbContext(options);
+        seed.Database.EnsureCreated();
+        foreach (var tenantId in tenantIds)
+        {
+            seed.Tenants.Add(new TenantEntity { Id = tenantId, Slug = $"t{tenantId:N}"[..12] });
+        }
+        seed.SaveChanges();
+
+        return options;
+    }
+
+    public void Dispose()
+    {
+        foreach (var connection in _connections)
+        {
+            connection.Dispose();
+        }
+        GC.SuppressFinalize(this);
+    }
 }
