@@ -9,6 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -429,7 +430,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
+                Criteria: MatchCriteriaMapper.From(e)
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);

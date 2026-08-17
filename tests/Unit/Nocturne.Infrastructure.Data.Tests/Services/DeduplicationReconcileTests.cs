@@ -161,6 +161,32 @@ public class DeduplicationReconcileTests : IDisposable
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(2);
     }
 
+    [Theory]
+    [InlineData(120.0, 120.8, 1)]
+    [InlineData(120.0, 121.1, 0)]
+    [InlineData(120.0, 123.0, 0)]
+    public async Task MergeDuplicateGroupsAsync_AppliesTheSameGlucoseToleranceAsTheInsertPath(
+        double firstMgdl, double secondMgdl, int expectedMerges)
+    {
+        // The merge pass reloads criteria from the entities while the insert path takes them from
+        // the repository. Both resolve through MatchCriteriaMapper, so a reading pair the insert
+        // path keeps apart must not be merged here. Bracketing 0.8 against 1.1 pins the window to
+        // 1.0 rather than merely ruling out the 5.0 the merge pass used to apply.
+        var t = DateTime.UtcNow;
+        var mylife = await AddSensorGlucose(t, "mylife-connector", firstMgdl);
+        var glooko = await AddSensorGlucose(t.AddSeconds(20), "glooko-connector", secondMgdl);
+        AddPrimaryLink(RecordType.SensorGlucose, mylife, ToMills(t), "mylife-connector");
+        AddPrimaryLink(RecordType.SensorGlucose, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, CancellationToken.None);
+
+        merged.Should().Be(expectedMerges);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters()
+            .Where(l => l.RecordType == "sensorglucose").ToListAsync();
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(expectedMerges == 1 ? 1 : 2);
+    }
+
     [Fact]
     public async Task MergeDuplicateGroupsAsync_DoesNotMergeOutsideWindow()
     {
@@ -732,6 +758,24 @@ public class DeduplicationReconcileTests : IDisposable
     /// are exact.
     /// </summary>
     private static readonly DateTime WideBase = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Inserts a <see cref="SensorGlucoseEntity"/> for the test tenant and returns its id.
+    /// </summary>
+    private async Task<Guid> AddSensorGlucose(DateTime timestamp, string dataSource, double mgdl)
+    {
+        var id = Guid.CreateVersion7();
+        _context.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = id,
+            TenantId = TestTenantId,
+            Mgdl = mgdl,
+            Timestamp = timestamp,
+            DataSource = dataSource
+        });
+        await _context.SaveChangesAsync();
+        return id;
+    }
 
     /// <summary>
     /// Inserts a <see cref="CarbIntakeEntity"/> for the test tenant and returns its id.

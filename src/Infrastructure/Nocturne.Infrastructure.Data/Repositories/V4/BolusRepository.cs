@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -310,7 +311,7 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: new MatchCriteria { Insulin = e.Insulin, InsulinTolerance = 0.05 }
+                Criteria: MatchCriteriaMapper.From(e)
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Bolus, dedupInputs, ct);

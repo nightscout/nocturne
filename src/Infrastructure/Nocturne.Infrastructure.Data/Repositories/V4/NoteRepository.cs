@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -167,7 +168,7 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: new MatchCriteria()
+                Criteria: MatchCriteriaMapper.ForNote()
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);

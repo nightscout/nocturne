@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -412,12 +413,7 @@ public class TempBasalRepository : ITempBasalRepository
                     RecordId: e.Id,
                     Mills: new DateTimeOffset(e.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                     DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    Criteria: new MatchCriteria
-                    {
-                        Rate = e.Rate,
-                        RateTolerance = 0.05,
-                        Duration = e.EndTimestamp.HasValue ? e.EndTimestamp.Value - e.StartTimestamp : null
-                    }
+                    Criteria: MatchCriteriaMapper.From(e)
                 )).ToList();
 
                 await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
