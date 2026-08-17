@@ -29,7 +29,7 @@ public class MyLifeConnectorServiceTests
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: true));
-        var (service, sessionCache) = BuildService(http, tenantId);
+        var (service, sessionCache, _) = BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -54,7 +54,7 @@ public class MyLifeConnectorServiceTests
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: false));
-        var (service, sessionCache) = BuildService(http, tenantId);
+        var (service, sessionCache, _) = BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -71,8 +71,36 @@ public class MyLifeConnectorServiceTests
         sessionCache.Get(tenantId).Should().BeNull("no session must be cached when login fails");
     }
 
-    private static (MyLifeConnectorService Service, IMyLifeSessionCache SessionCache) BuildService(
-        HttpClient http, Guid tenantId)
+    /// <summary>
+    /// MyLife auth tokens are cached for 24 hours. One the server has already rejected must be
+    /// dropped, or every sync until that expiry fails. Only a 401 drops it: the SOAP endpoints
+    /// return other statuses for reasons that say nothing about the token.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, true)]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    public async Task SyncDataAsync_DropsTheCachedToken_OnlyWhenMyLifeRejectsIt(
+        HttpStatusCode syncStatus, bool expectTokenDropped)
+    {
+        var tenantId = Guid.NewGuid();
+        using var http = new HttpClient(new SoapStubHandler(loginSucceeds: true, syncStatus: syncStatus));
+        var (service, _, tokenProvider) = BuildService(http, tenantId);
+
+        var config = new MyLifeConnectorConfiguration
+        {
+            Username = "user@example.com",
+            Password = "secret",
+            PatientId = "patient-1"
+        };
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        tokenProvider.IsTokenExpired.Should().Be(expectTokenDropped);
+    }
+
+    private static (MyLifeConnectorService Service, IMyLifeSessionCache SessionCache,
+        MyLifeAuthTokenProvider TokenProvider) BuildService(HttpClient http, Guid tenantId)
     {
         var resolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
 
@@ -103,7 +131,7 @@ public class MyLifeConnectorServiceTests
             syncService,
             publisher: null);
 
-        return (service, sessionCache);
+        return (service, sessionCache, tokenProvider);
     }
 
     /// <summary>
@@ -111,7 +139,8 @@ public class MyLifeConnectorServiceTests
     /// single-patient list; events and pump-settings return no result element so the sync completes
     /// with no data (and never reaches the archive-decryption path).
     /// </summary>
-    private sealed class SoapStubHandler(bool loginSucceeds) : HttpMessageHandler
+    private sealed class SoapStubHandler(
+        bool loginSucceeds, HttpStatusCode syncStatus = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -143,7 +172,7 @@ public class MyLifeConnectorServiceTests
                     : (HttpStatusCode.Unauthorized, string.Empty);
 
             // SyncEvents / SyncPumpSettings: no result element → treated as "no data".
-            return (HttpStatusCode.OK,
+            return (syncStatus,
                 "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body/></s:Envelope>");
         }
 

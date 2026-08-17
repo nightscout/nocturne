@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security;
 using System.Text;
 using System.Text.Json;
@@ -196,6 +197,14 @@ public class MyLifeSoapClient(HttpClient httpClient, ILogger<MyLifeSoapClient> l
         if (response.IsSuccessStatusCode) return content;
 
         logger.LogWarning("MyLife SOAP request failed {StatusCode}", response.StatusCode);
+
+        // Every other status is indistinguishable from "this call returned nothing" to the caller,
+        // which is what the empty string means. A rejected auth token has to be told apart from
+        // that so the caller can drop it.
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            throw new HttpRequestException(
+                $"MyLife rejected the {action} request as unauthorized", null, response.StatusCode);
+
         return string.Empty;
     }
 

@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -63,6 +64,78 @@ public class CareLinkAuthTokenProviderTests
 
         token.Should().BeNull();
         handler.Requests.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// CareLink issues short-lived JWTs, and the session is retired early so a request in flight
+    /// cannot outlive its token. The margin is the one shared by every short-lived-token connector;
+    /// a narrower one is inside the round-trip time of a single call.
+    /// </summary>
+    [Fact]
+    public async Task AcquireToken_RetiresTheSessionOnTheSharedLifetimeBuffer()
+    {
+        var tokenExpiry = DateTimeOffset.UtcNow.AddHours(2);
+        var handler = new CareLinkFakeHandler
+        {
+            TokenResponseJson =
+                $$"""{"access_token":"{{JwtExpiringAt(tokenExpiry)}}","refresh_token":"rotated-refresh-token"}""",
+        };
+        var provider = CreateProvider(handler);
+
+        provider.InitializeFromSecrets("pasted-refresh-token", clientId: null, tokenUrl: null, audience: null);
+
+        await provider.GetValidTokenAsync(
+            new CareLinkConnectorConfiguration { Username = "user@example.com", Server = "EU" },
+            CancellationToken.None);
+
+        var session = await provider.GetCachedSessionAsync();
+        session!.ExpiresAt.Should().BeCloseTo(
+            tokenExpiry.UtcDateTime.AddMinutes(-DefaultTokenLifetimeBufferMinutes),
+            TimeSpan.FromSeconds(5));
+    }
+
+    /// <summary>The margin <see cref="AuthTokenProviderBase{TConfig}"/> applies unless overridden.</summary>
+    private const int DefaultTokenLifetimeBufferMinutes = 5;
+
+    /// <summary>An unsigned JWT whose payload carries only the given expiry.</summary>
+    private static string JwtExpiringAt(DateTimeOffset expiresAt)
+    {
+        static string Segment(string json) =>
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        return $"{Segment("""{"alg":"none"}""")}."
+               + $"{Segment($$"""{"exp":{{expiresAt.ToUnixTimeSeconds()}}}""")}.signature";
+    }
+
+    /// <summary>
+    /// The credential login honours the connector's configured MaxRetryAttempts, which counts total
+    /// attempts and is clamped to one. Every login begins by fetching the discovery document, so the
+    /// number of discovery requests is the number of attempts.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    [InlineData(3, 3)]
+    public async Task AcquireToken_MakesOneCredentialLoginPerConfiguredAttempt(
+        int maxRetryAttempts, int expectedLogins)
+    {
+        var handler = new CareLinkFakeHandler();
+        var provider = CreateProvider(handler);
+
+        var token = await provider.GetValidTokenAsync(
+            new CareLinkConnectorConfiguration
+            {
+                Username = "user@example.com",
+                Password = "secret",
+                Server = "EU",
+                MaxRetryAttempts = maxRetryAttempts,
+            },
+            CancellationToken.None);
+
+        token.Should().BeNull("the fake serves no login form, so every attempt fails");
+        handler.Requests.Count(r => r.Url.Contains("/discover/", StringComparison.Ordinal))
+            .Should().Be(expectedLogins);
     }
 
     private static TestableProvider CreateProvider(CareLinkFakeHandler handler)

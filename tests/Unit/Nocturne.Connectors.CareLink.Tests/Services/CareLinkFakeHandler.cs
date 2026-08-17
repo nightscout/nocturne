@@ -22,6 +22,9 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
     internal string TokenResponseJson { get; init; } =
         """{"access_token":"new-access-token","refresh_token":"rotated-refresh-token"}""";
 
+    /// <summary>Status served for any URL the fake does not model, which is every data endpoint.</summary>
+    internal HttpStatusCode UnmodelledStatus { get; init; } = HttpStatusCode.NotFound;
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -58,7 +61,7 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
         if (url == TokenUrl)
             return Json(TokenResponseJson);
 
-        return new HttpResponseMessage(HttpStatusCode.NotFound);
+        return new HttpResponseMessage(UnmodelledStatus);
     }
 
     private static HttpResponseMessage Json(string body) =>

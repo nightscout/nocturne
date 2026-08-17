@@ -498,6 +498,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             var response = await _httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                // Same reasoning as the GraphQL path: only a 401 drops the token, since a 403 here
+                // is more likely a WAF block.
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    _tokenProvider.InvalidateToken();
+
                 _logger.LogWarning(
                     "MyFitnessPal diary for {Date} returned HTTP {StatusCode}",
                     date,

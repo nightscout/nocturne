@@ -38,7 +38,7 @@ public class MyFitnessPalAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyFitnessPalConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var maxRetries = Math.Max(1, config.MaxRetryAttempts);
+        var maxRetries = LoginAttempts(config);
 
         var token = await ExecuteWithRetryAsync(
             async attempt => await RequestTokenAsync(config, attempt, cancellationToken),

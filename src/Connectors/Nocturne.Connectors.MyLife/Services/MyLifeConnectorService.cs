@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -277,6 +278,11 @@ public class MyLifeConnectorService(
         }
         catch (Exception ex)
         {
+            // A token MyLife has already rejected would otherwise stay cached until its nominal
+            // 24-hour expiry, failing every sync in between.
+            if (ex is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized })
+                tokenProvider.InvalidateToken();
+
             _logger.LogError(ex, "Error during sync");
             result.Success = false;
             result.Errors.Add($"Sync error: {ex.Message}");

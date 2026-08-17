@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -155,9 +156,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         try
         {
             var host = GetServerHost(config);
-            var response = await GetWithHeadersAsync(
+            var response = await AuthenticatedGetAsync(
                 $"https://{host}{CareLinkConstants.Endpoints.UsersMe}",
-                AuthHeaders(),
                 cancellationToken);
 
             if (response.IsSuccessStatusCode)
@@ -548,9 +548,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var monitorResponse = await GetWithHeadersAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}",
-                AuthHeaders(), ct);
+            var monitorResponse = await AuthenticatedGetAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}", ct);
             if (monitorResponse.IsSuccessStatusCode)
                 return await DeserializeResponseAsync<CareLinkData>(monitorResponse, ct);
         }
@@ -587,10 +586,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var settingsResponse = await GetWithHeadersAsync(
+            var settingsResponse = await AuthenticatedGetAsync(
                 $"https://{host}{CareLinkConstants.Endpoints.CountrySettings}" +
-                $"?countryCode={config.CountryCode}&language={config.LanguageCode}",
-                AuthHeaders(), ct);
+                $"?countryCode={config.CountryCode}&language={config.LanguageCode}", ct);
 
             if (!settingsResponse.IsSuccessStatusCode)
             {
@@ -611,7 +609,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 body["patientId"] = patientId;
 
             using var jsonContent = JsonContent.Create(body);
-            var response = await PostWithHeadersAsync(endpoint, jsonContent, AuthHeaders(), ct);
+            var response = await AuthenticatedPostAsync(endpoint, jsonContent, ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -646,7 +644,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var url = $"https://{host}{CareLinkConstants.Endpoints.ConnectData}" +
                       $"?cpSerialNumber=NONE&msgType=last24hours&requestTime={timestamp}";
 
-            var response = await GetWithHeadersAsync(url, AuthHeaders(), ct);
+            var response = await AuthenticatedGetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -693,7 +691,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             {
                 var url = $"https://{host}/connect/carepartner{version}display/data";
                 using var jsonContent = JsonContent.Create(body);
-                var response = await PostWithHeadersAsync(url, jsonContent, AuthHeaders(), ct);
+                var response = await AuthenticatedPostAsync(url, jsonContent, ct);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -731,9 +729,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var response = await GetWithHeadersAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}",
-                AuthHeaders(), ct);
+            var response = await AuthenticatedGetAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}", ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -824,6 +821,32 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// </summary>
     private Dictionary<string, string> AuthHeaders() =>
         new() { ["Authorization"] = $"Bearer {_accessToken}" };
+
+    private async Task<HttpResponseMessage> AuthenticatedGetAsync(string url, CancellationToken ct)
+    {
+        var response = await GetWithHeadersAsync(url, AuthHeaders(), ct);
+        DropTokenIfRejected(response);
+        return response;
+    }
+
+    private async Task<HttpResponseMessage> AuthenticatedPostAsync(
+        string url, HttpContent content, CancellationToken ct)
+    {
+        var response = await PostWithHeadersAsync(url, content, AuthHeaders(), ct);
+        DropTokenIfRejected(response);
+        return response;
+    }
+
+    /// <summary>
+    ///     Drops the cached token when CareLink rejects it, so the next sync re-authenticates.
+    ///     Without this a token revoked or invalidated server-side stays cached until its nominal
+    ///     expiry and every request until then fails.
+    /// </summary>
+    private void DropTokenIfRejected(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            _tokenProvider.InvalidateToken();
+    }
 
     /// <summary>
     ///     Returns true if the last medical device update is older than the staleness threshold.

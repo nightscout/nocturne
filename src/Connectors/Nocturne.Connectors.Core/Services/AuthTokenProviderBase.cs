@@ -159,6 +159,13 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected abstract Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TConfig config, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     The number of login attempts a token acquisition makes.
+    ///     <see cref="BaseConnectorConfiguration.MaxRetryAttempts"/> counts total attempts and
+    ///     permits 0; authenticating at all needs one.
+    /// </summary>
+    protected static int LoginAttempts(TConfig config) => Math.Max(1, config.MaxRetryAttempts);
+
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<int, Task<(T? Result, bool ShouldRetry)>> operation,
         IRetryDelayStrategy retryDelayStrategy,
