@@ -1,3 +1,5 @@
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -9,9 +11,10 @@ namespace Nocturne.Core.Models.V4;
 /// stored as its own record rather than being multiplexed through the entries collection.
 /// </para>
 /// <para>
-/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using the standard conversion factor
-/// (18.0182). <see cref="Trend"/> is computed by casting <see cref="Direction"/> to its integer
-/// equivalent, providing a 1:1 mapping between <see cref="GlucoseDirection"/> and <see cref="GlucoseTrend"/>.
+/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using
+/// <see cref="GlucoseConstants.MgdlPerMmol"/>. <see cref="Trend"/> is computed by casting
+/// <see cref="Direction"/> to its integer equivalent, providing a 1:1 mapping between
+/// <see cref="GlucoseDirection"/> and <see cref="GlucoseTrend"/>.
 /// </para>
 /// </remarks>
 /// <seealso cref="Entry"/>
@@ -98,9 +101,9 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// Glucose value in mmol/L (computed from <see cref="Mgdl"/>).
     /// </summary>
     /// <remarks>
-    /// Computed as <c>Mgdl / 18.0182</c>. The mg/dL value is the source of truth.
+    /// The mg/dL value is the source of truth.
     /// </remarks>
-    public double Mmol => Mgdl / 18.0182;
+    public double Mmol => Mgdl / GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// CGM trend arrow direction.
@@ -158,7 +161,8 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// <summary>
     /// Smoothed glucose value in mmol/L (computed from <see cref="SmoothedMgdl"/>).
     /// </summary>
-    public double? SmoothedMmol => SmoothedMgdl.HasValue ? SmoothedMgdl.Value / 18.0182 : null;
+    public double? SmoothedMmol =>
+        SmoothedMgdl.HasValue ? SmoothedMgdl.Value / GlucoseConstants.MgdlPerMmol : null;
 
     /// <summary>
     /// Unsmoothed (raw) glucose value in mg/dL, when known.
@@ -168,7 +172,8 @@ public class SensorGlucose : IV4Record, IDeviceAttributed
     /// <summary>
     /// Unsmoothed glucose value in mmol/L (computed from <see cref="UnsmoothedMgdl"/>).
     /// </summary>
-    public double? UnsmoothedMmol => UnsmoothedMgdl.HasValue ? UnsmoothedMgdl.Value / 18.0182 : null;
+    public double? UnsmoothedMmol =>
+        UnsmoothedMgdl.HasValue ? UnsmoothedMgdl.Value / GlucoseConstants.MgdlPerMmol : null;
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns

@@ -1,3 +1,5 @@
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -10,8 +12,8 @@ namespace Nocturne.Core.Models.V4;
 /// is sourced directly from the meter via upload (e.g., through a connector or xDrip).
 /// </para>
 /// <para>
-/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using the standard conversion factor
-/// (18.0182). <see cref="Mgdl"/> is always the source of truth.
+/// <see cref="Mmol"/> is computed from <see cref="Mgdl"/> using
+/// <see cref="GlucoseConstants.MgdlPerMmol"/>. <see cref="Mgdl"/> is always the source of truth.
 /// </para>
 /// </remarks>
 /// <seealso cref="Entry"/>
@@ -89,9 +91,9 @@ public class MeterGlucose : IV4Record, IDeviceAttributed
     /// Glucose value in mmol/L, computed from <see cref="Mgdl"/>.
     /// </summary>
     /// <remarks>
-    /// Computed as <c>Mgdl / 18.0182</c>. The mg/dL value is the source of truth.
+    /// The mg/dL value is the source of truth.
     /// </remarks>
-    public double Mmol => Mgdl / 18.0182;
+    public double Mmol => Mgdl / GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns

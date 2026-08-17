@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -368,7 +369,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     internal static List<V4Models.ScheduleEntry> ConvertSensitivityValues(List<TimeValue> timeValues, string? units)
     {
         var toMgdl = IsMmol(units)
-            ? (Func<double, double>)(value => Math.Round(value * MgdlPerMmol))
+            ? (Func<double, double>)(value => Math.Round(value * GlucoseConstants.MgdlPerMmol))
             : value => value;
 
         return timeValues.Select(tv =>
@@ -382,11 +383,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             };
         }).ToList();
     }
-
-    /// <summary>
-    /// mg/dL per mmol/L. Matches the factor the V4 glucose models use (<see cref="V4Models.SensorGlucose"/> et al.).
-    /// </summary>
-    private const double MgdlPerMmol = 18.0182;
 
     /// <summary>
     /// Merges separate low- and high-target <see cref="TimeValue"/> lists into a single list of
@@ -406,7 +402,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units)
     {
         var toMgdl = IsMmol(units)
-            ? (Func<double, double>)(value => Math.Round(value * MgdlPerMmol))
+            ? (Func<double, double>)(value => Math.Round(value * GlucoseConstants.MgdlPerMmol))
             : value => value;
         var highLookup = highs.ToDictionary(h => h.Time, h => h.Value);
 
