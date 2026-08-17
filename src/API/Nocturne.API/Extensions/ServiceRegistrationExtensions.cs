@@ -313,7 +313,6 @@ public static class ServiceRegistrationExtensions
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
         });
 
-        // Rate limiting for OAuth endpoints
         services.AddRateLimiter(options =>
         {
             options.AddPolicy(
@@ -505,7 +504,6 @@ public static class ServiceRegistrationExtensions
         // Demo mode
         services.AddSingleton<IDemoModeService, DemoModeService>();
 
-        // V4 projection (must be registered before EntryService/TreatmentService)
         services.AddScoped<IV4ToLegacyProjectionService, V4ToLegacyProjectionService>();
 
         // Collection effect descriptors (resolved by WriteSideEffectsService)
@@ -653,12 +651,12 @@ public static class ServiceRegistrationExtensions
         // Basal series builder (used by chart data pipeline and reports endpoint)
         services.AddScoped<IBasalSeriesBuilder, BasalSeriesBuilder>();
 
-        // Chart data pipeline stages (order matters!)
         services.AddScoped<ProfileLoadStage>();
         services.AddScoped<DataFetchStage>();
         services.AddScoped<IobCobComputeStage>();
         services.AddScoped<DtoMappingStage>();
 
+        // The stages run in the order of this array, not the order they were registered in.
         services.AddScoped<IEnumerable<IChartDataStage>>(sp => new IChartDataStage[]
         {
             sp.GetRequiredService<ProfileLoadStage>(),

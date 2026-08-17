@@ -92,9 +92,9 @@ class Program
                 "PostgreSQL bootstrap password",
                 "Used only at first container start to create runtime roles");
 
-            // Non-bootstrap role passwords. The Postgres container's init
-            // script reads them via env vars and creates nocturne_migrator
-            // and nocturne_app at first container start.
+            // Non-bootstrap role passwords. The Postgres container's init script reads them via
+            // env vars and creates nocturne_migrator, nocturne_app and nocturne_web at first
+            // container start.
             postgresMigratorPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresMigratorPassword,
                 secret: true
@@ -230,8 +230,9 @@ class Program
         var discordClientSecret = builder.AddParameter("discord-client-secret", "", secret: true);
 
         // Platform base domain — the single hostname all services derive URLs from.
-        // Production should set this to e.g. "nocturne.run" via user-secrets.
-        // Injected as "BaseDomain" into both the API and SvelteKit.
+        // Production should set this to e.g. "nocturne.run" via user-secrets. Reaches the API and
+        // SvelteKit as BASE_DOMAIN in publish mode only; run mode overrides it further down with a
+        // value derived from the live gateway endpoint.
         var baseDomain = builder.AddParameter("base-domain", "")
             .WithPublishMetadata(
                 "Base domain",

@@ -128,7 +128,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// Use in-memory cache for single-user deployments
+// In-process, so each replica caches independently and entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 builder.Logging.ClearProviders();
@@ -151,9 +151,6 @@ builder.Services.AddHostedService<SoftDeleteCleanupService>();
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
 
-// Add native API services for strangler pattern
-// Note: NightscoutJsonFilter is added globally to apply null-omission and
-// NocturneOnly field exclusion to v1-v3 API responses only
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -338,9 +335,8 @@ app.UseResponseCaching();
 // UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
 
-// Explicit UseRouting so TenantSetupMiddleware can read endpoint metadata
-// (e.g. [AllowDuringSetup]). Minimal hosting would insert this automatically
-// but we make it explicit for clarity.
+// Routing must run here, not where minimal hosting would insert it, so that
+// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
 app.UseRouting();
 
 // Ahead of the documentation branch below, which jumps straight to its endpoint and would
