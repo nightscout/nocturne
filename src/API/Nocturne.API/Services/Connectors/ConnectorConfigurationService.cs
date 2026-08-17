@@ -42,23 +42,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
-    private static readonly Dictionary<string, SyncDataType> SyncPropertyToDataType =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SyncGlucose"] = SyncDataType.Glucose,
-            ["SyncManualBG"] = SyncDataType.ManualBG,
-            ["SyncBoluses"] = SyncDataType.Boluses,
-            ["SyncCarbIntake"] = SyncDataType.CarbIntake,
-            ["SyncBolusCalculations"] = SyncDataType.BolusCalculations,
-            ["SyncNotes"] = SyncDataType.Notes,
-            ["SyncDeviceEvents"] = SyncDataType.DeviceEvents,
-            ["SyncStateSpans"] = SyncDataType.StateSpans,
-            ["SyncProfiles"] = SyncDataType.Profiles,
-            ["SyncDeviceStatus"] = SyncDataType.DeviceStatus,
-            ["SyncActivity"] = SyncDataType.Activity,
-            ["SyncFood"] = SyncDataType.Food,
-        };
-
     public ConnectorConfigurationService(
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
@@ -655,11 +638,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 continue;
 
             // Skip sync toggle properties for data types this connector doesn't support
-            if (SyncPropertyToDataType.TryGetValue(property.Name, out var requiredDataType))
-            {
-                if (!supportedDataTypes.Contains(requiredDataType))
-                    continue;
-            }
+            if (ConnectorSyncToggles.ByPropertyKey.TryGetValue(connectorPropAttr.Key, out var gatedDataType)
+                && !supportedDataTypes.Contains(gatedDataType))
+                continue;
 
             var propName = ToCamelCase(connectorPropAttr.GetKeyName());
 
@@ -760,11 +741,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 continue;
 
             // Skip sync toggle properties for data types this connector doesn't support
-            if (SyncPropertyToDataType.TryGetValue(property.Name, out var requiredDataType))
-            {
-                if (!supportedDataTypes.Contains(requiredDataType))
-                    continue;
-            }
+            if (ConnectorSyncToggles.ByPropertyKey.TryGetValue(connectorPropAttr.Key, out var gatedDataType)
+                && !supportedDataTypes.Contains(gatedDataType))
+                continue;
 
             object? value = null;
             try
