@@ -1636,8 +1636,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<MeterGlucoseEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_meter_glucose_legacy_id");
+            .HasIndex(e => new { e.TenantId, e.LegacyId })
+            .HasDatabaseName("ix_meter_glucose_tenant_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+        // Keep the conventional TenantId index (see ApsSnapshot note).
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasIndex(e => e.TenantId)
+            .HasDatabaseName("IX_meter_glucose_tenant_id");
 
         modelBuilder
             .Entity<MeterGlucoseEntity>()
@@ -1653,8 +1661,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<CalibrationEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_calibrations_legacy_id");
+            .HasIndex(e => new { e.TenantId, e.LegacyId })
+            .HasDatabaseName("ix_calibrations_tenant_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+        // Keep the conventional TenantId index (see ApsSnapshot note).
+        modelBuilder
+            .Entity<CalibrationEntity>()
+            .HasIndex(e => e.TenantId)
+            .HasDatabaseName("IX_calibrations_tenant_id");
 
         modelBuilder
             .Entity<CalibrationEntity>()
