@@ -71,7 +71,7 @@ public class TenantDirectGrantController : ControllerBase
         await using var dbContext = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId, ct);
 
         var result = await _directGrantService.CreateAsync(
-            dbContext, request.SubjectId, request.Label, request.Scopes,
+            dbContext, request.SubjectId, request.Label, request.Scopes, request.ExpiresAt,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             actor: CallerDescription(),

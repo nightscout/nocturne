@@ -21,13 +21,16 @@ public class ApiKeyHandler : IAuthHandler
     public string Name => "ApiKeyHandler";
 
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApiKeyHandler> _logger;
 
     public ApiKeyHandler(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
+        TimeProvider timeProvider,
         ILogger<ApiKeyHandler> logger)
     {
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -79,30 +82,14 @@ public class ApiKeyHandler : IAuthHandler
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
         dbContext.TenantId = tenantCtx.TenantId;
 
-        OAuthGrantEntity? grant;
+        var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
+            dbContext.OAuthGrants.AsNoTracking(),
+            tenantCtx.TenantId,
+            _timeProvider.GetUtcNow().UtcDateTime);
 
-        if (tokenHash != null)
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.TokenHash == tokenHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
-        else
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.LegacySecretHash == legacySecretHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
+        var grant = tokenHash != null
+            ? await activeGrants.FirstOrDefaultAsync(g => g.TokenHash == tokenHash)
+            : await activeGrants.FirstOrDefaultAsync(g => g.LegacySecretHash == legacySecretHash);
 
         if (grant == null)
         {

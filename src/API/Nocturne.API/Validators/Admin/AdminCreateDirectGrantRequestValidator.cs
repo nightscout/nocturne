@@ -11,11 +11,8 @@ namespace Nocturne.API.Validators.Admin;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>SubjectId is required.</description></item>
-/// <item><description>Label and scope rules are shared with the self-service endpoint via
-/// <see cref="CreateDirectGrantRequestValidator"/>.</description></item>
-/// <item><description>ExpiresAt must not be set: direct grants do not expire, and the
-/// self-service endpoint's silent-ignore of the field must not carry over to a surface whose
-/// callers are SDKs that would trust a requested expiry.</description></item>
+/// <item><description>Label, scope, and expiry rules are shared with the self-service endpoint
+/// via <see cref="CreateDirectGrantRequestValidator"/>.</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="AdminCreateDirectGrantRequest"/>
@@ -30,7 +27,5 @@ public class AdminCreateDirectGrantRequestValidator : AbstractValidator<AdminCre
     {
         Include(new CreateDirectGrantRequestValidator());
         RuleFor(x => x.SubjectId).NotEmpty();
-        RuleFor(x => x.ExpiresAt).Null()
-            .WithMessage("Direct grants do not expire; ExpiresAt must not be set");
     }
 }

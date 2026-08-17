@@ -125,6 +125,51 @@ public class DirectGrantControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_RequestedExpiry_IsPersistedAndReturned()
+    {
+        var expiresAt = new DateTime(2027, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var request = new CreateDirectGrantRequest
+        {
+            Label = "Short-lived Token",
+            Scopes = ["glucose.read"],
+            ExpiresAt = expiresAt,
+        };
+
+        var result = await _controller.Create(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
+        Assert.Equal(expiresAt, response.ExpiresAt);
+
+        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        Assert.Equal(expiresAt, grant!.ExpiresAt);
+
+        var listResult = await _controller.List();
+        var listed = Assert.IsType<List<DirectGrantDto>>(
+            Assert.IsType<OkObjectResult>(listResult.Result).Value);
+        Assert.Equal(expiresAt, Assert.Single(listed, g => g.Id == response.Id).ExpiresAt);
+    }
+
+    [Fact]
+    public async Task Create_NoExpiry_StoresOpenEndedGrant()
+    {
+        var request = new CreateDirectGrantRequest
+        {
+            Label = "Open-ended Token",
+            Scopes = ["glucose.read"],
+        };
+
+        var result = await _controller.Create(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
+        Assert.Null(response.ExpiresAt);
+
+        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        Assert.Null(grant!.ExpiresAt);
+    }
+
+    [Fact]
     public async Task Create_EmptyLabel_ReturnsBadRequest()
     {
         var request = new CreateDirectGrantRequest

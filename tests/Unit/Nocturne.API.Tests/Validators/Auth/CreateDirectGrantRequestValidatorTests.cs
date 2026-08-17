@@ -23,6 +23,33 @@ public class CreateDirectGrantRequestValidatorTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 
+    [Fact]
+    public void Future_expiry_passes()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = DateTime.UtcNow.AddHours(1);
+        var result = _validator.TestValidate(request);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Past_expiry_fails()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        var result = _validator.TestValidate(request);
+        result.ShouldHaveValidationErrorFor(x => x.ExpiresAt);
+    }
+
+    [Fact]
+    public void Absent_expiry_passes()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = null;
+        var result = _validator.TestValidate(request);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
