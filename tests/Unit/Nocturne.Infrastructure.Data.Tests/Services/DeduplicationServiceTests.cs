@@ -1325,6 +1325,103 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeduplicateBatchAsync_Note_DoesNotMatchASoftDeletedNote()
+    {
+        // Notes match on the time window alone, so nothing about the note's own content can keep a
+        // deleted one out of range — only the deleted check can.
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        var timestamp = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var deleted = new NoteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = timestamp,
+            Text = "removed",
+            DataSource = "mylife-connector",
+            DeletedAt = DateTime.UtcNow
+        };
+        var fresh = new NoteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = timestamp.AddSeconds(10),
+            Text = "kept",
+            DataSource = "glooko-connector"
+        };
+        context.Notes.AddRange(deleted, fresh);
+        await context.SaveChangesAsync();
+
+        await service.DeduplicateBatchAsync(RecordType.Note, [ToInput(deleted)]);
+        await service.DeduplicateBatchAsync(RecordType.Note, [ToInput(fresh)]);
+
+        var links = await context.LinkedRecords.IgnoreQueryFilters()
+            .Where(lr => lr.RecordType == "note").ToListAsync();
+        links.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(
+            2, "a soft-deleted note is not a candidate for a live one to join");
+    }
+
+    [Fact]
+    public void CriteriaMatch_DeviceEvent_RefusesWhenTheEventTypeIsAbsent()
+    {
+        // The event type is the whole value, so two events that carry none compare equal on nothing.
+        var blank = new MatchCriteria { EventType = "" };
+
+        DeduplicationService.CriteriaMatch(RecordType.DeviceEvent, blank, blank).Should().BeFalse();
+        DeduplicationService.CriteriaMatch(
+            RecordType.DeviceEvent,
+            new MatchCriteria { EventType = "Site Change" },
+            new MatchCriteria { EventType = "site change" }).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("", "Automatic", false)]
+    [InlineData("Automatic", "", false)]
+    [InlineData("", "", true)]
+    [InlineData("Automatic", "automatic", true)]
+    public void CriteriaMatch_StateSpan_RequiresTheStatesToAgree(string storedState, string incomingState, bool expected)
+    {
+        // A span posted without a state is stored as "", so treating an absent state as a wildcard
+        // would let one join every other span of its category — and would answer differently
+        // depending on which side it was passed as.
+        var stored = new MatchCriteria { Category = StateSpanCategory.PumpMode, State = storedState };
+        var incoming = new MatchCriteria { Category = StateSpanCategory.PumpMode, State = incomingState };
+
+        DeduplicationService.CriteriaMatch(RecordType.StateSpan, stored, incoming).Should().Be(expected);
+        DeduplicationService.CriteriaMatch(RecordType.StateSpan, incoming, stored).Should().Be(
+            expected, "the merge pass compares stored spans in both orders");
+    }
+
+    [Theory]
+    [InlineData("Exercise", true)]
+    [InlineData("exercise", true)]
+    [InlineData("NotACategory", false)]
+    [InlineData("3", false)]
+    [InlineData("", false)]
+    public void MatchCriteriaMapper_StateSpan_ReadsOnlyADeclaredCategoryName(string stored, bool parsed)
+    {
+        // Enum.TryParse accepts the numeric form, so "3" would otherwise become a real category.
+        var criteria = MatchCriteriaMapper.From(new StateSpanEntity { Category = stored, State = "active" });
+
+        criteria.Category.HasValue.Should().Be(parsed);
+    }
+
+    [Fact]
+    public void CriteriaMatch_StateSpan_RefusesWhenTheCategoryIsUnparseable()
+    {
+        // A category the mapper could not read becomes null; without a presence check every such
+        // span in the window would compare equal to every other and collapse into one group.
+        var unreadable = new MatchCriteria { Category = null, State = "active" };
+
+        DeduplicationService.CriteriaMatch(RecordType.StateSpan, unreadable, unreadable).Should().BeFalse();
+        DeduplicationService.CriteriaMatch(
+            RecordType.StateSpan,
+            new MatchCriteria { Category = StateSpanCategory.Exercise, State = "active" },
+            new MatchCriteria { Category = StateSpanCategory.Exercise, State = "active" }).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DeduplicateBatchAsync_WideMatch_AdmitsOnlyTheFirstSameSourceRecordOfABatch()
     {
         await using var context = NewContext();
@@ -1493,26 +1590,31 @@ public class DeduplicationServiceTests : IDisposable
             DataSource = dataSource
         };
 
-    // Criteria mirror the repositories' own DeduplicationInput construction.
+    // Criteria come from MatchCriteriaMapper, the same source the repositories feed the service
+    // from, so a change to a tolerance cannot pass here while breaking production.
     private static DeduplicationInput ToInput(BolusEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            new MatchCriteria { Insulin = e.Insulin, InsulinTolerance = 0.05 });
+            MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(CarbIntakeEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            new MatchCriteria { Carbs = e.Carbs, CarbsTolerance = 1.0 });
+            MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(DeviceEventEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            new MatchCriteria { EventType = e.EventType });
+            MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(SensorGlucoseEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 });
+            MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(BolusCalculationEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            new MatchCriteria { Carbs = e.CarbInput ?? 0, CarbsTolerance = 1.0 });
+            MatchCriteriaMapper.From(e));
+
+    private static DeduplicationInput ToInput(NoteEntity e, string? dataSource = null) =>
+        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+            MatchCriteriaMapper.ForNote());
 
     private static StateSpan CreateTestStateSpan(
         StateSpanCategory category,
@@ -1539,22 +1641,12 @@ public class DeduplicationServiceTests : IDisposable
         };
     }
 
-    // Mirrors TempBasalRepository, including the duration the exact comparison reads.
-    private static DeduplicationInput ToDeduplicationInput(TempBasalEntity entity)
-    {
-        return new DeduplicationInput(
+    private static DeduplicationInput ToDeduplicationInput(TempBasalEntity entity) =>
+        new(
             RecordId: entity.Id,
             Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             DataSource: entity.DataSource ?? DeduplicationInput.UnknownDataSource,
-            Criteria: new MatchCriteria
-            {
-                Rate = entity.Rate,
-                RateTolerance = 0.05,
-                Duration = entity.EndTimestamp.HasValue
-                    ? entity.EndTimestamp.Value - entity.StartTimestamp
-                    : null
-            });
-    }
+            Criteria: MatchCriteriaMapper.From(entity));
 
     private static TempBasalEntity CreateTestTempBasalEntity(
         DateTime startTimestamp,

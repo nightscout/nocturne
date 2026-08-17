@@ -75,11 +75,16 @@ public static class MatchCriteriaMapper
     public static MatchCriteria From(StateSpanEntity entity) =>
         new()
         {
-            Category = Enum.TryParse<StateSpanCategory>(entity.Category, ignoreCase: true, out var category)
-                ? category
-                : null,
+            Category = CategoriesByName.TryGetValue(entity.Category, out var category) ? category : null,
             State = entity.State
         };
+
+    /// <summary>
+    /// Categories keyed by name. A name lookup rather than <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>,
+    /// which also accepts the numeric form and would read a column holding "3" as a real category.
+    /// </summary>
+    private static readonly Dictionary<string, StateSpanCategory> CategoriesByName =
+        Enum.GetValues<StateSpanCategory>().ToDictionary(c => c.ToString(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Criteria for a note, which matches on its time window alone.</summary>
     public static MatchCriteria ForNote() => new();

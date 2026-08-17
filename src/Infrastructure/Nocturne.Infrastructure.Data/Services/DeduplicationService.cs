@@ -394,19 +394,22 @@ public class DeduplicationService : IDeduplicationService
             .Where(lr => lr.SourceTimestamp >= minMills && lr.SourceTimestamp <= maxMills)
             .ToListAsync(ct);
 
-        // 3. One query: load type-specific matcher
+        // 3. One query: the criteria and soft-deleted status behind every candidate link, read by
+        //    both the tight matcher below and the wide pass.
         var referencedIds = allPotentialMatches.Select(m => m.RecordId).ToHashSet();
-        var matcher = await LoadMatcherAsync(recordType, referencedIds, ct);
+        var info = await LoadRecordInfoAsync(recordType, referencedIds, ct);
 
-        // 3b. Wide-path inputs, loaded only for wide-eligible types: the per-candidate criteria
-        //     the exact comparison runs against, and the data sources behind each candidate group.
-        //     groupSources is mutated as this chunk assigns records, so a second record of the same
-        //     source sees the group its predecessor just joined.
-        Dictionary<Guid, RecordInfo> wideInfo = new();
+        bool Matches(Guid recordId, MatchCriteria criteria) =>
+            info.TryGetValue(recordId, out var candidate)
+            && !candidate.IsDeleted
+            && CriteriaMatch(recordType, candidate.Criteria, criteria);
+
+        // 3b. The data sources behind each candidate group, needed only by the wide pass.
+        //     Mutated as this chunk assigns records, so a second record of the same source sees
+        //     the group its predecessor just joined.
         Dictionary<Guid, HashSet<string>> groupSources = new();
         if (wideEligible)
         {
-            wideInfo = await LoadRecordInfoAsync(recordType, referencedIds, ct);
             groupSources = await LoadGroupSourcesAsync(
                 recordTypeStr, allPotentialMatches.Select(m => m.CanonicalId).Distinct().ToList(), ct);
         }
@@ -473,7 +476,7 @@ public class DeduplicationService : IDeduplicationService
             for (int i = lo; i < hi; i++)
             {
                 var m = allPotentialMatches[i];
-                if (matcher(m.RecordId, record.Criteria))
+                if (Matches(m.RecordId, record.Criteria))
                 {
                     canonicalId = m.CanonicalId;
                     duplicateGroups++;
@@ -515,7 +518,7 @@ public class DeduplicationService : IDeduplicationService
                 for (int i = wideLo; i < wideHi; i++)
                 {
                     var m = allPotentialMatches[i];
-                    if (wideInfo.TryGetValue(m.RecordId, out var recordInfo)
+                    if (info.TryGetValue(m.RecordId, out var recordInfo)
                         && !recordInfo.IsDeleted
                         && CriteriaMatch(recordType, recordInfo.Criteria, record.Criteria, exact: true))
                     {
@@ -1272,118 +1275,6 @@ public class DeduplicationService : IDeduplicationService
         RecordType recordType, HashSet<Guid> ids, CancellationToken ct = default)
         => LoadRecordInfoAsync(recordType, ids, ct);
 
-    private async Task<Func<Guid, MatchCriteria, bool>> LoadMatcherAsync(
-        RecordType recordType, HashSet<Guid> ids, CancellationToken ct)
-    {
-        if (ids.Count == 0)
-            return (_, _) => false;
-
-        switch (recordType)
-        {
-            case RecordType.TempBasal:
-            {
-                var records = (await _context.TempBasals
-                    .AsNoTracking()
-                    .Where(t => ids.Contains(t.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(t => t.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var tb) && criteria.Rate.HasValue
-                    && Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance;
-            }
-            case RecordType.SensorGlucose:
-            {
-                var records = (await _context.SensorGlucose
-                    .AsNoTracking()
-                    .Where(s => ids.Contains(s.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(s => s.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var sg) && criteria.GlucoseValue.HasValue
-                    && Math.Abs(sg.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
-            }
-            case RecordType.Bolus:
-            {
-                var records = (await _context.Boluses
-                    .AsNoTracking()
-                    .Where(b => ids.Contains(b.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(b => b.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var b) && criteria.Insulin.HasValue
-                    && Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance;
-            }
-            case RecordType.CarbIntake:
-            {
-                var records = (await _context.CarbIntakes
-                    .AsNoTracking()
-                    .Where(c => ids.Contains(c.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(c => c.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var c) && criteria.Carbs.HasValue
-                    && Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance;
-            }
-            case RecordType.BGCheck:
-            {
-                var records = (await _context.BGChecks
-                    .AsNoTracking()
-                    .Where(bg => ids.Contains(bg.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(bg => bg.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var bg) && criteria.GlucoseValue.HasValue
-                    && Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
-            }
-            case RecordType.DeviceEvent:
-            {
-                var records = (await _context.DeviceEvents
-                    .AsNoTracking()
-                    .Where(d => ids.Contains(d.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(d => d.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var d) && !string.IsNullOrEmpty(criteria.EventType)
-                    && string.Equals(d.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase);
-            }
-            case RecordType.Note:
-                return (_, _) => true; // time-window only matching
-            case RecordType.BolusCalculation:
-            {
-                var records = (await _context.BolusCalculations
-                    .AsNoTracking()
-                    .Where(bc => ids.Contains(bc.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(bc => bc.Id);
-                return (id, criteria) =>
-                    records.TryGetValue(id, out var bc) && criteria.Carbs.HasValue
-                    && Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance;
-            }
-            case RecordType.StateSpan:
-            {
-                var records = (await _context.StateSpans
-                    .AsNoTracking()
-                    .Where(s => ids.Contains(s.Id))
-                    .ToListAsync(ct))
-                    .ToDictionary(s => s.Id);
-                return (id, criteria) =>
-                {
-                    if (!records.TryGetValue(id, out var ss) || !criteria.Category.HasValue)
-                        return false;
-                    var categoryStr = criteria.Category.Value.ToString();
-                    if (!string.Equals(ss.Category, categoryStr, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                    if (!string.IsNullOrEmpty(criteria.State)
-                        && !string.Equals(ss.State, criteria.State, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                    return true;
-                };
-            }
-            default:
-                return (_, _) => false;
-        }
-    }
-
     private static int LowerBoundTimestamp(long[] sortedTimestamps, long value)
     {
         int lo = 0, hi = sortedTimestamps.Length;
@@ -1445,16 +1336,20 @@ public class DeduplicationService : IDeduplicationService
             RecordType.BolusCalculation => a.Carbs.HasValue && b.Carbs.HasValue
                 && Math.Abs(a.Carbs.Value - b.Carbs.Value) <= Tolerance(a.CarbsTolerance, b.CarbsTolerance)
                 && (!exact || (a.Carbs.Value > 0 && b.Carbs.Value > 0)),
-            // The event type is the whole value here, so exact mode adds only a presence check.
+            // The event type is the whole value here, so an absent one leaves nothing to compare and
+            // every such event in the window would read as equal to every other.
             // Distinguishing two same-type events relies on the single-candidate and disjoint-source
             // guards instead: when a type genuinely repeats within ten minutes both connectors
             // report both occurrences, which puts two candidates in range and refuses the match.
-            RecordType.DeviceEvent => (!exact || !string.IsNullOrEmpty(a.EventType))
+            RecordType.DeviceEvent => !string.IsNullOrEmpty(a.EventType)
                 && string.Equals(a.EventType, b.EventType, StringComparison.OrdinalIgnoreCase),
             RecordType.Note => true,
-            RecordType.StateSpan => a.Category == b.Category
-                && (string.IsNullOrEmpty(a.State) || string.IsNullOrEmpty(b.State)
-                    || string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase)),
+            // An unparseable category maps to null, so null == null would collapse every state span
+            // whose category the mapper could not read into one group. The states must agree
+            // outright: treating an absent one as a wildcard makes the result depend on which span
+            // is the argument, and the merge pass compares stored spans in both orders.
+            RecordType.StateSpan => a.Category.HasValue && a.Category == b.Category
+                && string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase),
             _ => false
         };
     }
