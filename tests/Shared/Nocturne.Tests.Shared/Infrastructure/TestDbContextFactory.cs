@@ -7,11 +7,15 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 
 public static class TestDbContextFactory
 {
-    public static NocturneDbContext CreateInMemoryContext(string? databaseName = null)
+    /// <param name="interceptors">Interceptors the behaviour under test depends on, e.g.
+    /// <c>MutationAuditInterceptor</c> for anything reading the soft-delete attribution flag.</param>
+    public static NocturneDbContext CreateInMemoryContext(
+        string? databaseName = null, params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(databaseName ?? $"nocturne_tests_{Guid.NewGuid()}")
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .AddInterceptors(interceptors)
             .EnableSensitiveDataLogging()
             .Options;
 

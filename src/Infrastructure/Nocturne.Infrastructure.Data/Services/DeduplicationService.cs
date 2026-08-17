@@ -1225,8 +1225,8 @@ public class DeduplicationService : IDeduplicationService
 
     /// <summary>
     /// State spans are loaded apart from <see cref="LoadAsync{TEntity}"/> because
-    /// <see cref="StateSpanEntity"/> is not an <see cref="IV4Entity"/> and carries no
-    /// <c>DeletedAt</c> column, so it is never soft-deleted.
+    /// <see cref="StateSpanEntity"/> is keyed by <c>OriginalId</c> rather than the
+    /// <c>LegacyId</c> that <see cref="IV4Entity"/> requires.
     /// </summary>
     private async Task<Dictionary<Guid, RecordInfo>> LoadStateSpanInfoAsync(
         HashSet<Guid> ids, CancellationToken ct)
@@ -1234,7 +1234,7 @@ public class DeduplicationService : IDeduplicationService
         var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
             .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
         return records.ToDictionary(s => s.Id,
-            s => new RecordInfo(MatchCriteriaMapper.From(s), IsDeleted: false));
+            s => new RecordInfo(MatchCriteriaMapper.From(s), s.DeletedAt != null));
     }
 
     /// <summary>

@@ -109,7 +109,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Carbs = 20,
         });
 
-        // Auditable but not soft-deletable: audited hard delete.
         db.StateSpans.Add(new StateSpanEntity
         {
             Id = Guid.CreateVersion7(),
@@ -168,9 +167,8 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             a.EntityType == "Bolus" && a.EntityId == bolus.Id && a.Action == "delete"))
             .AuthType.Should().Be(AuthType);
 
-        // StateSpan is hard-deleted but still leaves a user-attributed delete audit row.
-        (await assertCtx.StateSpans.IgnoreQueryFilters().AnyAsync(s => s.Source == _deviceId))
-            .Should().BeFalse();
+        (await assertCtx.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.Source == _deviceId))
+            .DeletedAt.Should().NotBeNull();
         (await assertCtx.MutationAuditLog.Where(a => a.EntityType == "StateSpan" && a.Action == "delete")
             .ToListAsync())
             .Should().ContainSingle().Which.AuthType.Should().Be(AuthType);
