@@ -492,20 +492,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             foodEntryImports, carbs, foodResolver, config, cancellationToken);
 
         // 4. State spans
-        if (activeTypes.Contains(SyncDataType.StateSpans))
-        {
-            var stateSpans = context.StateSpanMapper.TransformV2ToStateSpans(batchData);
-            if (stateSpans.Count > 0)
-                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+            context.StateSpanMapper.TransformV2ToStateSpans(batchData),
+            PublishStateSpanDataAsync, config, cancellationToken);
 
         // 5. Temp basals
-        if (activeTypes.Contains(SyncDataType.TempBasals))
-        {
-            var tempBasals = context.TempBasalMapper.TransformV2ToTempBasals(batchData);
-            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
-                result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
+            context.TempBasalMapper.TransformV2ToTempBasals(batchData),
+            PublishTempBasalDataAsync, config, cancellationToken);
 
         return true;
     }
@@ -616,38 +610,25 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             foodEntryImports, allCarbs, foodResolver, config, cancellationToken);
 
         // 4. State spans
-        if (activeTypes.Contains(SyncDataType.StateSpans))
-        {
-            var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
-            stateSpans.AddRange(context.StateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
-            if (stateSpans.Count > 0)
-                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
-        }
+        var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
+        stateSpans.AddRange(context.StateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
+        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+            stateSpans, PublishStateSpanDataAsync, config, cancellationToken);
 
         // 4b. Temp basals
-        if (activeTypes.Contains(SyncDataType.TempBasals))
-        {
-            var tempBasals = context.TempBasalMapper.TransformV3ToTempBasals(v3Data);
-            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
-                result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
+            context.TempBasalMapper.TransformV3ToTempBasals(v3Data),
+            PublishTempBasalDataAsync, config, cancellationToken);
 
-        // 5. Device events + system events (summed into single ItemsSynced entry)
-        if (activeTypes.Contains(SyncDataType.DeviceEvents))
-        {
-            var deviceEventCount = 0;
+        // 5. Device events + system events — system events have no SyncDataType of their own, so both
+        // count towards DeviceEvents.
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+            context.V4TreatmentMapper.MapV3DeviceEvents(v3Data),
+            PublishDeviceEventDataAsync, config, cancellationToken);
 
-            var deviceEvents = context.V4TreatmentMapper.MapV3DeviceEvents(v3Data);
-            if (deviceEvents.Count > 0 && await PublishDeviceEventDataAsync(deviceEvents, config, cancellationToken))
-                deviceEventCount += deviceEvents.Count;
-
-            var systemEvents = context.SystemEventMapper.TransformV3ToSystemEvents(v3Data);
-            if (systemEvents.Count > 0 && await PublishSystemEventDataAsync(systemEvents, config, cancellationToken))
-                deviceEventCount += systemEvents.Count;
-
-            if (deviceEventCount > 0)
-                result.ItemsSynced[SyncDataType.DeviceEvents] = deviceEventCount;
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+            context.SystemEventMapper.TransformV3ToSystemEvents(v3Data),
+            PublishSystemEventDataAsync, config, cancellationToken);
 
         return true;
     }
