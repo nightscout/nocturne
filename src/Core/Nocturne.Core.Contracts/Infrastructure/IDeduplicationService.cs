@@ -10,45 +10,7 @@ namespace Nocturne.Core.Contracts.Infrastructure;
 public interface IDeduplicationService
 {
     /// <summary>
-    /// Find an existing canonical group that matches the given criteria, or create a new one
-    /// </summary>
-    /// <param name="recordType">The type of record being deduplicated</param>
-    /// <param name="mills">The timestamp of the record in milliseconds</param>
-    /// <param name="criteria">Matching criteria for finding duplicates</param>
-    /// <param name="dataSource">
-    /// The data source identifier of the record being matched. Required for the wide matching
-    /// window, which only merges records from different sources; when omitted the record is
-    /// matched on the tight window alone.
-    /// </param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The canonical ID for the matching group (existing or newly created)</returns>
-    Task<Guid> GetOrCreateCanonicalIdAsync(
-        RecordType recordType,
-        long mills,
-        MatchCriteria criteria,
-        string? dataSource = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Link a record to a canonical group
-    /// </summary>
-    /// <param name="canonicalId">The canonical group ID</param>
-    /// <param name="recordType">The type of record being linked</param>
-    /// <param name="recordId">The ID of the record to link</param>
-    /// <param name="mills">The timestamp of the record in milliseconds</param>
-    /// <param name="dataSource">The data source identifier</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task LinkRecordAsync(
-        Guid canonicalId,
-        RecordType recordType,
-        Guid recordId,
-        long mills,
-        string dataSource,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Deduplicate a batch of records: find or create canonical groups and link all records in bulk.
-    /// Replaces per-record GetOrCreateCanonicalIdAsync + LinkRecordAsync loops.
     /// </summary>
     /// <param name="recordType">The type of all records in the batch</param>
     /// <param name="records">The records to deduplicate</param>

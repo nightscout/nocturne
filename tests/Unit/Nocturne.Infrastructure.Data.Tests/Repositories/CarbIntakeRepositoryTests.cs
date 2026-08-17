@@ -53,23 +53,6 @@ public class CarbIntakeRepositoryTests : IDisposable
         _context.TenantId = TestTenantId;
 
         _mockDeduplicationService = new Mock<IDeduplicationService>();
-        _mockDeduplicationService
-            .Setup(d => d.GetOrCreateCanonicalIdAsync(
-                It.IsAny<RecordType>(),
-                It.IsAny<long>(),
-                It.IsAny<MatchCriteria>(),
-                It.IsAny<string?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Guid.NewGuid());
-        _mockDeduplicationService
-            .Setup(d => d.LinkRecordAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<RecordType>(),
-                It.IsAny<Guid>(),
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
 
         _repo = new CarbIntakeRepository(
             new TestTenantDbContextFactory(_context),
@@ -186,16 +169,14 @@ public class CarbIntakeRepositoryTests : IDisposable
         // And the new insert
         results.Should().ContainSingle(r => r.SyncIdentifier == "sync-2" && r.Carbs == 15.0);
 
-        // LinkRecordAsync was NOT called for the updated-in-place row
+        // The updated-in-place row is not handed to deduplication; only the insert is
         _mockDeduplicationService.Verify(
-            d => d.LinkRecordAsync(
-                It.IsAny<Guid>(),
-                It.IsAny<RecordType>(),
-                existing.Id,
-                It.IsAny<long>(),
-                It.IsAny<string>(),
+            d => d.DeduplicateBatchAsync(
+                RecordType.CarbIntake,
+                It.Is<IReadOnlyList<DeduplicationInput>>(inputs =>
+                    inputs.All(i => i.RecordId != existing.Id)),
                 It.IsAny<CancellationToken>()),
-            Times.Never);
+            Times.Once);
     }
 
     [Fact]
