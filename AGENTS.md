@@ -135,3 +135,27 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 - We never use emoji generally, and we prefer Lucide icons over unicode emoji for UI elements.
 
 This repository is set up to use Aspire. Aspire is an orchestrator for the entire application and will take care of configuring dependencies, building, and running the application. The resources that make up the application are defined in `apphost.cs` including application code and external dependencies.
+
+## Comments
+
+A comment earns its place by carrying something a reader could not work out from the code, the
+names and the types in front of them. We do not narrate. Restating a signature or a body is not a
+weaker comment, it is one to delete.
+
+Delete on sight:
+
+- **Narration** — `// Get the user's timezone` above a call to `GetTimezone()`, or
+  `/// <summary>Gets or sets the policy.</summary>` on a property named `Policy`. Keep a `<param>`
+  only for a non-obvious default or caller contract.
+- **Benefit tails** — "..., so report pages no longer need to paginate every raw reading out."
+- **Change history** — "previously this was X", "we now do Y". That belongs in the commit message;
+  someone reading the file does not need the diff's story.
+- **Step-by-step banners** — `// 1. Load`, `// 2. Filter` over code whose structure already says so.
+- **Essays** — a paragraph where a sentence would do. A long comment is right when an invariant is
+  genuinely load-bearing, and wrong when it re-derives reasoning.
+
+Rationale lives at exactly one site — the type or method that exists to solve the problem — and
+everywhere else refers to it with `<see cref="..."/>`. Repeating an argument across call sites is a
+DRY violation in prose, and every copy can drift out of step with the others.
+
+State the non-obvious why, then stop.

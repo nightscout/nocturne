@@ -246,3 +246,6 @@ Design notes:
 - **Always use remote functions**, never raw fetch/requests on the frontend. Use the remote functions attribute to automatically generate type-safe API calls with Zod validation.
 - **Strings/messages live on the frontend** (translation layer).
 - **No emoji.** Use Lucide icons for UI elements.
+- **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
+  no step-by-step banners. Rationale lives at one site and is referenced elsewhere with
+  `<see cref="..."/>`. See the Comments section in `AGENTS.md`.
