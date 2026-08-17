@@ -34,18 +34,6 @@ public class MyLifeConnectorService(
     public override string ServiceName => "MyLife";
     protected override string ConnectorSource => DataSources.MyLifeConnector;
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.BolusCalculations,
-        SyncDataType.Notes,
-        SyncDataType.DeviceEvents,
-        SyncDataType.StateSpans,
-        SyncDataType.Profiles
-    ];
 
     public override bool IsHealthy =>
         FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;

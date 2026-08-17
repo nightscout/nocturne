@@ -55,7 +55,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
     protected override string ConnectorSource => DataSources.MyFitnessPalConnector;
     public override string ServiceName => "MyFitnessPal";
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Food];
 
     /// <inheritdoc />
     public override Task<bool> AuthenticateAsync()

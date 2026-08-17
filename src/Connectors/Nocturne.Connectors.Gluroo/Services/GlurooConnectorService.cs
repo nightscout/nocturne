@@ -22,13 +22,4 @@ public class GlurooConnectorService : NightscoutConnectorServiceBase<GlurooConne
     protected override string ConnectorSource => DataSources.GlurooConnector;
     public override string ServiceName => "Gluroo Global Connect";
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.Notes,
-        SyncDataType.Profiles
-    ];
 }

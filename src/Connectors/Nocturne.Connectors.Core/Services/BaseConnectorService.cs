@@ -1,6 +1,8 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
@@ -60,8 +62,17 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     public abstract string ServiceName { get; }
 
-    /// <inheritdoc />
-    public virtual List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
+    /// <summary>
+    /// The data types this connector fetches, read from the <see cref="ConnectorRegistrationAttribute"/>
+    /// on <typeparamref name="TConfig"/>. The attribute drives the tenant-facing toggle schema and
+    /// this property drives the sync loop, so stating them separately lets a connector advertise a
+    /// toggle it never acts on, or act on data the tenant has no way to turn off.
+    /// </summary>
+    public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
+
+    private static readonly SyncDataType[] RegisteredDataTypes =
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>()?.SupportedDataTypes
+        ?? [SyncDataType.Glucose];
 
     public abstract Task<bool> AuthenticateAsync();
 

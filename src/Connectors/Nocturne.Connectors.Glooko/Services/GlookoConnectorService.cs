@@ -58,18 +58,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     public override string ServiceName => "Glooko";
     protected override string ConnectorSource => DataSources.GlookoConnector;
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.BasalInjections,
-        SyncDataType.CarbIntake,
-        SyncDataType.StateSpans,
-        SyncDataType.TempBasals,
-        SyncDataType.DeviceEvents,
-        SyncDataType.Profiles
-    ];
 
     // ── Authentication ──────────────────────────────────────────────────
 

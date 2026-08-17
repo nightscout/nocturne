@@ -44,18 +44,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     protected override string ConnectorSource => DataSources.TConnectSyncConnector;
     public override string ServiceName => "Tandem Source";
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.BolusCalculations,
-        SyncDataType.TempBasals,
-        SyncDataType.DeviceEvents,
-        SyncDataType.StateSpans,
-        SyncDataType.DeviceStatus,
-        SyncDataType.Profiles,
-    ];
 
     public override Task<bool> AuthenticateAsync()
     {

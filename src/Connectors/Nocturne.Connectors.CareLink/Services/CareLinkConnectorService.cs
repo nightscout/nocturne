@@ -50,15 +50,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
     protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.DeviceStatus,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.TempBasals,
-        SyncDataType.StateSpans,
-    ];
 
     /// <inheritdoc />
     public override Task<bool> AuthenticateAsync()

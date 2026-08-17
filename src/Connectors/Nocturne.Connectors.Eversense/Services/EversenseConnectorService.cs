@@ -41,7 +41,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
     protected override string ConnectorSource => DataSources.EversenseConnector;
     public override string ServiceName => "Eversense Now";
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
 
     public override async Task<bool> AuthenticateAsync()
     {

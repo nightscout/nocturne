@@ -46,7 +46,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
 
     protected override string ConnectorSource => DataSources.DexcomConnector;
     public override string ServiceName => "Dexcom Share";
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
 
     public override async Task<bool> AuthenticateAsync()
     {

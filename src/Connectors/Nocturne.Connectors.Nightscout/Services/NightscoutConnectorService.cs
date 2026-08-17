@@ -48,20 +48,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     // would silently drop older records. Catch-up syncs still resume from each type's own cursor.
     protected override DateTime? InitialSyncFloor => null;
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.BolusCalculations,
-        SyncDataType.Notes,
-        SyncDataType.DeviceEvents,
-        SyncDataType.Profiles,
-        SyncDataType.DeviceStatus,
-        SyncDataType.Food,
-        SyncDataType.Activity
-    ];
 
     public override async Task<bool> AuthenticateAsync()
     {

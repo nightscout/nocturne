@@ -71,7 +71,6 @@ public class LibreConnectorService(
 
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose];
 
     public override bool IsHealthy => base.IsHealthy && !_tokenProvider.IsTokenExpired;
 

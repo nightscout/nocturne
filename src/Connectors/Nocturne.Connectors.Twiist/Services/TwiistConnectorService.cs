@@ -48,8 +48,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     protected override string ConnectorSource => DataSources.TwiistConnector;
     public override string ServiceName => "Twiist Insight";
 
-    public override List<SyncDataType> SupportedDataTypes =>
-        [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals];
 
     public override Task<bool> AuthenticateAsync()
     {

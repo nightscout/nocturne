@@ -45,12 +45,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
     protected override string ConnectorSource => DataSources.TidepoolConnector;
     public override string ServiceName => "Tidepool";
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake
-    ];
 
     public override Task<bool> AuthenticateAsync()
     {

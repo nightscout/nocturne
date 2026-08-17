@@ -34,21 +34,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
     public override string ServiceName => "Nocturne Remote";
 
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.ManualBG,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.BolusCalculations,
-        SyncDataType.Notes,
-        SyncDataType.DeviceEvents,
-        SyncDataType.StateSpans,
-        SyncDataType.Profiles,
-        SyncDataType.DeviceStatus,
-        SyncDataType.Activity,
-        SyncDataType.Food
-    ];
 
     public override async Task<bool> AuthenticateAsync()
     {
