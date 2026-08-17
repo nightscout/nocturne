@@ -1196,75 +1196,45 @@ public class DeduplicationService : IDeduplicationService
         if (ids.Count == 0)
             return new Dictionary<Guid, RecordInfo>();
 
-        switch (recordType)
+        return recordType switch
         {
-            case RecordType.SensorGlucose:
-            {
-                var records = await _context.SensorGlucose.AsNoTracking().IgnoreQueryFilters()
-                    .Where(e => e.TenantId == _context.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
-                return records.ToDictionary(e => e.Id,
-                    e => new RecordInfo(MatchCriteriaMapper.From(e), e.DeletedAt != null));
-            }
-            case RecordType.Bolus:
-            {
-                var records = await _context.Boluses.AsNoTracking().IgnoreQueryFilters()
-                    .Where(b => b.TenantId == _context.TenantId && ids.Contains(b.Id)).ToListAsync(ct);
-                return records.ToDictionary(b => b.Id,
-                    b => new RecordInfo(MatchCriteriaMapper.From(b), b.DeletedAt != null));
-            }
-            case RecordType.CarbIntake:
-            {
-                var records = await _context.CarbIntakes.AsNoTracking().IgnoreQueryFilters()
-                    .Where(c => c.TenantId == _context.TenantId && ids.Contains(c.Id)).ToListAsync(ct);
-                return records.ToDictionary(c => c.Id,
-                    c => new RecordInfo(MatchCriteriaMapper.From(c), c.DeletedAt != null));
-            }
-            case RecordType.BGCheck:
-            {
-                var records = await _context.BGChecks.AsNoTracking().IgnoreQueryFilters()
-                    .Where(bg => bg.TenantId == _context.TenantId && ids.Contains(bg.Id)).ToListAsync(ct);
-                return records.ToDictionary(bg => bg.Id,
-                    bg => new RecordInfo(MatchCriteriaMapper.From(bg), bg.DeletedAt != null));
-            }
-            case RecordType.DeviceEvent:
-            {
-                var records = await _context.DeviceEvents.AsNoTracking().IgnoreQueryFilters()
-                    .Where(d => d.TenantId == _context.TenantId && ids.Contains(d.Id)).ToListAsync(ct);
-                return records.ToDictionary(d => d.Id,
-                    d => new RecordInfo(MatchCriteriaMapper.From(d), d.DeletedAt != null));
-            }
-            case RecordType.Note:
-            {
-                var records = await _context.Notes.AsNoTracking().IgnoreQueryFilters()
-                    .Where(n => n.TenantId == _context.TenantId && ids.Contains(n.Id)).ToListAsync(ct);
-                return records.ToDictionary(n => n.Id,
-                    n => new RecordInfo(MatchCriteriaMapper.ForNote(), n.DeletedAt != null));
-            }
-            case RecordType.BolusCalculation:
-            {
-                var records = await _context.BolusCalculations.AsNoTracking().IgnoreQueryFilters()
-                    .Where(bc => bc.TenantId == _context.TenantId && ids.Contains(bc.Id)).ToListAsync(ct);
-                return records.ToDictionary(bc => bc.Id,
-                    bc => new RecordInfo(MatchCriteriaMapper.From(bc), bc.DeletedAt != null));
-            }
-            case RecordType.TempBasal:
-            {
-                var records = await _context.TempBasals.AsNoTracking().IgnoreQueryFilters()
-                    .Where(t => t.TenantId == _context.TenantId && ids.Contains(t.Id)).ToListAsync(ct);
-                return records.ToDictionary(t => t.Id,
-                    t => new RecordInfo(MatchCriteriaMapper.From(t), t.DeletedAt != null));
-            }
-            case RecordType.StateSpan:
-            {
-                // StateSpanEntity has no DeletedAt column, so IsDeleted is always false.
-                var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-                    .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
-                return records.ToDictionary(s => s.Id,
-                    s => new RecordInfo(MatchCriteriaMapper.From(s), false));
-            }
-            default:
-                return new Dictionary<Guid, RecordInfo>();
-        }
+            RecordType.SensorGlucose => await LoadAsync<SensorGlucoseEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.Bolus => await LoadAsync<BolusEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.CarbIntake => await LoadAsync<CarbIntakeEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.BGCheck => await LoadAsync<BGCheckEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.DeviceEvent => await LoadAsync<DeviceEventEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.Note => await LoadAsync<NoteEntity>(_ => MatchCriteriaMapper.ForNote(), ids, ct),
+            RecordType.BolusCalculation => await LoadAsync<BolusCalculationEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.TempBasal => await LoadAsync<TempBasalEntity>(MatchCriteriaMapper.From, ids, ct),
+            RecordType.StateSpan => await LoadStateSpanInfoAsync(ids, ct),
+            _ => new Dictionary<Guid, RecordInfo>()
+        };
+    }
+
+    /// <summary>
+    /// Loads the criteria and soft-deleted status of every requested row of one entity type.
+    /// </summary>
+    private async Task<Dictionary<Guid, RecordInfo>> LoadAsync<TEntity>(
+        Func<TEntity, MatchCriteria> toCriteria, HashSet<Guid> ids, CancellationToken ct)
+        where TEntity : class, IV4Entity
+    {
+        var records = await _context.Set<TEntity>().AsNoTracking().IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
+        return records.ToDictionary(e => e.Id, e => new RecordInfo(toCriteria(e), e.DeletedAt != null));
+    }
+
+    /// <summary>
+    /// State spans are loaded apart from <see cref="LoadAsync{TEntity}"/> because
+    /// <see cref="StateSpanEntity"/> is not an <see cref="IV4Entity"/> and carries no
+    /// <c>DeletedAt</c> column, so it is never soft-deleted.
+    /// </summary>
+    private async Task<Dictionary<Guid, RecordInfo>> LoadStateSpanInfoAsync(
+        HashSet<Guid> ids, CancellationToken ct)
+    {
+        var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
+        return records.ToDictionary(s => s.Id,
+            s => new RecordInfo(MatchCriteriaMapper.From(s), IsDeleted: false));
     }
 
     /// <summary>
