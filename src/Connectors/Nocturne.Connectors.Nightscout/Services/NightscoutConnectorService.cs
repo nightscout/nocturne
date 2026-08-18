@@ -757,21 +757,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return allEntries;
     }
 
-    protected override async Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
-        DateTime? from, DateTime? to)
-    {
-        var allTreatments = new List<Treatment>();
-        await foreach (var page in FetchTreatmentPagesAsync(from, to))
-            allTreatments.AddRange(page);
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
-            ConnectorSource,
-            allTreatments.Count);
-
-        return allTreatments;
-    }
-
     protected override async Task<IEnumerable<Profile>> FetchProfilesAsync()
     {
         var profiles = await FetchDataAsync<Profile[]>(

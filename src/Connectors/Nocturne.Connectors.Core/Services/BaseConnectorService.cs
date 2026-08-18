@@ -394,14 +394,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return FetchGlucoseDataAsync(from);
     }
 
-    protected virtual Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<Treatment>());
-    }
-
     protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
     {
         return Task.FromResult(Enumerable.Empty<Profile>());
