@@ -185,8 +185,12 @@ export class RealtimeStore {
     return this.currentBG - this.previousBG;
   });
 
-  /** Direction and trend */
-  direction = $derived(this.currentEntry?.direction || "Flat");
+  /**
+   * Trend direction exactly as the reading carried it, empty when it carried none.
+   * Consumers render the unknown state; substituting a drawable direction here would
+   * report a trend the CGM never sent.
+   */
+  direction = $derived(this.currentEntry?.direction ?? "");
 
   /** Time since last update */
   lastUpdated = $derived(this.currentEntry?.mills || Date.now());
@@ -1181,6 +1185,7 @@ export function tryGetRealtimeStore(): RealtimeStore | null {
 export interface ClockGlucoseSource {
   readonly currentBG: number;
   readonly bgDelta: number;
+  /** Empty when the reading carried no direction. */
   readonly direction: string;
   readonly lastUpdated: number;
   readonly demoMode: boolean;

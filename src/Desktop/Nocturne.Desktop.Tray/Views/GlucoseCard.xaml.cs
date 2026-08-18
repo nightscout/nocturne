@@ -43,9 +43,13 @@ public sealed partial class GlucoseCard : UserControl
         BgValueText.Text = GlucoseRangeHelper.FormatValue(reading.Sgv, settings.Unit);
         BgValueText.Foreground = brush;
 
-        TrendArrowText.Text = "\uE74A";
+        var direction = reading.Direction.ToString();
+        var rotation = TrendHelper.GetArrowRotation(direction);
+        TrendArrowText.Text = rotation is null
+            ? TrendHelper.GetArrowGlyph(direction)
+            : TrendHelper.ArrowUpGlyph;
         TrendArrowText.Foreground = brush;
-        TrendArrowRotation.Angle = TrendHelper.GetArrowRotation(reading.Direction.ToString());
+        TrendArrowRotation.Angle = rotation ?? 0;
 
         var delta = GlucoseRangeHelper.FormatDelta(reading.Delta, settings.Unit);
         DeltaText.Text = delta;

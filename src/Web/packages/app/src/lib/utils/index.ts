@@ -16,10 +16,19 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-const directionInfo: Partial<Record<
-  Direction,
-  { label: string; icon: SvelteComponent; css: string }
->> = {
+type DirectionInfo = { label: string; icon: SvelteComponent; css: string };
+
+/**
+ * Shown for every direction no arrow can express — none reported, not computable, or a
+ * spelling this build does not know. A trend we do not have must never read as a stable one.
+ */
+const unknownDirectionInfo: DirectionInfo = {
+  label: "unknown",
+  icon: HelpCircle,
+  css: "text-gray-500",
+};
+
+const directionInfo: Partial<Record<Direction, DirectionInfo>> = {
   [Direction.DoubleUp]: {
     label: "rising very fast",
     icon: ArrowUp,
@@ -51,16 +60,13 @@ const directionInfo: Partial<Record<
     icon: ArrowDown,
     css: "text-red-500",
   },
-  [Direction.NotComputable]: {
-    label: "unknown",
-    icon: HelpCircle,
-    css: "text-gray-500",
-  },
   [Direction.RateOutOfRange]: {
     label: "out of range",
     icon: AlertTriangle,
     css: "text-gray-500",
   },
+  [Direction.NONE]: unknownDirectionInfo,
+  [Direction.NotComputable]: unknownDirectionInfo,
 };
 
 /**
@@ -74,11 +80,11 @@ const directionsByName = new Map(
 );
 
 /** Get BG trend direction information */
-export function getDirectionInfo(direction?: Direction | string) {
+export function getDirectionInfo(direction?: Direction | string): DirectionInfo {
   const name = direction
     ? directionsByName.get(normaliseDirection(direction))
     : undefined;
-  return directionInfo[name ?? Direction.Flat] || directionInfo[Direction.Flat]!;
+  return directionInfo[name ?? Direction.NONE] ?? unknownDirectionInfo;
 }
 
 /** Enhanced relative time formatting with internationalization support */

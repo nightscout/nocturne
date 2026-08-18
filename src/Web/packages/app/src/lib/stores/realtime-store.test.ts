@@ -38,7 +38,7 @@ interface StoreInternals {
 }
 
 type TestStore = StoreInternals &
-  Pick<RealtimeStore, "currentReservoir" | "destroy">;
+  Pick<RealtimeStore, "currentReservoir" | "entries" | "direction" | "destroy">;
 
 /** Store instance with an empty socket URL, so nothing connects. */
 function makeStore(): TestStore {
@@ -138,6 +138,30 @@ describe("RealtimeStore reservoir freshness", () => {
     await store.performBackfillIfNeeded(true);
 
     expect(store.currentReservoir).toBe(30);
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore direction", () => {
+  it("passes the reported direction through", () => {
+    const store = makeStore();
+    store.entries = [{ mills: 1_000, sgv: 120, direction: "FortyFiveDown" }];
+
+    expect(store.direction).toBe("FortyFiveDown");
+
+    store.destroy();
+  });
+
+  it.each([
+    ["an entry with no direction", [{ mills: 1_000, sgv: 120 }]],
+    ["an empty direction", [{ mills: 1_000, sgv: 120, direction: "" }]],
+    ["no entries at all", []],
+  ])("reports no direction for %s rather than Flat", (_case, entries) => {
+    const store = makeStore();
+    store.entries = entries;
+
+    expect(store.direction).toBe("");
 
     store.destroy();
   });

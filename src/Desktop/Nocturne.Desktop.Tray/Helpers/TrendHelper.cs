@@ -9,6 +9,15 @@ namespace Nocturne.Desktop.Tray.Helpers;
 /// </summary>
 public static class TrendHelper
 {
+    /// <summary>Segoe Fluent Icons upward arrow, the glyph <see cref="GetArrowRotation"/> rotates.</summary>
+    public const string ArrowUpGlyph = "\uE74A";
+
+    /// <summary>
+    /// Segoe Fluent Icons glyph for a direction no arrow can express. Rendered unrotated:
+    /// a rotated glyph would report a trend the CGM never sent, and 90 degrees reads as stable.
+    /// </summary>
+    public const string UnknownGlyph = "\uE9CE";
+
     /// <summary>
     /// Returns a Segoe Fluent Icons glyph for the given direction.
     /// Windows-specific: uses Segoe Fluent Icon font codepoints.
@@ -17,24 +26,25 @@ public static class TrendHelper
     {
         return direction switch
         {
-            "TripleUp" => "\uE74A",
-            "DoubleUp" => "\uE74A",
-            "SingleUp" => "\uE74A",
+            "TripleUp" => ArrowUpGlyph,
+            "DoubleUp" => ArrowUpGlyph,
+            "SingleUp" => ArrowUpGlyph,
             "FortyFiveUp" => "\uE76C",
             "Flat" => "\uE76C",
             "FortyFiveDown" => "\uE76C",
             "SingleDown" => "\uE74B",
             "DoubleDown" => "\uE74B",
             "TripleDown" => "\uE74B",
-            _ => "\uE9CE",
+            _ => UnknownGlyph,
         };
     }
 
     /// <summary>
-    /// Returns the rotation angle for a Segoe Fluent Icons arrow glyph.
+    /// Returns the rotation angle for <see cref="ArrowUpGlyph"/>, or <c>null</c> when no arrow
+    /// can express the direction. Callers must then render <see cref="UnknownGlyph"/> unrotated.
     /// Windows-specific: used with WinUI RotateTransform.
     /// </summary>
-    public static double GetArrowRotation(string? direction)
+    public static double? GetArrowRotation(string? direction)
     {
         return direction switch
         {
@@ -47,7 +57,7 @@ public static class TrendHelper
             "SingleDown" => 180,
             "DoubleDown" => 180,
             "TripleDown" => 180,
-            _ => 90,
+            _ => null,
         };
     }
 
