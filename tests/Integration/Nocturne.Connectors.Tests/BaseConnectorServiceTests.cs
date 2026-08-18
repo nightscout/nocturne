@@ -132,6 +132,14 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
         return Task.FromResult<IEnumerable<Entry>>(entries);
     }
 
+    // This double only exercises the publish path, never a sync run.
+    protected override Task<SyncResult> PerformSyncInternalAsync(
+        SyncRequest request,
+        TestConnectorConfiguration config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter = null)
+        => throw new NotSupportedException();
+
     // Public wrapper for testing protected method
     public Task<bool> PublishGlucoseDataAsyncPublic(
         IEnumerable<Entry> entries,

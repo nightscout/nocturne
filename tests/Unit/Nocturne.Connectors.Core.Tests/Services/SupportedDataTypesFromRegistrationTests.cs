@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Models;
@@ -29,6 +30,14 @@ public class SupportedDataTypesFromRegistrationTests
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
         public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
+
+        // These tests only read SupportedDataTypes, never run a sync.
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request,
+            TConfig config,
+            CancellationToken cancellationToken,
+            ISyncProgressReporter? progressReporter = null)
+            => throw new NotSupportedException();
     }
 
     private static Service<TConfig> Build<TConfig>() where TConfig : BaseConnectorConfiguration =>

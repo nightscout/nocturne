@@ -373,164 +373,18 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected static DateTime DefaultInitialSyncFloor() => DateTime.UtcNow.AddMonths(-6);
 
     /// <summary>
-    ///     Core synchronization logic that processes data types sequentially.
-    ///     Shared between manual and background sync flows.
+    ///     Core synchronization logic: fetches and publishes every data type the tenant has enabled,
+    ///     honouring <see cref="BaseConnectorConfiguration.GetEnabledDataTypes"/> over
+    ///     <see cref="SupportedDataTypes"/>. Shared between the manual and background sync flows.
+    ///     There is deliberately no default implementation: a connector that advertises data types it
+    ///     does not sync would fail silently, so the omission is a compile error instead.
     /// </summary>
-    protected virtual async Task<SyncResult> PerformSyncInternalAsync(
+    protected abstract Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
         CancellationToken cancellationToken,
         ISyncProgressReporter? progressReporter = null
-    )
-    {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
-
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var disabledTypes = SupportedDataTypes.Except(enabledTypes).ToList();
-        if (disabledTypes.Count > 0)
-            _logger.LogInformation(
-                "Skipping disabled data types for {Connector}: {DisabledTypes}",
-                ConnectorSource,
-                string.Join(", ", disabledTypes));
-
-        var typesToSync = request.DataTypes.Where(type => enabledTypes.Contains(type)).ToList();
-        var completedTypes = new List<SyncDataType>();
-        var itemsSoFar = new Dictionary<SyncDataType, int>();
-
-        foreach (var type in typesToSync)
-        {
-            if (progressReporter != null)
-            {
-                await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                {
-                    ConnectorId = ConnectorSource,
-                    ConnectorName = ServiceName,
-                    Phase = SyncPhase.Syncing,
-                    CurrentDataType = type,
-                    CompletedDataTypes = [.. completedTypes],
-                    TotalDataTypes = typesToSync.Count,
-                    ItemsSyncedSoFar = new(itemsSoFar),
-                    MessageType = SyncMessageType.FetchingDataType,
-                    MessageParams = new() { ["dataType"] = type.ToString() },
-                }, cancellationToken);
-            }
-
-            try
-            {
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                switch (type)
-                {
-                    case SyncDataType.Glucose:
-                        var entries = await FetchGlucoseDataRangeAsync(
-                            request.From,
-                            request.To
-                        );
-                        var entryList = entries.ToList();
-                        count = entryList.Count;
-                        if (count > 0)
-                            lastTime = entryList.Max(e => e.Date);
-                        publishSuccess = await PublishGlucoseDataInBatchesAsync(
-                            entryList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    case SyncDataType.Profiles:
-                        var profiles = await FetchProfilesAsync();
-                        var profileList = profiles.ToList();
-                        count = profileList.Count;
-                        if (count > 0)
-                            lastTime = profileList
-                                .Where(p => p.Mills > 0)
-                                .Select(p => DateTimeOffset.FromUnixTimeMilliseconds(p.Mills).UtcDateTime)
-                                .DefaultIfEmpty()
-                                .Max();
-                        publishSuccess = await PublishProfileDataAsync(
-                            profileList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    default:
-                        _logger.LogDebug(
-                            "Data type {DataType} not supported by this connector",
-                            type
-                        );
-                        break;
-                }
-
-                result.ItemsSynced[type] = count;
-                result.LastEntryTimes[type] = lastTime;
-                if (!publishSuccess)
-                {
-                    result.Success = false;
-                    result.Errors.Add($"{type} publish failed");
-                }
-
-                if (progressReporter != null && count > 0)
-                {
-                    await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                    {
-                        ConnectorId = ConnectorSource,
-                        ConnectorName = ServiceName,
-                        Phase = SyncPhase.Syncing,
-                        CurrentDataType = type,
-                        CompletedDataTypes = [.. completedTypes],
-                        TotalDataTypes = typesToSync.Count,
-                        ItemsSyncedSoFar = new(itemsSoFar) { [type] = count },
-                        MessageType = SyncMessageType.PublishingDataType,
-                        MessageParams = new() { ["dataType"] = type.ToString(), ["count"] = count.ToString() },
-                    }, cancellationToken);
-                }
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = count;
-            }
-            catch (Exception ex)
-            {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-
-                _logger.LogError(
-                    ex,
-                    "Failed to sync {DataType} for {Connector}",
-                    type,
-                    ConnectorSource
-                );
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = 0;
-            }
-        }
-
-        result.EndTime = DateTimeOffset.UtcNow;
-
-        if (progressReporter != null)
-        {
-            await progressReporter.ReportProgressAsync(new SyncProgressEvent
-            {
-                ConnectorId = ConnectorSource,
-                ConnectorName = ServiceName,
-                Phase = result.Success ? SyncPhase.Completed : SyncPhase.Failed,
-                CurrentDataType = null,
-                CompletedDataTypes = [.. completedTypes],
-                TotalDataTypes = typesToSync.Count,
-                ItemsSyncedSoFar = new(itemsSoFar),
-                ErrorMessage = result.Success ? null : string.Join("; ", result.Errors),
-                MessageType = result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
-            }, cancellationToken);
-        }
-
-        return result;
-    }
+    );
 
     protected virtual Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
         DateTime? from,

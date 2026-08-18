@@ -104,8 +104,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             var time = new TandemTimeResolver(config.TimezoneOffset);
 
-            if (enabled.Contains(SyncDataType.Profiles))
-                await SyncProfilesAsync(device, time, result, config, cancellationToken);
+            await SyncProfilesAsync(device, enabled, result, config, cancellationToken);
 
             await SyncEventsAsync(region, pumperId, device, enabled, time, result, config, cancellationToken);
         }
@@ -126,20 +125,16 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     private async Task SyncProfilesAsync(
-        TandemBffPump device, TandemTimeResolver time, SyncResult result,
+        TandemBffPump device, HashSet<SyncDataType> enabled, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details);
         if (profile == null)
             return;
 
-        var success = await PublishProfileDataAsync([profile], config, cancellationToken);
-        result.ItemsSynced[SyncDataType.Profiles] = 1;
-        if (!success)
-        {
-            result.Success = false;
-            result.Errors.Add("Profile publish failed");
-        }
+        await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
+            result, SyncDataType.Profiles, enabled, [profile],
+            PublishProfileDataAsync, config, cancellationToken);
     }
 
     private async Task SyncEventsAsync(
@@ -212,62 +207,44 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
         SyncResult result, TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        if (enabled.Contains(SyncDataType.Glucose) && groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
-            await PublishAsync(SyncDataType.Glucose, cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, result, config, cancellationToken);
+        if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabled,
+                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
             var decomposed = bolus.Map(bolusEvents);
-            if (enabled.Contains(SyncDataType.Boluses))
-                await PublishAsync(SyncDataType.Boluses, decomposed.Boluses, PublishBolusDataAsync, result, config, cancellationToken);
-            if (enabled.Contains(SyncDataType.CarbIntake))
-                await PublishAsync(SyncDataType.CarbIntake, decomposed.CarbIntakes, PublishCarbIntakeDataAsync, result, config, cancellationToken);
-            if (enabled.Contains(SyncDataType.BolusCalculations))
-                await PublishAsync(SyncDataType.BolusCalculations, decomposed.BolusCalculations, PublishBolusCalculationDataAsync, result, config, cancellationToken);
+            await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabled,
+                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabled,
+                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken);
+            await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, enabled,
+                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken);
         }
 
-        if (enabled.Contains(SyncDataType.TempBasals) && groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
-            await PublishAsync(SyncDataType.TempBasals, basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync, result, config, cancellationToken);
+        if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
+            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabled,
+                basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
+                config, cancellationToken);
 
-        if (enabled.Contains(SyncDataType.DeviceEvents))
-        {
-            var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
-                TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
-            if (devEvents.Count > 0)
-                await PublishAsync(SyncDataType.DeviceEvents, deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, result, config, cancellationToken);
+        var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
+            TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
+            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken);
 
-            var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
-            if (sysEvents.Count > 0)
-                // System events (alarms / CGM alerts) are gated and accounted under DeviceEvents —
-                // there is no dedicated SyncDataType for them — so a publish failure flips Success.
-                await PublishAsync(SyncDataType.DeviceEvents, systemEvents.Map(sysEvents),
-                    PublishSystemEventDataAsync, result, config, cancellationToken);
-        }
+        // Alarms and CGM alerts are gated and accounted under DeviceEvents — there is no dedicated
+        // SyncDataType for them — so a publish failure flips Success.
+        var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
+            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
 
-        if (enabled.Contains(SyncDataType.StateSpans) && groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
-            await PublishAsync(SyncDataType.StateSpans, userMode.Map(userModeEvents), PublishStateSpanDataAsync, result, config, cancellationToken);
+        if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
+            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, enabled,
+                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken);
 
-        if (enabled.Contains(SyncDataType.DeviceStatus) && groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
-            await PublishAsync(SyncDataType.DeviceStatus, deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, result, config, cancellationToken);
-    }
-
-    private async Task PublishAsync<T>(
-        SyncDataType type, List<T> records,
-        Func<IEnumerable<T>, TandemConnectorConfiguration, CancellationToken, Task<bool>> publish,
-        SyncResult result, TandemConnectorConfiguration config, CancellationToken cancellationToken)
-        where T : class
-    {
-        if (records.Count == 0)
-            return;
-
-        var success = await publish(records, config, cancellationToken);
-        result.ItemsSynced.TryGetValue(type, out var prev);
-        result.ItemsSynced[type] = prev + records.Count;
-        if (!success)
-        {
-            result.Success = false;
-            result.Errors.Add($"{type} publish failed");
-        }
+        if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, enabled,
+                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
     }
 
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(
