@@ -43,8 +43,11 @@ interface LinkResolutionInput {
  * - **Multiple candidates + label arg matches exactly one** → invokes
  *   callback with the matched link.
  *
- * - **Multiple candidates + no label arg** → explains the ambiguity, listing
- *   each label and display name, and returns null.
+ * - **Multiple candidates + no label arg + exactly one marked default** →
+ *   invokes callback with the default link.
+ *
+ * - **Multiple candidates + no label arg + no single default** → explains the
+ *   ambiguity, listing each label and display name, and returns null.
  *
  * - **Multiple candidates + label arg does not match any** → explains "no link
  *   named X, try one of: ..." and returns null.
@@ -69,8 +72,13 @@ interface LinkResolutionInput {
  * //   Resolves to the "work" link.
  *
  * @example
+ * // Multi + default:
+ * //   User has "home" and "work", with "work" set as their default.
+ * //   They run `/bg`. Resolves to "work" without asking.
+ *
+ * @example
  * // Multi + ambiguous:
- * //   User has "home" and "work". They run `/bg`.
+ * //   User has "home" and "work", neither set as default. They run `/bg`.
  * //   Ephemeral: "You have multiple linked Nocturne accounts: `home` (Home),
  * //   `work` (Work). Use `/bg <label>` to pick one, or set a default in
  * //   Settings → Integrations → Discord."
@@ -222,7 +230,8 @@ export async function requireLinkForAction<T>(
 }
 
 /**
- * Selects a single DirectoryCandidate from a non-empty list. Returns
+ * Selects a single DirectoryCandidate from a non-empty list, preferring a bound
+ * `tenantId`, then an explicit `labelArg`, then the sole default link. Returns
  * "tenant-not-linked" if `tenantId` names a tenant the user has no link to,
  * "ambiguous" if no disambiguation is possible, or "not-found" if the label arg
  * doesn't match any candidate.
@@ -253,6 +262,10 @@ function pickCandidate(
     return match ?? "not-found";
   }
 
-  // No label and multiple candidates: ambiguous.
+  // ux_directory_user_one_default permits at most one default per platform
+  // user, so more than one here means the invariant broke — don't guess.
+  const defaults = candidates.filter((c) => c.isDefault);
+  if (defaults.length === 1) return defaults[0]!;
+
   return "ambiguous";
 }

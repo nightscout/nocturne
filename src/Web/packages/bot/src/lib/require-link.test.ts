@@ -11,6 +11,7 @@ const HOME: DirectoryCandidate = {
   nocturneUserId: "nocturne-user-home",
   label: "home",
   displayName: "HOME",
+  isDefault: false,
 };
 
 const WORK: DirectoryCandidate = {
@@ -22,6 +23,11 @@ const WORK: DirectoryCandidate = {
   label: "work",
   displayName: "WORK",
 };
+
+const asDefault = (c: DirectoryCandidate): DirectoryCandidate => ({
+  ...c,
+  isDefault: true,
+});
 
 function createContext(candidates: DirectoryCandidate[] | null) {
   const resolve = vi.fn().mockResolvedValue(candidates);
@@ -81,6 +87,30 @@ describe("requireLink", () => {
 
     expect(run.result).toBe("work");
     expect(run.seen).toEqual(["work-clinic"]);
+  });
+
+  it("resolves a multi-link user to their default when no label is given", async () => {
+    const run = await runSlash([HOME, asDefault(WORK)], "");
+
+    expect(run.result).toBe("work");
+    expect(run.seen).toEqual(["work-clinic"]);
+    expect(run.postEphemeral).not.toHaveBeenCalled();
+  });
+
+  it("prefers an explicit label over the default", async () => {
+    const run = await runSlash([HOME, asDefault(WORK)], "home");
+
+    expect(run.result).toBe("home");
+    expect(run.seen).toEqual(["home-clinic"]);
+    expect(run.postEphemeral).not.toHaveBeenCalled();
+  });
+
+  it("stays ambiguous when more than one link claims to be default", async () => {
+    const run = await runSlash([asDefault(HOME), asDefault(WORK)], "");
+
+    expect(run.result).toBeNull();
+    expect(run.seen).toEqual([]);
+    expect(run.postEphemeral).toHaveBeenCalledOnce();
   });
 
   it("lists the choices when a multi-link user gives no label", async () => {

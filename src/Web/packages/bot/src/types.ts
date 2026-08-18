@@ -98,6 +98,11 @@ export interface DirectoryCandidate {
   nocturneUserId: string;
   label: string;
   displayName: string;
+  /**
+   * The link a bare, label-less invocation resolves to. At most one of a
+   * platform user's links carries it (`ux_directory_user_one_default`).
+   */
+  isDefault: boolean;
 }
 
 export interface HeartbeatRequest {

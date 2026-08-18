@@ -31,8 +31,14 @@ function candidate(
     nocturneUserId: `nocturne-user-${label}`,
     label,
     displayName: label.toUpperCase(),
+    isDefault: false,
   };
 }
+
+const asDefault = (c: DirectoryCandidate): DirectoryCandidate => ({
+  ...c,
+  isDefault: true,
+});
 
 function createContext(candidates: DirectoryCandidate[] | null) {
   const resolve = vi.fn().mockResolvedValue(candidates);
@@ -162,6 +168,28 @@ describe("ack_alert action", () => {
     );
     expect(ctx.scopedApiFactory).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("uses the tenant on the button over the user's default", async () => {
+    const ctx = createContext([asDefault(HOME), WORK]);
+    const { event, post } = createActionEvent(WORK_TENANT);
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(ctx.acknowledgeBySlug.has("home-clinic")).toBe(false);
+    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+  });
+
+  it("falls back to the default when the button carries no tenant", async () => {
+    const ctx = createContext([HOME, asDefault(WORK)]);
+    const { event, post, postEphemeral } = createActionEvent();
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(postEphemeral).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
   });
 
   it("asks a multi-link user to choose when the button carries no tenant", async () => {
