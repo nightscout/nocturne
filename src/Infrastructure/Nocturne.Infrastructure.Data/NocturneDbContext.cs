@@ -418,6 +418,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
+    /// The device-status snapshot tables, whose dedup key is the <see cref="ISyncDedupable"/> one
+    /// rather than their legacy id.
+    /// </summary>
+    internal static readonly Type[] V4SnapshotEntities =
+    [
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+    ];
+
+    /// <summary>
     /// V4 record tables keyed on <see cref="IV4TimeSeriesEntity.Timestamp"/>.
     /// </summary>
     internal static readonly Type[] V4TimeSeriesRecordEntities =
@@ -437,15 +448,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(CarbRatioScheduleEntity),
         typeof(SensitivityScheduleEntity),
         typeof(TargetRangeScheduleEntity),
+        .. V4SnapshotEntities,
     ];
 
     /// <summary>
     /// V4 record tables whose legacy id is the dedup key, adding the span-shaped
-    /// <see cref="TempBasalEntity"/>. The snapshot tables are absent: they dedup on the
-    /// <see cref="ISyncDedupable"/> key, so their legacy id carries a plain lookup index instead.
+    /// <see cref="TempBasalEntity"/>. The snapshot tables drop out: their legacy id carries a plain
+    /// lookup index instead of the tenant-scoped unique one.
     /// </summary>
     internal static readonly Type[] V4LegacyIdRecordEntities =
-        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
+        [.. V4TimeSeriesRecordEntities.Except(V4SnapshotEntities), typeof(TempBasalEntity)];
 
     /// <summary>
     /// Profile-decomposition schedule tables, read as (tenant, profile, newest-first).
@@ -479,9 +491,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(BasalInjectionEntity),
         typeof(CarbIntakeEntity),
         typeof(TempBasalEntity),
-        typeof(ApsSnapshotEntity),
-        typeof(PumpSnapshotEntity),
-        typeof(UploaderSnapshotEntity),
+        .. V4SnapshotEntities,
     ];
 
     /// <summary>
@@ -507,8 +517,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
-            entity.HasIndex(nameof(SensorGlucoseEntity.CorrelationId))
+            entity.HasIndex(nameof(IV4Entity.CorrelationId))
                 .HasDatabaseName($"ix_{table}_correlation_id");
+        }
+
+        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var table = entity.Metadata.GetTableName();
+
+            entity.HasIndex(nameof(IV4Entity.LegacyId))
+                .HasDatabaseName($"ix_{table}_legacy_id");
+
+            // The partial sync-id index leads with tenant_id, which makes EF drop the auto-created
+            // tenant index as redundant, but a filtered index can't serve general tenant-scoped
+            // scans (all pre-existing rows have NULL sync_identifier).
+            entity.HasIndex(nameof(ITenantScoped.TenantId))
+                .HasDatabaseName($"IX_{table}_tenant_id");
         }
 
         foreach (var entity in V4ProfileNamedEntities.Select(t => modelBuilder.Entity(t)))
@@ -1435,59 +1459,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.TenantId, e.EventType, e.Timestamp })
             .HasDatabaseName("ix_device_events_tenant_event_type_timestamp")
             .IsDescending(false, false, true);
-
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_aps_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_aps_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index: the partial sync-id index starts with tenant_id,
-        // which makes EF drop the auto-created one as redundant, but a filtered index can't serve
-        // general tenant-scoped scans (all pre-existing rows have NULL sync_identifier).
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_aps_snapshots_tenant_id");
-
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_pump_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_pump_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index (see ApsSnapshot note above).
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_pump_snapshots_tenant_id");
-
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_uploader_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_uploader_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index (see ApsSnapshot note above).
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_uploader_snapshots_tenant_id");
 
         modelBuilder
             .Entity<DeviceStatusExtrasEntity>()
