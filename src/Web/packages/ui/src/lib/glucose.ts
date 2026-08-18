@@ -8,13 +8,16 @@
 /** Display unit preference. */
 export type GlucoseUnits = "mg/dl" | "mmol";
 
-/** Conversion factor from mg/dL to mmol/L. */
-const MGDL_TO_MMOL = 18.01559;
+/**
+ * Milligrams per decilitre in one millimole per litre of glucose. Must equal
+ * `GlucoseConstants.MgdlPerMmol`; `GlucoseConversionFactorMirrorTests` fails if it does not.
+ */
+export const MGDL_PER_MMOL = 18.0182;
 
 /** Convert a glucose value from mg/dL to the given display units. */
 export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number {
   if (units === "mmol") {
-    return Math.round((mgdl / MGDL_TO_MMOL) * 10) / 10;
+    return Math.round((mgdl / MGDL_PER_MMOL) * 10) / 10;
   }
   return Math.round(mgdl);
 }
@@ -22,7 +25,7 @@ export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number
 /** Convert a glucose value from display units back to mg/dL. */
 export function convertFromDisplayUnits(value: number, units: GlucoseUnits): number {
   if (units === "mmol") {
-    return Math.round(value * MGDL_TO_MMOL);
+    return Math.round(value * MGDL_PER_MMOL);
   }
   return Math.round(value);
 }

@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260817121547_AddAuthAuditActorAndTenant")]
-    partial class AddAuthAuditActorAndTenant
+    [Migration("20260817064038_AddTenantScopedLegacyIdIndexesToMeterGlucoseAndCalibrations")]
+    partial class AddTenantScopedLegacyIdIndexesToMeterGlucoseAndCalibrations
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -590,15 +590,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("ActorCredential")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("actor_credential");
-
-                    b.Property<Guid?>("ActorSubjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("actor_subject_id");
-
                     b.Property<string>("CorrelationId")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
@@ -644,10 +635,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("success");
 
-                    b.Property<Guid?>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
                     b.Property<string>("UserAgent")
                         .HasColumnType("text")
                         .HasColumnName("user_agent");
@@ -668,14 +655,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("SubjectId")
                         .HasDatabaseName("ix_auth_audit_log_subject_id");
-
-                    b.HasIndex("ActorCredential", "CreatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("ix_auth_audit_log_actor_credential_created");
-
-                    b.HasIndex("ActorSubjectId", "CreatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("ix_auth_audit_log_actor_subject_created");
 
                     b.HasIndex("SubjectId", "CreatedAt")
                         .IsDescending(false, true)
@@ -6219,14 +6198,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_calibrations_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_calibrations_legacy_id");
-
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_calibrations_tenant_id");
 
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_calibrations_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calibrations_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("calibrations");
                 });
@@ -6751,18 +6733,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_meter_glucose_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_meter_glucose_legacy_id");
-
                     b.HasIndex("PatientDeviceId")
                         .HasDatabaseName("ix_meter_glucose_patient_device_id")
                         .HasFilter("patient_device_id IS NOT NULL");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_meter_glucose_tenant_id");
 
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_meter_glucose_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_meter_glucose_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("meter_glucose");
                 });
@@ -8237,11 +8222,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AuthAuditLogEntity", b =>
                 {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", null)
-                        .WithMany()
-                        .HasForeignKey("ActorSubjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.RefreshTokenEntity", "RefreshToken")
                         .WithMany()
                         .HasForeignKey("RefreshTokenId")

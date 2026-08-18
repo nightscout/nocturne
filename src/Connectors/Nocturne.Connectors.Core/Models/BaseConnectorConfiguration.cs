@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Nocturne.Connectors.Core.Extensions;
@@ -11,6 +12,9 @@ namespace Nocturne.Connectors.Core.Models;
 /// </summary>
 public abstract class BaseConnectorConfiguration : IConnectorConfiguration
 {
+    private static readonly ConcurrentDictionary<Type, Dictionary<SyncDataType, PropertyInfo>>
+        SyncTogglePropertyCache = new();
+
     /// <summary>
     ///     Gets the connector name from the ConnectorRegistration attribute.
     ///     Used for error messages and logging.
@@ -104,26 +108,37 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.StaleThresholdMinutes)]
     public int StaleThresholdMinutes { get; set; } = 0;
 
-    public bool IsDataTypeEnabled(SyncDataType type) => type switch
-    {
-        SyncDataType.Glucose => SyncGlucose,
-        SyncDataType.ManualBG => SyncManualBG,
-        SyncDataType.Boluses => SyncBoluses,
-        SyncDataType.CarbIntake => SyncCarbIntake,
-        SyncDataType.BolusCalculations => SyncBolusCalculations,
-        SyncDataType.Notes => SyncNotes,
-        SyncDataType.DeviceEvents => SyncDeviceEvents,
-        SyncDataType.StateSpans => SyncStateSpans,
-        SyncDataType.TempBasals => SyncTempBasals,
-        SyncDataType.Profiles => SyncProfiles,
-        SyncDataType.DeviceStatus => SyncDeviceStatus,
-        SyncDataType.Activity => SyncActivity,
-        SyncDataType.Food => SyncFood,
-        _ => true
-    };
+    /// <summary>
+    ///     Whether this configuration has <paramref name="type"/> switched on. A data type with no
+    ///     sync toggle property — Calibrations, BasalInjections and BGChecks — has nothing to switch
+    ///     it off, so it syncs whenever the connector declares it supported.
+    /// </summary>
+    public bool IsDataTypeEnabled(SyncDataType type)
+        => !SyncToggleProperties(GetType()).TryGetValue(type, out var toggle)
+           || (bool)toggle.GetValue(this)!;
 
     public List<SyncDataType> GetEnabledDataTypes(List<SyncDataType> supportedTypes)
         => supportedTypes.Where(IsDataTypeEnabled).ToList();
+
+    /// <summary>
+    ///     The bool properties carrying a sync toggle key on a concrete configuration type, indexed
+    ///     by the data type each one gates.
+    /// </summary>
+    private static Dictionary<SyncDataType, PropertyInfo> SyncToggleProperties(Type configurationType)
+        => SyncTogglePropertyCache.GetOrAdd(configurationType, static type =>
+        {
+            var toggles = new Dictionary<SyncDataType, PropertyInfo>();
+
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var key = property.GetCustomAttribute<ConnectorPropertyAttribute>()?.Key;
+
+                if (key is not null && ConnectorSyncToggles.ByPropertyKey.TryGetValue(key.Value, out var dataType))
+                    toggles[dataType] = property;
+            }
+
+            return toggles;
+        });
 
     public virtual void Validate()
     {

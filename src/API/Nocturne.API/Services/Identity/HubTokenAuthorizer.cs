@@ -62,6 +62,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     private readonly IAuthorizationService _authorizationService;
     private readonly ITenantMemberService _memberService;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<HubTokenAuthorizer> _logger;
 
@@ -72,6 +73,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         IAuthorizationService authorizationService,
         ITenantMemberService memberService,
         IDbContextFactory<NocturneDbContext> dbContextFactory,
+        TimeProvider timeProvider,
         IConfiguration configuration,
         ILogger<HubTokenAuthorizer> logger)
     {
@@ -81,6 +83,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         _authorizationService = authorizationService;
         _memberService = memberService;
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _configuration = configuration;
         _logger = logger;
     }
@@ -239,7 +242,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         string token, Guid connectionTenantId, string requiredScope)
     {
         var grant = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            _dbContextFactory, token, connectionTenantId);
+            _dbContextFactory, token, connectionTenantId, _timeProvider.GetUtcNow().UtcDateTime);
 
         if (grant is null)
         {

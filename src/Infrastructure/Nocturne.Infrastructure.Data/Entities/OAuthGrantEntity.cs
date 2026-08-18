@@ -99,7 +99,8 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public DateTime? DismissedAt { get; set; }
 
     /// <summary>
-    /// When this grant expires. Only used for guest grants (creation + 48h).
+    /// When this grant expires; null means it never does. Guest grants are always given one
+    /// (creation + 48h); direct grants carry one only when the caller asked for it.
     /// </summary>
     [Column("expires_at")]
     public DateTime? ExpiresAt { get; set; }
