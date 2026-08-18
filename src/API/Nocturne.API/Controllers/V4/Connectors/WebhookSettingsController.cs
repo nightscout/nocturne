@@ -11,12 +11,11 @@ using Nocturne.Core.Models.Configuration;
 namespace Nocturne.API.Controllers.V4.Connectors;
 
 /// <summary>
-/// Controller for managing outbound webhook notification settings (URL, headers, test dispatch).
+/// Controller for testing outbound webhook delivery.
 /// </summary>
 /// <remarks>
-/// Webhook settings are persisted per-tenant and allow administrators to configure an external
-/// HTTP endpoint that receives alert notifications. The <c>POST /test</c> endpoint sends a test
-/// payload via <see cref="WebhookRequestSender"/> to verify connectivity before saving.
+/// The <c>POST /test</c> endpoint sends a test payload via <see cref="WebhookRequestSender"/>.
+/// The GET/PUT pair has no storage behind it — see <see cref="NoStorageDetail"/>.
 /// </remarks>
 /// <seealso cref="WebhookRequestSender"/>
 /// <seealso cref="WebhookNotificationSettings"/>
@@ -25,49 +24,45 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [Route("api/v4/ui-settings/notifications/webhooks")]
 [Authorize]
 // Choosing where a tenant's alerts are delivered, and dispatching from the server to a
-// caller-named host, are tenant administration. The GET is left on [Authorize] alone: it returns a
-// fixed disabled stub rather than anything the tenant configured.
+// caller-named host, are tenant administration. The GET is left on [Authorize] alone: it exposes
+// no tenant state.
 public class WebhookSettingsController(
     WebhookRequestSender requestSender,
     ILogger<WebhookSettingsController> logger)
     : ControllerBase
 {
+    /// <summary>
+    /// Why the GET/PUT pair reports 501 instead of persisting. The alert engine addresses
+    /// webhooks per rule — an <c>alert_rule_channels</c> row with
+    /// <see cref="Core.Models.Alerts.ChannelType.Webhook"/> whose destination holds the URLs —
+    /// so there is no tenant-wide record to read or write, and no field for a signing secret
+    /// (<see cref="Services.Alerts.Providers.WebhookProvider"/> signs with none). A 200 here
+    /// reported a save that never happened, on the alerting path.
+    /// </summary>
+    private const string NoStorageDetail =
+        "Tenant-wide webhook settings are not stored. Webhook destinations belong to individual "
+        + "alert rules: attach a webhook channel to a rule via /api/v4/alert-rules instead.";
+
     /// <summary>Gets the webhook notification settings for the current tenant.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(WebhookNotificationSettings), 200)]
-    [ProducesResponseType(500)]
-    public Task<ActionResult<WebhookNotificationSettings>> GetWebhookSettings(
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Not wired to the current alert engine's storage, so this reports disabled
-        // regardless of what the tenant configured.
-        return Task.FromResult<ActionResult<WebhookNotificationSettings>>(Ok(
-            new WebhookNotificationSettings
-            {
-                Enabled = false,
-                Urls = new List<string>(),
-                HasSecret = false,
-                Secret = null,
-                SignatureVersion = "v1",
-            }
-        ));
-    }
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status501NotImplemented)]
+    public ActionResult<WebhookNotificationSettings> GetWebhookSettings() => NotStored();
 
     /// <summary>Saves webhook notification settings.</summary>
     [HttpPut]
     [RequireScope(TenantPermissions.TenantSettings)]
     [ProducesResponseType(typeof(WebhookNotificationSettings), 200)]
-    [ProducesResponseType(400)]
-    [ProducesResponseType(500)]
-    public Task<ActionResult<WebhookNotificationSettings>> SaveWebhookSettings(
-        [FromBody] WebhookNotificationSettings settings,
-        CancellationToken cancellationToken = default
-    )
-    {
-        logger.LogWarning("Webhook settings save is a no-op until new alert engine is implemented");
-        return Task.FromResult<ActionResult<WebhookNotificationSettings>>(Ok(settings));
-    }
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status501NotImplemented)]
+    public ActionResult<WebhookNotificationSettings> SaveWebhookSettings(
+        [FromBody] WebhookNotificationSettings settings
+    ) => NotStored();
+
+    private ObjectResult NotStored() => Problem(
+        detail: NoStorageDetail,
+        statusCode: StatusCodes.Status501NotImplemented,
+        title: "Not Implemented"
+    );
 
     /// <summary>Tests webhook settings by sending test payloads to configured URLs.</summary>
     /// <remarks>

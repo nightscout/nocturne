@@ -367,9 +367,31 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            // The profile is discarded: this is not wired to the current alert engine's
-            // storage.
-            return await GetAlarmConfiguration(cancellationToken);
+            var config =
+                await _settingsService.GetAlarmConfigurationAsync(cancellationToken)
+                ?? GenerateDefaultAlarmConfiguration();
+            config.Profiles ??= [];
+
+            // A blank id would match every other blank-id profile on the next upsert, so the
+            // list could never hold more than one of them.
+            if (string.IsNullOrWhiteSpace(profile.Id))
+            {
+                profile.Id = Guid.CreateVersion7().ToString();
+            }
+
+            var existing = config.Profiles.FindIndex(p => p.Id == profile.Id);
+            if (existing >= 0)
+            {
+                config.Profiles[existing] = profile;
+            }
+            else
+            {
+                config.Profiles.Add(profile);
+            }
+
+            return Ok(
+                await _settingsService.SaveAlarmConfigurationAsync(config, cancellationToken)
+            );
         }
         catch (Exception ex)
         {
@@ -406,9 +428,23 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            // The profile id is discarded: this is not wired to the current alert engine's
-            // storage.
-            return await GetAlarmConfiguration(cancellationToken);
+            var config =
+                await _settingsService.GetAlarmConfigurationAsync(cancellationToken)
+                ?? GenerateDefaultAlarmConfiguration();
+            config.Profiles ??= [];
+
+            if (config.Profiles.RemoveAll(p => p.Id == profileId) == 0)
+            {
+                return Problem(
+                    detail: $"Alarm profile not found: {profileId}",
+                    statusCode: 404,
+                    title: "Not Found"
+                );
+            }
+
+            return Ok(
+                await _settingsService.SaveAlarmConfigurationAsync(config, cancellationToken)
+            );
         }
         catch (Exception ex)
         {
