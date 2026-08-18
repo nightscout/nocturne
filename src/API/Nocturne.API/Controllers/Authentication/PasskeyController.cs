@@ -56,6 +56,12 @@ public class PasskeyController : ControllerBase
     private const string RecoveryCookieName = ".Nocturne.RecoverySession";
 
     /// <summary>
+    /// How long a spent recovery code stays redeemable for one passkey enrolment. Bounds both the
+    /// token and the cookie carrying it, so neither outlives the other.
+    /// </summary>
+    private static readonly TimeSpan RecoverySessionLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// Shown for every recovery-mode refusal so the response never distinguishes an unknown
     /// username from an account that still has a working sign-in method.
     /// </summary>
@@ -195,16 +201,38 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
+    /// The attributes the recovery-session cookie is written with. A cookie is keyed by name,
+    /// domain and path, so the write and the expiry that spends it must present the same ones.
+    /// Host-only: the recovery session is redeemed on the host it was issued from, so unlike a
+    /// session cookie it is never widened to sibling tenants.
+    /// </summary>
+    private CookieOptions RecoveryCookieOptions() => new()
+    {
+        HttpOnly = true,
+        Secure = _oidcOptions.Cookie.Secure,
+        SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
+        Path = "/",
+        IsEssential = true,
+    };
+
+    /// <summary>
     /// Complete passkey registration with attestation response
     /// </summary>
     /// <remarks>
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
+    /// <para>
+    /// Declares no invalidation, like the other enrolment a recovery session reaches
+    /// (<see cref="RecoveryModeComplete"/>): the generated command would refresh
+    /// <see cref="ListCredentials"/>, which needs a session, and its 401 would surface as a
+    /// failure on an enrolment that in fact succeeded. Callers holding a session refresh their
+    /// own list.
+    /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
     [DenyDemoSubject]
     [AllowAnonymous]
-    [RemoteCommand(Invalidates = ["ListCredentials"])]
+    [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -229,6 +257,10 @@ public class PasskeyController : ControllerBase
             var result = await _passkeyService.CompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, tenantId,
                 expectedSubjectId: subjectId.Value, request.Label);
+
+            // One spent recovery code buys one enrolment: the credential it authorized now exists,
+            // so the session that authorized it is over even though its token has time left.
+            Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
 
             return Ok(new PasskeyRegisterCompleteResponse
             {
@@ -614,17 +646,11 @@ public class PasskeyController : ControllerBase
             subjectInfo,
             permissions: ["passkey:manage"],
             roles: [],
-            lifetime: TimeSpan.FromMinutes(10));
+            lifetime: RecoverySessionLifetime);
 
-        Response.Cookies.Append(RecoveryCookieName, recoveryToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            MaxAge = TimeSpan.FromMinutes(10),
-            Path = "/",
-            IsEssential = true,
-        });
+        var cookieOptions = RecoveryCookieOptions();
+        cookieOptions.MaxAge = RecoverySessionLifetime;
+        Response.Cookies.Append(RecoveryCookieName, recoveryToken, cookieOptions);
 
         return Ok(new RecoveryVerifyResponse
         {

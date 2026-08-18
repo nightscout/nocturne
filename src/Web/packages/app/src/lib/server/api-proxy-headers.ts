@@ -56,6 +56,7 @@ export function buildProxyHeaders({
     AUTH_COOKIE_NAMES.refreshToken,
     AUTH_COOKIE_NAMES.guestSession,
     AUTH_COOKIE_NAMES.platformAccess,
+    AUTH_COOKIE_NAMES.recoverySession,
   ]
     .map((name) => {
       const value = cookies.get(name);

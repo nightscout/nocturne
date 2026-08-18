@@ -376,6 +376,29 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterComplete_WithARecoverySession_SpendsTheCookie()
+    {
+        // One recovery code buys one enrolment: the credential exists now, so the cookie that
+        // authorized it must not authorize a second.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+
+        await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
+
+        var setCookie = _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
+            .Single(header => header!.StartsWith(".Nocturne.RecoverySession=", StringComparison.Ordinal));
+        setCookie.Should().Contain("expires=Thu, 01 Jan 1970");
+    }
+
+    [Fact]
     public async Task RegisterComplete_NoChallengeToken_ReturnsBadRequest()
     {
         Authenticate();

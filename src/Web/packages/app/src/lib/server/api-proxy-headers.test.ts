@@ -7,6 +7,7 @@ const JAR: Record<string, string> = {
   [AUTH_COOKIE_NAMES.refreshToken]: "refresh-value",
   [AUTH_COOKIE_NAMES.guestSession]: "guest-value",
   [AUTH_COOKIE_NAMES.platformAccess]: "platform-value",
+  [AUTH_COOKIE_NAMES.recoverySession]: "recovery-value",
 };
 
 const cookies = { get: (name: string) => JAR[name] };
@@ -50,6 +51,9 @@ describe("buildProxyHeaders", () => {
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.refreshToken}=refresh-value`);
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.guestSession}=guest-value`);
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.platformAccess}=platform-value`);
+    // A recovery-code visitor's only credential: unforwarded, the passkey they came to register
+    // cannot be enrolled and the recovery code is spent for nothing.
+    expect(cookie).toContain(`${AUTH_COOKIE_NAMES.recoverySession}=recovery-value`);
   });
 
   it("leaves the incoming Cookie header alone when the jar holds no auth cookies", () => {

@@ -263,6 +263,11 @@ const authenticatorSchema = z.object({
  * Runs entirely on the server, so it works with JavaScript disabled: the
  * browser posts the form, the handler redirects on success, and a rejected code
  * comes back as a field-level issue on the re-rendered page.
+ *
+ * A spent code buys a recovery session, which authorizes one passkey enrolment and no
+ * session, so the destination is the enrolment page and not the page the visitor asked
+ * for — that one needs a session, which their new passkey gets them. `returnUrl` rides
+ * along so it still decides where they land at the end.
  */
 export const signInWithRecoveryCode = form(
   recoveryCodeSchema,
@@ -289,7 +294,11 @@ export const signInWithRecoveryCode = form(
       invalid(issue.code("That username and recovery code don't match."));
     }
 
-    redirect(303, safeReturnUrl(data.returnUrl));
+    const destination = new URLSearchParams({
+      username: data.username,
+      returnUrl: safeReturnUrl(data.returnUrl),
+    });
+    redirect(303, `/auth/recovery/passkey?${destination}`);
   }
 );
 

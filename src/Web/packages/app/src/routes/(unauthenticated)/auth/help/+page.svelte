@@ -110,6 +110,10 @@
           and one of your remaining codes. Each code can only be used once, so
           cross it off your list after use.
         </p>
+        <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+          A code doesn't sign you in on its own: it gives you ten minutes to set
+          up a new passkey, and you sign in with that.
+        </p>
       </Card.Content>
     </Card.Root>
 
