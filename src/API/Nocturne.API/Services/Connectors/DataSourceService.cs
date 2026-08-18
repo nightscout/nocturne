@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -970,12 +971,7 @@ public class DataSourceService : IDataSourceService
         return deletedCounts;
     }
 
-    private static string GenerateId(string deviceId)
-    {
-        // Create a stable ID from the device identifier
-        var hash = deviceId.GetHashCode();
-        return $"ds-{Math.Abs(hash):x8}";
-    }
+    internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
     private static string CleanDeviceName(string deviceId)
     {
