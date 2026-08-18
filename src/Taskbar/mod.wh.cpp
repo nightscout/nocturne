@@ -761,7 +761,12 @@ static std::wstring FormatDelta(double v) {
     return b;
 }
 
-// Unicode trend glyph for the Dexcom-style direction strings.
+// Shown for a trend we cannot draw: an unknown trend must not read as a stable one.
+constexpr PCWSTR kUnknownTrendGlyph = L"?";
+
+// Unicode trend glyph for the Dexcom-style direction strings. The caller suppresses the whole
+// element when the trend is absent, so anything reaching here that has no arrow ("None",
+// "NotComputable", an unrecognised vendor value) gets kUnknownTrendGlyph.
 static std::wstring TrendArrow(const std::wstring& t) {
     if (t == L"DoubleUp") return L"\x21C8";
     if (t == L"SingleUp") return L"\x2191";
@@ -770,7 +775,7 @@ static std::wstring TrendArrow(const std::wstring& t) {
     if (t == L"FortyFiveDown") return L"\x2198";
     if (t == L"SingleDown") return L"\x2193";
     if (t == L"DoubleDown") return L"\x21CA";
-    return L"";
+    return kUnknownTrendGlyph;
 }
 
 // Named elements (CurrentValue / TrendArrow / IobCob / RangeBand / SparkActual / SparkPredicted /

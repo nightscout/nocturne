@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ArrowUp } from "lucide-svelte";
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
+  import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
   import type { TrackerDefinitionDto } from "$lib/api";
   import {
     ELEMENT_INFO,
@@ -10,8 +10,6 @@
     getFontClass,
     getFontWeightClass,
     buildStyleString,
-    getDirectionRotation,
-    isDoubleArrow,
     renderElementValue,
     getTrackerDefinition,
   } from "$lib/clock-builder";
@@ -38,26 +36,13 @@
 </script>
 
 {#if element.type === "arrow"}
-  <!-- Arrow element using Lucide icon with rotation -->
-  {@const size = element.size || ELEMENT_INFO.arrow.defaultSize}
-  {@const rotation = getDirectionRotation(direction)}
-  {@const isDouble = isDoubleArrow(direction)}
+  {@const size = (element.size || ELEMENT_INFO.arrow.defaultSize) * 0.8}
   <div
-    class="flex items-center {isDouble ? 'gap-0' : ''}"
+    class="flex items-center"
     style="color: {getElementColor(element, currentBG)}; opacity: {element.style
       ?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
   >
-    {#if isDouble}
-      <ArrowUp
-        style="width: {size * 0.8}px; height: {size *
-          0.8}px; transform: rotate({rotation}deg); margin-right: -{size *
-          0.3}px;"
-      />
-    {/if}
-    <ArrowUp
-      style="width: {size * 0.8}px; height: {size *
-        0.8}px; transform: rotate({rotation}deg);"
-    />
+    <TrendArrow {direction} {size} />
   </div>
 {:else if element.type === "tracker"}
   <!-- Tracker element with icon and time remaining -->
