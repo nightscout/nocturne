@@ -130,7 +130,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         // Seed the tenant timezone timeline from the pump's reported zone (idempotent; first sync only).
         await ConfigureCareLinkTimezoneAsync(data, cancellationToken);
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
+        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
         var isStale = IsDataStale(data);
 
         await PublishSensorGlucoseStepAsync(data, config, enabledTypes, isStale, result, cancellationToken);
@@ -241,7 +241,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishSensorGlucoseStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> enabledTypes,
         bool isStale,
         SyncResult result,
         CancellationToken cancellationToken)
@@ -297,7 +297,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishDeviceStatusStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> enabledTypes,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -335,8 +335,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     }
 
     /// <summary>
-    ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. Alarm failures
-    ///     are logged but never fail the sync.
+    ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. A rejected publish
+    ///     fails the sync and leaves the dedup key behind so the next cycle retries the same alarm;
+    ///     a transport exception is only logged, matching the pre-existing policy for this step.
     /// </summary>
     private async Task PublishAlarmStepAsync(
         CareLinkData data,
@@ -357,12 +358,16 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
                 if (systemEvent != null)
                 {
-                    var success = await PublishSystemEventDataAsync([systemEvent], config, cancellationToken);
-                    if (success)
+                    if (await PublishSystemEventDataAsync([systemEvent], config, cancellationToken))
                     {
                         _lastAlarmKey = alarmKey;
                         _logger.LogInformation("[{ConnectorSource}] Published alarm event {Code}",
                             ConnectorSource, data.LastAlarm.Code);
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.Errors.Add("Alarm event publish failed");
                     }
                 }
             }
@@ -386,7 +391,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishTreatmentsStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> enabledTypes,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -395,39 +400,32 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                 data.MedicalDeviceTime ?? "", data.CurrentServerTime);
 
-            if (enabledTypes.Contains(SyncDataType.Boluses))
-            {
-                var boluses = CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs);
-                if (boluses.Count > 0 && await PublishBolusDataAsync(boluses, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.Boluses] = boluses.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} Bolus records", ConnectorSource, boluses.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabledTypes,
+                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), PublishBolusDataAsync,
+                config, cancellationToken);
 
-            if (enabledTypes.Contains(SyncDataType.CarbIntake))
-            {
-                var carbs = CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs);
-                if (carbs.Count > 0 && await PublishCarbIntakeDataAsync(carbs, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.CarbIntake] = carbs.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} CarbIntake records", ConnectorSource, carbs.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabledTypes,
+                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), PublishCarbIntakeDataAsync,
+                config, cancellationToken);
 
-            if (enabledTypes.Contains(SyncDataType.TempBasals))
-            {
-                var tempBasals = CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs);
-                if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} TempBasal records", ConnectorSource, tempBasals.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabledTypes,
+                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), PublishTempBasalDataAsync,
+                config, cancellationToken);
 
+            // Not routed through PublishRecordTypeAsync: system events would have to be gated and
+            // counted under DeviceEvents, which CareLink does not declare supported, so the helper
+            // would suppress them outright.
             var notifications = CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs);
-            if (notifications.Count > 0 && await PublishSystemEventDataAsync(notifications, config, cancellationToken))
-                _logger.LogInformation("[{ConnectorSource}] Synced {Count} notification events", ConnectorSource, notifications.Count);
+            if (notifications.Count > 0)
+            {
+                if (await PublishSystemEventDataAsync(notifications, config, cancellationToken))
+                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} notification events", ConnectorSource, notifications.Count);
+                else
+                {
+                    result.Success = false;
+                    result.Errors.Add("Notification events publish failed");
+                }
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)

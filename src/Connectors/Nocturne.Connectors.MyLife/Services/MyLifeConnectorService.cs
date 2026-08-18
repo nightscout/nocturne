@@ -266,13 +266,8 @@ public class MyLifeConnectorService(
                     profiles, PublishProfileDataAsync, config, cancellationToken);
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
-                if (profileStateSpans.Count > 0)
-                {
-                    await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
-                    _logger.LogInformation(
-                        "Published {Count} profile state spans from pump settings",
-                        profileStateSpans.Count);
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings");
             }
         }
         catch (Exception ex)
