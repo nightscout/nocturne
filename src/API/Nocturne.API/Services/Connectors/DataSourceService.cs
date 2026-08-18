@@ -1073,19 +1073,17 @@ public class DataSourceService : IDataSourceService
             );
 
             // Delete V4 treatment records by data source
-            var treatmentsDeleted = await _context.Boluses.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.BGChecks.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.Notes.Where(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.TempBasals.Where(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
+            var treatmentsDeleted = await _context.Boluses.PurgeAsync(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.CarbIntakes.PurgeAsync(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.BGChecks.PurgeAsync(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.Notes.PurgeAsync(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.DeviceEvents.PurgeAsync(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.BolusCalculations.PurgeAsync(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.TempBasals.PurgeAsync(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService), cancellationToken);
+            treatmentsDeleted += await _context.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, cancellationToken);
 
             // Delete APS snapshots - demo data uses the demo-service device
-            var deviceStatusDeleted = await _context
-                .ApsSnapshots.Where(ds => ds.Device == DataSources.DemoService)
-                .ExecuteDeleteAsync(cancellationToken);
+            var deviceStatusDeleted = await _context.ApsSnapshots.PurgeAsync(ds => ds.Device == DataSources.DemoService, cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
             if (glucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = glucoseDeleted;

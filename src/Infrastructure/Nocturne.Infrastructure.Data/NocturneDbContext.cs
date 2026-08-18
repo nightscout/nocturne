@@ -21,6 +21,19 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private readonly DbContextOptions<NocturneDbContext> _options;
 
     /// <summary>
+    /// Key of the global query filter restricting every <see cref="ITenantScoped"/> entity to
+    /// <see cref="TenantId"/>.
+    /// </summary>
+    public const string TenantFilterKey = "tenant_isolation";
+
+    /// <summary>
+    /// Key of the global query filter hiding soft-deleted rows of every <see cref="ISoftDeletable"/>
+    /// entity. Named separately from <see cref="TenantFilterKey"/> so a purge can lift it alone —
+    /// see <see cref="Extensions.PurgeExtensions"/>.
+    /// </summary>
+    public const string SoftDeleteFilterKey = "soft_delete";
+
+    /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
     /// </summary>
     /// <param name="options">The options for this context</param>
@@ -2515,7 +2528,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
-    /// Applies global query filters for tenant isolation on all ITenantScoped entities.
+    /// Applies the global query filters carried by every ITenantScoped entity: tenant isolation,
+    /// plus the soft-delete predicate on the ISoftDeletable ones.
     /// Filters reference this.TenantId which is set per-request.
     /// EF Core parameterizes the value, so pooled contexts work correctly.
     /// </summary>
@@ -2529,26 +2543,31 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             var parameter = Expression.Parameter(entityType.ClrType, "e");
             var tenantIdProperty = Expression.Property(parameter, nameof(ITenantScoped.TenantId));
             var currentTenantId = Expression.Property(Expression.Constant(this), nameof(TenantId));
-            Expression body = Expression.Equal(tenantIdProperty, currentTenantId);
+            var entityBuilder = modelBuilder.Entity(entityType.ClrType);
 
-            if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
-            {
-                var deletedAtProperty = Expression.Property(parameter, nameof(ISoftDeletable.DeletedAt));
-                var nullValue = Expression.Constant(null, typeof(DateTime?));
-                var isNotDeleted = Expression.Equal(deletedAtProperty, nullValue);
-                body = Expression.AndAlso(body, isNotDeleted);
+            // Keyed rather than anonymous filters: a hard purge has to lift the soft-delete
+            // predicate without lifting tenant isolation with it (PurgeExtensions).
+            entityBuilder.HasQueryFilter(
+                TenantFilterKey,
+                Expression.Lambda(Expression.Equal(tenantIdProperty, currentTenantId), parameter));
 
-                // Records whether the latest soft-delete was user-initiated. The soft-delete
-                // dedup discriminator (SoftDeleteDedupExtensions) blocks connector resync from
-                // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
-                // A shadow property so it lands on every soft-deletable table without a per-entity edit.
-                modelBuilder.Entity(entityType.ClrType)
-                    .Property<bool>("DeletedByUser")
-                    .HasColumnName("deleted_by_user")
-                    .HasDefaultValue(false);
-            }
+            if (!typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
+                continue;
 
-            modelBuilder.Entity(entityType.ClrType).HasQueryFilter(Expression.Lambda(body, parameter));
+            var deletedAtProperty = Expression.Property(parameter, nameof(ISoftDeletable.DeletedAt));
+            var nullValue = Expression.Constant(null, typeof(DateTime?));
+            entityBuilder.HasQueryFilter(
+                SoftDeleteFilterKey,
+                Expression.Lambda(Expression.Equal(deletedAtProperty, nullValue), parameter));
+
+            // Records whether the latest soft-delete was user-initiated. The soft-delete
+            // dedup discriminator (SoftDeleteDedupExtensions) blocks connector resync from
+            // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
+            // A shadow property so it lands on every soft-deletable table without a per-entity edit.
+            entityBuilder
+                .Property<bool>("DeletedByUser")
+                .HasColumnName("deleted_by_user")
+                .HasDefaultValue(false);
         }
     }
 

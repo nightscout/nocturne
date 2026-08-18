@@ -120,6 +120,29 @@ public class ModelConventionTests
                 && i.IsDescending is not null
                 && i.IsDescending.SequenceEqual([false, false, true]));
 
+    /// <summary>
+    /// <see cref="Nocturne.Infrastructure.Data.Extensions.PurgeExtensions"/> lifts the soft-delete
+    /// filter by key, and <c>IgnoreQueryFilters</c> ignores a key the entity does not declare — so
+    /// folding the two predicates back into one filter would silently restore the purge skip.
+    /// </summary>
+    [Fact]
+    public void EverySoftDeletableEntity_DeclaresTheTenantAndSoftDeleteFiltersSeparately()
+    {
+        var softDeletable = Model().GetEntityTypes()
+            .Where(e => typeof(ISoftDeletable).IsAssignableFrom(e.ClrType)
+                     && typeof(ITenantScoped).IsAssignableFrom(e.ClrType))
+            .ToList();
+
+        softDeletable.Should().HaveCountGreaterThan(20,
+            "an empty set would let every assertion below pass vacuously");
+
+        softDeletable
+            .Where(e => e.FindDeclaredQueryFilter(NocturneDbContext.SoftDeleteFilterKey) is null
+                     || e.FindDeclaredQueryFilter(NocturneDbContext.TenantFilterKey) is null)
+            .Select(e => e.ShortName())
+            .Should().BeEmpty("a purge has to lift the soft-delete filter without lifting tenant isolation");
+    }
+
     private static void AssertFamily(
         IReadOnlyList<Type> entities,
         string suffix,

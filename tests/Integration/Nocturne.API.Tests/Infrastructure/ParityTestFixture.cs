@@ -93,18 +93,18 @@ public class ParityTestFixture : IAsyncLifetime
     {
         if (_sharedState == null) return;
 
-        // Clean Nocturne (PostgreSQL) first using ExecuteDeleteAsync for bulk deletion
-        // This is more reliable than RemoveRange as it bypasses the change tracker
+        // Clean Nocturne (PostgreSQL) first with a bulk purge: more reliable than RemoveRange as it
+        // bypasses the change tracker, and unlike ExecuteDeleteAsync it empties the table rather than
+        // leaving soft-deleted rows to leak into the next test.
         var db = _sharedState.DbContext;
 
         // Clear change tracker to ensure no stale entities
         db.ChangeTracker.Clear();
 
-        // Use ExecuteDeleteAsync for efficient bulk deletion that bypasses EF tracking
-        await db.ApsSnapshots.ExecuteDeleteAsync(cancellationToken);
-        await db.Foods.ExecuteDeleteAsync(cancellationToken);
-        await db.Settings.ExecuteDeleteAsync(cancellationToken);
-        await db.StateSpans.ExecuteDeleteAsync(cancellationToken);
+        await db.ApsSnapshots.PurgeAsync(ct: cancellationToken);
+        await db.Foods.PurgeAsync(ct: cancellationToken);
+        await db.Settings.PurgeAsync(ct: cancellationToken);
+        await db.StateSpans.PurgeAsync(ct: cancellationToken);
         // Clean Nightscout (network calls - may have latency)
         await _sharedState.NightscoutContainer.CleanupDataAsync(cancellationToken);
     }
