@@ -284,11 +284,16 @@ static int64_t NowMsEpoch() {
     return (int64_t)((u.QuadPart - 116444736000000000ULL) / 10000ULL);
 }
 
+// A standalone Windhawk mod can't link the shared constant, so the factor is copied here. It
+// MUST equal GlucoseConstants.MgdlPerMmol, or the taskbar and the server disagree about which
+// side of a rounding boundary a reading falls on.
+constexpr double kMgdlPerMmol = 18.0182;
+
 // Convert a canonical mg/dL value to the configured display unit. mmol/L is
 // rounded to 1 dp; mg/dL to a whole number.
 static double ToDisplayUnit(double mgdl) {
     if (g_settings.unit == L"mg/dL") return std::round(mgdl);
-    return std::round(mgdl / 18.0182 * 10.0) / 10.0;
+    return std::round(mgdl / kMgdlPerMmol * 10.0) / 10.0;
 }
 
 static std::string Narrow(const std::wstring& w) {

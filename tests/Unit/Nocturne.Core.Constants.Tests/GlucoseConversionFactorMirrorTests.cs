@@ -6,24 +6,38 @@ using Xunit;
 namespace Nocturne.Core.Constants.Tests;
 
 /// <summary>
-/// The frontend converts glucose for display with its own copy of the factor, so a backend-only
-/// change leaves the two disagreeing by about 1 part in 7,000 — enough to move a rounded mmol
-/// reading. This reads the TypeScript source and fails on the difference.
+/// TypeScript, Rust and the Windhawk mod cannot link <see cref="GlucoseConstants.MgdlPerMmol"/>, so
+/// each declares its own copy of the factor. A backend-only change leaves them disagreeing by about
+/// 1 part in 7,000 — enough to move a rounded mmol reading. This reads each source and fails on the
+/// difference.
 /// </summary>
 public class GlucoseConversionFactorMirrorTests
 {
-    private static readonly Regex Declaration =
-        new(@"export const MGDL_PER_MMOL = ([0-9.]+);", RegexOptions.Compiled);
-
-    [Fact]
-    public void TypeScriptUsesTheSameFactorAsTheBackend()
+    public static TheoryData<string, string> Declarations() => new()
     {
-        var path = Path.Combine(RepositoryRoot(), "src", "Web", "packages", "ui", "src", "lib",
-            "glucose.ts");
-        var match = Declaration.Match(File.ReadAllText(path));
+        {
+            Path.Combine("src", "Web", "packages", "ui", "src", "lib", "glucose.ts"),
+            @"export const MGDL_PER_MMOL = ([0-9.]+);"
+        },
+        {
+            Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "glucose_poll.rs"),
+            @"pub const MGDL_PER_MMOL: f64 = ([0-9.]+);"
+        },
+        {
+            Path.Combine("src", "Taskbar", "mod.wh.cpp"),
+            @"constexpr double kMgdlPerMmol = ([0-9.]+);"
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(Declarations))]
+    public void MirroredFactorMatchesTheBackend(string relativePath, string pattern)
+    {
+        var path = Path.Combine(RepositoryRoot(), relativePath);
+        var match = Regex.Match(File.ReadAllText(path), pattern);
 
         if (!match.Success)
-            throw new InvalidOperationException($"No MGDL_PER_MMOL declaration in {path}.");
+            throw new InvalidOperationException($"No declaration matching /{pattern}/ in {path}.");
 
         double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
             .Should().Be(GlucoseConstants.MgdlPerMmol);

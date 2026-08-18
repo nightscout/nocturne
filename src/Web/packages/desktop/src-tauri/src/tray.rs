@@ -9,7 +9,7 @@
 //! ownership is coordinated with the glucose poll via shared state so the two don't fight over the
 //! icon and the normal tile is restored when the last flashing excursion clears.
 
-use crate::glucose_poll::CurrentBg;
+use crate::glucose_poll::{CurrentBg, MGDL_PER_MMOL};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -29,7 +29,6 @@ const FLASH_INTERVAL_MS: u64 = 600;
 
 /// Display unit. mmol/L is the default (1 dp); switch to "mg/dL" (0 dp) by changing this constant.
 const TRAY_UNIT: &str = "mmol/L";
-const MMOL_PER_MGDL: f64 = 18.0182;
 
 /// Segoe UI Bold — present on every Win11 install. Read at runtime; never bundled/committed.
 const FONT_PATH: &str = r"C:\Windows\Fonts\segoeuib.ttf";
@@ -107,7 +106,7 @@ fn to_display(sgv_mgdl: f64) -> String {
     if TRAY_UNIT == "mg/dL" {
         format!("{:.0}", sgv_mgdl.round())
     } else {
-        format!("{:.1}", sgv_mgdl / MMOL_PER_MGDL)
+        format!("{:.1}", sgv_mgdl / MGDL_PER_MMOL)
     }
 }
 
