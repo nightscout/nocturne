@@ -181,7 +181,7 @@ public class DirectGrantService : IDirectGrantService
             userAgent: userAgent,
             detailsJson: JsonSerializer.Serialize(new { method = "direct_grant", grant_id = entity.Id }),
             actor: actor,
-            tenantId: TargetTenant(dbContext));
+            tenantId: dbContext.TenantIdOrNull);
 
         return DirectGrantCreationResult.Created(new CreateDirectGrantResponse
         {
@@ -258,17 +258,10 @@ public class DirectGrantService : IDirectGrantService
             userAgent: userAgent,
             detailsJson: JsonSerializer.Serialize(new { grant_id = grantId }),
             actor: actor,
-            tenantId: TargetTenant(dbContext));
+            tenantId: dbContext.TenantIdOrNull);
 
         return true;
     }
-
-    /// <summary>
-    /// The tenant the grant belongs to, taken from the context it was created on, or null on an
-    /// unpinned context.
-    /// </summary>
-    private static Guid? TargetTenant(NocturneDbContext dbContext) =>
-        dbContext.TenantId == Guid.Empty ? null : dbContext.TenantId;
 
     private static string Base64UrlEncode(byte[] bytes)
     {

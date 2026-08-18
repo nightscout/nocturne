@@ -47,6 +47,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public Guid TenantId { get; set; }
 
     /// <summary>
+    /// <see cref="TenantId"/> as an optional, for the non-tenant-scoped columns that record which
+    /// tenant an action targeted and must stay null rather than empty on an unpinned context.
+    /// </summary>
+    public Guid? TenantIdOrNull => TenantId == Guid.Empty ? null : TenantId;
+
+    /// <summary>
     /// The subject whose own rows a subject-scoped cross-tenant read may reach. Set per-lease by
     /// the few callers that legitimately read one subject's rows across tenants (the tenant
     /// switcher, the caregiver overview, membership enumeration). The
@@ -883,6 +889,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<AuthAuditLogEntity>()
             .HasIndex(a => new { a.ActorCredential, a.CreatedAt })
             .HasDatabaseName("ix_auth_audit_log_actor_credential_created")
+            .IsDescending(false, true);
+
+        modelBuilder
+            .Entity<AuthAuditLogEntity>()
+            .HasIndex(a => new { a.TenantId, a.CreatedAt })
+            .HasDatabaseName("ix_auth_audit_log_tenant_created")
             .IsDescending(false, true);
 
         modelBuilder

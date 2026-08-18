@@ -55,13 +55,6 @@ public class DirectGrantControllerTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        var auditService = new AuthAuditService(
-            _dbContext, new Mock<ILogger<AuthAuditService>>().Object);
-        var directGrantService = new DirectGrantService(
-            auditService, new Mock<ILogger<DirectGrantService>>().Object);
-
-        _controller = new DirectGrantController(_dbContext, directGrantService);
-
         // Set up authenticated HttpContext
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
@@ -72,6 +65,15 @@ public class DirectGrantControllerTests : IDisposable
             SubjectId = _subjectId,
             Permissions = ["*"],
         };
+
+        var auditService = new AuthAuditService(
+            _dbContext,
+            new HttpContextAccessor { HttpContext = httpContext },
+            new Mock<ILogger<AuthAuditService>>().Object);
+        var directGrantService = new DirectGrantService(
+            auditService, new Mock<ILogger<DirectGrantService>>().Object);
+
+        _controller = new DirectGrantController(_dbContext, directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,

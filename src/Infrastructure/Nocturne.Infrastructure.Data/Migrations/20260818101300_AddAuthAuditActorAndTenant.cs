@@ -42,6 +42,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: new[] { "actor_subject_id", "created_at" },
                 descending: new[] { false, true });
 
+            migrationBuilder.CreateIndex(
+                name: "ix_auth_audit_log_tenant_created",
+                table: "auth_audit_log",
+                columns: new[] { "tenant_id", "created_at" },
+                descending: new[] { false, true });
+
             migrationBuilder.AddForeignKey(
                 name: "FK_auth_audit_log_subjects_actor_subject_id",
                 table: "auth_audit_log",
@@ -64,6 +70,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             migrationBuilder.DropIndex(
                 name: "ix_auth_audit_log_actor_subject_created",
+                table: "auth_audit_log");
+
+            migrationBuilder.DropIndex(
+                name: "ix_auth_audit_log_tenant_created",
                 table: "auth_audit_log");
 
             migrationBuilder.DropColumn(

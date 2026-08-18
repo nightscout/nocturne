@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260818073321_AddAuthAuditActorAndTenant")]
+    [Migration("20260818101300_AddAuthAuditActorAndTenant")]
     partial class AddAuthAuditActorAndTenant
     {
         /// <inheritdoc />
@@ -680,6 +680,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SubjectId", "CreatedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_subject_created");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_auth_audit_log_tenant_created");
 
                     b.ToTable("auth_audit_log");
                 });

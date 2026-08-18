@@ -88,18 +88,19 @@ public class TenantDirectGrantControllerTests : IDisposable
         // The audit service runs on the request-scoped context, which on this path carries no
         // tenant — so a recorded tenant can only have come from the grant's own pinned context.
         _auditDbContext = new NocturneDbContext(_dbOptions);
+        var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
-            new AuthAuditService(_auditDbContext, new Mock<ILogger<AuthAuditService>>().Object),
+            new AuthAuditService(
+                _auditDbContext,
+                new HttpContextAccessor { HttpContext = httpContext },
+                new Mock<ILogger<AuthAuditService>>().Object),
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object);
 
         _controller = new TenantDirectGrantController(
             factory.Object, tenantMemberService, directGrantService)
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext(),
-            },
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 

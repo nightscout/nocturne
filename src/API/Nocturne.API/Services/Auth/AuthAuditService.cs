@@ -1,3 +1,4 @@
+using Nocturne.API.Extensions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -21,14 +22,19 @@ namespace Nocturne.API.Services.Auth;
 public class AuthAuditService : IAuthAuditService
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthAuditService> _logger;
 
     /// <summary>
     /// Creates a new instance of AuthAuditService.
     /// </summary>
-    public AuthAuditService(NocturneDbContext dbContext, ILogger<AuthAuditService> logger)
+    public AuthAuditService(
+        NocturneDbContext dbContext,
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<AuthAuditService> logger)
     {
         _dbContext = dbContext;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -40,6 +46,10 @@ public class AuthAuditService : IAuthAuditService
         AuthAuditActor? actor = null,
         Guid? tenantId = null)
     {
+        actor ??= AuthAuditActor.FromCallerOtherThan(
+            _httpContextAccessor.HttpContext?.GetAuthContext(), subjectId);
+        tenantId ??= _dbContext.TenantIdOrNull;
+
         try
         {
             _dbContext.AuthAuditLog.Add(new AuthAuditLogEntity
@@ -47,7 +57,7 @@ public class AuthAuditService : IAuthAuditService
                 Id = Guid.CreateVersion7(),
                 EventType = eventType,
                 SubjectId = subjectId,
-                // No explicit actor means the subject acted for themselves.
+                // No actor to distinguish means the subject acted for themselves.
                 ActorSubjectId = actor is null ? subjectId : actor.SubjectId,
                 ActorCredential = actor?.Credential,
                 TenantId = tenantId,

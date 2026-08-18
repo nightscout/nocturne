@@ -28,6 +28,21 @@ public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
             new AuthAuditActor(null, $"{auth.AuthType}:{auth.CredentialFingerprint}"),
         _ => new AuthAuditActor(null, auth.AuthType.ToString()),
     };
+
+    /// <summary>
+    /// The caller behind <paramref name="auth"/> when they are distinguishable from
+    /// <paramref name="subjectId"/>, otherwise null.
+    /// </summary>
+    /// <remarks>
+    /// A credential with no subject of its own is always worth naming, since it can never be the
+    /// subject the event happened to. An unauthenticated request has no caller to name — a login
+    /// carries <see cref="AuthContext.Unauthenticated"/> until it succeeds, and the Public subject
+    /// of a share is not an actor — so it yields null and leaves the subject as its own actor.
+    /// </remarks>
+    public static AuthAuditActor? FromCallerOtherThan(AuthContext? auth, Guid? subjectId) =>
+        auth is { IsAuthenticated: true } && (auth.SubjectId is null || auth.SubjectId != subjectId)
+            ? From(auth)
+            : null;
 }
 
 /// <summary>
@@ -48,9 +63,14 @@ public interface IAuthAuditService
     /// <param name="refreshTokenId">Related refresh token, if applicable.</param>
     /// <param name="actor">
     /// Who performed the action, when that is someone other than <paramref name="subjectId"/>.
-    /// Leave null where the subject acted for themselves.
+    /// Defaults to the caller on the current request per
+    /// <see cref="AuthAuditActor.FromCallerOtherThan"/>; pass one explicitly only where the actor
+    /// is not that caller.
     /// </param>
-    /// <param name="tenantId">The tenant the action targeted, if any.</param>
+    /// <param name="tenantId">
+    /// The tenant the action targeted. Defaults to the tenant the request is pinned to; pass one
+    /// explicitly for an action against a tenant other than the caller's own.
+    /// </param>
     Task LogAsync(string eventType, Guid? subjectId, bool success,
         string? ipAddress = null, string? userAgent = null,
         string? errorMessage = null, string? detailsJson = null,

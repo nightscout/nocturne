@@ -678,6 +678,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_subject_created");
 
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_auth_audit_log_tenant_created");
+
                     b.ToTable("auth_audit_log");
                 });
 
