@@ -64,9 +64,15 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: the current
+    /// reading is the most staleness-sensitive value the API serves. The <c>Last-Modified</c> /
+    /// <c>If-Modified-Since</c> handling below still answers a conditional poll with a 304, so
+    /// revalidating callers pay no body.
+    /// </remarks>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/entries/current")]
-    [ResponseCache(Duration = 60, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
     [RequireScope(OAuthScopes.GlucoseRead)]
@@ -297,9 +303,15 @@ public class EntriesController : ControllerBase
     /// <param name="dateString">ISO date string for date filtering</param>
     /// <param name="format">Output format (json, csv, tsv, txt)</param>
     /// <returns>Array of entries matching the criteria</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: a reading or
+    /// correction that has just landed must not be missing from the next poll. The
+    /// <c>Last-Modified</c> / <c>If-Modified-Since</c> handling below still answers a conditional
+    /// poll with a 304, so revalidating callers pay no body.
+    /// </remarks>
     [HttpGet]
     [NightscoutEndpoint("/api/v1/entries")]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" }, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
     [RequireScope(OAuthScopes.GlucoseRead)]
