@@ -163,10 +163,12 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .SingleAsync(b => b.LegacyId == "bolus-1");
         bolus.DeletedAt.Should().NotBeNull();
 
-        // ...and carry a user-attributed delete audit row.
-        (await assertCtx.MutationAuditLog.SingleAsync(a =>
-            a.EntityType == "Bolus" && a.EntityId == bolus.Id && a.Action == "delete"))
-            .AuthType.Should().Be(AuthType);
+        // ...and are covered by one user-attributed bulk_delete summary row naming the purged source.
+        var bolusSummary = await assertCtx.MutationAuditLog.SingleAsync(a =>
+            a.EntityType == "Bolus" && a.Action == "bulk_delete");
+        bolusSummary.AuthType.Should().Be(AuthType);
+        bolusSummary.EntityId.Should().BeNull();
+        bolusSummary.ChangesJson.Should().Contain($"data_source={_deviceId}");
 
         // StateSpan is hard-deleted but still leaves a user-attributed delete audit row.
         (await assertCtx.StateSpans.IgnoreQueryFilters().AnyAsync(s => s.Source == _deviceId))

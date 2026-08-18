@@ -467,7 +467,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source)),
-            AuditContext, ct);
+            AuditContext, $"data_source={source}", ct);
     }
 
     /// <inheritdoc />
@@ -526,6 +526,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, ct);
+        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
 }

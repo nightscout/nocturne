@@ -61,6 +61,7 @@
     { value: "Create", label: "Create" },
     { value: "Update", label: "Update" },
     { value: "Delete", label: "Delete" },
+    { value: "bulk_delete", label: "Bulk delete" },
     { value: "Restore", label: "Restore" },
   ];
 
@@ -95,11 +96,34 @@
   function getActionBadgeVariant(action: string | undefined): "default" | "secondary" | "destructive" {
     switch (action?.toLowerCase()) {
       case "delete":
+      case "bulk_delete":
         return "destructive";
       case "create":
         return "default";
       default:
         return "secondary";
+    }
+  }
+
+  function formatAction(action: string | undefined): string {
+    if (!action) return "—";
+    return action.toLowerCase() === "bulk_delete" ? "Bulk delete" : action;
+  }
+
+  /**
+   * A bulk_delete row describes a set of records rather than one, so it carries a count and the key
+   * the delete was scoped to instead of a field-level diff.
+   */
+  function parseBulkDeleteSummary(
+    changes: string | undefined
+  ): { count: number; scope: string } | null {
+    if (!changes) return null;
+    try {
+      const parsed = JSON.parse(changes);
+      if (typeof parsed?.count !== "number") return null;
+      return { count: parsed.count, scope: String(parsed.scope ?? "") };
+    } catch {
+      return null;
     }
   }
 
@@ -370,7 +394,7 @@
 
 {#snippet actionBadgeSnippet({ action }: { action: string | undefined })}
   <Badge variant={getActionBadgeVariant(action)}>
-    {action ?? "\u2014"}
+    {formatAction(action)}
   </Badge>
 {/snippet}
 
@@ -494,7 +518,19 @@
                       <span class="ml-2 font-mono text-xs">{row.original.entityId}</span>
                     </div>
                   {/if}
-                  {#if row.original.changes}
+                  {#if row.original.action?.toLowerCase() === "bulk_delete"}
+                    {@const summary = parseBulkDeleteSummary(row.original.changes)}
+                    {#if summary}
+                      <div>
+                        <span class="font-medium text-muted-foreground">Records deleted:</span>
+                        <span class="ml-2">{summary.count}</span>
+                      </div>
+                      <div>
+                        <span class="font-medium text-muted-foreground">Scope:</span>
+                        <span class="ml-2 font-mono text-xs">{summary.scope}</span>
+                      </div>
+                    {/if}
+                  {:else if row.original.changes}
                     {@const diffs = parseChanges(row.original.changes)}
                     {#if diffs.length > 0}
                       <div>

@@ -916,8 +916,8 @@ public class DataSourceService : IDataSourceService
     /// Capability matrix (entity interfaces decide the path):
     /// <list type="bullet">
     /// <item>Glucose and the auditable+soft-deletable treatments (Bolus, CarbIntake, BolusCalculation,
-    ///   DeviceEvent) take the audited soft-delete path. The audit row's non-null AuthType is what makes
-    ///   the soft-delete dedup block re-import (<see cref="SoftDeleteDedupExtensions"/>).</item>
+    ///   DeviceEvent) take the audited soft-delete path, which stamps the <c>deleted_by_user</c> flag the
+    ///   soft-delete dedup reads to block re-import (<see cref="SoftDeleteDedupExtensions"/>).</item>
     /// <item>StateSpan is auditable but not soft-deletable, so it takes the audited hard-delete path.</item>
     /// <item>BGChecks, Notes and device status are soft-deletable but not auditable, so they soft-delete
     ///   without an audit row; with the connector disabled they do not re-import.</item>
@@ -934,14 +934,15 @@ public class DataSourceService : IDataSourceService
         var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(deviceId, cancellationToken);
 
         // Auditable + soft-deletable treatments: audited soft-delete, user-attributed.
+        var scope = $"data_source={deviceId}";
         var bolusesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.Boluses.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), _auditContext, cancellationToken);
+            _context.Boluses.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), _auditContext, scope, cancellationToken);
         var carbIntakesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.CarbIntakes.Where(c => c.DataSource == deviceId || (c.DataSource == null && c.Device == deviceId)), _auditContext, cancellationToken);
+            _context.CarbIntakes.Where(c => c.DataSource == deviceId || (c.DataSource == null && c.Device == deviceId)), _auditContext, scope, cancellationToken);
         var bolusCalcsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.BolusCalculations.Where(bc => bc.DataSource == deviceId || (bc.DataSource == null && bc.Device == deviceId)), _auditContext, cancellationToken);
+            _context.BolusCalculations.Where(bc => bc.DataSource == deviceId || (bc.DataSource == null && bc.Device == deviceId)), _auditContext, scope, cancellationToken);
         var deviceEventsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.DeviceEvents.Where(de => de.DataSource == deviceId || (de.DataSource == null && de.Device == deviceId)), _auditContext, cancellationToken);
+            _context.DeviceEvents.Where(de => de.DataSource == deviceId || (de.DataSource == null && de.Device == deviceId)), _auditContext, scope, cancellationToken);
 
         // StateSpan is auditable but not soft-deletable: audited hard delete.
         var stateSpansDeleted = await _context.AuditedExecuteDeleteAsync(
