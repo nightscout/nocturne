@@ -255,7 +255,7 @@ public class GlookoSensorGlucoseMapper
 
     private static GlucoseDirection ParseTrendToDirection(string? trend)
     {
-        if (string.IsNullOrWhiteSpace(trend)) return GlucoseDirection.Flat;
+        if (string.IsNullOrWhiteSpace(trend)) return GlucoseDirection.None;
 
         return trend.ToUpperInvariant() switch
         {
@@ -268,7 +268,7 @@ public class GlookoSensorGlucoseMapper
             "DOUBLEDOWN" or "DOUBLE_DOWN" => GlucoseDirection.DoubleDown,
             "NOT COMPUTABLE" or "NOTCOMPUTABLE" => GlucoseDirection.NotComputable,
             "RATE OUT OF RANGE" or "RATEOUTOFRANGE" => GlucoseDirection.RateOutOfRange,
-            _ => GlucoseDirection.Flat
+            _ => GlucoseDirection.NotComputable
         };
     }
 

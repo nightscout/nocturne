@@ -8,8 +8,9 @@ namespace Nocturne.Connectors.Eversense.Mappers;
 public class EversenseSensorGlucoseMapper(ILogger logger)
 {
     /// <summary>
-    /// Eversense trend values mapped to GlucoseDirection.
-    /// Mapping verified via LoopKit GlucoseTrend enum and the EversenseNowClient trendmap.
+    /// Eversense trend values mapped to GlucoseDirection. The wire value is the ordinal of the
+    /// Eversense app's own ARROW_TYPE enum, which runs falling-to-rising — the inverse of LoopKit's
+    /// GlucoseTrend, so this table reads as reversed if checked against LoopKit.
     /// </summary>
     private static readonly Dictionary<int, GlucoseDirection> TrendDirections = new()
     {
