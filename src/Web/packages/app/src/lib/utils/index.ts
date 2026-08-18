@@ -16,57 +16,69 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
+const directionInfo: Partial<Record<
+  Direction,
+  { label: string; icon: SvelteComponent; css: string }
+>> = {
+  [Direction.DoubleUp]: {
+    label: "rising very fast",
+    icon: ArrowUp,
+    css: "text-red-500",
+  },
+  [Direction.SingleUp]: {
+    label: "rising",
+    icon: ArrowUpRight,
+    css: "text-orange-500",
+  },
+  [Direction.FortyFiveUp]: {
+    label: "rising slowly",
+    icon: ArrowUpRight,
+    css: "text-yellow-500",
+  },
+  [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
+  [Direction.FortyFiveDown]: {
+    label: "falling slowly",
+    icon: ArrowDownRight,
+    css: "text-yellow-500",
+  },
+  [Direction.SingleDown]: {
+    label: "falling",
+    icon: ArrowDownRight,
+    css: "text-orange-500",
+  },
+  [Direction.DoubleDown]: {
+    label: "falling very fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.NotComputable]: {
+    label: "unknown",
+    icon: HelpCircle,
+    css: "text-gray-500",
+  },
+  [Direction.RateOutOfRange]: {
+    label: "out of range",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+};
+
+/**
+ * v1/v3 responses carry the space-separated Nightscout spellings ("NOT COMPUTABLE"); v4 carries the
+ * enum member names. Both resolve to the same entry.
+ */
+const normaliseDirection = (direction: string) => direction.replace(/\s/g, "").toUpperCase();
+
+const directionsByName = new Map(
+  Object.keys(directionInfo).map((name) => [normaliseDirection(name), name as Direction])
+);
+
 /** Get BG trend direction information */
 export function getDirectionInfo(direction?: Direction | string) {
-  const directions: Partial<Record<
-    Direction,
-    { label: string; icon: SvelteComponent; css: string }
-  >> = {
-    [Direction.DoubleUp]: {
-      label: "rising very fast",
-      icon: ArrowUp,
-      css: "text-red-500",
-    },
-    [Direction.SingleUp]: {
-      label: "rising",
-      icon: ArrowUpRight,
-      css: "text-orange-500",
-    },
-    [Direction.FortyFiveUp]: {
-      label: "rising slowly",
-      icon: ArrowUpRight,
-      css: "text-yellow-500",
-    },
-    [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
-    [Direction.FortyFiveDown]: {
-      label: "falling slowly",
-      icon: ArrowDownRight,
-      css: "text-yellow-500",
-    },
-    [Direction.SingleDown]: {
-      label: "falling",
-      icon: ArrowDownRight,
-      css: "text-orange-500",
-    },
-    [Direction.DoubleDown]: {
-      label: "falling very fast",
-      icon: ArrowDown,
-      css: "text-red-500",
-    },
-    [Direction.NotComputable]: {
-      label: "unknown",
-      icon: HelpCircle,
-      css: "text-gray-500",
-    },
-    [Direction.RateOutOfRange]: {
-      label: "out of range",
-      icon: AlertTriangle,
-      css: "text-gray-500",
-    },
-  };
-
-  const dirValue = typeof direction === 'string' ? direction as Direction : direction;
-  return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
+  const name = direction
+    ? directionsByName.get(normaliseDirection(direction))
+    : undefined;
+  return directionInfo[name ?? Direction.Flat] || directionInfo[Direction.Flat]!;
 }
 
 /** Enhanced relative time formatting with internationalization support */

@@ -419,32 +419,13 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <summary>
-    /// Converts a Nightscout direction string (e.g. <c>"SingleUp"</c>, <c>"Flat"</c>) to the typed
-    /// <see cref="GlucoseDirection"/> enum. Returns <see langword="null"/> for unknown or empty values.
+    /// Converts a Nightscout direction string (e.g. <c>"SingleUp"</c>, <c>"NOT COMPUTABLE"</c>) to the
+    /// typed <see cref="GlucoseDirection"/> enum. Returns <see langword="null"/> for unknown or empty
+    /// values, and for legacy values V4 does not model (triple arrows, CGM error).
     /// </summary>
     /// <param name="direction">The raw direction string from the legacy entry.</param>
     /// <returns>The corresponding <see cref="GlucoseDirection"/> value, or <see langword="null"/> if unrecognised.</returns>
-    internal static GlucoseDirection? MapDirection(string? direction)
-    {
-        if (string.IsNullOrEmpty(direction))
-            return null;
-
-        return direction switch
-        {
-            "NONE" => GlucoseDirection.None,
-            "DoubleUp" => GlucoseDirection.DoubleUp,
-            "SingleUp" => GlucoseDirection.SingleUp,
-            "FortyFiveUp" => GlucoseDirection.FortyFiveUp,
-            "Flat" => GlucoseDirection.Flat,
-            "FortyFiveDown" => GlucoseDirection.FortyFiveDown,
-            "SingleDown" => GlucoseDirection.SingleDown,
-            "DoubleDown" => GlucoseDirection.DoubleDown,
-            "NOT COMPUTABLE" => GlucoseDirection.NotComputable,
-            "RATE OUT OF RANGE" => GlucoseDirection.RateOutOfRange,
-            _ => Enum.TryParse<GlucoseDirection>(direction, ignoreCase: true, out var parsed)
-                ? parsed
-                : null
-        };
-    }
+    internal static GlucoseDirection? MapDirection(string? direction) =>
+        DirectionExtensions.TryParse(direction, out var parsed) ? parsed.ToGlucoseDirection() : null;
 
 }
