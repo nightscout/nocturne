@@ -34,9 +34,8 @@ public class WebhookSettingsController(
     /// <summary>
     /// Why the GET/PUT pair reports 501 instead of persisting. The alert engine addresses
     /// webhooks per rule — an <c>alert_rule_channels</c> row with
-    /// <see cref="Core.Models.Alerts.ChannelType.Webhook"/> whose destination holds the URLs —
-    /// so there is no tenant-wide record to read or write, and no field for a signing secret
-    /// (<see cref="Services.Alerts.Providers.WebhookProvider"/> signs with none). A 200 here
+    /// <see cref="Core.Models.Alerts.ChannelType.Webhook"/> whose destination holds the URLs and
+    /// whose secret signs them — so there is no tenant-wide record to read or write. A 200 here
     /// reported a save that never happened, on the alerting path.
     /// </summary>
     private const string NoStorageDetail =

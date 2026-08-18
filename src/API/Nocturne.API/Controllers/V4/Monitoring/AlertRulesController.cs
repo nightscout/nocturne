@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
@@ -51,6 +53,7 @@ public class AlertRulesController : ControllerBase
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly ISecretEncryptionService _encryption;
     private readonly ILogger<AlertRulesController> _logger;
 
     /// <summary>
@@ -61,12 +64,14 @@ public class AlertRulesController : ControllerBase
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         IRuleScopeClassifier scopeClassifier,
+        ISecretEncryptionService encryption,
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
         _referenceService = referenceService;
         _deliveryService = deliveryService;
         _scopeClassifier = scopeClassifier;
+        _encryption = encryption;
         _logger = logger;
     }
 
@@ -170,7 +175,7 @@ public class AlertRulesController : ControllerBase
             var sortIndex = 0;
             foreach (var ch in request.Channels)
             {
-                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++));
+                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++, NoRetainedSecrets));
             }
         }
 
@@ -250,6 +255,8 @@ public class AlertRulesController : ControllerBase
 
         if (request.Channels is not null)
         {
+            var retainedSecrets = CollectRetainedSecrets(rule.Channels);
+
             // Replace the channel list wholesale. Cascade-delete on AlertRuleChannelEntity ⇒
             // AlertDeliveryEntity is configured as SetNull (not Cascade) to preserve the audit
             // trail of historical deliveries even when the source channel is reconfigured.
@@ -259,7 +266,7 @@ public class AlertRulesController : ControllerBase
             var sortIndex = 0;
             foreach (var ch in request.Channels)
             {
-                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++));
+                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++, retainedSecrets));
             }
         }
 
@@ -368,7 +375,7 @@ public class AlertRulesController : ControllerBase
             .OrderBy(c => c.SortOrder)
             .Select(c => new AlertRuleChannelSnapshot(
                 c.Id, c.AlertRuleId, c.ChannelType,
-                c.Destination, c.DestinationLabel, c.SortOrder))
+                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret))
             .ToList();
 
         await _deliveryService.TestFireAsync(rule.Id, channels, BuildTestPayload(rule, db.TenantId), ct);
@@ -401,10 +408,13 @@ public class AlertRulesController : ControllerBase
         // values which become AlertDeliveryEntity.AlertRuleChannelId=null on persistence
         // (the FK is SetNull). This is fine because dry-run rules don't have saved
         // channels to back-reference.
+        // The snapshot's secret is ciphertext everywhere else, so the preview's plaintext is
+        // encrypted here rather than the provider learning a second input shape.
         var channels = request.Channels
             .Select((c, i) => new AlertRuleChannelSnapshot(
                 Guid.Empty, Guid.Empty, c.ChannelType, c.Destination ?? string.Empty,
-                c.DestinationLabel, i))
+                c.DestinationLabel, i, SerializeMetadata(c.Metadata),
+                string.IsNullOrWhiteSpace(c.Secret) ? null : _encryption.Encrypt(c.Secret)))
             .ToList();
 
         var payload = new AlertPayload
@@ -534,8 +544,7 @@ public class AlertRulesController : ControllerBase
             });
         }
 
-        var requested = DeviceCapabilities.ParseRequestedCapabilities(
-            ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
+        var requested = DeviceCapabilities.ParseRequestedCapabilities(SerializeMetadata(ch.Metadata));
         foreach (var capability in requested)
         {
             if (!DeviceCapabilities.IsKnown(capability))
@@ -589,8 +598,11 @@ public class AlertRulesController : ControllerBase
     private static string WireName(ChannelType channelType) =>
         JsonSerializer.Serialize(channelType).Trim('"');
 
-    private static AlertRuleChannelEntity BuildChannel(
-        CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder) => new()
+    private static readonly Dictionary<(ChannelType, string), string> NoRetainedSecrets = [];
+
+    private AlertRuleChannelEntity BuildChannel(
+        CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder,
+        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets) => new()
     {
         Id = Guid.CreateVersion7(),
         TenantId = tenantId,
@@ -598,10 +610,46 @@ public class AlertRulesController : ControllerBase
         ChannelType = req.ChannelType,
         Destination = req.Destination ?? string.Empty,
         DestinationLabel = req.DestinationLabel,
-        Metadata = req.Metadata is not null ? JsonSerializer.Serialize(req.Metadata) : null,
+        Metadata = SerializeMetadata(req.Metadata),
+        Secret = ResolveSecret(req, retainedSecrets),
         SortOrder = sortOrder,
         CreatedAt = DateTime.UtcNow,
     };
+
+    /// <summary>
+    /// The stored ciphertext of every channel that carries a signing secret, keyed by the pair a
+    /// caller can still name after a read: an update replaces the channel list wholesale and mints
+    /// new ids, and the secret is never echoed back, so a channel arriving without one has to be
+    /// matched to its predecessor by type and destination.
+    /// </summary>
+    private static IReadOnlyDictionary<(ChannelType, string), string> CollectRetainedSecrets(
+        IEnumerable<AlertRuleChannelEntity> channels) => channels
+            .Where(c => c.Secret is not null)
+            .GroupBy(c => (c.ChannelType, c.Destination))
+            .ToDictionary(g => g.Key, g => g.First().Secret!);
+
+    /// <summary>
+    /// Ciphertext for the channel's signing secret. A secret omitted from the request keeps the one
+    /// already stored (the editor cannot re-send what it was never shown); an explicitly empty one
+    /// clears it.
+    /// </summary>
+    private string? ResolveSecret(
+        CreateAlertRuleChannelRequest req,
+        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets)
+    {
+        if (req.Secret is null)
+        {
+            return retainedSecrets.TryGetValue(
+                (req.ChannelType, req.Destination ?? string.Empty), out var retained)
+                ? retained
+                : null;
+        }
+
+        return string.IsNullOrWhiteSpace(req.Secret) ? null : _encryption.Encrypt(req.Secret);
+    }
+
+    private static string? SerializeMetadata(object? metadata) =>
+        metadata is not null ? JsonSerializer.Serialize(metadata) : null;
 
     private static AlertRuleResponse MapToResponse(AlertRuleEntity entity) => new()
     {
@@ -631,6 +679,7 @@ public class AlertRulesController : ControllerBase
                 DestinationLabel = c.DestinationLabel,
                 SortOrder = c.SortOrder,
                 Metadata = c.Metadata is null ? null : DeserializeJson(c.Metadata),
+                HasSecret = c.Secret is not null,
             })
             .ToList(),
     };
@@ -839,6 +888,9 @@ public class AlertRuleChannelResponse
     public int SortOrder { get; set; }
     /// <summary>Channel-specific config (e.g. device_action capabilities). Null when unset.</summary>
     public object? Metadata { get; set; }
+    /// <summary>Whether a webhook signing secret is stored for this channel. The secret itself is
+    /// never returned.</summary>
+    public bool HasSecret { get; set; }
 }
 
 public class CreateAlertRuleRequest
@@ -881,6 +933,14 @@ public class CreateAlertRuleChannelRequest
     public string? DestinationLabel { get; set; }
     /// <summary>Channel-specific config, persisted as JSONB. For device_action: <c>{ "capabilities": ["notify", ...] }</c>.</summary>
     public object? Metadata { get; set; }
+    /// <summary>
+    /// Write-only HMAC signing secret for a <c>webhook</c> channel; the receiver verifies it
+    /// against the <c>X-Nocturne-Signature</c> header. Omit to keep the stored secret, send empty
+    /// to clear it. Never returned — the read side reports
+    /// <see cref="AlertRuleChannelResponse.HasSecret"/> instead.
+    /// </summary>
+    [MaxLength(256)]
+    public string? Secret { get; set; }
 }
 
 /// <summary>

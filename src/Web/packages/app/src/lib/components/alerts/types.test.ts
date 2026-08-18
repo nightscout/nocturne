@@ -267,6 +267,37 @@ describe("parseRule", () => {
 
 });
 
+describe("buildBody webhook secret", () => {
+	function webhookState(over: Partial<ChannelDef>) {
+		const state = parseRule(null);
+		state.channels = [
+			{
+				channelType: ChannelType.Webhook,
+				destination: "https://receiver.example.com/hook",
+				destinationLabel: "",
+				...over,
+			},
+		];
+		return state;
+	}
+
+	function sentSecret(over: Partial<ChannelDef>) {
+		return (buildBody(webhookState(over)).channels[0] as { secret?: string }).secret;
+	}
+
+	it("omits the secret when the channel already has one, so the save keeps it", () => {
+		expect(sentSecret({ hasSecret: true })).toBeUndefined();
+	});
+
+	it("sends an empty secret once the editor has removed the stored one", () => {
+		expect(sentSecret({ hasSecret: false })).toBe("");
+	});
+
+	it("sends a typed secret over the stored one", () => {
+		expect(sentSecret({ hasSecret: true, secret: "typed" })).toBe("typed");
+	});
+});
+
 describe("buildBody", () => {
 	it("produces no _uid fields in any part of the output", () => {
 		const state = parseRule(null);
