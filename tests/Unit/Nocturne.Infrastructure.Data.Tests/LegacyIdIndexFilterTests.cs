@@ -23,21 +23,13 @@ namespace Nocturne.Infrastructure.Data.Tests;
 [Trait("Category", "Unit")]
 public class LegacyIdIndexFilterTests
 {
-    /// <summary>
-    /// Tables whose legacy id is not their dedup key: the snapshot repositories upsert on
-    /// <c>(tenant_id, data_source, sync_identifier)</c>, and that index carries the uniqueness.
-    /// </summary>
-    private static readonly string[] TablesKeyedOnSyncIdentifierInstead =
-        ["aps_snapshots", "pump_snapshots", "uploader_snapshots"];
-
     [Fact]
     public void EveryLegacyIdTable_HasATenantScopedUniqueIndex()
     {
         using var ctx = CreateContext();
 
         LegacyIdEntityTypes(ctx)
-            .Where(e => !TablesKeyedOnSyncIdentifierInstead.Contains(e.GetTableName())
-                && !e.GetIndexes().Any(IsTenantLegacyIdUniqueIndex))
+            .Where(e => !e.GetIndexes().Any(IsTenantLegacyIdUniqueIndex))
             .Select(e => e.GetTableName())
             .Should().BeEmpty(
                 "a read-then-insert dedup with no uniqueness index lets two overlapping imports both insert the same legacy id");

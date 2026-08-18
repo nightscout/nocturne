@@ -418,8 +418,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
-    /// The device-status snapshot tables, whose dedup key is the <see cref="ISyncDedupable"/> one
-    /// rather than their legacy id.
+    /// The device-status snapshot tables, upserted on the <see cref="ISyncDedupable"/> key.
     /// </summary>
     internal static readonly Type[] V4SnapshotEntities =
     [
@@ -452,12 +451,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
-    /// V4 record tables whose legacy id is the dedup key, adding the span-shaped
-    /// <see cref="TempBasalEntity"/>. The snapshot tables drop out: their legacy id carries a plain
-    /// lookup index instead of the tenant-scoped unique one.
+    /// V4 record tables whose legacy id is an insert-only dedup key, adding the span-shaped
+    /// <see cref="TempBasalEntity"/>. The snapshots belong here too: their sync-identifier
+    /// uniqueness is filtered on a non-null identifier, which a legacy import never carries.
     /// </summary>
     internal static readonly Type[] V4LegacyIdRecordEntities =
-        [.. V4TimeSeriesRecordEntities.Except(V4SnapshotEntities), typeof(TempBasalEntity)];
+        [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
 
     /// <summary>
     /// Profile-decomposition schedule tables, read as (tenant, profile, newest-first).
@@ -521,18 +520,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName($"ix_{table}_correlation_id");
         }
 
+        // The partial sync-id and legacy-id indexes lead with tenant_id, which makes EF drop the
+        // auto-created tenant index as redundant, but a filtered index can't serve general
+        // tenant-scoped scans (all pre-existing rows have NULL sync_identifier).
         foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
         {
-            var table = entity.Metadata.GetTableName();
-
-            entity.HasIndex(nameof(IV4Entity.LegacyId))
-                .HasDatabaseName($"ix_{table}_legacy_id");
-
-            // The partial sync-id index leads with tenant_id, which makes EF drop the auto-created
-            // tenant index as redundant, but a filtered index can't serve general tenant-scoped
-            // scans (all pre-existing rows have NULL sync_identifier).
             entity.HasIndex(nameof(ITenantScoped.TenantId))
-                .HasDatabaseName($"IX_{table}_tenant_id");
+                .HasDatabaseName($"IX_{entity.Metadata.GetTableName()}_tenant_id");
         }
 
         foreach (var entity in V4ProfileNamedEntities.Select(t => modelBuilder.Entity(t)))

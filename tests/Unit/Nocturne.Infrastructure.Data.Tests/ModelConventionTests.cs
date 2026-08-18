@@ -65,18 +65,9 @@ public class ModelConventionTests
                 && !i.IsUnique
                 && i.GetFilter() is null);
 
-    [Fact]
-    public void EverySnapshotTable_HasAPlainLegacyIdLookup() =>
-        AssertFamily(
-            NocturneDbContext.V4SnapshotEntities,
-            "_legacy_id",
-            i => Columns(i).SequenceEqual([nameof(IV4Entity.LegacyId)])
-                && !i.IsUnique
-                && i.GetFilter() is null);
-
     /// <summary>
-    /// EF drops this one as redundant against the partial sync-id index unless it is declared — see
-    /// <see cref="NocturneDbContext.V4SnapshotEntities"/>.
+    /// EF drops this one as redundant against the tenant-leading partial indexes unless it is
+    /// declared — see <see cref="NocturneDbContext.V4SnapshotEntities"/>.
     /// </summary>
     [Fact]
     public void EverySnapshotTable_KeepsTheUnfilteredTenantIndex() =>
