@@ -51,8 +51,7 @@ public class MigrationTestFixture : IAsyncLifetime
 
     public MigrationTestFixture()
     {
-        _mongoContainer = new MongoDbBuilder()
-            .WithImage("mongo:7")
+        _mongoContainer = new MongoDbBuilder("mongo:7")
             .Build();
     }
 

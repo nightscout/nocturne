@@ -146,8 +146,7 @@ public class ParityTestFixture : IAsyncLifetime
             }
 
             // Start PostgreSQL for Nocturne
-            _postgresContainer = new PostgreSqlBuilder()
-                .WithImage("postgres:16")
+            _postgresContainer = new PostgreSqlBuilder("postgres:16")
                 .WithDatabase("nocturne_parity")
                 .WithUsername("test")
                 .WithPassword("test")
