@@ -56,8 +56,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TidepoolConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -96,27 +95,9 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                     request.From, request.To);
 
                 if (bgValues != null)
-                {
-                    var sgList = _sensorGlucoseMapper.MapBgValues(bgValues).ToList();
-                    result.ItemsSynced[SyncDataType.Glucose] = sgList.Count;
-                    if (sgList.Count > 0)
-                    {
-                        result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                            .FromUnixTimeMilliseconds(sgList.Max(s => s.Mills)).UtcDateTime;
-                        var publishSuccess = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                        if (!publishSuccess)
-                        {
-                            result.Success = false;
-                            result.Errors.Add("Glucose publish failed");
-                        }
-                        else
-                        {
-                            _logger.LogInformation(
-                                "[{ConnectorSource}] Synced {Count} SensorGlucose records from Tidepool",
-                                ConnectorSource, sgList.Count);
-                        }
-                    }
-                }
+                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                        _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), PublishSensorGlucoseDataAsync,
+                        config, cancellationToken, "Tidepool", s => s.Timestamp);
             }
             catch (Exception ex)
             {

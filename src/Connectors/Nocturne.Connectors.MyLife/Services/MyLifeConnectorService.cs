@@ -96,9 +96,7 @@ public class MyLifeConnectorService(
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -183,29 +181,9 @@ public class MyLifeConnectorService(
                         .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
-                    if (sgList.Count > 0)
-                    {
-                        var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                        result.ItemsSynced.TryGetValue(SyncDataType.Glucose, out var prevCount);
-                        result.ItemsSynced[SyncDataType.Glucose] = prevCount + sgList.Count;
-
-                        if (!success)
-                        {
-                            result.Success = false;
-                            result.Errors.Add("SensorGlucose publish failed");
-                        }
-                        else
-                        {
-                            var maxMills = sgList.Max(s => s.Mills);
-                            var maxTime = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-                            if (!result.LastEntryTimes.TryGetValue(SyncDataType.Glucose, out var existing) || maxTime > existing)
-                                result.LastEntryTimes[SyncDataType.Glucose] = maxTime;
-
-                            _logger.LogInformation(
-                                "Synced {Count} SensorGlucose records from {Month}",
-                                sgList.Count, batch.Month);
-                        }
-                    }
+                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month,
+                        timestampOf: s => s.Timestamp);
                 }
 
                 // Shared treatment filtering and context for records + state spans
@@ -228,17 +206,23 @@ public class MyLifeConnectorService(
 
                         var monthCtx = batch.Month;
                         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                            records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx);
+                            records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx,
+                            b => b.Timestamp);
                         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                            records.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken, monthCtx);
+                            records.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken, monthCtx,
+                            c => c.Timestamp);
                         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-                            records.BGChecks, PublishBGCheckDataAsync, config, cancellationToken, monthCtx);
+                            records.BGChecks, PublishBGCheckDataAsync, config, cancellationToken, monthCtx,
+                            b => b.Timestamp);
                         await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
-                            records.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken, monthCtx);
+                            records.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken, monthCtx,
+                            b => b.Timestamp);
                         await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
-                            records.Notes, PublishNoteDataAsync, config, cancellationToken, monthCtx);
+                            records.Notes, PublishNoteDataAsync, config, cancellationToken, monthCtx,
+                            n => n.Timestamp);
                         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                            records.DeviceEvents, PublishDeviceEventDataAsync, config, cancellationToken, monthCtx);
+                            records.DeviceEvents, PublishDeviceEventDataAsync, config, cancellationToken, monthCtx,
+                            d => d.Timestamp);
                     }
 
                     // TempBasal state spans
@@ -247,7 +231,8 @@ public class MyLifeConnectorService(
                         var tempBasals = MyLifeStateSpanMapper.MapTempBasals(treatmentEvents, treatmentContext).ToList();
 
                         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                            tempBasals, PublishTempBasalDataAsync, config, cancellationToken, batch.Month);
+                            tempBasals, PublishTempBasalDataAsync, config, cancellationToken, batch.Month,
+                            t => t.StartTimestamp);
                     }
                 }
 
@@ -263,11 +248,13 @@ public class MyLifeConnectorService(
 
                 var profiles = MyLifePumpSettingsMapper.MapToProfiles(readouts);
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles, PublishProfileDataAsync, config, cancellationToken);
+                    profiles, PublishProfileDataAsync, config, cancellationToken,
+                    timestampOf: p => TimestampFromMills(p.Mills));
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
                 await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings");
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings",
+                    s => s.StartTimestamp);
             }
         }
         catch (Exception ex)

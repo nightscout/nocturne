@@ -136,8 +136,7 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
     protected override Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TestConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
         => throw new NotSupportedException();
 
     // Public wrapper for testing protected method

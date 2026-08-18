@@ -55,8 +55,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TandemConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
         var enabled = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
@@ -134,7 +133,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
             result, SyncDataType.Profiles, enabled, [profile],
-            PublishProfileDataAsync, config, cancellationToken);
+            PublishProfileDataAsync, config, cancellationToken,
+            timestampOf: p => TimestampFromMills(p.Mills));
     }
 
     private async Task SyncEventsAsync(
@@ -209,42 +209,50 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     {
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabled,
-                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
+                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken,
+                timestampOf: s => s.Timestamp);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
             var decomposed = bolus.Map(bolusEvents);
             await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabled,
-                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken);
+                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken,
+                timestampOf: b => b.Timestamp);
             await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabled,
-                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken);
+                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken,
+                timestampOf: c => c.Timestamp);
             await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, enabled,
-                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken);
+                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken,
+                timestampOf: b => b.Timestamp);
         }
 
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabled,
                 basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
-                config, cancellationToken);
+                config, cancellationToken, timestampOf: t => t.StartTimestamp);
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
-            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken);
+            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken,
+            timestampOf: d => d.Timestamp);
 
         // Alarms and CGM alerts are gated and accounted under DeviceEvents — there is no dedicated
         // SyncDataType for them — so a publish failure flips Success.
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
-            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
+            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken,
+            timestampOf: e => TimestampFromMills(e.Mills));
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
             await PublishRecordTypeAsync(result, SyncDataType.StateSpans, enabled,
-                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken);
+                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken,
+                timestampOf: s => s.StartTimestamp);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
             await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, enabled,
-                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
+                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken,
+                timestampOf: d => TimestampFromMills(d.Mills));
     }
 
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(

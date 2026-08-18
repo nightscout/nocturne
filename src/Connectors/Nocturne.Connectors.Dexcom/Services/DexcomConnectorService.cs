@@ -78,13 +78,11 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         DexcomConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
+        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
         if (!enabledTypes.Contains(SyncDataType.Glucose))
         {
             result.EndTime = DateTimeOffset.UtcNow;
@@ -94,26 +92,10 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
-            var sgList = sensorGlucose.ToList();
 
-            if (sgList.Count > 0)
-            {
-                var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                result.ItemsSynced[SyncDataType.Glucose] = sgList.Count;
-                result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                    .FromUnixTimeMilliseconds(sgList.Max(s => s.Mills))
-                    .UtcDateTime;
-
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("SensorGlucose publish failed");
-                }
-                else
-                {
-                    _logger.LogInformation("Synced {Count} SensorGlucose records from Dexcom", sgList.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
+                sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken,
+                "Dexcom", s => s.Timestamp);
         }
         catch (Exception ex)
         {

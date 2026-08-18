@@ -92,8 +92,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         CareLinkConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -402,15 +401,15 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
             await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabledTypes,
                 CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), PublishBolusDataAsync,
-                config, cancellationToken);
+                config, cancellationToken, timestampOf: b => b.Timestamp);
 
             await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabledTypes,
                 CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), PublishCarbIntakeDataAsync,
-                config, cancellationToken);
+                config, cancellationToken, timestampOf: c => c.Timestamp);
 
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabledTypes,
                 CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), PublishTempBasalDataAsync,
-                config, cancellationToken);
+                config, cancellationToken, timestampOf: t => t.StartTimestamp);
 
             // Not routed through PublishRecordTypeAsync: system events would have to be gated and
             // counted under DeviceEvents, which CareLink does not declare supported, so the helper

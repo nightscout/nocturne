@@ -161,8 +161,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -170,7 +169,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             request.DataTypes = SupportedDataTypes;
 
         var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToList();
+        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
         // For open-ended background catch-up (no explicit upper bound), each data type
         // resolves its own "since" from its OWN latest stored record rather than reusing
@@ -282,23 +281,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var profiles = await FetchProfilesAsync();
-                var profileList = profiles.ToList();
-                result.ItemsSynced[SyncDataType.Profiles] = profileList.Count;
-                if (profileList.Count > 0)
-                {
-                    result.LastEntryTimes[SyncDataType.Profiles] = profileList
-                        .Where(p => p.Mills > 0)
-                        .Select(p => DateTimeOffset.FromUnixTimeMilliseconds(p.Mills).UtcDateTime)
-                        .DefaultIfEmpty()
-                        .Max();
-                    var publishSuccess = await PublishProfileDataAsync(
-                        profileList, config, cancellationToken);
-                    if (!publishSuccess)
-                    {
-                        result.Success = false;
-                        result.Errors.Add("Profiles publish failed");
-                    }
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
+                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken,
+                    timestampOf: p => TimestampFromMills(p.Mills));
             }
             catch (Exception ex)
             {
@@ -436,6 +421,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
         from is null && to is null ? DateTime.UtcNow : to;
 
+    /// <summary>
+    ///     Outcome of one crawled collection. <paramref name="NewestTime"/> spans every page of the
+    ///     crawl, including the resume pass below the low-water mark, so it cannot come from the
+    ///     shared publish path: that sees one page at a time and never the crawl as a whole.
+    /// </summary>
     private sealed record PagedCrawlOutcome(int Count, DateTime? NewestTime, bool Success);
 
     private Task<DateTime?> GetBackfillLowWaterMarkAsync(string collection) =>

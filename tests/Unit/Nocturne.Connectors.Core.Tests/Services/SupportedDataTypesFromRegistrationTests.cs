@@ -35,8 +35,7 @@ public class SupportedDataTypesFromRegistrationTests
         protected override Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,
             TConfig config,
-            CancellationToken cancellationToken,
-            ISyncProgressReporter? progressReporter = null)
+            CancellationToken cancellationToken)
             => throw new NotSupportedException();
     }
 

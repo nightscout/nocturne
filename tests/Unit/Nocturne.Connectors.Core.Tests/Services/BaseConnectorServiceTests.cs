@@ -35,8 +35,7 @@ public class BaseConnectorServiceTests
         protected override Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,
             TestConfig config,
-            CancellationToken cancellationToken,
-            ISyncProgressReporter? progressReporter = null)
+            CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
         // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.

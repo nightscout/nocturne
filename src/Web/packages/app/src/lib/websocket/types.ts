@@ -88,7 +88,6 @@ export interface NotificationUpdateEvent {
 export type SyncMessageType =
   | "Authenticating"
   | "FetchingData"
-  | "FetchingDataType"
   | "ProcessingDataType"
   | "PublishingDataType"
   | "SyncComplete"

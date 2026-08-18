@@ -113,8 +113,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         NocturneRemoteConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -122,7 +121,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             request.DataTypes = SupportedDataTypes;
 
         var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToList();
+        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
         foreach (var type in activeTypes)
         {
@@ -130,30 +129,22 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
             try
             {
-                var (count, lastTime, success) = type switch
+                await (type switch
                 {
-                    SyncDataType.Glucose => await SyncSensorGlucoseAsync(request, config, cancellationToken),
-                    SyncDataType.ManualBG => await SyncBGChecksAsync(request, config, cancellationToken),
-                    SyncDataType.Boluses => await SyncBolusesAsync(request, config, cancellationToken),
-                    SyncDataType.CarbIntake => await SyncCarbIntakeAsync(request, config, cancellationToken),
-                    SyncDataType.BolusCalculations => await SyncBolusCalculationsAsync(request, config, cancellationToken),
-                    SyncDataType.Notes => await SyncNotesAsync(request, config, cancellationToken),
-                    SyncDataType.DeviceEvents => await SyncDeviceEventsAsync(request, config, cancellationToken),
-                    SyncDataType.StateSpans => await SyncStateSpansAsync(request, config, cancellationToken),
-                    SyncDataType.Profiles => await SyncProfilesAsync(config, cancellationToken),
-                    SyncDataType.DeviceStatus => await SyncDeviceStatusAsync(request, config, cancellationToken),
-                    SyncDataType.Activity => await SyncActivityAsync(request, config, cancellationToken),
-                    SyncDataType.Food => await SyncFoodAsync(config, cancellationToken),
-                    _ => (0, null, true)
-                };
-
-                result.ItemsSynced[type] = count;
-                result.LastEntryTimes[type] = lastTime;
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add($"{type} publish failed");
-                }
+                    SyncDataType.Glucose => SyncSensorGlucoseAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.ManualBG => SyncBGChecksAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Boluses => SyncBolusesAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.CarbIntake => SyncCarbIntakeAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.BolusCalculations => SyncBolusCalculationsAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Notes => SyncNotesAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.DeviceEvents => SyncDeviceEventsAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.StateSpans => SyncStateSpansAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Profiles => SyncProfilesAsync(config, result, activeTypes, cancellationToken),
+                    SyncDataType.DeviceStatus => SyncDeviceStatusAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Activity => SyncActivityAsync(request, config, result, activeTypes, cancellationToken),
+                    SyncDataType.Food => SyncFoodAsync(config, result, activeTypes, cancellationToken),
+                    _ => Task.CompletedTask
+                });
             }
             catch (Exception ex)
             {
@@ -169,165 +160,150 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     #region V4 Data Type Sync Methods
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncSensorGlucoseAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncSensorGlucoseAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<SensorGlucose>(
             NocturneRemoteConstants.SensorGlucose, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishSensorGlucoseDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishSensorGlucoseDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncBGChecksAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncBGChecksAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<BGCheck>(
             NocturneRemoteConstants.BGChecks, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishBGCheckDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishBGCheckDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncBolusesAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncBolusesAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<Bolus>(
             NocturneRemoteConstants.Boluses, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishBolusDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishBolusDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncCarbIntakeAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncCarbIntakeAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<CarbIntake>(
             NocturneRemoteConstants.CarbIntake, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishCarbIntakeDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishCarbIntakeDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncBolusCalculationsAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncBolusCalculationsAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<BolusCalculation>(
             NocturneRemoteConstants.BolusCalculations, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishBolusCalculationDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishBolusCalculationDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncNotesAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncNotesAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<Note>(
             NocturneRemoteConstants.Notes, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishNoteDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishNoteDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncDeviceEventsAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncDeviceEventsAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedV4Async<DeviceEvent>(
             NocturneRemoteConstants.DeviceEvents, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var prepared = ImportHelper.PrepareForImport(records);
-        var lastTime = prepared.Max(r => r.Timestamp);
-        var success = await PublishDeviceEventDataAsync(prepared, config, ct);
-        return (prepared.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+            ImportHelper.PrepareForImport(records), PublishDeviceEventDataAsync, config, ct,
+            timestampOf: r => r.Timestamp);
     }
 
     #endregion
 
     #region Legacy Model Sync Methods
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncStateSpansAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncStateSpansAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedLegacyAsync<StateSpan>(
             NocturneRemoteConstants.StateSpans, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var lastTime = records
-            .Select(s => s.StartTimestamp)
-            .DefaultIfEmpty()
-            .Max();
-        var success = await PublishStateSpanDataAsync(records, config, ct);
-        return (records.Count, lastTime == default ? null : lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+            records, PublishStateSpanDataAsync, config, ct,
+            timestampOf: s => s.StartTimestamp == default ? null : s.StartTimestamp);
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncProfilesAsync(
-        NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncProfilesAsync(
+        NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedLegacyAsync<Profile>(
             NocturneRemoteConstants.ProfileRecords, null, null, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var lastTime = records
-            .Where(p => p.Mills > 0)
-            .Select(p => DateTimeOffset.FromUnixTimeMilliseconds(p.Mills).UtcDateTime)
-            .DefaultIfEmpty()
-            .Max();
-        var success = await PublishProfileDataAsync(records, config, ct);
-        return (records.Count, lastTime == default ? null : lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
+            records, PublishProfileDataAsync, config, ct,
+            timestampOf: p => TimestampFromMills(p.Mills));
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncDeviceStatusAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncDeviceStatusAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         // DeviceStatus uses the v1 API because the publisher only supports the legacy model.
         // The remote instance exposes v1 compatibility endpoints.
         var records = await FetchV1DeviceStatusAsync(request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var lastTime = records
-            .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-            .Where(dt => dt.HasValue)
-            .Max();
-        var success = await PublishDeviceStatusAsync(records, config, ct);
-        return (records.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
+            records, PublishDeviceStatusAsync, config, ct,
+            timestampOf: d => ParseCreatedAt(d.CreatedAt));
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncActivityAsync(
-        SyncRequest request, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    private async Task SyncActivityAsync(
+        SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         var records = await FetchPaginatedLegacyAsync<Activity>(
             NocturneRemoteConstants.Activity, request.From, request.To, ct);
-        if (records.Count == 0) return (0, null, true);
 
-        var lastTime = records
-            .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-            .Where(dt => dt.HasValue)
-            .Max();
-        var success = await PublishActivityDataAsync(records, config, ct);
-        return (records.Count, lastTime, success);
+        await PublishRecordTypeAsync(result, SyncDataType.Activity, activeTypes,
+            records, PublishActivityDataAsync, config, ct,
+            timestampOf: a => ParseCreatedAt(a.CreatedAt));
     }
 
-    private async Task<(int count, DateTime? lastTime, bool success)> SyncFoodAsync(
-        NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    /// <summary>Parses a legacy ISO createdAt string, treating an unparseable value as absent.</summary>
+    private static DateTime? ParseCreatedAt(string? createdAt) =>
+        DateTimeOffset.TryParse(createdAt, out var dto) ? dto.UtcDateTime : null;
+
+    private async Task SyncFoodAsync(
+        NocturneRemoteConnectorConfiguration config, SyncResult result,
+        HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
         // Foods endpoint returns a flat array, not PaginatedResponse
         var url = BuildAbsoluteUrl($"{NocturneRemoteConstants.Foods}?count={_config.MaxCount}");
@@ -339,14 +315,14 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                 "[{ConnectorSource}] Failed to fetch foods: HTTP {StatusCode}",
                 ConnectorSource,
                 (int)response.StatusCode);
-            return (0, null, true);
+            return;
         }
 
         var foods = await DeserializeResponseAsync<Food[]>(response, ct);
-        if (foods == null || foods.Length == 0) return (0, null, true);
 
-        var success = await PublishFoodDataAsync(foods, config, ct);
-        return (foods.Length, null, success);
+        // Food carries no per-record time, so no timestamp selector is supplied.
+        await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
+            foods?.ToList() ?? [], PublishFoodDataAsync, config, ct);
     }
 
     #endregion

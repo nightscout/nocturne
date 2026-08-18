@@ -35,6 +35,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     private WriteOrigin? _treatmentPublishOrigin;
     private WriteOrigin? _devicePublishOrigin;
 
+    // Carried on the instance rather than through PerformSyncInternalAsync's callees so the shared
+    // publish path can report without every connector threading it; safe for the same reason the
+    // publish-origin memos above are.
+    private ISyncProgressReporter? _progressReporter;
+
     /// <summary>
     ///     Base constructor for connector services using IHttpClientFactory pattern
     /// </summary>
@@ -92,7 +97,25 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ISyncProgressReporter? progressReporter = null
     )
     {
-        return await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+        return await RunSyncInternalAsync(request, config, cancellationToken, progressReporter);
+    }
+
+    private async Task<SyncResult> RunSyncInternalAsync(
+        SyncRequest request,
+        TConfig config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter
+    )
+    {
+        _progressReporter = progressReporter;
+        try
+        {
+            return await PerformSyncInternalAsync(request, config, cancellationToken);
+        }
+        finally
+        {
+            _progressReporter = null;
+        }
     }
 
     public void Dispose()
@@ -382,9 +405,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected abstract Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    );
+        CancellationToken cancellationToken);
 
     protected virtual Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
         DateTime? from,
@@ -612,9 +633,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Reusable helper that checks whether a data type is active, publishes a batch of records,
-    ///     updates the <see cref="SyncResult"/> counts, and logs the outcome.
+    ///     Reusable helper that checks whether a data type is active, reports publish progress,
+    ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts and
+    ///     <see cref="SyncResult.LastEntryTimes"/>, and logs the outcome.
     /// </summary>
+    /// <param name="timestampOf">
+    ///     Extracts a record's canonical timestamp for <see cref="SyncResult.LastEntryTimes"/>.
+    ///     <c>null</c> — the parameter or an individual return — means the record carries no time
+    ///     to report, and nothing is recorded for the type.
+    /// </param>
     protected async Task PublishRecordTypeAsync<T>(
         SyncResult result,
         SyncDataType dataType,
@@ -623,13 +650,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         Func<List<T>, TConfig, CancellationToken, Task<bool>> publishFunc,
         TConfig config,
         CancellationToken cancellationToken,
-        string? context = null) where T : class
+        string? context = null,
+        Func<T, DateTime?>? timestampOf = null) where T : class
     {
         if (!activeTypes.Contains(dataType) || records.Count == 0) return;
+
+        await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
+            new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
+            cancellationToken);
 
         var success = await publishFunc(records, config, cancellationToken);
         result.ItemsSynced.TryGetValue(dataType, out var prev);
         result.ItemsSynced[dataType] = prev + records.Count;
+        RecordLastEntryTime(result, dataType, records, timestampOf);
         if (!success)
         {
             result.Success = false;
@@ -641,6 +674,63 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             _logger.LogInformation("Synced {Count} {Type} records{Context}",
                 records.Count, dataType, ctx);
         }
+    }
+
+    /// <summary>
+    ///     Raises <see cref="SyncResult.LastEntryTimes"/> for a type to the newest timestamp in a
+    ///     published batch. Max-compare, not assignment: a connector that publishes several batches
+    ///     per type is under no obligation to deliver them in chronological order.
+    /// </summary>
+    private static void RecordLastEntryTime<T>(
+        SyncResult result,
+        SyncDataType dataType,
+        List<T> records,
+        Func<T, DateTime?>? timestampOf)
+    {
+        if (timestampOf is null) return;
+
+        DateTime? newest = null;
+        foreach (var record in records)
+        {
+            var time = timestampOf(record);
+            if (time.HasValue && (newest is null || time.Value > newest.Value))
+                newest = time;
+        }
+
+        if (newest is null) return;
+
+        // A recorded null must still be raised: lifted comparison against null is false, so
+        // `newest > existing` alone would leave a null-valued entry in place forever.
+        if (!result.LastEntryTimes.TryGetValue(dataType, out var existing)
+            || existing is null
+            || newest.Value > existing.Value)
+            result.LastEntryTimes[dataType] = newest;
+    }
+
+    /// <summary>
+    ///     Converts a legacy mills field to a UTC timestamp, treating a non-positive value as absent.
+    /// </summary>
+    protected static DateTime? TimestampFromMills(long mills) =>
+        mills > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime : null;
+
+    /// <summary>
+    ///     Reports a sync-progress message to the reporter supplied for this run, if any.
+    /// </summary>
+    protected Task ReportSyncMessageAsync(
+        SyncMessageType messageType,
+        Dictionary<string, string>? messageParams,
+        CancellationToken cancellationToken)
+    {
+        if (_progressReporter is null) return Task.CompletedTask;
+
+        return _progressReporter.ReportProgressAsync(new SyncProgressEvent
+        {
+            ConnectorId = ConnectorSource,
+            ConnectorName = ServiceName,
+            Phase = SyncPhase.Syncing,
+            MessageType = messageType,
+            MessageParams = messageParams,
+        }, cancellationToken);
     }
 
     #region V4 Publishing Methods
@@ -978,7 +1068,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 DataTypes = SupportedDataTypes,
             };
 
-            var result = await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+            var result = await RunSyncInternalAsync(request, config, cancellationToken, progressReporter);
 
             if (result.Success)
             {
