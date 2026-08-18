@@ -5,6 +5,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.AidDetection;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
@@ -90,6 +91,34 @@ public static class ServiceRegistrationExtensions
     /// controller actions and so cannot carry the attribute.
     /// </summary>
     public const string DocsRateLimitPolicy = "docs";
+
+    /// <summary>
+    /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
+    /// each applies. Held as one table so all of them resolve their partition through
+    /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
+    /// in exactly one place.
+    /// </summary>
+    internal static readonly (string Policy, int PermitLimit, TimeSpan Window)[] ClientAddressPolicies =
+    [
+        ("oauth-token", 30, TimeSpan.FromMinutes(1)),
+        ("oauth-device", 10, TimeSpan.FromMinutes(1)),
+        // RFC 7591 Dynamic Client Registration.
+        ("oauth-register", 10, TimeSpan.FromHours(1)),
+        ("oauth-device-approve", 20, TimeSpan.FromMinutes(1)),
+        ("totp-login", 10, TimeSpan.FromMinutes(1)),
+        ("guest-activate", 5, TimeSpan.FromMinutes(10)),
+        // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
+        // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
+        ("demo-session", 10, TimeSpan.FromMinutes(5)),
+        ("support-issues", 5, TimeSpan.FromHours(1)),
+        // The documentation surface (/scalar, /openapi) runs before tenant resolution and
+        // authentication, and the reference reads the tenants table and may write that tenant's
+        // OAuth client, so it is the one unauthenticated path that reaches the database that
+        // early. What bounds the damage is elsewhere: the row holds at most
+        // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
+        // client id are cached, so a flood mostly costs the page render.
+        (DocsRateLimitPolicy, 30, TimeSpan.FromMinutes(1)),
+    ];
 
     /// <summary>
     /// Rate-limiting policy for the statistics actions that compute over a caller-supplied body.
@@ -314,157 +343,33 @@ public static class ServiceRegistrationExtensions
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
         });
 
+        var clientRateLimitKey = new ClientRateLimitKey(configuration);
+
         services.AddRateLimiter(options =>
         {
-            options.AddPolicy(
-                "oauth-token",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 30,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "oauth-device",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // RFC 7591 Dynamic Client Registration: 10 registrations per IP per hour.
-            options.AddPolicy(
-                "oauth-register",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromHours(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "oauth-device-approve",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 20,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.AddPolicy(
-                "totp-login",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Guest link activation: 5 attempts per IP per 10 minutes.
-            options.AddPolicy(
-                "guest-activate",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 5,
-                            Window = TimeSpan.FromMinutes(10),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Demo sign-in: 10 sessions per IP per 5 minutes. Friction against naive abuse
-            // only — this does NOT bound the refresh_tokens table. The partition key comes from
-            // Connection.RemoteIpAddress, which UseForwardedHeaders sets from X-Forwarded-For
-            // with no trusted-proxy list, and the gateway does not strip that header, so a
-            // caller rotating it gets a fresh partition every request. The real ceiling is
-            // DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
-            options.AddPolicy(
-                "demo-session",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 10,
-                            Window = TimeSpan.FromMinutes(5),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Support issue creation: 5 issues per IP per hour.
-            options.AddPolicy(
-                "support-issues",
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 5,
-                            Window = TimeSpan.FromHours(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Documentation surface (/scalar, /openapi): 30 per IP per minute. These endpoints run
-            // before tenant resolution and authentication, and the reference reads the tenants
-            // table and may write that tenant's OAuth client, so they are the one unauthenticated
-            // path that reaches the database that early. As with demo-session the partition key is
-            // no hard ceiling — it comes from X-Forwarded-For. What bounds the damage is elsewhere:
-            // the row holds at most ScalarAuthProvider.MaxRedirectUris entries, and both the tenant
-            // resolution and the client id are cached, so a flood mostly costs the page render.
-            options.AddPolicy(
-                DocsRateLimitPolicy,
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 30,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
+            foreach (var (policy, permitLimit, window) in ClientAddressPolicies)
+            {
+                options.AddPolicy(
+                    policy,
+                    context =>
+                        RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: clientRateLimitKey.Resolve(context),
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = permitLimit,
+                                Window = window,
+                                QueueLimit = 0,
+                            }
+                        )
+                );
+            }
 
             // Statistics compute POSTs: 60 per tenant host per minute. These actions compute over a
             // caller-supplied body rather than over stored data, and reports.read — the scope
             // gating them — is held by every public share link, so an anonymous viewer can post
-            // them. The partition is the Host rather than the IP because the limiter runs before
-            // tenant resolution, the tenant (or share token) is the subdomain, and the browser does
-            // not reach these actions directly: the SvelteKit server calls them, so every tenant's
-            // traffic arrives from one address.
+            // them. The partition is the Host rather than the client because what this bounds is one
+            // tenant's compute across all of its viewers, and the limiter runs before tenant
+            // resolution while the tenant (or share token) is already the subdomain.
             options.AddPolicy(
                 StatisticsComputeRateLimitPolicy,
                 context =>

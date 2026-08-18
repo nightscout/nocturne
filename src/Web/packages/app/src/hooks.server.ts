@@ -19,6 +19,7 @@ import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
+import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import { STATIC_ASSET_PREFIXES, isPublicRoute } from "$lib/server/public-routes";
 import {
@@ -356,6 +357,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
+    ...clientAddressHeaders(event),
   };
 
   // Forward the original Host for tenant resolution behind reverse proxies.

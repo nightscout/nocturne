@@ -1,4 +1,8 @@
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import {
+  CLIENT_IP_HEADER,
+  CLIENT_IP_SIGNATURE_HEADER,
+} from "$lib/server/client-address";
 
 /** The subset of SvelteKit's Cookies the proxy reads. */
 export interface ProxyCookieReader {
@@ -45,6 +49,12 @@ export function buildProxyHeaders({
 
   headers.delete("X-Instance-Key");
   headers.delete("X-Instance-Service");
+
+  // On this path the address the API partitions on is the X-Forwarded-For entry the gateway left,
+  // forwarded on with the rest of the incoming headers. A client-written pair is unsigned and so
+  // ignored, but it has no business travelling either.
+  headers.delete(CLIENT_IP_HEADER);
+  headers.delete(CLIENT_IP_SIGNATURE_HEADER);
 
   if (isShareHost) {
     headers.delete("Cookie");
