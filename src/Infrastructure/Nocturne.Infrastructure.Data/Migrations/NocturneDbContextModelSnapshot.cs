@@ -420,8 +420,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("metadata");
 
                     b.Property<string>("Secret")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasMaxLength(1536)
+                        .HasColumnType("character varying(1536)")
                         .HasColumnName("secret");
 
                     b.Property<int>("SortOrder")

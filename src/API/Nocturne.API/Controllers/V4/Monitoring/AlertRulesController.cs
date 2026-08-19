@@ -413,8 +413,7 @@ public class AlertRulesController : ControllerBase
         var channels = request.Channels
             .Select((c, i) => new AlertRuleChannelSnapshot(
                 Guid.Empty, Guid.Empty, c.ChannelType, c.Destination ?? string.Empty,
-                c.DestinationLabel, i, SerializeMetadata(c.Metadata),
-                string.IsNullOrWhiteSpace(c.Secret) ? null : _encryption.Encrypt(c.Secret)))
+                c.DestinationLabel, i, SerializeMetadata(c.Metadata), EncryptSecret(c.Secret)))
             .ToList();
 
         var payload = new AlertPayload
@@ -475,6 +474,11 @@ public class AlertRulesController : ControllerBase
 
         foreach (var ch in channels)
         {
+            if (RejectOversizedSecret(ch) is { } badSecret)
+            {
+                return badSecret;
+            }
+
             if (ch.ChannelType == ChannelType.DeviceAction)
             {
                 if (RejectInvalidDeviceActionChannel(ch) is { } badDevice)
@@ -531,6 +535,31 @@ public class AlertRulesController : ControllerBase
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The largest signing secret accepted, measured in UTF-8 bytes because that — not the
+    /// character count — is what the stored ciphertext is sized from. Stating the bound keeps a
+    /// secret of legal length in non-Latin script from being discovered as a 500 at the column.
+    /// </summary>
+    private const int SecretMaxBytes = 256;
+
+    private ActionResult? RejectOversizedSecret(CreateAlertRuleChannelRequest ch)
+    {
+        var secret = ch.Secret?.Trim();
+        if (string.IsNullOrEmpty(secret))
+        {
+            return null;
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(secret);
+        return bytes <= SecretMaxBytes
+            ? null
+            : BadRequest(new
+            {
+                message = $"A {WireName(ch.ChannelType)} channel's signing secret must be at most "
+                    + $"{SecretMaxBytes} bytes once UTF-8 encoded; got {bytes}.",
+            });
     }
 
     private ActionResult? RejectInvalidDeviceActionChannel(CreateAlertRuleChannelRequest ch)
@@ -622,16 +651,25 @@ public class AlertRulesController : ControllerBase
     /// new ids, and the secret is never echoed back, so a channel arriving without one has to be
     /// matched to its predecessor by type and destination.
     /// </summary>
+    /// <remarks>
+    /// A pair held by more than one stored secret retains none of them: the key cannot tell which
+    /// of the duplicates an incoming channel descends from, and a guess would sign one receiver's
+    /// alerts with another's secret. Ciphertext is compared rather than plaintext, so two channels
+    /// sharing a destination are ambiguous even when the secret behind them is the same — they are
+    /// re-entered rather than silently mismatched.
+    /// </remarks>
     private static IReadOnlyDictionary<(ChannelType, string), string> CollectRetainedSecrets(
         IEnumerable<AlertRuleChannelEntity> channels) => channels
             .Where(c => c.Secret is not null)
             .GroupBy(c => (c.ChannelType, c.Destination))
-            .ToDictionary(g => g.Key, g => g.First().Secret!);
+            .Select(g => (g.Key, Secrets: g.Select(c => c.Secret!).Distinct(StringComparer.Ordinal).ToArray()))
+            .Where(g => g.Secrets.Length == 1)
+            .ToDictionary(g => g.Key, g => g.Secrets[0]);
 
     /// <summary>
     /// Ciphertext for the channel's signing secret. A secret omitted from the request keeps the one
-    /// already stored (the editor cannot re-send what it was never shown); an explicitly empty one
-    /// clears it.
+    /// stored against this channel type and destination (the editor cannot re-send what it was
+    /// never shown); one that is empty once trimmed clears it.
     /// </summary>
     private string? ResolveSecret(
         CreateAlertRuleChannelRequest req,
@@ -645,7 +683,18 @@ public class AlertRulesController : ControllerBase
                 : null;
         }
 
-        return string.IsNullOrWhiteSpace(req.Secret) ? null : _encryption.Encrypt(req.Secret);
+        return EncryptSecret(req.Secret);
+    }
+
+    /// <summary>
+    /// Ciphertext for a caller-supplied secret, or null when it is blank. Surrounding whitespace is
+    /// dropped rather than signed with: it does not survive a copy-paste round trip through the
+    /// receiver's own configuration.
+    /// </summary>
+    private string? EncryptSecret(string? secret)
+    {
+        var trimmed = secret?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : _encryption.Encrypt(trimmed);
     }
 
     private static string? SerializeMetadata(object? metadata) =>
@@ -935,9 +984,10 @@ public class CreateAlertRuleChannelRequest
     public object? Metadata { get; set; }
     /// <summary>
     /// Write-only HMAC signing secret for a <c>webhook</c> channel; the receiver verifies it
-    /// against the <c>X-Nocturne-Signature</c> header. Omit to keep the stored secret, send empty
-    /// to clear it. Never returned — the read side reports
-    /// <see cref="AlertRuleChannelResponse.HasSecret"/> instead.
+    /// against the <c>X-Nocturne-Signature</c> header. Omit to keep the secret stored against this
+    /// channel type and destination — changing either is a new channel and carries no secret over.
+    /// Send empty to clear it. At most 256 bytes once UTF-8 encoded. Never returned — the read side
+    /// reports <see cref="AlertRuleChannelResponse.HasSecret"/> instead.
     /// </summary>
     [MaxLength(256)]
     public string? Secret { get; set; }

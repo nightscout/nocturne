@@ -13,8 +13,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "secret",
                 table: "alert_rule_channels",
-                type: "character varying(512)",
-                maxLength: 512,
+                type: "character varying(1536)",
+                maxLength: 1536,
                 nullable: true);
         }
 

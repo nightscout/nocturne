@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260818232343_AddAlertRuleChannelSecret")]
+    [Migration("20260819060052_AddAlertRuleChannelSecret")]
     partial class AddAlertRuleChannelSecret
     {
         /// <inheritdoc />
@@ -423,8 +423,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("metadata");
 
                     b.Property<string>("Secret")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasMaxLength(1536)
+                        .HasColumnType("character varying(1536)")
                         .HasColumnName("secret");
 
                     b.Property<int>("SortOrder")

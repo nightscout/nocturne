@@ -51,8 +51,15 @@ public class AlertRuleChannelEntity : ITenantScoped
     /// receiver does not verify signatures. It lives in its own column rather than in
     /// <see cref="Metadata"/> because metadata is echoed back verbatim on read.
     /// </summary>
+    /// <remarks>
+    /// Sized so the API's 256-character cap cannot overflow it whatever script the secret is in:
+    /// a BMP character costs one UTF-16 unit but up to three UTF-8 bytes, so 256 characters reach
+    /// 768 bytes, which AES-GCM frames to 768 + 12 nonce + 16 tag = 796 bytes and Base64 widens to
+    /// 1064 characters. The stated contract is the tighter 256-byte one the controller enforces;
+    /// this width is what keeps the looser character cap from ever reaching the column.
+    /// </remarks>
     [Column("secret")]
-    [MaxLength(512)]
+    [MaxLength(1536)]
     public string? Secret { get; set; }
 
     /// <summary>Display ordering within the rule's channel list. Not load-bearing.</summary>
