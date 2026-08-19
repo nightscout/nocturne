@@ -405,9 +405,42 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return result;
     }
 
+    /// <summary>
+    ///     Ceiling on the list <see cref="FetchGlucoseDataAsync"/> builds — roughly ten weeks of
+    ///     five-minute readings.
+    /// </summary>
+    private const int MaxMaterializedEntries = 20_000;
+
+    /// <summary>
+    ///     Hands back one list, so it stops at <see cref="MaxMaterializedEntries"/> however wide a
+    ///     range the caller asks for: this is the accumulation <see cref="PerformSyncInternalAsync"/>
+    ///     streams to avoid, and importing a range belongs to that path, not this one.
+    /// </summary>
     public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
     {
-        return await FetchGlucoseDataRangeAsync(since, null);
+        var entries = new List<Entry>();
+
+        await foreach (var page in FetchGlucosePagesAsync(since, null))
+        {
+            entries.AddRange(page);
+
+            if (entries.Count >= MaxMaterializedEntries)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Glucose fetch stopped at {Count} entries; records older than {Oldest:yyyy-MM-dd HH:mm:ss} were not fetched",
+                    ConnectorSource,
+                    entries.Count,
+                    entries[^1].Date);
+                break;
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
+            ConnectorSource,
+            entries.Count);
+
+        return entries;
     }
 
     /// <summary>
@@ -730,21 +763,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 treatment.DataSource = ConnectorSource;
             yield return page;
         }
-    }
-
-    protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from, DateTime? to)
-    {
-        var allEntries = new List<Entry>();
-        await foreach (var page in FetchGlucosePagesAsync(from, to))
-            allEntries.AddRange(page);
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
-            ConnectorSource,
-            allEntries.Count);
-
-        return allEntries;
     }
 
     protected override async Task<IEnumerable<Profile>> FetchProfilesAsync()

@@ -407,14 +407,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         TConfig config,
         CancellationToken cancellationToken);
 
-    protected virtual Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return FetchGlucoseDataAsync(from);
-    }
-
     protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
     {
         return Task.FromResult(Enumerable.Empty<Profile>());

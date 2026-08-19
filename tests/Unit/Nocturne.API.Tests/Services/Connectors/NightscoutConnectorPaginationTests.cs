@@ -281,6 +281,42 @@ public class NightscoutConnectorPaginationTests
     }
 
     [Fact]
+    public async Task FetchGlucoseData_RangeWiderThanTheCeiling_StopsInsteadOfAccumulating()
+    {
+        // This overload hands back one list, so an open-ended range must stop at the ceiling
+        // rather than crawl a multi-year history into memory. Pages are newest-first, so what
+        // it stops short of is the older end.
+        const int pageSize = 5_000;
+        const int ceiling = 20_000;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = pageSize,
+        };
+
+        var handler = new SequentialMockHandler();
+        var pageStart = BaseTime;
+        // One more full page than the ceiling can hold: without the stop, the crawl takes it too.
+        for (var i = 0; i < (ceiling / pageSize) + 1; i++)
+        {
+            var page = CreateEntries(pageSize, pageStart);
+            handler.Enqueue(JsonResponse(page));
+            pageStart = DateTimeOffset.FromUnixTimeMilliseconds(page.Min(e => e.Mills)).AddMilliseconds(-1);
+        }
+
+        var service = CreateService(handler, config);
+
+        var result = (await service.FetchGlucoseDataAsync()).ToList();
+
+        result.Should().HaveCount(ceiling,
+            "the materialized fetch must stop at its ceiling, not accumulate the whole range");
+        handler.RequestUrls.Should().HaveCount(ceiling / pageSize,
+            "reaching the ceiling must stop the crawl, not just trim what it already fetched");
+    }
+
+    [Fact]
     public async Task FetchGlucoseData_SetsDataSourceOnAllEntries()
     {
         var page1 = CreateEntries(MaxCount, BaseTime);
