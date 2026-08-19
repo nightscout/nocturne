@@ -9,7 +9,10 @@ describe("getDirectionInfo", () => {
 		["NONE", "unknown"],
 		["RATE OUT OF RANGE", "out of range"],
 		["RateOutOfRange", "out of range"],
+		["CGM ERROR", "sensor error"],
+		["CgmError", "sensor error"],
 		["Flat", "stable"],
+		["FORTY_FIVE_UP", "rising slowly"],
 		["DoubleDown", "falling very fast"],
 	])("resolves %s to %s", (direction, label) => {
 		expect(getDirectionInfo(direction).label).toBe(label);
@@ -21,7 +24,16 @@ describe("getDirectionInfo", () => {
 		expect(getDirectionInfo(undefined).label).toBe("unknown");
 	});
 
-	it.each(["None", "NONE", "Bogus", "", undefined])(
+	it.each([
+		"None",
+		"NONE",
+		"NotComputable",
+		"RateOutOfRange",
+		"CgmError",
+		"Bogus",
+		"",
+		undefined,
+	])(
 		"does not render %s as the stable arrow",
 		(direction) => {
 			const info = getDirectionInfo(direction);

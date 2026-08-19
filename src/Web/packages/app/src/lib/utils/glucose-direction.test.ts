@@ -14,6 +14,7 @@ describe("canonicalDirection", () => {
     expect(canonicalDirection("NONE")).toBe("None");
     expect(canonicalDirection("NOT COMPUTABLE")).toBe("NotComputable");
     expect(canonicalDirection("RATE OUT OF RANGE")).toBe("RateOutOfRange");
+    expect(canonicalDirection("CGM ERROR")).toBe("CgmError");
   });
 
   it("returns nothing for an absent or unrecognised direction", () => {
@@ -42,6 +43,8 @@ describe("directionGlyph", () => {
       "NONE",
       "NotComputable",
       "NOT COMPUTABLE",
+      "CgmError",
+      "CGM ERROR",
     ]) {
       expect(directionGlyph(direction)).toBe(UNKNOWN_DIRECTION_GLYPH);
       expect(directionGlyph(direction)).not.toBe(directionGlyph("Flat"));
@@ -70,6 +73,7 @@ describe("directionRotation", () => {
       "None",
       "NotComputable",
       "RateOutOfRange",
+      "CgmError",
       "Sideways",
       undefined,
     ]) {

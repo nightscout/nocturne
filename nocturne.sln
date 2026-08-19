@@ -179,7 +179,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.MyFitnessPal.Tests", "tests\Unit\Nocturne.Connectors.MyFitnessPal.Tests\Nocturne.Connectors.MyFitnessPal.Tests.csproj", "{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Tools.Connect.Tests", "tests\Unit\Nocturne.Tools.Connect.Tests\Nocturne.Tools.Connect.Tests.csproj", "{F8F11145-C385-45CC-96B7-5C44889EEE04}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Nightscout.Tests", "tests\Unit\Nocturne.Connectors.Nightscout.Tests\Nocturne.Connectors.Nightscout.Tests.csproj", "{AD362D58-392A-462C-A3F3-43ADA7ECBC12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Widget.Contracts.Tests", "tests\Unit\Nocturne.Widget.Contracts.Tests\Nocturne.Widget.Contracts.Tests.csproj", "{50AE64E7-3958-4D4D-81DE-2285BC7741F2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -947,6 +950,18 @@ Global
 		{AD362D58-392A-462C-A3F3-43ADA7ECBC12}.Release|x64.Build.0 = Release|Any CPU
 		{AD362D58-392A-462C-A3F3-43ADA7ECBC12}.Release|x86.ActiveCfg = Release|Any CPU
 		{AD362D58-392A-462C-A3F3-43ADA7ECBC12}.Release|x86.Build.0 = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|x64.Build.0 = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Debug|x86.Build.0 = Debug|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|x64.ActiveCfg = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|x64.Build.0 = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|x86.ActiveCfg = Release|Any CPU
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1027,5 +1042,6 @@ Global
 		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{F8F11145-C385-45CC-96B7-5C44889EEE04} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{AD362D58-392A-462C-A3F3-43ADA7ECBC12} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
+		{50AE64E7-3958-4D4D-81DE-2285BC7741F2} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal

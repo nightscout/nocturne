@@ -29,7 +29,6 @@
   interface ComponentProps {
     entries?: Entry[];
     currentBG?: number;
-    direction?: string;
     bgDelta?: number;
     demoMode?: boolean;
     /**
@@ -43,7 +42,6 @@
 
   let {
     currentBG,
-    direction,
     bgDelta,
     demoMode,
     profileTimezone,
@@ -60,9 +58,6 @@
 
   // Use realtime store values as fallback when props not provided
   const rawCurrentBG = $derived(currentBG ?? realtimeStore.currentBG);
-  // Direction is derived but reserved for future use
-  // svelte-ignore state_referenced_locally
-  void (direction ?? realtimeStore.direction);
   const rawBgDelta = $derived(bgDelta ?? realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
 
@@ -238,9 +233,6 @@
           size="lg"
         />
         <div class="text-center">
-          <div class="text-2xl">
-            <!-- Direction display placeholder -->
-          </div>
           <div class="text-sm text-muted-foreground">
             {displayBgDelta}
           </div>

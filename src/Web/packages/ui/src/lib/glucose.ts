@@ -65,7 +65,10 @@ export function getUnitLabel(units: GlucoseUnits): string {
  */
 export const UNKNOWN_DIRECTION_GLYPH = "?";
 
-/** Unicode glyph per drawable direction. `None`/`NotComputable` are absent by design. */
+/**
+ * Unicode glyph per drawable direction. `None`, `NotComputable` and `CgmError` are absent
+ * by design — no arrow expresses them.
+ */
 const DIRECTION_GLYPHS: Record<string, string> = {
   DoubleUp: "⇈",
   SingleUp: "↑",
@@ -100,6 +103,7 @@ const CANONICAL_DIRECTIONS = new Map(
     "DoubleDown",
     "NotComputable",
     "RateOutOfRange",
+    "CgmError",
   ].map((name) => [name.toUpperCase(), name] as const),
 );
 

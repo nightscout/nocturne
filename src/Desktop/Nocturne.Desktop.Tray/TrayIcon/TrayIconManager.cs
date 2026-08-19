@@ -7,6 +7,7 @@ using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Widget.Contracts;
+using DirectionHelper = Nocturne.Widget.Contracts.Helpers.DirectionHelper;
 using GlucoseUnit = Nocturne.Widget.Contracts.GlucoseUnit;
 
 namespace Nocturne.Desktop.Tray.TrayIcon;
@@ -89,7 +90,7 @@ public sealed class TrayIconManager : IDisposable
     {
         var value = GlucoseRangeHelper.FormatValue(reading.Sgv, settings.Unit);
         var unit = settings.Unit == GlucoseUnit.MmolL ? "mmol/L" : "mg/dL";
-        var arrow = TrendHelper.GetArrowText(reading.Direction.ToString());
+        var arrow = DirectionHelper.GetArrowText(reading.Direction.ToString());
         var delta = GlucoseRangeHelper.FormatDelta(reading.Delta, settings.Unit);
         var age = TimeAgoHelper.Format(reading.GetTimestamp());
 
