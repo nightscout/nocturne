@@ -332,7 +332,7 @@ public class ServicesController : ControllerBase
             var result = await _dataSourceService.DeleteDataSourceDataAsync(id, cancellationToken);
             if (!result.Success)
             {
-                if (result.Error?.Contains("not found") == true)
+                if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return NotFound(result);
                 }
@@ -406,7 +406,7 @@ public class ServicesController : ControllerBase
 
             if (!result.Success)
             {
-                if (result.Error?.Contains("not found") == true)
+                if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return NotFound(result);
                 }

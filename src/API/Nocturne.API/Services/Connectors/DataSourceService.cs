@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -611,7 +612,7 @@ public class DataSourceService : IDataSourceService
             info.Icon = "xdrip4ios";
             info.Description = ExtractDeviceDescription(deviceId, "xDrip4iOS on");
         }
-        else if (lowerDevice.Contains("xdrip") || lowerDevice.StartsWith("xdrip"))
+        else if (lowerDevice.Contains("xdrip"))
         {
             info.Name = "xDrip+";
             info.SourceType = "xdrip";
@@ -857,12 +858,10 @@ public class DataSourceService : IDataSourceService
             var metadata = ConnectorMetadataService.GetByConnectorId(connectorId);
             if (metadata == null)
             {
-                return new DataSourceDeleteResult
-                {
-                    Success = false,
-                    DataSource = connectorId,
-                    Error = $"Connector not found: {connectorId}",
-                };
+                return DataSourceDeleteResult.Failed(
+                    connectorId,
+                    DataSourceDeleteError.NotFound,
+                    $"Connector not found: {connectorId}");
             }
 
             // Connector's DataSourceId is what we use in the database (e.g. "dexcom-connector")
@@ -898,12 +897,10 @@ public class DataSourceService : IDataSourceService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting data for connector: {ConnectorId}", connectorId);
-            return new DataSourceDeleteResult
-            {
-                Success = false,
-                DataSource = connectorId,
-                Error = "Failed to delete connector data",
-            };
+            return DataSourceDeleteResult.Failed(
+                connectorId,
+                DataSourceDeleteError.DeleteFailed,
+                "Failed to delete connector data");
         }
     }
 
@@ -972,13 +969,11 @@ public class DataSourceService : IDataSourceService
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
-    private static string CleanDeviceName(string deviceId)
+    internal static string CleanDeviceName(string deviceId)
     {
-        // Clean up device ID to make it more readable
         var name = deviceId.Replace("-", " ").Replace("_", " ").Trim();
 
-        // Capitalize first letter of each word
-        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.ToLower());
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
     }
 
     private static string ExtractDeviceDescription(string deviceId, string prefix)
@@ -1012,12 +1007,10 @@ public class DataSourceService : IDataSourceService
             if (source == null)
             {
                 _logger.LogWarning("Data source not found: {DataSourceId}", dataSourceId);
-                return new DataSourceDeleteResult
-                {
-                    Success = false,
-                    DataSource = dataSourceId,
-                    Error = $"Data source not found: {dataSourceId}",
-                };
+                return DataSourceDeleteResult.Failed(
+                    dataSourceId,
+                    DataSourceDeleteError.NotFound,
+                    $"Data source not found: {dataSourceId}");
             }
 
             // The deviceId is the raw Device field value from sensor_glucose (e.g. "dexcom-connector",
@@ -1047,12 +1040,10 @@ public class DataSourceService : IDataSourceService
                 "Error deleting data for data source: {DataSourceId}",
                 dataSourceId
             );
-            return new DataSourceDeleteResult
-            {
-                Success = false,
-                DataSource = dataSourceId,
-                Error = ex.Message,
-            };
+            return DataSourceDeleteResult.Failed(
+                dataSourceId,
+                DataSourceDeleteError.DeleteFailed,
+                ex.Message);
         }
     }
 
@@ -1104,12 +1095,10 @@ public class DataSourceService : IDataSourceService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting demo data");
-            return new DataSourceDeleteResult
-            {
-                Success = false,
-                DataSource = DataSources.DemoService,
-                Error = ex.Message,
-            };
+            return DataSourceDeleteResult.Failed(
+                DataSources.DemoService,
+                DataSourceDeleteError.DeleteFailed,
+                ex.Message);
         }
     }
 
