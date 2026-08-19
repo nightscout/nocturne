@@ -829,9 +829,10 @@ public class DataSourceService : IDataSourceService
             .LongCountAsync(cancellationToken);
         if (stateSpansCount > 0) counts[nameof(SyncDataType.StateSpans)] = stateSpansCount;
 
-        // Device status
+        // Device status. Device carries the rig string the uploader reported (e.g. "openaps://host"),
+        // so an imported snapshot is only reachable through DataSource.
         var deviceStatusCount = await _context
-            .ApsSnapshots.Where(ds => ds.Device == deviceId)
+            .ApsSnapshots.Where(ds => ds.DataSource == deviceId || (ds.DataSource == null && ds.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (deviceStatusCount > 0) counts[nameof(SyncDataType.DeviceStatus)] = deviceStatusCount;
 
@@ -947,7 +948,7 @@ public class DataSourceService : IDataSourceService
         var notesDeleted = await _context.AuditedSoftDeleteAsync(
             _context.Notes.Where(n => n.DataSource == deviceId || (n.DataSource == null && n.Device == deviceId)), _auditContext, scope, cancellationToken);
         var deviceStatusDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.ApsSnapshots.Where(ds => ds.Device == deviceId), _auditContext, scope, cancellationToken);
+            _context.ApsSnapshots.Where(ds => ds.DataSource == deviceId || (ds.DataSource == null && ds.Device == deviceId)), _auditContext, scope, cancellationToken);
 
         // StateSpan is auditable but not soft-deletable: audited hard delete.
         var stateSpansDeleted = await _context.AuditedExecuteDeleteAsync(

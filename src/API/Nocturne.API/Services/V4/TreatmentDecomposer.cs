@@ -1543,10 +1543,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     /// (<see cref="SoftDeleteDedupExtensions"/>).
     /// </summary>
     /// <remarks>
-    /// A legacy id fans out to a handful of correlated rows, never a set, so the per-record
-    /// <c>delete</c> audit rows this overload writes below its materialization cap are the right shape
-    /// — the same call the V4 repositories' own by-legacy-id delete makes. The materialized entities
-    /// are unused here because the v4-native delete broadcast is still deferred.
+    /// A legacy id fans out to a handful of correlated rows, never a set, so the per-record audit
+    /// rows <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteWithEntitiesAsync{T}"/> writes
+    /// below its cap are the right shape.
     /// </remarks>
     private async Task<int> DeleteRecordsByLegacyId<T>(
         DbSet<T> dbSet, string legacyId, string scope, CancellationToken ct)

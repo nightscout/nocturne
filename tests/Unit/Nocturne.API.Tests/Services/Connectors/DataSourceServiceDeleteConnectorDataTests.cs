@@ -138,12 +138,15 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             Timestamp = DateTime.UtcNow,
             Text = "hello",
         });
+        // An imported snapshot's Device is the rig string the uploader reported, so only DataSource
+        // ties it back to the connector.
         db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
             LegacyId = "aps-1",
-            Device = _deviceId,
+            DataSource = _deviceId,
+            Device = "openaps://rig",
             Timestamp = DateTime.UtcNow,
             AidAlgorithm = "Loop",
         });
@@ -185,7 +188,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .ToListAsync())
             .Should().ContainSingle().Which.AuthType.Should().Be(AuthType);
 
-        // BGChecks, notes and device status are auditable too, so they take the same path.
         (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1"))
             .DeletedAt.Should().NotBeNull();
         (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1"))
@@ -203,9 +205,18 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         await using (var ctx = NewContext())
             await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId);
 
-        // The dedup that guards bulk-create now treats every user-deleted row as blocking, so the
-        // next sync cannot re-import them.
         await using var assertCtx = NewContext();
+
+        // An active row blocks re-import too, so each row must be shown deleted before "blocking"
+        // says anything about attribution.
+        (await assertCtx.Boluses.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bolus-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.CarbIntakes.IgnoreQueryFilters().SingleAsync(c => c.LegacyId == "carb-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.Notes.IgnoreQueryFilters().SingleAsync(n => n.LegacyId == "note-1")).DeletedAt.Should().NotBeNull();
+        (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1")).DeletedAt.Should().NotBeNull();
+
+        // The dedup that guards bulk-create treats every user-deleted row as blocking, so the next
+        // sync cannot re-import them.
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().Contain("bolus-1");
         (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Should().Contain("carb-1");
         (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Should().Contain("bgcheck-1");
