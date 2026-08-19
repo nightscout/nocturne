@@ -23,13 +23,13 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.V4;
 
 /// <summary>
-/// Covers the legacy v1 bulk delete (<c>DELETE /api/v1/treatments?find[created_at][…]</c>) reaching
-/// <see cref="TreatmentDecomposer.BulkDeleteAsync"/>: every record type in the window must be
-/// soft-deleted through the audited path so the delete is attributed and
+/// Covers the legacy delete paths through <see cref="TreatmentDecomposer"/> — the v1 bulk delete
+/// (<c>DELETE /api/v1/treatments?find[created_at][…]</c>) and the v1/v3 single-treatment delete: every
+/// record either removes must be soft-deleted through the audited path so the delete is attributed and
 /// <see cref="SoftDeleteDedupExtensions"/> stops a connector resync re-creating what the user removed.
 /// </summary>
 [Trait("Category", "Unit")]
-public class TreatmentDecomposerBulkDeleteTests : IDisposable
+public class TreatmentDecomposerDeleteTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
@@ -38,6 +38,9 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
     /// <summary>Every seeded record sits inside this window; the find query below brackets it.</summary>
     private static readonly DateTime Inside = new(2023, 1, 1, 10, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Outside = new(2024, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>The legacy treatment id every decomposed row shares on the single-delete path.</summary>
+    private const string LegacyTreatmentId = "treat-1";
 
     private const string Find =
         "find[created_at][$gte]=2023-01-01T00:00:00.000Z&find[created_at][$lte]=2023-01-02T00:00:00.000Z";
@@ -53,7 +56,7 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         Endpoint = "DELETE /api/v1/treatments"
     };
 
-    public TreatmentDecomposerBulkDeleteTests()
+    public TreatmentDecomposerDeleteTests()
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
@@ -97,15 +100,21 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         NullLogger<TreatmentDecomposer>.Instance);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>
-    private void SeedOneOfEachType()
+    /// <param name="legacyIdFor">
+    /// Maps a record type to the legacy id it is seeded with, so the by-time sweep can seed distinct
+    /// ids while the by-legacy-id delete seeds one treatment's worth of correlated rows.
+    /// </param>
+    private void SeedOneOfEachType(Func<string, string>? legacyIdFor = null)
     {
+        legacyIdFor ??= type => $"{type}-1";
+
         using var db = NewContext();
 
         db.Boluses.Add(new BolusEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "bolus-1",
+            LegacyId = legacyIdFor("bolus"),
             Timestamp = Inside,
             Insulin = 1.5
         });
@@ -121,7 +130,7 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "carb-1",
+            LegacyId = legacyIdFor("carb"),
             Timestamp = Inside,
             Carbs = 20
         });
@@ -129,7 +138,7 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "bgcheck-1",
+            LegacyId = legacyIdFor("bgcheck"),
             Timestamp = Inside,
             Glucose = 100
         });
@@ -137,7 +146,7 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "note-1",
+            LegacyId = legacyIdFor("note"),
             Timestamp = Inside,
             Text = "hello"
         });
@@ -145,7 +154,7 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "devevent-1",
+            LegacyId = legacyIdFor("devevent"),
             Timestamp = Inside,
             EventType = "Site Change"
         });
@@ -153,14 +162,14 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "boluscalc-1",
+            LegacyId = legacyIdFor("boluscalc"),
             Timestamp = Inside
         });
         db.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
-            LegacyId = "tempbasal-1",
+            LegacyId = legacyIdFor("tempbasal"),
             StartTimestamp = Inside,
             Rate = 0.8,
             Origin = "Algorithm"
@@ -236,6 +245,80 @@ public class TreatmentDecomposerBulkDeleteTests : IDisposable
 
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().BeEmpty();
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Should().BeEmpty();
+        (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
+    }
+
+    private async Task<int> DeleteByLegacyIdAsync(IAuditContext auditContext)
+    {
+        await using var ctx = NewContext();
+        return await CreateDecomposer(ctx, auditContext)
+            .DeleteByLegacyIdAsync(LegacyTreatmentId, WriteOrigin.Live);
+    }
+
+    [Fact]
+    public async Task DeleteByLegacyId_UserContext_BlocksConnectorResyncFromRecreatingEveryType()
+    {
+        SeedOneOfEachType(_ => LegacyTreatmentId);
+
+        (await DeleteByLegacyIdAsync(_userAuditContext)).Should().Be(7);
+
+        await using var assertCtx = NewContext();
+
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+    }
+
+    [Fact]
+    public async Task DeleteByLegacyId_UserContext_LeavesOtherTreatmentsUntouched()
+    {
+        SeedOneOfEachType(_ => LegacyTreatmentId);
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        await using var assertCtx = NewContext();
+        var other = await assertCtx.Boluses.IgnoreQueryFilters()
+            .SingleAsync(b => b.LegacyId == "bolus-outside");
+        other.DeletedAt.Should().BeNull();
+    }
+
+    /// <summary>
+    /// One treatment's fan-out is a handful of rows, not a set, so each gets its own <c>delete</c>
+    /// audit row rather than the <c>bulk_delete</c> summary the by-time sweep writes.
+    /// </summary>
+    [Fact]
+    public async Task DeleteByLegacyId_UserContext_AuditsEachDecomposedRecordIndividually()
+    {
+        SeedOneOfEachType(_ => LegacyTreatmentId);
+
+        await DeleteByLegacyIdAsync(_userAuditContext);
+
+        await using var assertCtx = NewContext();
+        var entries = await assertCtx.MutationAuditLog.ToListAsync();
+
+        entries.Should().OnlyContain(a => a.Action == "delete" && a.EntityId != null && a.AuthType == AuthType);
+        entries.Select(a => a.EntityType).Should().BeEquivalentTo(
+            new[] { "Bolus", "CarbIntake", "BGCheck", "Note", "DeviceEvent", "BolusCalculation", "TempBasal" });
+    }
+
+    [Fact]
+    public async Task DeleteByLegacyId_SystemContext_LeavesRecordsRecreatableAndUnaudited()
+    {
+        SeedOneOfEachType(_ => LegacyTreatmentId);
+
+        (await DeleteByLegacyIdAsync(SystemAuditContext.ForService("connector:nightscout"))).Should().Be(7);
+
+        await using var assertCtx = NewContext();
+        var bolus = await assertCtx.Boluses.IgnoreQueryFilters()
+            .SingleAsync(b => b.LegacyId == LegacyTreatmentId);
+        bolus.DeletedAt.Should().NotBeNull();
+
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Should().BeEmpty();
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
     }
 }

@@ -1520,44 +1520,39 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var scope = $"legacy_id={legacyId}";
+        var deleted = 0;
 
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
-            var now = DateTime.UtcNow;
-            var deleted = 0;
+        deleted += await DeleteRecordsByLegacyId(_dbContext.Boluses, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.TempBasals, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.CarbIntakes, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.BGChecks, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.Notes, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.DeviceEvents, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.BolusCalculations, legacyId, scope, ct);
 
-            deleted += await _dbContext.Boluses
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.TempBasals
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.CarbIntakes
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.BGChecks
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.Notes
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.DeviceEvents
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.BolusCalculations
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
+        if (deleted > 0)
+            _logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
 
-            await tx.CommitAsync(ct);
-
-            if (deleted > 0)
-                _logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
-
-            return deleted;
-        });
+        return deleted;
     }
+
+    /// <summary>
+    /// Soft-deletes one legacy treatment's decomposed records through the audited path, so a
+    /// user-issued delete is attributed and a later connector resync cannot re-create it
+    /// (<see cref="SoftDeleteDedupExtensions"/>).
+    /// </summary>
+    /// <remarks>
+    /// A legacy id fans out to a handful of correlated rows, never a set, so the per-record
+    /// <c>delete</c> audit rows this overload writes below its materialization cap are the right shape
+    /// — the same call the V4 repositories' own by-legacy-id delete makes. The materialized entities
+    /// are unused here because the v4-native delete broadcast is still deferred.
+    /// </remarks>
+    private async Task<int> DeleteRecordsByLegacyId<T>(
+        DbSet<T> dbSet, string legacyId, string scope, CancellationToken ct)
+        where T : class, IV4Entity, IAuditable
+        => (await _dbContext.AuditedSoftDeleteWithEntitiesAsync(
+            dbSet.Where(e => e.LegacyId == legacyId), _auditContext, scope, ct)).Count;
 
     /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)

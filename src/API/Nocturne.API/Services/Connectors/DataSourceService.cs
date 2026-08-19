@@ -915,12 +915,11 @@ public class DataSourceService : IDataSourceService
     /// <remarks>
     /// Capability matrix (entity interfaces decide the path):
     /// <list type="bullet">
-    /// <item>Glucose and the auditable+soft-deletable treatments (Bolus, CarbIntake, BolusCalculation,
-    ///   DeviceEvent) take the audited soft-delete path, which stamps the <c>deleted_by_user</c> flag the
-    ///   soft-delete dedup reads to block re-import (<see cref="SoftDeleteDedupExtensions"/>).</item>
+    /// <item>Glucose and the auditable+soft-deletable records (Bolus, CarbIntake, BolusCalculation,
+    ///   DeviceEvent, BGCheck, Note, ApsSnapshot) take the audited soft-delete path, which stamps the
+    ///   <c>deleted_by_user</c> flag the soft-delete dedup reads to block re-import
+    ///   (<see cref="SoftDeleteDedupExtensions"/>).</item>
     /// <item>StateSpan is auditable but not soft-deletable, so it takes the audited hard-delete path.</item>
-    /// <item>BGChecks, Notes and device status are soft-deletable but not auditable, so they soft-delete
-    ///   without an audit row; with the connector disabled they do not re-import.</item>
     /// </list>
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
@@ -933,7 +932,7 @@ public class DataSourceService : IDataSourceService
         var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
         var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(deviceId, cancellationToken);
 
-        // Auditable + soft-deletable treatments: audited soft-delete, user-attributed.
+        // Auditable + soft-deletable records: audited soft-delete, user-attributed.
         var scope = $"data_source={deviceId}";
         var bolusesDeleted = await _context.AuditedSoftDeleteAsync(
             _context.Boluses.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), _auditContext, scope, cancellationToken);
@@ -943,18 +942,16 @@ public class DataSourceService : IDataSourceService
             _context.BolusCalculations.Where(bc => bc.DataSource == deviceId || (bc.DataSource == null && bc.Device == deviceId)), _auditContext, scope, cancellationToken);
         var deviceEventsDeleted = await _context.AuditedSoftDeleteAsync(
             _context.DeviceEvents.Where(de => de.DataSource == deviceId || (de.DataSource == null && de.Device == deviceId)), _auditContext, scope, cancellationToken);
+        var bgChecksDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.BGChecks.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), _auditContext, scope, cancellationToken);
+        var notesDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.Notes.Where(n => n.DataSource == deviceId || (n.DataSource == null && n.Device == deviceId)), _auditContext, scope, cancellationToken);
+        var deviceStatusDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.ApsSnapshots.Where(ds => ds.Device == deviceId), _auditContext, scope, cancellationToken);
 
         // StateSpan is auditable but not soft-deletable: audited hard delete.
         var stateSpansDeleted = await _context.AuditedExecuteDeleteAsync(
             _context.StateSpans.Where(s => s.Source == deviceId), _auditContext, cancellationToken);
-
-        // Soft-deletable but not auditable: soft-delete without an audit row.
-        var bgChecksDeleted = await _context.SoftDeleteAsync(
-            _context.BGChecks.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), cancellationToken);
-        var notesDeleted = await _context.SoftDeleteAsync(
-            _context.Notes.Where(n => n.DataSource == deviceId || (n.DataSource == null && n.Device == deviceId)), cancellationToken);
-        var deviceStatusDeleted = await _context.SoftDeleteAsync(
-            _context.ApsSnapshots.Where(ds => ds.Device == deviceId), cancellationToken);
 
         var deletedCounts = new Dictionary<string, long>();
         if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;

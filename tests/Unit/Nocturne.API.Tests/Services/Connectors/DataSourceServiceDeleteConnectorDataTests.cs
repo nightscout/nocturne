@@ -120,7 +120,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             StartTimestamp = DateTime.UtcNow,
         });
 
-        // Soft-deletable but not auditable: soft-delete without an audit row.
         db.BGChecks.Add(new BGCheckEntity
         {
             Id = Guid.CreateVersion7(),
@@ -129,6 +128,15 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             DataSource = _deviceId,
             Timestamp = DateTime.UtcNow,
             Glucose = 100,
+        });
+        db.Notes.Add(new NoteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            LegacyId = "note-1",
+            DataSource = _deviceId,
+            Timestamp = DateTime.UtcNow,
+            Text = "hello",
         });
         db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
@@ -177,30 +185,32 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .ToListAsync())
             .Should().ContainSingle().Which.AuthType.Should().Be(AuthType);
 
-        // Non-auditable types are soft-deleted with no audit row.
-        var bgCheck = await assertCtx.BGChecks.IgnoreQueryFilters()
-            .SingleAsync(b => b.LegacyId == "bgcheck-1");
-        bgCheck.DeletedAt.Should().NotBeNull();
+        // BGChecks, notes and device status are auditable too, so they take the same path.
+        (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1"))
+            .DeletedAt.Should().NotBeNull();
         (await assertCtx.ApsSnapshots.IgnoreQueryFilters().SingleAsync(a => a.LegacyId == "aps-1"))
             .DeletedAt.Should().NotBeNull();
-        (await assertCtx.MutationAuditLog.AnyAsync(a => a.EntityType == "BGCheck"))
-            .Should().BeFalse();
+        (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete")
+            .Select(a => a.EntityType).ToListAsync())
+            .Should().Contain(["BGCheck", "Note", "ApsSnapshot"]);
     }
 
     [Fact]
-    public async Task DeleteConnectorData_BlocksReimportOfAuditableTreatments()
+    public async Task DeleteConnectorData_BlocksReimportOfEveryAuditableType()
     {
         SeedOneOfEachType();
 
         await using (var ctx = NewContext())
             await CreateService(ctx).DeleteConnectorDataAsync(ConnectorId);
 
-        // The dedup that guards bulk-create now treats the user-deleted bolus as blocking, so the
-        // next sync cannot re-import it.
+        // The dedup that guards bulk-create now treats every user-deleted row as blocking, so the
+        // next sync cannot re-import them.
         await using var assertCtx = NewContext();
-        var blocked = await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(
-            new HashSet<string> { "bolus-1" });
-        blocked.Should().Contain("bolus-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().Contain("bolus-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Should().Contain("carb-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Should().Contain("bgcheck-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Should().Contain("note-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(["aps-1"])).Should().Contain("aps-1");
     }
 
     [Fact]

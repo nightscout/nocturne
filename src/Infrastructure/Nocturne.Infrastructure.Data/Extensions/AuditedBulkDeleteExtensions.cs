@@ -223,18 +223,6 @@ public static class AuditedBulkDeleteExtensions
     }
 
     /// <summary>
-    /// Executes a bulk soft delete without audit trail by setting <c>DeletedAt</c> on all matching rows.
-    /// </summary>
-    public static async Task<int> SoftDeleteAsync<T>(
-        this NocturneDbContext context,
-        IQueryable<T> query,
-        CancellationToken ct = default) where T : class, ISoftDeletable
-    {
-        return await query.ExecuteUpdateAsync(
-            s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
-    }
-
-    /// <summary>
     /// Stamps <c>DeletedAt</c> and the dedup attribution flag in one update: a user-initiated delete
     /// blocks resync re-creation, a system sweep leaves the row re-creatable
     /// (<see cref="SoftDeleteDedupExtensions"/>). Runs whether or not an audit row is written.
