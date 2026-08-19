@@ -234,7 +234,10 @@ public class DataSourceService : IDataSourceService
             })
             .ToListAsync(cancellationToken);
 
-        // Also check APS snapshots for devices that might not have entries
+        // Also check APS snapshots for devices that might not have entries. Discovery keys on Device,
+        // not DataSource: an entry's identity here is the uploader string that CreateDataSourceInfo
+        // parses for name, category and icon, so a connector-imported snapshot still lists its rig.
+        // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
         var deviceStatusDevices = await _context
             .ApsSnapshots.Where(ds =>
                 ds.Timestamp >= thirtyDaysAgoDate && ds.Device != null && ds.Device != ""
@@ -1120,7 +1123,6 @@ public class DataSourceService : IDataSourceService
     )
     {
         var now = DateTimeOffset.UtcNow;
-        var oneDayAgo = now.AddHours(-24).ToUnixTimeMilliseconds();
         var oneDayAgoDate = now.AddHours(-24).UtcDateTime;
 
         // Query V4 sensor glucose stats
@@ -1205,11 +1207,11 @@ public class DataSourceService : IDataSourceService
             : 0;
 
         var deviceStatusTotal = await _context
-            .ApsSnapshots.Where(ds => ds.Device == dataSource)
+            .ApsSnapshots.Where(ds => ds.DataSource == dataSource || (ds.DataSource == null && ds.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var deviceStatus24h = deviceStatusTotal > 0
             ? await _context.ApsSnapshots
-                .Where(ds => ds.Device == dataSource && ds.Timestamp >= DateTimeOffset.FromUnixTimeMilliseconds(oneDayAgo).UtcDateTime)
+                .Where(ds => (ds.DataSource == dataSource || (ds.DataSource == null && ds.Device == dataSource)) && ds.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
