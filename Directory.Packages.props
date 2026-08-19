@@ -4,11 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Aspire packages -->
-    <!-- Aspire packages -->
     <PackageVersion Include="Aspire.Hosting.Python" Version="13.3.0" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.3.0" />
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.3.0" />
-    <PackageVersion Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
     <PackageVersion Include="Aspire.Hosting" Version="13.3.0" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.3.0" />
     <PackageVersion Include="Aspire.Hosting.Docker" Version="13.3.0" />
@@ -136,7 +134,7 @@
     <PackageVersion Include="YamlDotNet" Version="17.0.1" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
     <!-- Extension packages -->
-    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.8" />
     <!-- MCP (Model Context Protocol) packages -->
     <PackageVersion Include="ModelContextProtocol" Version="1.0.0" />
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.0.0" />
