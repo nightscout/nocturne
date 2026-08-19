@@ -472,6 +472,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
 
     /// <summary>
+    /// Tables looked up by the decomposition correlation, adding
+    /// <see cref="DeviceStatusExtrasEntity"/> — which carries the correlation but no legacy id
+    /// (see its <see cref="DeviceStatusExtrasEntity.CorrelationId"/>), so it cannot ride the
+    /// <see cref="V4LegacyIdRecordEntities"/> list.
+    /// </summary>
+    internal static readonly Type[] V4CorrelationIndexedEntities =
+        [.. V4LegacyIdRecordEntities, typeof(DeviceStatusExtrasEntity)];
+
+    /// <summary>
     /// Profile-decomposition schedule tables, read as (tenant, profile, newest-first).
     /// </summary>
     internal static readonly Type[] V4ProfileScheduleEntities =
@@ -522,15 +531,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
         foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
         {
-            var table = entity.Metadata.GetTableName();
-
             entity.HasIndex(nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId))
-                .HasDatabaseName($"ix_{table}_tenant_legacy_id")
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id")
                 .IsUnique()
                 .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+        }
 
+        foreach (var entity in V4CorrelationIndexedEntities.Select(t => modelBuilder.Entity(t)))
+        {
             entity.HasIndex(nameof(IV4Entity.CorrelationId))
-                .HasDatabaseName($"ix_{table}_correlation_id");
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_correlation_id");
         }
 
         // The partial sync-id and legacy-id indexes lead with tenant_id, which makes EF drop the
@@ -775,7 +785,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<DiscrepancyAnalysisEntity>()
-            .HasIndex(d => d.CorrelationId)
+            .HasIndex(d => d.TraceId)
             .HasDatabaseName("ix_discrepancy_analyses_correlation_id");
 
         modelBuilder
@@ -1468,11 +1478,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsDescending(false, false, true);
 
         modelBuilder
-            .Entity<DeviceStatusExtrasEntity>()
-            .HasIndex(e => e.CorrelationId)
-            .HasDatabaseName("ix_device_status_extras_correlation_id");
-
-        modelBuilder
             .Entity<TempBasalEntity>()
             .HasIndex(e => e.StartTimestamp)
             .HasDatabaseName("ix_temp_basals_start_timestamp")
@@ -1969,7 +1974,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_subject");
 
-            entity.HasIndex(e => e.CorrelationId)
+            entity.HasIndex(e => e.TraceId)
                 .HasDatabaseName("ix_mutation_audit_log_correlation")
                 .HasFilter("correlation_id IS NOT NULL");
 
@@ -1990,7 +1995,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_created");
 
-            entity.HasIndex(e => e.CorrelationId)
+            entity.HasIndex(e => e.TraceId)
                 .HasDatabaseName("ix_read_access_log_correlation")
                 .HasFilter("correlation_id IS NOT NULL");
         });

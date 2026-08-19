@@ -24,7 +24,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
     /// <summary>
     /// Store a discrepancy analysis result
     /// </summary>
-    /// <param name="correlationId">The unique correlation identifier for the request.</param>
+    /// <param name="traceId">The request trace identifier.</param>
     /// <param name="analysisTimestamp">The timestamp when the analysis was performed.</param>
     /// <param name="requestMethod">The HTTP request method (e.g., GET, POST).</param>
     /// <param name="requestPath">The endpoint path.</param>
@@ -46,7 +46,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The unique identifier of the stored analysis record.</returns>
     public async Task<Guid> StoreAnalysisAsync(
-        string correlationId,
+        string traceId,
         DateTimeOffset analysisTimestamp,
         string requestMethod,
         string requestPath,
@@ -71,7 +71,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
         var entity = new DiscrepancyAnalysisEntity
         {
             Id = Guid.CreateVersion7(),
-            CorrelationId = correlationId,
+            TraceId = traceId,
             AnalysisTimestamp = analysisTimestamp,
             RequestMethod = requestMethod,
             RequestPath = requestPath,

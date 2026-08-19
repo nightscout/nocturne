@@ -27,12 +27,12 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Request correlation ID for tracking
+    /// Request trace identifier for tracking
     /// </summary>
     [Column("correlation_id")]
     [MaxLength(128)]
     [Required]
-    public string CorrelationId { get; set; } = string.Empty;
+    public string TraceId { get; set; } = string.Empty;
 
     /// <summary>
     /// Timestamp when the analysis was performed

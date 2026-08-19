@@ -81,11 +81,11 @@ public class AuthAuditLogEntity : IEntityCreated
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// Correlation ID for tracing related events
+    /// Request trace identifier for tracing related events
     /// </summary>
     [MaxLength(50)]
     [Column("correlation_id")]
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
 
     /// <summary>
     /// When this event occurred

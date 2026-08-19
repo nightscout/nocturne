@@ -334,7 +334,7 @@ public class TreatmentPublisherTests
         {
             AuthType = "bearer",
             SubjectId = Guid.NewGuid(),
-            CorrelationId = "trace-1",
+            TraceId = "trace-1",
             Endpoint = "POST /sync",
         };
         var publisher = CreatePublisher(auditContext);
@@ -348,7 +348,7 @@ public class TreatmentPublisherTests
             .Callback(() =>
             {
                 authTypeDuringDelete = auditContext.AuthType;
-                correlationDuringDelete = auditContext.CorrelationId;
+                correlationDuringDelete = auditContext.TraceId;
             })
             .ReturnsAsync(0);
 

@@ -269,7 +269,7 @@ public static class AuditedBulkDeleteExtensions
             AuthType = auditContext?.AuthType,
             IpAddress = auditContext?.IpAddress,
             TokenId = auditContext?.TokenId,
-            CorrelationId = auditContext?.CorrelationId,
+            TraceId = auditContext?.TraceId,
             Endpoint = auditContext?.Endpoint,
             CreatedAt = DateTime.UtcNow
         });
@@ -328,7 +328,7 @@ public static class AuditedBulkDeleteExtensions
                 AuthType = auditContext?.AuthType,
                 IpAddress = auditContext?.IpAddress,
                 TokenId = auditContext?.TokenId,
-                CorrelationId = auditContext?.CorrelationId,
+                TraceId = auditContext?.TraceId,
                 Endpoint = auditContext?.Endpoint,
                 CreatedAt = now
             };

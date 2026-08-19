@@ -100,7 +100,7 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 EntityType = entityType,
                 RecordCount = recordCount,
                 QueryParametersJson = queryParams,
-                CorrelationId = _auditContext.CorrelationId,
+                TraceId = _auditContext.TraceId,
                 StatusCode = statusCode,
                 CreatedAt = DateTime.UtcNow,
             };

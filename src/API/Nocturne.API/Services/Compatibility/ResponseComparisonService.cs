@@ -21,7 +21,7 @@ public interface IResponseComparisonService
     Task<ResponseComparisonResult> CompareResponsesAsync(
         TargetResponse? nightscoutResponse,
         TargetResponse? nocturneResponse,
-        string correlationId,
+        string traceId,
         string? requestPath = null
     );
 }
@@ -86,13 +86,13 @@ public class ResponseComparisonService : IResponseComparisonService
     public async Task<ResponseComparisonResult> CompareResponsesAsync(
         TargetResponse? nightscoutResponse,
         TargetResponse? nocturneResponse,
-        string correlationId,
+        string traceId,
         string? requestPath = null
     )
     {
         var result = new ResponseComparisonResult
         {
-            CorrelationId = correlationId,
+            TraceId = traceId,
             ComparisonTimestamp = DateTimeOffset.UtcNow,
         };
 
@@ -103,7 +103,7 @@ public class ResponseComparisonService : IResponseComparisonService
         {
             _logger.LogDebug(
                 "Starting response comparison for correlation {CorrelationId} on path {RequestPath}",
-                correlationId,
+                traceId,
                 sanitizedPath
             );
 
@@ -161,7 +161,7 @@ public class ResponseComparisonService : IResponseComparisonService
 
             _logger.LogDebug(
                 "Response comparison completed for correlation {CorrelationId}. Match: {OverallMatch}, Discrepancies: {DiscrepancyCount}",
-                correlationId,
+                traceId,
                 result.OverallMatch,
                 result.Discrepancies.Count
             );
@@ -173,7 +173,7 @@ public class ResponseComparisonService : IResponseComparisonService
             _logger.LogError(
                 ex,
                 "Error comparing responses for correlation {CorrelationId}",
-                correlationId
+                traceId
             );
             result.OverallMatch = Nocturne.Core.Models.ResponseMatchType.ComparisonError;
             result.Summary = $"Comparison failed: {ex.Message}";

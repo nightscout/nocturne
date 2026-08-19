@@ -13,7 +13,7 @@ public interface IDiscrepancyAnalysisRepository
     /// Stores the results of a discrepancy analysis between Nightscout and Nocturne responses
     /// </summary>
     Task<Guid> StoreAnalysisAsync(
-        string correlationId,
+        string traceId,
         DateTimeOffset analysisTimestamp,
         string requestMethod,
         string requestPath,
