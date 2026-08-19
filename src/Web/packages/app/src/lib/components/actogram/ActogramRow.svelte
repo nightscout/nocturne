@@ -4,6 +4,7 @@
   import { scaleTime } from 'd3-scale';
   import type { ScaleTime } from 'd3-scale';
   import { curveMonotoneX } from 'd3';
+  import { bg, bgLabel, time } from '$lib/utils/formatting';
   import {
     MS_PER_HOUR,
     HOURS_PER_DAY,
@@ -134,13 +135,13 @@
         {#if d}
           <div class="space-y-1 text-xs">
             <div class="font-medium tabular-nums">
-              {d.time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              {time(d.time)}
             </div>
             {#if d.bgPoint}
               <div class="flex items-center gap-1.5">
                 <div class="size-2 rounded-full" style:background={d.bgPoint.point.color}></div>
                 <span class="text-muted-foreground">Glucose</span>
-                <span class="ml-auto font-mono font-medium tabular-nums">{Math.round(d.bgPoint.point.sgv)}</span>
+                <span class="ml-auto font-mono font-medium tabular-nums">{bg(d.bgPoint.point.sgv)} {bgLabel()}</span>
               </div>
             {/if}
             {#if d.dataPoint && tooltipValue}
