@@ -237,8 +237,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken,
             timestampOf: d => d.Timestamp);
 
-        // Alarms and CGM alerts are gated and accounted under DeviceEvents — there is no dedicated
-        // SyncDataType for them — so a publish failure flips Success.
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
             systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken,

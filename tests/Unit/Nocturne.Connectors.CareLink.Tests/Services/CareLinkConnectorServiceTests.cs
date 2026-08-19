@@ -111,9 +111,60 @@ public class CareLinkConnectorServiceTests
             new SyncRequest(), fixture.Config, CancellationToken.None);
 
         first.Success.Should().BeFalse("an alarm that never reached the tenant is not a successful sync");
-        first.Errors.Should().Contain("Alarm event publish failed");
-        second.Errors.Should().Contain("Alarm event publish failed",
+        first.Errors.Should().Contain("DeviceEvents publish failed");
+        second.Errors.Should().Contain("DeviceEvents publish failed",
             "the dedup key must not advance past an alarm that was never published");
+        second.ItemsSynced.GetValueOrDefault(SyncDataType.DeviceEvents).Should().Be(1,
+            "the second cycle must attempt the same alarm again");
+    }
+
+    /// <summary>
+    /// Both system-event paths — the last alarm and the notification history — are gated and counted
+    /// under the DeviceEvents toggle, which a CareLink tenant that never saw the toggle has on.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 2)]
+    [InlineData(false, 0)]
+    public async Task SyncDataAsync_GatesSystemEventsOnTheDeviceEventsToggle(
+        bool syncDeviceEvents, int expectedCount)
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": {},
+                  "lastAlarm": {
+                    "type": "PUMP_SUSPEND",
+                    "code": 816,
+                    "flash": true,
+                    "datetime": "2026-01-01T10:00:00"
+                  },
+                  "notificationHistory": {
+                    "activeNotifications": [
+                      {
+                        "referenceGUID": "11111111-1111-1111-1111-111111111111",
+                        "triggeredDateTime": "2026-01-01T09:55:00",
+                        "type": "ALERT",
+                        "faultId": 105,
+                        "messageId": "BC_SID_LOW_RESERVOIR"
+                      }
+                    ]
+                  }
+                }
+                """
+        };
+        var config = AlarmOnlyConfiguration();
+        config.SyncDeviceEvents = syncDeviceEvents;
+        var fixture = new ServiceFixture(handler, config);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest(), fixture.Config, CancellationToken.None);
+
+        result.ItemsSynced.GetValueOrDefault(SyncDataType.DeviceEvents).Should().Be(expectedCount);
+        result.LastEntryTimes.ContainsKey(SyncDataType.DeviceEvents).Should().Be(expectedCount > 0);
+        result.Errors.Contains("DeviceEvents publish failed").Should().Be(expectedCount > 0,
+            "a switched-off type is never handed to the publisher, so it cannot fail");
     }
 
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>
