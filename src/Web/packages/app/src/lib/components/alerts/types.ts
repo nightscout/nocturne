@@ -599,6 +599,19 @@ export function buildBody(state: RuleEditorState) {
 }
 
 /**
+ * Applies a destination edit to a channel row. A stored secret is held against the
+ * channel's type and destination, so retyping the destination leaves it behind — the
+ * row must stop reporting a saved secret unless the editor is carrying a replacement
+ * the user typed.
+ */
+export function applyChannelDestination(channel: ChannelDef, destination: string): void {
+	if (channel.hasSecret && !channel.secret && destination !== channel.destination) {
+		channel.hasSecret = false;
+	}
+	channel.destination = destination;
+}
+
+/**
  * Client-side pre-save validation for the channel list. Returns a message
  * describing the first invalid channel, or `null` when the list is saveable.
  * Mirrors the server's rejection of a device_action channel without a kind so

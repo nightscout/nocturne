@@ -10,7 +10,7 @@
   import { ChannelType, AlertRuleSeverity } from "$api-clients";
   import type { ChannelStatusEntry, DeviceCapabilityCatalog } from "$api-clients";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
-  import type { ChannelDef } from "./types";
+  import { applyChannelDestination, type ChannelDef } from "./types";
   import {
     CHANNEL_META,
     destinationError,
@@ -176,7 +176,7 @@
                     : undefined}
                 value={ch.destination}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                  channels[i].destination = e.currentTarget.value;
+                  applyChannelDestination(channels[i], e.currentTarget.value);
                 }}
               />
               {#if error}
@@ -226,7 +226,9 @@
               <p id="channel-secret-helper-{i}" class="text-xs text-muted-foreground">
                 Set this to have Nocturne sign each request with an
                 <code>X-Nocturne-Signature</code> header your receiver can verify. Leave blank if
-                your receiver does not check signatures.
+                your receiver does not check signatures.{#if ch.hasSecret}
+                  Changing the URL above does not carry the saved secret over — enter it again.
+                {/if}
               </p>
             </div>
           {/if}
