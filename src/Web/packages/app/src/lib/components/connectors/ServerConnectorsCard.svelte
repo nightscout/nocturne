@@ -37,10 +37,6 @@
 
   interface SyncProgress {
     phase: string;
-    currentDataType: string | null;
-    completedDataTypes: string[];
-    totalDataTypes: number;
-    itemsSyncedSoFar: Record<string, number>;
     messageType: SyncMessageType | null;
     messageParams: Record<string, string> | null;
   }

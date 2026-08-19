@@ -97,10 +97,6 @@ export interface SyncProgressEvent {
   connectorId: string;
   connectorName: string;
   phase: "Syncing" | "Completed" | "Failed";
-  currentDataType: string | null;
-  completedDataTypes: string[];
-  totalDataTypes: number;
-  itemsSyncedSoFar: Record<string, number>;
   errorMessage: string | null;
   timestamp: string;
   messageType: SyncMessageType | null;
