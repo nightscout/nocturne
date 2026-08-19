@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
@@ -8,10 +9,19 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Services.Profiles;
 
 /// <summary>
-/// Persists per-tenant UI settings as JSON blobs in the settings table, partitioned by section key
-/// (devices, algorithm, features, notifications, services, alarm configuration). Provides typed
-/// read/write access via <see cref="IUISettingsService"/>.
+/// Persists per-tenant UI settings as JSON blobs in the settings table, one row per section
+/// (devices, algorithm, features, notifications, services, data quality, security) plus one row for
+/// the alarm configuration.
 /// </summary>
+/// <remarks>
+/// Every value has exactly one owning row. The aggregate <see cref="UISettingsConfiguration"/> is
+/// assembled on read from the section rows rather than stored, and the alarm configuration lives
+/// only under <c>ui:settings:notifications:alarms</c> — the notifications row is written without its
+/// <see cref="NotificationSettings.AlarmConfiguration"/> so no second copy can go stale.
+/// <c>ui:settings:complete</c>, written by earlier versions, is read-only: it is the fallback for a
+/// section that has no row of its own, which is how tenants whose settings predate this layout keep
+/// reading correctly.
+/// </remarks>
 /// <seealso cref="IUISettingsService"/>
 public class UISettingsService : IUISettingsService
 {
@@ -19,14 +29,71 @@ public class UISettingsService : IUISettingsService
     private readonly ILogger<UISettingsService> _logger;
     private readonly IConfiguration _configuration;
 
-    // Settings keys for different sections
-    private const string UiSettingsKey = "ui:settings:complete";
-    private const string DevicesSettingsKey = "ui:settings:devices";
-    private const string AlgorithmSettingsKey = "ui:settings:algorithm";
-    private const string FeaturesSettingsKey = "ui:settings:features";
-    private const string NotificationsSettingsKey = "ui:settings:notifications";
-    private const string ServicesSettingsKey = "ui:settings:services";
+    private const string SettingsKeyPrefix = "ui:settings:";
+    private const string LegacyAggregateKey = "ui:settings:complete";
     private const string AlarmConfigurationKey = "ui:settings:notifications:alarms";
+    private const string AlarmConfigurationNotes = "xDrip+-style alarm profiles configuration";
+    private const string NotificationsSectionName = "notifications";
+
+    /// <summary>
+    /// A section of <see cref="UISettingsConfiguration"/>, its settings-table row and its property
+    /// name in the persisted JSON (also the suffix of its key, see <see cref="GetSectionKey"/>).
+    /// </summary>
+    private sealed record Section(
+        string Name,
+        Type Type,
+        Func<UISettingsConfiguration, object?> Get,
+        Action<UISettingsConfiguration, object> Set
+    )
+    {
+        public string Key => GetSectionKey(Name);
+    }
+
+    private static readonly Section[] Sections =
+    [
+        new(
+            "devices",
+            typeof(DeviceSettings),
+            s => s.Devices,
+            (s, v) => s.Devices = (DeviceSettings)v
+        ),
+        new(
+            "algorithm",
+            typeof(AlgorithmSettings),
+            s => s.Algorithm,
+            (s, v) => s.Algorithm = (AlgorithmSettings)v
+        ),
+        new(
+            "features",
+            typeof(FeatureSettings),
+            s => s.Features,
+            (s, v) => s.Features = (FeatureSettings)v
+        ),
+        new(
+            NotificationsSectionName,
+            typeof(NotificationSettings),
+            s => s.Notifications,
+            (s, v) => s.Notifications = (NotificationSettings)v
+        ),
+        new(
+            "services",
+            typeof(ServicesSettings),
+            s => s.Services,
+            (s, v) => s.Services = (ServicesSettings)v
+        ),
+        new(
+            "dataQuality",
+            typeof(DataQualitySettings),
+            s => s.DataQuality,
+            (s, v) => s.DataQuality = (DataQualitySettings)v
+        ),
+        new(
+            "security",
+            typeof(SecuritySettings),
+            s => s.Security,
+            (s, v) => s.Security = (SecuritySettings)v
+        ),
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -52,31 +119,34 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == UiSettingsKey && s.IsActive,
-                cancellationToken
-            );
+            var stored = await ReadAllAsync(cancellationToken);
+            var legacy = Value(stored, LegacyAggregateKey);
+            var legacyAggregate = legacy == null ? null : JsonNode.Parse(legacy) as JsonObject;
+            var settings = new UISettingsConfiguration();
 
-            if (entity?.Value != null)
+            foreach (var section in Sections)
             {
-                var settings = JsonSerializer.Deserialize<UISettingsConfiguration>(
-                    entity.Value,
-                    JsonOptions
-                );
+                var value =
+                    Deserialize(Value(stored, section.Key), section.Type)
+                    ?? legacyAggregate?[section.Name]?.Deserialize(section.Type, JsonOptions);
 
-                if (settings != null)
+                if (value != null)
                 {
-                    return settings;
+                    section.Set(settings, value);
                 }
             }
 
-            // Return defaults if no saved settings
-            return GenerateDefaultSettings();
+            settings.Notifications.AlarmConfiguration =
+                Deserialize(Value(stored, AlarmConfigurationKey), typeof(UserAlarmConfiguration))
+                    as UserAlarmConfiguration
+                ?? settings.Notifications.AlarmConfiguration;
+
+            return settings;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving UI settings");
-            return GenerateDefaultSettings();
+            return new UISettingsConfiguration();
         }
     }
 
@@ -88,35 +158,13 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            var jsonValue = JsonSerializer.Serialize(settings, JsonOptions);
-            var now = DateTimeOffset.UtcNow;
-
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == UiSettingsKey,
-                cancellationToken
-            );
-
-            if (entity == null)
+            foreach (var section in Sections)
             {
-                entity = new SettingsEntity
+                var value = section.Get(settings);
+                if (value != null)
                 {
-                    Id = Guid.CreateVersion7(),
-                    Key = UiSettingsKey,
-                    Value = jsonValue,
-                    Mills = now.ToUnixTimeMilliseconds(),
-                    SrvCreated = now,
-                    SrvModified = now,
-                    IsActive = true,
-                    Notes = "Complete UI settings configuration",
-                    App = "nocturne-api",
-                };
-                _context.Settings.Add(entity);
-            }
-            else
-            {
-                entity.Value = jsonValue;
-                entity.SrvModified = now;
-                entity.Mills = now.ToUnixTimeMilliseconds();
+                    await WriteSectionAsync(section.Name, value, cancellationToken);
+                }
             }
 
             await _context.SaveChangesAsync(cancellationToken);
@@ -142,19 +190,17 @@ public class UISettingsService : IUISettingsService
 
         try
         {
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == key && s.IsActive,
-                cancellationToken
-            );
-
-            if (entity?.Value != null)
+            if (key == AlarmConfigurationKey)
             {
-                return JsonSerializer.Deserialize<T>(entity.Value, JsonOptions);
+                return await GetAlarmConfigurationAsync(cancellationToken) as T;
             }
 
-            // Fall back to getting from complete settings
-            var settings = await GetSettingsAsync(cancellationToken);
-            return GetSectionFromSettings<T>(settings, sectionName);
+            if (FindSection(sectionName) is { } section)
+            {
+                return section.Get(await GetSettingsAsync(cancellationToken)) as T;
+            }
+
+            return await ReadAsync(key, typeof(T), cancellationToken) as T;
         }
         catch (Exception ex)
         {
@@ -171,43 +217,9 @@ public class UISettingsService : IUISettingsService
     )
         where T : class
     {
-        var key = GetSectionKey(sectionName);
-
         try
         {
-            var jsonValue = JsonSerializer.Serialize(sectionSettings, JsonOptions);
-            var now = DateTimeOffset.UtcNow;
-
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == key,
-                cancellationToken
-            );
-
-            if (entity == null)
-            {
-                entity = new SettingsEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    Key = key,
-                    Value = jsonValue,
-                    Mills = now.ToUnixTimeMilliseconds(),
-                    SrvCreated = now,
-                    SrvModified = now,
-                    IsActive = true,
-                    Notes = $"UI settings section: {sectionName}",
-                    App = "nocturne-api",
-                };
-                _context.Settings.Add(entity);
-            }
-            else
-            {
-                entity.Value = jsonValue;
-                entity.SrvModified = now;
-                entity.Mills = now.ToUnixTimeMilliseconds();
-            }
-
-            // Also update the section in complete settings
-            await UpdateSectionInCompleteSettings(sectionName, sectionSettings, cancellationToken);
+            await WriteSectionAsync(sectionName, sectionSettings, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Settings section {Section} saved successfully", sectionName);
@@ -227,11 +239,11 @@ public class UISettingsService : IUISettingsService
     )
     {
         var section = await GetSectionAsync<NotificationSettings>(
-            "notifications",
+            NotificationsSectionName,
             cancellationToken
         );
 
-        return section ?? GenerateDefaultNotificationSettings();
+        return section ?? new NotificationSettings();
     }
 
     /// <inheritdoc />
@@ -240,7 +252,7 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
-        return await SaveSectionAsync("notifications", settings, cancellationToken);
+        return await SaveSectionAsync(NotificationsSectionName, settings, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -250,23 +262,8 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            // First try to get from dedicated alarm key
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == AlarmConfigurationKey && s.IsActive,
-                cancellationToken
-            );
-
-            if (entity?.Value != null)
-            {
-                return JsonSerializer.Deserialize<UserAlarmConfiguration>(
-                    entity.Value,
-                    JsonOptions
-                );
-            }
-
-            // Fall back to notification settings
-            var notifications = await GetNotificationSettingsAsync(cancellationToken);
-            return notifications.AlarmConfiguration;
+            return await ReadAlarmConfigurationAsync(cancellationToken)
+                ?? (await GetNotificationSettingsAsync(cancellationToken)).AlarmConfiguration;
         }
         catch (Exception ex)
         {
@@ -283,42 +280,12 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            var jsonValue = JsonSerializer.Serialize(config, JsonOptions);
-            var now = DateTimeOffset.UtcNow;
-
-            // Save to dedicated alarm key
-            var entity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Key == AlarmConfigurationKey,
+            await UpsertAsync(
+                AlarmConfigurationKey,
+                JsonSerializer.Serialize(config, JsonOptions),
+                AlarmConfigurationNotes,
                 cancellationToken
             );
-
-            if (entity == null)
-            {
-                entity = new SettingsEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    Key = AlarmConfigurationKey,
-                    Value = jsonValue,
-                    Mills = now.ToUnixTimeMilliseconds(),
-                    SrvCreated = now,
-                    SrvModified = now,
-                    IsActive = true,
-                    Notes = "xDrip+-style alarm profiles configuration",
-                    App = "nocturne-api",
-                };
-                _context.Settings.Add(entity);
-            }
-            else
-            {
-                entity.Value = jsonValue;
-                entity.SrvModified = now;
-                entity.Mills = now.ToUnixTimeMilliseconds();
-            }
-
-            // Also update in notification settings
-            var notifications = await GetNotificationSettingsAsync(cancellationToken);
-            notifications.AlarmConfiguration = config;
-            await SaveNotificationSettingsAsync(notifications, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
@@ -339,130 +306,151 @@ public class UISettingsService : IUISettingsService
     {
         return sectionName.ToLowerInvariant() switch
         {
-            "devices" => DevicesSettingsKey,
-            "algorithm" => AlgorithmSettingsKey,
-            "features" => FeaturesSettingsKey,
-            "notifications" => NotificationsSettingsKey,
-            "services" => ServicesSettingsKey,
             "alarms" or "alarmconfiguration" => AlarmConfigurationKey,
-            _ => $"ui:settings:{sectionName.ToLowerInvariant()}",
+            var name => SettingsKeyPrefix + name,
         };
     }
 
-    private static T? GetSectionFromSettings<T>(
-        UISettingsConfiguration settings,
-        string sectionName
-    )
-        where T : class
+    private static Section? FindSection(string sectionName)
     {
-        return sectionName.ToLowerInvariant() switch
-        {
-            "devices" => settings.Devices as T,
-            "algorithm" => settings.Algorithm as T,
-            "features" => settings.Features as T,
-            "notifications" => settings.Notifications as T,
-            "services" => settings.Services as T,
-            _ => null,
-        };
+        return Sections.FirstOrDefault(s =>
+            string.Equals(s.Name, sectionName, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
-    private async Task UpdateSectionInCompleteSettings<T>(
-        string sectionName,
-        T sectionSettings,
+    private async Task<UserAlarmConfiguration?> ReadAlarmConfigurationAsync(
         CancellationToken cancellationToken
     )
-        where T : class
     {
-        var settings = await GetSettingsAsync(cancellationToken);
+        return await ReadAsync(
+            AlarmConfigurationKey,
+            typeof(UserAlarmConfiguration),
+            cancellationToken
+        ) as UserAlarmConfiguration;
+    }
 
-        switch (sectionName.ToLowerInvariant())
-        {
-            case "devices" when sectionSettings is DeviceSettings ds:
-                settings.Devices = ds;
-                break;
-            case "algorithm" when sectionSettings is AlgorithmSettings alg:
-                settings.Algorithm = alg;
-                break;
-            case "features" when sectionSettings is FeatureSettings fs:
-                settings.Features = fs;
-                break;
-            case "notifications" when sectionSettings is NotificationSettings ns:
-                settings.Notifications = ns;
-                break;
-            case "services" when sectionSettings is ServicesSettings ss:
-                settings.Services = ss;
-                break;
-        }
+    private async Task<object?> ReadAsync(string key, Type type, CancellationToken cancellationToken)
+    {
+        return Deserialize(await ReadValueAsync(key, cancellationToken), type);
+    }
 
-        // Update the complete settings (without recursion)
-        var jsonValue = JsonSerializer.Serialize(settings, JsonOptions);
-        var now = DateTimeOffset.UtcNow;
+    private static object? Deserialize(string? value, Type type)
+    {
+        return value == null ? null : JsonSerializer.Deserialize(value, type, JsonOptions);
+    }
 
+    private static string? Value(IReadOnlyDictionary<string, string> stored, string key)
+    {
+        return stored.TryGetValue(key, out var value) ? value : null;
+    }
+
+    /// <summary>
+    /// Every stored UI settings row in one query, so assembling the aggregate does not cost a
+    /// round trip per section.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> ReadAllAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = await _context
+            .Settings.Where(s => s.IsActive && s.Key.StartsWith(SettingsKeyPrefix))
+            .Select(s => new { s.Key, s.Value })
+            .ToListAsync(cancellationToken);
+
+        return rows.Where(r => r.Value != null)
+            .GroupBy(r => r.Key)
+            .ToDictionary(g => g.Key, g => g.First().Value!);
+    }
+
+    private async Task<string?> ReadValueAsync(string key, CancellationToken cancellationToken)
+    {
         var entity = await _context.Settings.FirstOrDefaultAsync(
-            s => s.Key == UiSettingsKey,
+            s => s.Key == key && s.IsActive,
             cancellationToken
         );
 
-        if (entity != null)
+        return entity?.Value;
+    }
+
+    /// <summary>
+    /// Stages the row owning <paramref name="sectionSettings"/>. The notifications section splits in
+    /// two: its alarm configuration goes to the row that owns it, and the section row is written
+    /// without that property.
+    /// </summary>
+    private async Task WriteSectionAsync(
+        string sectionName,
+        object sectionSettings,
+        CancellationToken cancellationToken
+    )
+    {
+        var notes = $"UI settings section: {sectionName}";
+
+        if (sectionSettings is NotificationSettings notifications)
         {
-            entity.Value = jsonValue;
-            entity.SrvModified = now;
-            entity.Mills = now.ToUnixTimeMilliseconds();
+            await UpsertAsync(
+                AlarmConfigurationKey,
+                JsonSerializer.Serialize(notifications.AlarmConfiguration, JsonOptions),
+                AlarmConfigurationNotes,
+                cancellationToken
+            );
+
+            var node = JsonSerializer.SerializeToNode(notifications, JsonOptions)!.AsObject();
+            node.Remove("alarmConfiguration");
+
+            await UpsertAsync(
+                GetSectionKey(sectionName),
+                node.ToJsonString(),
+                notes,
+                cancellationToken
+            );
+            return;
         }
+
+        await UpsertAsync(
+            GetSectionKey(sectionName),
+            JsonSerializer.Serialize(sectionSettings, JsonOptions),
+            notes,
+            cancellationToken
+        );
     }
 
-    private UISettingsConfiguration GenerateDefaultSettings()
+    private async Task UpsertAsync(
+        string key,
+        string value,
+        string notes,
+        CancellationToken cancellationToken
+    )
     {
-        return new UISettingsConfiguration
-        {
-            Devices = new DeviceSettings(),
-            Algorithm = new AlgorithmSettings(),
-            Features = GenerateDefaultFeatureSettings(),
-            Notifications = GenerateDefaultNotificationSettings(),
-            Services = new ServicesSettings(),
-        };
-    }
+        var now = DateTimeOffset.UtcNow;
 
-    private static FeatureSettings GenerateDefaultFeatureSettings()
-    {
-        return new FeatureSettings
-        {
-            Display = new DisplaySettings
-            {
-                NightMode = false,
-                Theme = "system",
-                TimeFormat = "12",
-                Units = "mg/dl",
-                ShowRawBG = false,
-                FocusHours = 3,
-            },
-            Widgets = new List<WidgetConfig>
-            {
-                new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.LastUpdated, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.ConnectionStatus, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.GlucoseChart, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Statistics, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Predictions, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.DailyStats, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Treatments, Enabled = true, Placement = WidgetPlacement.Main },
-            },
-            Plugins = new Dictionary<string, PluginSettings>(),
-        };
-    }
+        var entity = await _context.Settings.FirstOrDefaultAsync(
+            s => s.Key == key,
+            cancellationToken
+        );
 
-    private static NotificationSettings GenerateDefaultNotificationSettings()
-    {
-        return new NotificationSettings
+        if (entity == null)
         {
-            AlarmConfiguration = new UserAlarmConfiguration
-            {
-                Enabled = true,
-                SoundEnabled = true,
-                VibrationEnabled = true,
-                GlobalVolume = 80,
-                Profiles = new List<AlarmProfileConfiguration>(),
-            },
-        };
+            _context.Settings.Add(
+                new SettingsEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    Key = key,
+                    Value = value,
+                    Mills = now.ToUnixTimeMilliseconds(),
+                    SrvCreated = now,
+                    SrvModified = now,
+                    IsActive = true,
+                    Notes = notes,
+                    App = "nocturne-api",
+                }
+            );
+            return;
+        }
+
+        entity.Value = value;
+        entity.SrvModified = now;
+        entity.Mills = now.ToUnixTimeMilliseconds();
+        // Reads filter on IsActive, so a deactivated row would swallow the write.
+        entity.IsActive = true;
     }
 }
