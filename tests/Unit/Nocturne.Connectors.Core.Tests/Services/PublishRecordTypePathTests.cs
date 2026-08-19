@@ -51,7 +51,7 @@ public class PublishRecordTypePathTests
             return result;
         }
 
-        public Task PublishAsync(
+        public Task<bool> PublishAsync(
             SyncResult result,
             SyncDataType dataType,
             HashSet<SyncDataType> activeTypes,
@@ -206,6 +206,31 @@ public class PublishRecordTypePathTests
         // Assert
         result.Success.Should().BeFalse();
         result.LastEntryTimes[SyncDataType.Glucose].Should().Be(Newer);
+    }
+
+    [Fact]
+    public async Task ReturnValue_IsTrueOnlyForAnAcceptedPublish()
+    {
+        // Arrange: connectors advance a cursor on the return value — CareLink's alarm dedup key
+        // holds an alarm the tenant never took, whatever the reason it did not take it.
+        var active = new HashSet<SyncDataType> { SyncDataType.Glucose };
+        var outcomes = new List<bool>();
+
+        // Act: gated-off type, empty batch, rejected publish, accepted publish
+        await RunAsync(async (service, syncResult) =>
+        {
+            outcomes.Add(await service.PublishAsync(syncResult, SyncDataType.Boluses, active,
+                [new TimedRecord { At = Newer }], r => r.At));
+            outcomes.Add(await service.PublishAsync(syncResult, SyncDataType.Glucose, active,
+                [], r => r.At));
+            outcomes.Add(await service.PublishAsync(syncResult, SyncDataType.Glucose, active,
+                [new TimedRecord { At = Newer }], r => r.At, publishSucceeds: false));
+            outcomes.Add(await service.PublishAsync(syncResult, SyncDataType.Glucose, active,
+                [new TimedRecord { At = Newer }], r => r.At));
+        });
+
+        // Assert
+        outcomes.Should().Equal(false, false, false, true);
     }
 
     [Fact]

@@ -611,7 +611,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits system event data directly to the API via HTTP
+    ///     Submits system event data directly to the API via HTTP. System events have no
+    ///     <see cref="SyncDataType"/> of their own, so a connector routing them through
+    ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
+    ///     <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     protected virtual async Task<bool> PublishSystemEventDataAsync(
         IEnumerable<SystemEvent> systemEvents,
@@ -642,7 +645,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     <c>null</c> — the parameter or an individual return — means the record carries no time
     ///     to report, and nothing is recorded for the type.
     /// </param>
-    protected async Task PublishRecordTypeAsync<T>(
+    /// <returns>
+    ///     Whether the batch reached the tenant. An inactive type, an empty batch and a rejected
+    ///     publish are alike <c>false</c>: no record was accepted in any of them.
+    /// </returns>
+    protected async Task<bool> PublishRecordTypeAsync<T>(
         SyncResult result,
         SyncDataType dataType,
         HashSet<SyncDataType> activeTypes,
@@ -653,7 +660,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         string? context = null,
         Func<T, DateTime?>? timestampOf = null) where T : class
     {
-        if (!activeTypes.Contains(dataType) || records.Count == 0) return;
+        if (!activeTypes.Contains(dataType) || records.Count == 0) return false;
 
         await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
             new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
@@ -674,6 +681,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             _logger.LogInformation("Synced {Count} {Type} records{Context}",
                 records.Count, dataType, ctx);
         }
+
+        return success;
     }
 
     /// <summary>
