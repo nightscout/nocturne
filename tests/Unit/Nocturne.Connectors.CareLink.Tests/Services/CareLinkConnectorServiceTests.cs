@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -128,35 +129,9 @@ public class CareLinkConnectorServiceTests
     public async Task SyncDataAsync_GatesSystemEventsOnTheDeviceEventsToggle(
         bool syncDeviceEvents, int expectedCount)
     {
-        var handler = new CareLinkFakeHandler
-        {
-            MonitorDataJson = """
-                {
-                  "currentServerTime": 1767261600000,
-                  "lastSG": {},
-                  "lastAlarm": {
-                    "type": "PUMP_SUSPEND",
-                    "code": 816,
-                    "flash": true,
-                    "datetime": "2026-01-01T10:00:00"
-                  },
-                  "notificationHistory": {
-                    "activeNotifications": [
-                      {
-                        "referenceGUID": "11111111-1111-1111-1111-111111111111",
-                        "triggeredDateTime": "2026-01-01T09:55:00",
-                        "type": "ALERT",
-                        "faultId": 105,
-                        "messageId": "BC_SID_LOW_RESERVOIR"
-                      }
-                    ]
-                  }
-                }
-                """
-        };
         var config = AlarmOnlyConfiguration();
         config.SyncDeviceEvents = syncDeviceEvents;
-        var fixture = new ServiceFixture(handler, config);
+        var fixture = new ServiceFixture(SystemEventHandler(NotificationBeforeAlarm), config);
 
         var result = await fixture.Service.SyncDataAsync(
             new SyncRequest(), fixture.Config, CancellationToken.None);
@@ -166,6 +141,59 @@ public class CareLinkConnectorServiceTests
         result.Errors.Contains("DeviceEvents publish failed").Should().Be(expectedCount > 0,
             "a switched-off type is never handed to the publisher, so it cannot fail");
     }
+
+    /// <summary>
+    /// DeviceEvents' last-entry time is the newest of the two system-event paths, so each path in
+    /// turn is the one that must report a time: whichever is newer has to win the max-compare.
+    /// </summary>
+    [Theory]
+    [InlineData(NotificationBeforeAlarm, AlarmDateTime)]
+    [InlineData(NotificationAfterAlarm, NotificationAfterAlarm)]
+    public async Task SyncDataAsync_RecordsTheNewestSystemEventTimeUnderDeviceEvents(
+        string notificationDateTime, string expectedNewest)
+    {
+        var fixture = new ServiceFixture(
+            SystemEventHandler(notificationDateTime), AlarmOnlyConfiguration());
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest(), fixture.Config, CancellationToken.None);
+
+        result.LastEntryTimes[SyncDataType.DeviceEvents].Should().Be(
+            DateTime.Parse(expectedNewest, CultureInfo.InvariantCulture));
+    }
+
+    private const string AlarmDateTime = "2026-01-01T10:00:00";
+    private const string NotificationBeforeAlarm = "2026-01-01T09:55:00";
+    private const string NotificationAfterAlarm = "2026-01-01T10:05:00";
+
+    /// <summary>A payload feeding both system-event paths: the last alarm and one notification.</summary>
+    private static CareLinkFakeHandler SystemEventHandler(string notificationDateTime) => new()
+    {
+        // Server time equals the alarm time, so no pump offset is applied and the strings are UTC.
+        MonitorDataJson = $$"""
+            {
+              "currentServerTime": 1767261600000,
+              "lastSG": {},
+              "lastAlarm": {
+                "type": "PUMP_SUSPEND",
+                "code": 816,
+                "flash": true,
+                "datetime": "{{AlarmDateTime}}"
+              },
+              "notificationHistory": {
+                "activeNotifications": [
+                  {
+                    "referenceGUID": "11111111-1111-1111-1111-111111111111",
+                    "triggeredDateTime": "{{notificationDateTime}}",
+                    "type": "ALERT",
+                    "faultId": 105,
+                    "messageId": "BC_SID_LOW_RESERVOIR"
+                  }
+                ]
+              }
+            }
+            """
+    };
 
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>
     private static CareLinkConnectorConfiguration AlarmOnlyConfiguration() => new()

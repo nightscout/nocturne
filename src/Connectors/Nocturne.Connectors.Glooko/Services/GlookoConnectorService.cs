@@ -629,8 +629,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
         }
 
-        // Device events and system events share one ItemsSynced entry: Glooko declares no separate
-        // system-event toggle, so both are gated and counted under DeviceEvents.
+        // Device events and system events share one ItemsSynced entry — see
+        // <see cref="BaseConnectorService{TConfig}.PublishSystemEventDataAsync"/>.
         if (activeTypes.Contains(SyncDataType.DeviceEvents))
         {
             var deviceEventCount = 0;
