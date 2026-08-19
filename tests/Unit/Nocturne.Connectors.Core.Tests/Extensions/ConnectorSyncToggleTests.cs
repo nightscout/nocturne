@@ -69,8 +69,9 @@ public class ConnectorSyncToggleTests
             .Except(ConnectorSyncToggles.ByPropertyKey.Values)
             .ToList();
 
-        untoggled.Should().Contain(
-            [SyncDataType.Calibrations, SyncDataType.BasalInjections, SyncDataType.BGChecks]);
+        untoggled.Should().Contain([SyncDataType.Calibrations, SyncDataType.BGChecks]);
+        untoggled.Should().NotContain(SyncDataType.BasalInjections,
+            "a connector declares basal injections supported, so the user must be able to switch them off");
 
         var allTogglesOff = new TestConnectorConfiguration();
         foreach (var key in ConnectorSyncToggles.ByPropertyKey.Keys)
