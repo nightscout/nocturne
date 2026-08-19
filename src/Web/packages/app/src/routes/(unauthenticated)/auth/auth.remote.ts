@@ -16,8 +16,15 @@ import { invalid, redirect } from "@sveltejs/kit";
 
 import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
 import { clearAuthCookies } from "$lib/config/auth-cookies";
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus, RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
 import { safeReturnUrl } from "$lib/server/return-url";
+import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
+
+const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, string> = {
+  // The API deliberately doesn't say which of the two was wrong.
+  rejected: "That username and recovery code don't match.",
+  "rate-limited": RATE_LIMITED_ERROR,
+};
 
 // ============================================================================
 // Helper Functions
@@ -274,14 +281,15 @@ export const signInWithRecoveryCode = form(
   async (data, issue) => {
     const api = getApiClient();
 
-    let verified = false;
+    let failure: RecoveryFailure | null = null;
     try {
       const result = await api.passkey.recoveryVerify({
         username: data.username,
         code: data.code,
       });
-      verified = result?.success === true;
+      if (result?.success !== true) failure = "rejected";
     } catch (err) {
+      failure = classifyRecoveryError(err);
       // Log the status only: the response carries the submitted credentials.
       console.error(
         "Recovery code sign-in failed with status:",
@@ -289,10 +297,7 @@ export const signInWithRecoveryCode = form(
       );
     }
 
-    // The API deliberately doesn't say which of the two was wrong.
-    if (!verified) {
-      invalid(issue.code("That username and recovery code don't match."));
-    }
+    if (failure) invalid(issue.code(RECOVERY_FAILURE_MESSAGES[failure]));
 
     const destination = new URLSearchParams({
       username: data.username,

@@ -109,9 +109,11 @@ public static class ServiceRegistrationExtensions
         // The passkey ceremonies. An assertion is phishing-resistant and its challenge is a
         // stateless Data Protection token, so what these bound is the work each attempt costs —
         // the credential lookup, the audit row a failure writes, and the crypto the completion
-        // step runs.
-        ("passkey-login", 10, TimeSpan.FromMinutes(1)),
-        ("passkey-register", 10, TimeSpan.FromMinutes(1)),
+        // step runs. Two things set the ceilings well above that work: a ceremony spends two
+        // permits (options then complete), and a household or clinic behind one NAT is a single
+        // partition, so the whole family signs in from one bucket.
+        ("passkey-login", 30, TimeSpan.FromMinutes(1)),
+        ("passkey-register", 20, TimeSpan.FromMinutes(1)),
         // A recovery code is a one-time human-typed secret and the last way back into an account,
         // so the ceiling has to leave room to mistype ten characters under stress. The window,
         // not the ceiling, is what makes this an order of magnitude tighter than totp-login: an

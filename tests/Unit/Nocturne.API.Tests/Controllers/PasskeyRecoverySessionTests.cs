@@ -19,6 +19,11 @@ namespace Nocturne.API.Tests.Controllers;
 /// The recovery-code path over the real pipeline: spending a code has to leave the caller able to
 /// enrol a replacement passkey, and able to do nothing else.
 /// </summary>
+/// <remarks>
+/// One factory, so one rate limiter, and the test server presents no client address — every test
+/// here draws from the same <c>passkey-recovery</c> bucket (10 per 10 minutes). Adding recovery
+/// verifications in bulk trips a 429 on whichever test happens to run last.
+/// </remarks>
 public class PasskeyRecoverySessionTests : IClassFixture<AuthenticationTestFactory>
 {
     private const string RecoveryCookieName = ".Nocturne.RecoverySession";
