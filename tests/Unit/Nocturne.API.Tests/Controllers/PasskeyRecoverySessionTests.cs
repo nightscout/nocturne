@@ -77,6 +77,15 @@ public class PasskeyRecoverySessionTests : IClassFixture<AuthenticationTestFacto
     }
 
     [Fact]
+    public async Task A_passkey_manage_token_that_is_not_a_recovery_session_cannot_enrol_a_passkey()
+    {
+        var response = await PostAsync(
+            "register/options", new { username = Username }, SessionShapedPasskeyManageToken());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task No_recovery_session_cannot_enrol_a_passkey()
     {
         var response = await PostAsync("register/options", new { username = Username }, cookie: null);
@@ -117,6 +126,19 @@ public class PasskeyRecoverySessionTests : IClassFixture<AuthenticationTestFacto
             notBefore: DateTime.UtcNow.AddMinutes(-20),
             expires: DateTime.UtcNow.AddMinutes(-10),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)));
+    }
+
+    /// <summary>
+    /// A token the API itself signs and would honour as a session, carrying the permission a
+    /// recovery session carries but nothing that says a recovery code bought it.
+    /// </summary>
+    private string SessionShapedPasskeyManageToken()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateAccessToken(
+            new SubjectInfo { Id = TestDatabaseSeeder.TestSubjectId },
+            permissions: ["passkey:manage"],
+            roles: []);
     }
 
     /// <summary>Spends a freshly issued recovery code and returns the recovery-session token.</summary>

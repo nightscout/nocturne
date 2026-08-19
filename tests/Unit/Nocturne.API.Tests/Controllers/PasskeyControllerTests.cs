@@ -190,7 +190,14 @@ public class PasskeyControllerTests : IDisposable
         };
 
     /// <summary>Presents a recovery-session cookie that the JWT service accepts for this subject.</summary>
-    private void GiveRecoverySession(Guid subjectId, params string[] permissions)
+    private void GiveRecoverySession(Guid subjectId, params string[] permissions) =>
+        GiveRecoveryCookie(subjectId, ["auth:recovery:enrol"], permissions);
+
+    /// <summary>
+    /// Presents a cookie carrying whatever claim shape the caller names, so a token that is not a
+    /// recovery session can be put where one is expected.
+    /// </summary>
+    private void GiveRecoveryCookie(Guid subjectId, string[] scopes, string[] permissions)
     {
         const string token = "recovery-token";
         _controller.ControllerContext.HttpContext.Request.Headers.Cookie =
@@ -200,6 +207,7 @@ public class PasskeyControllerTests : IDisposable
             .Returns(JwtValidationResult.Success(new JwtClaims
             {
                 SubjectId = subjectId,
+                Scopes = [.. scopes],
                 Permissions = [.. permissions],
             }));
     }
@@ -342,6 +350,23 @@ public class PasskeyControllerTests : IDisposable
     {
         var subjectId = await SeedMemberAsync("owner", withPasskey: true);
         GiveRecoverySession(subjectId, "glucose.read");
+
+        var result = await _controller.RegisterOptions(
+            new PasskeyRegisterOptionsRequest { Username = "owner" });
+
+        Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterOptions_WithAPasskeyManageTokenThatIsNotARecoverySession_IsRefused()
+    {
+        // Spending a recovery code is what buys an enrolment. A token that merely carries the same
+        // permission — anything a future mint site emits — is not that proof.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoveryCookie(subjectId, scopes: [], permissions: ["passkey:manage"]);
 
         var result = await _controller.RegisterOptions(
             new PasskeyRegisterOptionsRequest { Username = "owner" });

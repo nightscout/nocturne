@@ -62,6 +62,20 @@ public class PasskeyController : ControllerBase
     private static readonly TimeSpan RecoverySessionLifetime = TimeSpan.FromMinutes(10);
 
     /// <summary>
+    /// What makes a token a recovery session, as opposed to any credential that merely carries
+    /// <see cref="RecoverySessionPermission"/>. It sits outside
+    /// <see cref="Core.Models.Authorization.OAuthScopes.ValidRequestScopes"/>, so no client can
+    /// register it and no scope gate resolves anything from it, leaving
+    /// <see cref="RecoveryVerify"/> its only source.
+    /// </summary>
+    private const string RecoverySessionScope = "auth:recovery:enrol";
+
+    /// <summary>
+    /// The authority a recovery session confers: enrol a replacement passkey, nothing else.
+    /// </summary>
+    private const string RecoverySessionPermission = "passkey:manage";
+
+    /// <summary>
     /// Shown for every recovery-mode refusal so the response never distinguishes an unknown
     /// username from an account that still has a working sign-in method.
     /// </summary>
@@ -195,7 +209,8 @@ public class PasskeyController : ControllerBase
         if (!validation.IsValid || validation.Claims is null)
             return null;
 
-        return validation.Claims.Permissions.Contains("passkey:manage")
+        return validation.Claims.Scopes.Contains(RecoverySessionScope)
+            && validation.Claims.Permissions.Contains(RecoverySessionPermission)
             ? validation.Claims.SubjectId
             : null;
     }
@@ -644,8 +659,9 @@ public class PasskeyController : ControllerBase
 
         var recoveryToken = _jwtService.GenerateAccessToken(
             subjectInfo,
-            permissions: ["passkey:manage"],
+            permissions: [RecoverySessionPermission],
             roles: [],
+            scopes: [RecoverySessionScope],
             lifetime: RecoverySessionLifetime);
 
         var cookieOptions = RecoveryCookieOptions();
