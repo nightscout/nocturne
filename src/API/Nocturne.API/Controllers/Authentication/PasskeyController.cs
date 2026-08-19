@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -142,6 +143,7 @@ public class PasskeyController : ControllerBase
     [HttpPost("register/options")]
     [DenyDemoSubject]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -247,6 +249,7 @@ public class PasskeyController : ControllerBase
     [HttpPost("register/complete")]
     [DenyDemoSubject]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -302,6 +305,7 @@ public class PasskeyController : ControllerBase
     /// </remarks>
     [HttpPost("recovery-mode/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -330,6 +334,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("recovery-mode/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -486,6 +491,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/discoverable/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<PasskeyOptionsResponse>> DiscoverableLoginOptions()
@@ -505,6 +511,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -530,6 +537,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyLoginCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -608,6 +616,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("recovery/verify")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-recovery")]
     [RemoteCommand]
     [ProducesResponseType(typeof(RecoveryVerifyResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -898,6 +907,7 @@ public class PasskeyController : ControllerBase
     /// <returns>A <see cref="PasskeyOptionsResponse"/> with the WebAuthn options and challenge token, or <c>404</c> if access requests are disabled.</returns>
     [HttpPost("access-request/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-access-request")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -983,6 +993,7 @@ public class PasskeyController : ControllerBase
     /// <returns><c>200 OK</c> on success, or <c>400</c> / <c>404</c> on error.</returns>
     [HttpPost("access-request/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-access-request")]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -1067,6 +1078,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("invite/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1147,6 +1159,7 @@ public class PasskeyController : ControllerBase
     /// </remarks>
     [HttpPost("invite/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
