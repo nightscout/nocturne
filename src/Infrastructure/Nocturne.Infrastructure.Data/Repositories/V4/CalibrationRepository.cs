@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -70,7 +71,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.Calibrations
-            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
+            .FromSource(source)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
