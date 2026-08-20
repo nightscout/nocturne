@@ -70,6 +70,21 @@ public class UISettingsControllerSectionTests
         security.HideGlucoseInFavicon.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("Devices")]
+    [InlineData("DEVICES")]
+    [InlineData("dataquality")]
+    [InlineData("DATAQUALITY")]
+    [InlineData("DataQuality")]
+    public async Task GetSectionSettings_matchesSectionNamesWithoutRegardToCase(string section)
+    {
+        var controller = NewController();
+
+        var result = await controller.GetSectionSettings(section);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
     [Fact]
     public async Task GetSectionSettings_reports404_forASectionTheAggregateDoesNotOwn()
     {
