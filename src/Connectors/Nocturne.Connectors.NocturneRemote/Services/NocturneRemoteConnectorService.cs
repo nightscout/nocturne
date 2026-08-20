@@ -286,10 +286,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             records, PublishActivityDataAsync, config, ct);
     }
 
-    /// <summary>Parses a legacy ISO createdAt string, treating an unparseable value as absent.</summary>
-    private static DateTime? ParseCreatedAt(string? createdAt) =>
-        DateTimeOffset.TryParse(createdAt, out var dto) ? dto.UtcDateTime : null;
-
     private async Task SyncFoodAsync(
         NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)

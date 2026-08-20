@@ -197,7 +197,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Glucose", request.From, request.To,
                     FetchGlucosePagesAsync,
-                    newestOf: p => p.Max(e => e.Date),
                     oldestOf: OldestEntryTime,
                     publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken));
 
@@ -240,7 +239,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Treatments", treatmentFrom, request.To,
                     FetchTreatmentPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, t => t.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
                     publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
 
@@ -302,7 +300,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "DeviceStatus", deviceStatusFrom, request.To,
                     FetchDeviceStatusPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, d => d.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, d => d.CreatedAt),
                     publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken));
 
@@ -367,7 +364,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Activity", activityFrom, request.To,
                     FetchActivityPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, a => a.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
                     publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
 
@@ -444,12 +440,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
         from is null && to is null ? DateTime.UtcNow : to;
 
-    /// <summary>
-    ///     Outcome of one crawled collection. <paramref name="NewestTime"/> spans every page of the
-    ///     crawl, including the resume pass below the low-water mark, so it cannot come from the
-    ///     shared publish path: that sees one page at a time and never the crawl as a whole.
-    /// </summary>
-    private sealed record PagedCrawlOutcome(int Count, DateTime? NewestTime, bool Success);
+    /// <summary>Outcome of one crawled collection, spanning every page of the crawl.</summary>
+    private sealed record PagedCrawlOutcome(int Count, bool Success);
 
     private Task<DateTime?> GetBackfillLowWaterMarkAsync(string collection) =>
         Publisher is { IsAvailable: true } p
@@ -484,14 +476,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from,
         DateTime? to,
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
-        Func<T[], DateTime?> newestOf,
         Func<T[], DateTime?> oldestOf,
         Func<T[], Task<bool>> publishAsync)
     {
         var mark = await GetBackfillLowWaterMarkAsync(collection);
 
         var primary = await CrawlRangeAsync(
-            collection, from, to, pages, newestOf, oldestOf, publishAsync, fullCrawl: from is null);
+            collection, from, to, pages, oldestOf, publishAsync, fullCrawl: from is null);
 
         // Resume the incomplete backfill only when this cycle's primary crawl stored cleanly —
         // a store that is failing right now shouldn't be hammered with the deep history too.
@@ -501,12 +492,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         var resume = await CrawlRangeAsync(
             collection, null, mark.Value.AddMilliseconds(-1),
-            pages, newestOf, oldestOf, publishAsync, fullCrawl: true);
+            pages, oldestOf, publishAsync, fullCrawl: true);
 
-        var newest = primary.NewestTime is null || (resume.NewestTime is not null && resume.NewestTime > primary.NewestTime)
-            ? resume.NewestTime
-            : primary.NewestTime;
-        return new PagedCrawlOutcome(primary.Count + resume.Count, newest, resume.Success);
+        return new PagedCrawlOutcome(primary.Count + resume.Count, resume.Success);
     }
 
     /// <summary>
@@ -521,13 +509,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from,
         DateTime? to,
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
-        Func<T[], DateTime?> newestOf,
         Func<T[], DateTime?> oldestOf,
         Func<T[], Task<bool>> publishAsync,
         bool fullCrawl)
     {
         var count = 0;
-        DateTime? newestSeen = null;
         DateTime? lowestPublished = null;
         var success = true;
 
@@ -536,9 +522,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             await foreach (var page in pages(from, to))
             {
                 count += page.Length;
-                var pageNewest = newestOf(page);
-                if (pageNewest.HasValue && (newestSeen is null || pageNewest > newestSeen))
-                    newestSeen = pageNewest;
 
                 if (!await publishAsync(page))
                 {
@@ -572,7 +555,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
         }
 
-        return new PagedCrawlOutcome(count, newestSeen, success);
+        return new PagedCrawlOutcome(count, success);
     }
 
     /// <summary>
@@ -672,10 +655,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     /// </summary>
     private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
         page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Min();
-
-    /// <summary>Newest created_at on a page; the counterpart of <see cref="OldestCreatedAt{T}"/>.</summary>
-    private static DateTime? NewestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
-        page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Max();
 
     /// <summary>
     ///     Oldest created_at on a page as the source wrote it — the key the source orders and
