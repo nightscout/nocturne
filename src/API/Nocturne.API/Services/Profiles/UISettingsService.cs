@@ -9,9 +9,8 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Services.Profiles;
 
 /// <summary>
-/// Persists per-tenant UI settings as JSON blobs in the settings table, one row per section
-/// (devices, algorithm, features, notifications, services, data quality, security) plus one row for
-/// the alarm configuration.
+/// Persists per-tenant UI settings as JSON blobs in the settings table, one row per
+/// <see cref="UISettingsSections"/> entry plus one row for the alarm configuration.
 /// </summary>
 /// <remarks>
 /// Every value has exactly one owning row. The aggregate <see cref="UISettingsConfiguration"/> is
@@ -27,73 +26,11 @@ public class UISettingsService : IUISettingsService
 {
     private readonly NocturneDbContext _context;
     private readonly ILogger<UISettingsService> _logger;
-    private readonly IConfiguration _configuration;
 
     private const string SettingsKeyPrefix = "ui:settings:";
     private const string LegacyAggregateKey = "ui:settings:complete";
     private const string AlarmConfigurationKey = "ui:settings:notifications:alarms";
     private const string AlarmConfigurationNotes = "xDrip+-style alarm profiles configuration";
-    private const string NotificationsSectionName = "notifications";
-
-    /// <summary>
-    /// A section of <see cref="UISettingsConfiguration"/>, its settings-table row and its property
-    /// name in the persisted JSON (also the suffix of its key, see <see cref="GetSectionKey"/>).
-    /// </summary>
-    private sealed record Section(
-        string Name,
-        Type Type,
-        Func<UISettingsConfiguration, object?> Get,
-        Action<UISettingsConfiguration, object> Set
-    )
-    {
-        public string Key => GetSectionKey(Name);
-    }
-
-    private static readonly Section[] Sections =
-    [
-        new(
-            "devices",
-            typeof(DeviceSettings),
-            s => s.Devices,
-            (s, v) => s.Devices = (DeviceSettings)v
-        ),
-        new(
-            "algorithm",
-            typeof(AlgorithmSettings),
-            s => s.Algorithm,
-            (s, v) => s.Algorithm = (AlgorithmSettings)v
-        ),
-        new(
-            "features",
-            typeof(FeatureSettings),
-            s => s.Features,
-            (s, v) => s.Features = (FeatureSettings)v
-        ),
-        new(
-            NotificationsSectionName,
-            typeof(NotificationSettings),
-            s => s.Notifications,
-            (s, v) => s.Notifications = (NotificationSettings)v
-        ),
-        new(
-            "services",
-            typeof(ServicesSettings),
-            s => s.Services,
-            (s, v) => s.Services = (ServicesSettings)v
-        ),
-        new(
-            "dataQuality",
-            typeof(DataQualitySettings),
-            s => s.DataQuality,
-            (s, v) => s.DataQuality = (DataQualitySettings)v
-        ),
-        new(
-            "security",
-            typeof(SecuritySettings),
-            s => s.Security,
-            (s, v) => s.Security = (SecuritySettings)v
-        ),
-    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -101,15 +38,10 @@ public class UISettingsService : IUISettingsService
         WriteIndented = false,
     };
 
-    public UISettingsService(
-        NocturneDbContext context,
-        ILogger<UISettingsService> logger,
-        IConfiguration configuration
-    )
+    public UISettingsService(NocturneDbContext context, ILogger<UISettingsService> logger)
     {
         _context = context;
         _logger = logger;
-        _configuration = configuration;
     }
 
     /// <inheritdoc />
@@ -124,10 +56,10 @@ public class UISettingsService : IUISettingsService
             var legacyAggregate = legacy == null ? null : JsonNode.Parse(legacy) as JsonObject;
             var settings = new UISettingsConfiguration();
 
-            foreach (var section in Sections)
+            foreach (var section in UISettingsSections.All)
             {
                 var value =
-                    Deserialize(Value(stored, section.Key), section.Type)
+                    Deserialize(Value(stored, GetSectionKey(section.Name)), section.Type)
                     ?? legacyAggregate?[section.Name]?.Deserialize(section.Type, JsonOptions);
 
                 if (value != null)
@@ -158,7 +90,7 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            foreach (var section in Sections)
+            foreach (var section in UISettingsSections.All)
             {
                 var value = section.Get(settings);
                 if (value != null)
@@ -195,7 +127,7 @@ public class UISettingsService : IUISettingsService
                 return await GetAlarmConfigurationAsync(cancellationToken) as T;
             }
 
-            if (FindSection(sectionName) is { } section)
+            if (UISettingsSections.Find(sectionName) is { } section)
             {
                 return section.Get(await GetSettingsAsync(cancellationToken)) as T;
             }
@@ -239,7 +171,7 @@ public class UISettingsService : IUISettingsService
     )
     {
         var section = await GetSectionAsync<NotificationSettings>(
-            NotificationsSectionName,
+            UISettingsSections.Notifications,
             cancellationToken
         );
 
@@ -252,7 +184,11 @@ public class UISettingsService : IUISettingsService
         CancellationToken cancellationToken = default
     )
     {
-        return await SaveSectionAsync(NotificationsSectionName, settings, cancellationToken);
+        return await SaveSectionAsync(
+            UISettingsSections.Notifications,
+            settings,
+            cancellationToken
+        );
     }
 
     /// <inheritdoc />
@@ -309,13 +245,6 @@ public class UISettingsService : IUISettingsService
             "alarms" or "alarmconfiguration" => AlarmConfigurationKey,
             var name => SettingsKeyPrefix + name,
         };
-    }
-
-    private static Section? FindSection(string sectionName)
-    {
-        return Sections.FirstOrDefault(s =>
-            string.Equals(s.Name, sectionName, StringComparison.OrdinalIgnoreCase)
-        );
     }
 
     private async Task<UserAlarmConfiguration?> ReadAlarmConfigurationAsync(

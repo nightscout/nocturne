@@ -140,7 +140,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get settings for a specific section.
     /// </summary>
-    /// <param name="section">Section name: devices, therapy, algorithm, features, notifications, or services</param>
+    /// <param name="section">Name of any <see cref="UISettingsSections"/> entry</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Settings for the specified section</returns>
     [HttpGet("{section}")]
@@ -159,15 +159,13 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             && okResult.Value is UISettingsConfiguration config
         )
         {
-            return section.ToLowerInvariant() switch
-            {
-                "devices" => Ok(config.Devices),
-                "algorithm" => Ok(config.Algorithm),
-                "features" => Ok(config.Features),
-                "notifications" => Ok(config.Notifications),
-                "services" => Ok(config.Services),
-                _ => Problem(detail: $"Unknown settings section: {section}", statusCode: 404, title: "Not Found"),
-            };
+            return UISettingsSections.Find(section) is { } known
+                ? Ok(known.Get(config))
+                : Problem(
+                    detail: $"Unknown settings section: {section}",
+                    statusCode: 404,
+                    title: "Not Found"
+                );
         }
 
         return settings.Result ?? StatusCode(500);

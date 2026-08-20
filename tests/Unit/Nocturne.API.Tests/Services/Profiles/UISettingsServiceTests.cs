@@ -1,7 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Models.Configuration;
@@ -354,10 +353,6 @@ public class UISettingsServiceTests
 
     private static UISettingsService NewService(NocturneDbContext context)
     {
-        return new UISettingsService(
-            context,
-            NullLogger<UISettingsService>.Instance,
-            new ConfigurationBuilder().Build()
-        );
+        return new UISettingsService(context, NullLogger<UISettingsService>.Instance);
     }
 }
