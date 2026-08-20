@@ -20,15 +20,12 @@
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The shared framework above supplies these too, so NuGet calls them redundant
-             (NU1510). They stay: System.Security.Cryptography.Xml pins advisory fixes ahead of
-             the framework's copy, and the configuration and logging packages carry the
-             design-time configuration loading path. The suppression is per-reference, not
-             project-wide, so a reference that becomes genuinely redundant is still reported. -->
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" NoWarn="NU1510" />
-        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" NoWarn="NU1510" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" NoWarn="NU1510" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" NoWarn="NU1510" />
+        <!-- Microsoft.AspNetCore.App supplies the assembly, so this reference delivers nothing and
+             NuGet reports it as redundant (NU1510). It stays because NuGet audits the pre-pruning
+             graph: without it the transitive resolves to the 10.0.8 that GHSA-23rf-6693-g89p and
+             four sibling advisories cover, and the solution restore reports 120 NU1903. Deleting it
+             needs the EF Core family on 10.0.10 first, so that Microsoft.AspNetCore.DataProtection
+             10.0.10 can carry the fixed transitive without an NU1605 downgrade. -->
         <PackageReference Include="System.Security.Cryptography.Xml" NoWarn="NU1510" />
     </ItemGroup>
     <ItemGroup>
