@@ -118,20 +118,6 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
 
     public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        var entries = new[]
-        {
-            new Entry { Sgv = 120, Mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
-            new Entry
-            {
-                Sgv = 115,
-                Mills = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds(),
-            },
-        };
-        return Task.FromResult<IEnumerable<Entry>>(entries);
-    }
-
     // This double only exercises the publish path, never a sync run.
     protected override Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,

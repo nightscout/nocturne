@@ -406,44 +406,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     }
 
     /// <summary>
-    ///     Ceiling on the list <see cref="FetchGlucoseDataAsync"/> builds — roughly ten weeks of
-    ///     five-minute readings.
-    /// </summary>
-    private const int MaxMaterializedEntries = 20_000;
-
-    /// <summary>
-    ///     Hands back one list, so it stops at <see cref="MaxMaterializedEntries"/> however wide a
-    ///     range the caller asks for: this is the accumulation <see cref="PerformSyncInternalAsync"/>
-    ///     streams to avoid, and importing a range belongs to that path, not this one.
-    /// </summary>
-    public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        var entries = new List<Entry>();
-
-        await foreach (var page in FetchGlucosePagesAsync(since, null))
-        {
-            entries.AddRange(page);
-
-            if (entries.Count >= MaxMaterializedEntries)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Glucose fetch stopped at {Count} entries; records older than {Oldest:yyyy-MM-dd HH:mm:ss} were not fetched",
-                    ConnectorSource,
-                    entries.Count,
-                    entries[^1].Date);
-                break;
-            }
-        }
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
-            ConnectorSource,
-            entries.Count);
-
-        return entries;
-    }
-
-    /// <summary>
     ///     Upper bound for the first page of a paginated fetch. Nightscout applies an
     ///     implicit recency window (roughly the last four days) to any query carrying no
     ///     date filter at all, so a fully unbounded first page silently truncates a

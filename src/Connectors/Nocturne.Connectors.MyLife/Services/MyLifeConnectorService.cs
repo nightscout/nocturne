@@ -46,15 +46,6 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Legacy method required by IConnectorService interface.
-    /// Returns empty - use PerformSyncInternalAsync for glucose data.
-    /// </summary>
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
-
-    /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
     /// is established.
     /// </summary>

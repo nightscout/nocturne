@@ -81,14 +81,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     public abstract Task<bool> AuthenticateAsync();
 
-    /// <summary>
-    ///     Fetch glucose entries from the data source.
-    ///     Connectors that write V4 models directly via <see cref="PerformSyncInternalAsync"/> do
-    ///     not need to override this — the default returns empty.
-    /// </summary>
-    public virtual Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null) =>
-        Task.FromResult(Enumerable.Empty<Entry>());
-
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(
         SyncRequest request,

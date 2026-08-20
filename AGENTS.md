@@ -88,7 +88,7 @@ public async Task<ActionResult<Entry[]>> GetCurrentEntry(...)
 
 Data connectors extend `IConnectorService<TConfig>`:
 
-- Implement `AuthenticateAsync()` and `FetchGlucoseDataAsync()`
+- Implement `AuthenticateAsync()` and `PerformSyncInternalAsync()`
 - Configuration via `IConnectorConfiguration` with `Validate()` method
 - Reference: `src/Connectors/Nocturne.Connectors.Dexcom/`
 
