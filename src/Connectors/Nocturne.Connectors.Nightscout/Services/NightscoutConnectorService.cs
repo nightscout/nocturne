@@ -708,7 +708,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)
     {
         await foreach (var page in FetchPagesAsync<Entry>(
-            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucoseData"))
+            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucosePages"))
         {
             foreach (var entry in page)
                 entry.DataSource = ConnectorSource;

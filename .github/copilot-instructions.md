@@ -43,7 +43,7 @@ public async Task<ActionResult<Entry[]>> GetCurrentEntry(...)
 
 ### Connector Pattern
 
-New data connectors extend `IConnectorService<TConfig>`:
+New data connectors derive from `BaseConnectorService<TConfig>`, which implements `IConnectorService<TConfig>`:
 
 - Implement `AuthenticateAsync()` and `PerformSyncInternalAsync()`
 - Configuration via `IConnectorConfiguration` with `Validate()` method

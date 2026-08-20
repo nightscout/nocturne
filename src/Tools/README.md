@@ -4,12 +4,6 @@ A collection of modern C# tools built with the Spectre.Console CLI framework for
 
 ## 🛠️ Available Tools
 
-### Configuration Generator
-
-**Path:** `Nocturne.Tools.Config`
-
-A smart configuration generator that creates comprehensive example configuration files for Nocturne in multiple formats (JSON, YAML, Environment Variables).
-
 ### MCP Server
 
 **Path:** `Nocturne.Tools.McpServer`
@@ -25,14 +19,6 @@ A Model Context Protocol (MCP) server providing AI and automation tools for inte
 - **🛡️ Type-Safe Configuration**: Comprehensive validation with helpful error messages
 - **📝 Structured Logging**: Consistent logging patterns with configurable verbosity
 - **⚙️ Dependency Injection**: Modern .NET patterns for maintainable, testable code
-
-### Configuration Generator
-
-- **📋 Multiple Formats**: Generate configurations in JSON, YAML, and Environment Variables
-- **🎯 Comprehensive Templates**: Full Nocturne configuration with all sections
-- **💬 Smart Comments**: Helpful documentation embedded in generated configs
-- **✅ Validation**: Built-in configuration validation and checking
-- **🔧 Environment-Aware**: Generate configs for different deployment environments
 
 ### MCP Server
 
@@ -59,33 +45,13 @@ A Model Context Protocol (MCP) server providing AI and automation tools for inte
    dotnet build
    ```
 
-2. **Run any tool with help to see available commands:**
+2. **Run the tool with help to see available commands:**
 
    ```bash
-   # Config generator
-   dotnet run --project Nocturne.Tools.Config --help
-
-   # MCP server
    dotnet run --project Nocturne.Tools.McpServer --help
    ```
 
-### Tool-Specific Quick Starts
-
-#### Configuration Generator
-
-```bash
-# Generate JSON configuration
-dotnet run --project Nocturne.Tools.Config generate --format json
-
-# Generate with comments and custom path
-dotnet run --project Nocturne.Tools.Config generate \
-  --output "my-config.json" \
-  --comments true
-
-# Validate existing configuration
-dotnet run --project Nocturne.Tools.Config validate \
-  --config "appsettings.json"
-```
+### Common Commands
 
 #### MCP Server
 
@@ -105,14 +71,6 @@ dotnet run --project Nocturne.Tools.McpServer server \
 ## 📋 Command Reference
 
 All tools are built with the Spectre.Console CLI framework and provide consistent help and command structure.
-
-### Configuration Generator Commands
-
-| Command    | Description                  | Examples                              |
-| ---------- | ---------------------------- | ------------------------------------- |
-| `generate` | Generate configuration files | `generate --format json --output ...` |
-| `validate` | Validate configuration files | `validate --config appsettings.json`  |
-| `version`  | Show version information     | `version --detailed`                  |
 
 ### MCP Server Commands
 
@@ -134,33 +92,6 @@ All tools are built with the Spectre.Console CLI framework and provide consisten
 | `GetEntryCount`         | Get entry count statistics                |
 
 ### Detailed Command Usage
-
-#### Configuration Generator Examples
-
-```bash
-# Generate JSON configuration with comments
-dotnet run --project Nocturne.Tools.Config generate \
-  --format json \
-  --output "appsettings.example.json" \
-  --comments true
-
-# Generate environment variables format
-dotnet run --project Nocturne.Tools.Config generate \
-  --format env \
-  --output ".env.example" \
-  --environment "Production"
-
-# Generate YAML configuration
-dotnet run --project Nocturne.Tools.Config generate \
-  --format yaml \
-  --output "config.yml" \
-  --overwrite
-
-# Validate existing configuration
-dotnet run --project Nocturne.Tools.Config validate \
-  --config "appsettings.json" \
-  --verbose
-```
 
 #### MCP Server Examples
 
@@ -199,18 +130,6 @@ All tools support multiple configuration methods:
 
 ### Tool-Specific Configuration
 
-#### Configuration Generator
-
-Generate example configurations for any Nocturne component:
-
-```bash
-# Generate comprehensive JSON configuration
-dotnet run --project Nocturne.Tools.Config generate \
-  --format json \
-  --output "appsettings.example.json" \
-  --comments true
-```
-
 #### MCP Server Configuration
 
 The MCP server supports both command-line and configuration file options:
@@ -239,13 +158,6 @@ All tools support these common options:
 ## 🔧 Troubleshooting
 
 ### Common Issues
-
-**Configuration Problems:**
-
-```bash
-# Validate configuration file (Config tool)
-dotnet run --project Nocturne.Tools.Config validate --config "appsettings.json"
-```
 
 **Authentication Failures:**
 
@@ -296,15 +208,6 @@ dotnet run --project Nocturne.Tools.McpServer server
 dotnet run --project Nocturne.Tools.McpServer server --web --port 5000
 ```
 
-### Scheduled Operations
-
-Use cron for periodic operations:
-
-```bash
-# Generate fresh configuration daily
-0 2 * * * cd /opt/nocturne/src/Tools && dotnet run --project Nocturne.Tools.Config generate --overwrite
-```
-
 ## 🏗️ Development
 
 ### Building from Source
@@ -338,7 +241,6 @@ src/Tools/
 │   ├── Commands/                  # Base command classes
 │   ├── Services/                  # Common services
 │   └── SpectreApplicationBuilder.cs # Spectre.Console extensions
-├── Nocturne.Tools.Config/         # Configuration generator
 └── Nocturne.Tools.McpServer/      # MCP server
 ```
 
