@@ -65,6 +65,43 @@ public class GlookoConnectorServiceReauthTests
         tokenProvider.AcquireCount.Should().Be(2, "it should re-auth exactly once before giving up");
     }
 
+    /// <summary>
+    /// The terminal progress message belongs to the shared run wrapper, which emits it once per
+    /// run. A connector that reports its own outcome as well would hand the tenant two terminal
+    /// messages, and the second would outlive the first's clear timer.
+    /// </summary>
+    [Theory]
+    [InlineData(true, SyncPhase.Completed)]
+    [InlineData(false, SyncPhase.Failed)]
+    public async Task SyncDataAsync_ReportsExactlyOneTerminalMessage(
+        bool codeRefreshes, SyncPhase expectedPhase)
+    {
+        var tokenProvider = new SwitchingGlookoTokenProvider(
+            codeRefreshes ? [OldCode, NewCode] : [OldCode]);
+        var handler = new PatientCodeAwareHandler(forbiddenCode: OldCode);
+        var service = BuildService(handler, tokenProvider);
+
+        var reported = new List<SyncProgressEvent>();
+        var reporter = new Mock<ISyncProgressReporter>();
+        reporter
+            .Setup(r => r.ReportProgressAsync(It.IsAny<SyncProgressEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<SyncProgressEvent, CancellationToken>((e, _) => reported.Add(e))
+            .Returns(Task.CompletedTask);
+
+        var request = new SyncRequest
+        {
+            DataTypes = [SyncDataType.Glucose],
+            From = DateTime.UtcNow.AddDays(-3),
+        };
+
+        await service.SyncDataAsync(request, BuildConfig(), CancellationToken.None, reporter.Object);
+
+        reported.Should().NotBeEmpty(
+            "a run that reported nothing at all would satisfy the count below vacuously");
+        reported.Where(e => e.Phase != SyncPhase.Syncing)
+            .Should().ContainSingle().Which.Phase.Should().Be(expectedPhase);
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private static GlookoConnectorConfiguration BuildConfig() => new()

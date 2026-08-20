@@ -167,8 +167,7 @@ public class SyncTerminalPhaseTests
     [Fact]
     public async Task CancelledSync_ReportsNothing()
     {
-        // Arrange: the reporter's own transport is cancelled with the run, so a cancelled sync has
-        // nowhere to send a terminal message.
+        // Arrange: a run the caller withdrew has no outcome to report.
         var (reporter, reported) = BuildReporter();
 
         // Act
