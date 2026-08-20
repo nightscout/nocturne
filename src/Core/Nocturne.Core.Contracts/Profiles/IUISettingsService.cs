@@ -72,10 +72,11 @@ public interface IUISettingsService
     );
 
     /// <summary>
-    /// Gets just the alarm configuration from notification settings.
+    /// Gets just the alarm configuration from notification settings. A tenant that has never saved
+    /// one reads back an empty configuration, so null means the read itself failed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The alarm configuration, or null if not set</returns>
+    /// <returns>The alarm configuration, or null if it could not be read</returns>
     Task<UserAlarmConfiguration?> GetAlarmConfigurationAsync(
         CancellationToken cancellationToken = default
     );

@@ -198,8 +198,13 @@ public class UISettingsService : IUISettingsService
     {
         try
         {
-            return await ReadAlarmConfigurationAsync(cancellationToken)
+            UserAlarmConfiguration? stored =
+                await ReadAlarmConfigurationAsync(cancellationToken)
                 ?? (await GetNotificationSettingsAsync(cancellationToken)).AlarmConfiguration;
+
+            // A row carrying an explicit JSON null binds over the property initialiser, so a read
+            // that succeeded can still land here with nothing. Null is reserved for a failed read.
+            return stored ?? new UserAlarmConfiguration();
         }
         catch (Exception ex)
         {

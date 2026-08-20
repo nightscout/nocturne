@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 
@@ -101,6 +102,36 @@ public class UISettingsControllerAlarmProfileTests
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    /// <summary>
+    /// An explicit JSON null binds over the property initialiser, so these rows deserialize to a
+    /// <see cref="NotificationSettings"/> with no alarm configuration at all. Earlier versions could
+    /// write them; the read has to cope rather than treat it as a failed read.
+    /// </summary>
+    [Theory]
+    [InlineData("ui:settings:complete", """{"notifications":{"alarmConfiguration":null}}""")]
+    [InlineData("ui:settings:notifications", """{"alarmConfiguration":null}""")]
+    public async Task GetAlarmConfiguration_servesAnEmptyConfiguration_forALegacyNullAlarmRow(
+        string key,
+        string value
+    )
+    {
+        var database = NewDatabase();
+        database.Settings.Add(
+            new SettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Key = key,
+                Value = value,
+                IsActive = true,
+            }
+        );
+        await database.SaveChangesAsync();
+
+        var result = await NewController(database).GetAlarmConfiguration();
+
+        OkValue<UserAlarmConfiguration>(result.Result).Profiles.Should().BeEmpty();
     }
 
     [Fact]

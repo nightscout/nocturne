@@ -25,16 +25,31 @@ internal static class UISettingsControllerHarness
         params (string Key, string Value)[] configuration
     )
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
+        return NewController(NewDatabase(), configuration);
+    }
 
-        var dbContext = new NocturneDbContext(options) { TenantId = TenantId };
-
+    internal static UISettingsController NewController(
+        NocturneDbContext dbContext,
+        params (string Key, string Value)[] configuration
+    )
+    {
         return NewController(
             new UISettingsService(dbContext, NullLogger<UISettingsService>.Instance),
             configuration
         );
+    }
+
+    /// <summary>
+    /// An empty tenant database, for tests that seed settings rows the service's own writers cannot
+    /// produce.
+    /// </summary>
+    internal static NocturneDbContext NewDatabase()
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new NocturneDbContext(options) { TenantId = TenantId };
     }
 
     internal static UISettingsController NewController(

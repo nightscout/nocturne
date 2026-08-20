@@ -455,9 +455,9 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> returns null only when the read
-    /// itself failed — a tenant that has never saved one still gets a configuration — so
-    /// substituting a value here would let the following write replace the tenant's profiles.
+    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> normalizes every successful read
+    /// to a configuration, so null means the read failed. Substituting a value here would let the
+    /// following write replace the tenant's profiles.
     /// </summary>
     private ObjectResult AlarmConfigurationUnavailable()
     {
