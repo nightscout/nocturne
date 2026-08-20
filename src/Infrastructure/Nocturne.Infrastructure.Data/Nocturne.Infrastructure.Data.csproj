@@ -15,16 +15,21 @@
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-        <!-- Added for design-time configuration loading -->
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-        <!-- Added to take vulnerability patched version -->
-        <PackageReference Include="System.Security.Cryptography.Xml" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The shared framework above supplies these too, so NuGet calls them redundant
+             (NU1510). They stay: System.Security.Cryptography.Xml pins advisory fixes ahead of
+             the framework's copy, and the configuration and logging packages carry the
+             design-time configuration loading path. The suppression is per-reference, not
+             project-wide, so a reference that becomes genuinely redundant is still reported. -->
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" NoWarn="NU1510" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" NoWarn="NU1510" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" NoWarn="NU1510" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" NoWarn="NU1510" />
+        <PackageReference Include="System.Security.Cryptography.Xml" NoWarn="NU1510" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
