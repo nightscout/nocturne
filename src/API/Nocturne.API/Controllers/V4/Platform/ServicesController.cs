@@ -334,7 +334,7 @@ public class ServicesController : ControllerBase
             {
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
-                    return NotFound(result);
+                    return Problem(detail: $"Data source not found: {id}", statusCode: 404, title: "Not Found");
                 }
                 return StatusCode(500, result);
             }
@@ -408,7 +408,7 @@ public class ServicesController : ControllerBase
             {
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
-                    return NotFound(result);
+                    return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
                 }
                 return StatusCode(500, result);
             }

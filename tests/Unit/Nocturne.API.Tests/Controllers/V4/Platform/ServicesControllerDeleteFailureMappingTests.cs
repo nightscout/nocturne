@@ -1,5 +1,8 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -16,7 +19,9 @@ namespace Nocturne.API.Tests.Controllers.V4.Platform;
 /// <summary>
 /// The delete endpoints distinguish "no such source" (404) from "the delete failed" (500) by
 /// <see cref="DataSourceDeleteResult.ErrorCode"/>, so the mapping survives any rewording of the
-/// human-readable <see cref="DataSourceDeleteResult.Error"/> message.
+/// human-readable <see cref="DataSourceDeleteResult.Error"/> message. A 404 answers with the
+/// RFC-7807 body the sibling GET lookups and the generated client's 404 branch both expect, not
+/// with the domain result.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ServicesControllerDeleteFailureMappingTests
@@ -33,7 +38,24 @@ public class ServicesControllerDeleteFailureMappingTests
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
             Mock.Of<ITenantAccessor>(),
-            Options.Create(new BaseDomainOptions()));
+            Options.Create(new BaseDomainOptions()))
+        {
+            ProblemDetailsFactory = new PassThroughProblemDetailsFactory(),
+        };
+
+    /// <summary>Stands in for the MVC-registered factory, which needs a request scope.</summary>
+    private sealed class PassThroughProblemDetailsFactory : ProblemDetailsFactory
+    {
+        public override ProblemDetails CreateProblemDetails(
+            HttpContext httpContext, int? statusCode = null, string? title = null,
+            string? type = null, string? detail = null, string? instance = null) =>
+            new() { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
+
+        public override ValidationProblemDetails CreateValidationProblemDetails(
+            HttpContext httpContext, ModelStateDictionary modelStateDictionary, int? statusCode = null,
+            string? title = null, string? type = null, string? detail = null, string? instance = null) =>
+            new(modelStateDictionary) { Status = statusCode, Title = title, Type = type, Detail = detail, Instance = instance };
+    }
 
     [Fact]
     public async Task DeleteDataSourceData_MissingSource_Returns404_WhateverTheMessageSays()
@@ -47,7 +69,10 @@ public class ServicesControllerDeleteFailureMappingTests
 
         var response = await CreateController().DeleteDataSourceData(DataSourceId, CancellationToken.None);
 
-        response.Result.Should().BeOfType<NotFoundObjectResult>();
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(404);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain(DataSourceId);
     }
 
     [Fact]
@@ -62,8 +87,9 @@ public class ServicesControllerDeleteFailureMappingTests
 
         var response = await CreateController().DeleteDataSourceData(DataSourceId, CancellationToken.None);
 
-        response.Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(500);
+        var failure = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        failure.StatusCode.Should().Be(500);
+        failure.Value.Should().BeOfType<DataSourceDeleteResult>();
     }
 
     [Fact]
@@ -78,7 +104,10 @@ public class ServicesControllerDeleteFailureMappingTests
 
         var response = await CreateController().DeleteConnectorData(ConnectorId, CancellationToken.None);
 
-        response.Result.Should().BeOfType<NotFoundObjectResult>();
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(404);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain(ConnectorId);
     }
 
     [Fact]
@@ -93,7 +122,8 @@ public class ServicesControllerDeleteFailureMappingTests
 
         var response = await CreateController().DeleteConnectorData(ConnectorId, CancellationToken.None);
 
-        response.Result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(500);
+        var failure = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        failure.StatusCode.Should().Be(500);
+        failure.Value.Should().BeOfType<DataSourceDeleteResult>();
     }
 }
