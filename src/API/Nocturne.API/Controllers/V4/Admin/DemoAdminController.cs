@@ -178,9 +178,9 @@ public class DemoAdminController : ControllerBase
         db.TenantId = tenant.Id;
 
         var deleted = 0L;
-        deleted += await db.SensorGlucose.PurgeAsync(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService), ct);
-        deleted += await db.MeterGlucose.PurgeAsync(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService), ct);
-        deleted += await db.Calibrations.PurgeAsync(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService), ct);
+        deleted += await db.SensorGlucose.PurgeAsync(SourceFilter.For<SensorGlucoseEntity>(DataSources.DemoService), ct);
+        deleted += await db.MeterGlucose.PurgeAsync(SourceFilter.For<MeterGlucoseEntity>(DataSources.DemoService), ct);
+        deleted += await db.Calibrations.PurgeAsync(SourceFilter.For<CalibrationEntity>(DataSources.DemoService), ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
@@ -202,15 +202,15 @@ public class DemoAdminController : ControllerBase
         db.TenantId = tenant.Id;
 
         var deleted = 0L;
-        deleted += await db.Boluses.PurgeAsync(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService), ct);
-        deleted += await db.CarbIntakes.PurgeAsync(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService), ct);
-        deleted += await db.BGChecks.PurgeAsync(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService), ct);
-        deleted += await db.Notes.PurgeAsync(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService), ct);
-        deleted += await db.DeviceEvents.PurgeAsync(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService), ct);
-        deleted += await db.BolusCalculations.PurgeAsync(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService), ct);
-        deleted += await db.TempBasals.PurgeAsync(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService), ct);
+        deleted += await db.Boluses.PurgeAsync(SourceFilter.For<BolusEntity>(DataSources.DemoService), ct);
+        deleted += await db.CarbIntakes.PurgeAsync(SourceFilter.For<CarbIntakeEntity>(DataSources.DemoService), ct);
+        deleted += await db.BGChecks.PurgeAsync(SourceFilter.For<BGCheckEntity>(DataSources.DemoService), ct);
+        deleted += await db.Notes.PurgeAsync(SourceFilter.For<NoteEntity>(DataSources.DemoService), ct);
+        deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
+        deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
+        deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
         deleted += await db.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, ct);
-        deleted += await db.ApsSnapshots.PurgeAsync(a => a.Device == DataSources.DemoService, ct);
+        deleted += await db.ApsSnapshots.PurgeAsync(SourceFilter.For<ApsSnapshotEntity>(DataSources.DemoService), ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
