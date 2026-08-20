@@ -7,6 +7,7 @@ import {
 // Plain-text arrows rather than the web app's Unicode glyphs: chat platforms render these
 // legibly everywhere. Directions with no arrow fall through to UNKNOWN_DIRECTION_GLYPH.
 export const TREND_ARROWS: Record<string, string> = {
+  TripleUp: "^^^",
   DoubleUp: "^^",
   SingleUp: "^",
   FortyFiveUp: "/",
@@ -14,6 +15,7 @@ export const TREND_ARROWS: Record<string, string> = {
   FortyFiveDown: "\\",
   SingleDown: "v",
   DoubleDown: "vv",
+  TripleDown: "vvv",
 };
 
 export function formatGlucose(mgdl: number, unit: "mg/dL" | "mmol/L"): string {

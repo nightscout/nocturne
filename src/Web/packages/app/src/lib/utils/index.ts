@@ -31,6 +31,11 @@ const unknownDirectionInfo: DirectionInfo = {
 
 /** Keyed by the canonical direction name {@link canonicalDirection} yields. */
 const directionInfo: Partial<Record<string, DirectionInfo>> = {
+  [Direction.TripleUp]: {
+    label: "rising extremely fast",
+    icon: ArrowUp,
+    css: "text-red-500",
+  },
   [Direction.DoubleUp]: {
     label: "rising very fast",
     icon: ArrowUp,
@@ -59,6 +64,11 @@ const directionInfo: Partial<Record<string, DirectionInfo>> = {
   },
   [Direction.DoubleDown]: {
     label: "falling very fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.TripleDown]: {
+    label: "falling extremely fast",
     icon: ArrowDown,
     css: "text-red-500",
   },

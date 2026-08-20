@@ -14,8 +14,20 @@ describe("getDirectionInfo", () => {
 		["Flat", "stable"],
 		["FORTY_FIVE_UP", "rising slowly"],
 		["DoubleDown", "falling very fast"],
+		["TripleUp", "rising extremely fast"],
+		["TripleDown", "falling extremely fast"],
+		["TRIPLE_UP", "rising extremely fast"],
 	])("resolves %s to %s", (direction, label) => {
 		expect(getDirectionInfo(direction).label).toBe(label);
+	});
+
+	it("does not report the fastest trends as unknown", () => {
+		for (const direction of ["TripleUp", "TripleDown"]) {
+			expect(getDirectionInfo(direction).label).not.toBe("unknown");
+			expect(getDirectionInfo(direction).icon).not.toBe(
+				getDirectionInfo("Bogus").icon,
+			);
+		}
 	});
 
 	it("falls back to unknown for unrecognised and absent values", () => {

@@ -70,6 +70,7 @@ export const UNKNOWN_DIRECTION_GLYPH = "?";
  * by design — no arrow expresses them.
  */
 const DIRECTION_GLYPHS: Record<string, string> = {
+  TripleUp: "⤊",
   DoubleUp: "⇈",
   SingleUp: "↑",
   FortyFiveUp: "↗",
@@ -77,11 +78,13 @@ const DIRECTION_GLYPHS: Record<string, string> = {
   FortyFiveDown: "↘",
   SingleDown: "↓",
   DoubleDown: "⇊",
+  TripleDown: "⤋",
   RateOutOfRange: "⇕",
 };
 
 /** Degrees to rotate an upward arrow icon by, per direction that an arrow can express. */
 const DIRECTION_ROTATIONS: Record<string, number> = {
+  TripleUp: 0,
   DoubleUp: 0,
   SingleUp: 0,
   FortyFiveUp: 45,
@@ -89,11 +92,25 @@ const DIRECTION_ROTATIONS: Record<string, number> = {
   FortyFiveDown: 135,
   SingleDown: 180,
   DoubleDown: 180,
+  TripleDown: 180,
+};
+
+/**
+ * How many arrows a direction is drawn with, so the doubled and tripled directions stay
+ * distinguishable from the single ones they share a rotation with. `0` when no arrow can
+ * express the direction.
+ */
+const DIRECTION_ARROW_COUNTS: Record<string, number> = {
+  TripleUp: 3,
+  DoubleUp: 2,
+  TripleDown: 3,
+  DoubleDown: 2,
 };
 
 const CANONICAL_DIRECTIONS = new Map(
   [
     "None",
+    "TripleUp",
     "DoubleUp",
     "SingleUp",
     "FortyFiveUp",
@@ -101,6 +118,7 @@ const CANONICAL_DIRECTIONS = new Map(
     "FortyFiveDown",
     "SingleDown",
     "DoubleDown",
+    "TripleDown",
     "NotComputable",
     "RateOutOfRange",
     "CgmError",
@@ -130,10 +148,15 @@ export function directionRotation(direction: string | null | undefined): number 
   return DIRECTION_ROTATIONS[canonicalDirection(direction)] ?? null;
 }
 
-/** True when the direction is drawn as a doubled arrow. */
-export function isDoubleArrow(direction: string | null | undefined): boolean {
+/**
+ * How many copies of the rotated arrow icon express the direction: one for the plain
+ * directions, two for the doubled ones, three for the tripled ones, and `0` when
+ * {@link directionRotation} refuses a rotation.
+ */
+export function directionArrowCount(direction: string | null | undefined): number {
   const name = canonicalDirection(direction);
-  return name === "DoubleUp" || name === "DoubleDown";
+  if (!(name in DIRECTION_ROTATIONS)) return 0;
+  return DIRECTION_ARROW_COUNTS[name] ?? 1;
 }
 
 /**
@@ -148,13 +171,18 @@ export function trendAngle(deltaPer5: number): number {
 }
 
 /**
- * Text-colour class for a trend direction, scaled by trend severity.
+ * Text-colour class for a trend direction, scaled by trend severity. Folds the spelling
+ * through {@link canonicalDirection} first, so a caller holding a wire spelling
+ * ("NOT COMPUTABLE") or a store value of unknown casing is classified rather than
+ * dropped to the muted default.
  *
  * Uses the theme's status tokens rather than fixed Tailwind palette colours, so
  * the arrow matches the chart in every theme instead of only the default one.
  */
-export function deltaColorClass(direction: string): string {
-  switch (direction) {
+export function deltaColorClass(direction: string | null | undefined): string {
+  switch (canonicalDirection(direction)) {
+    case "TripleUp":
+    case "TripleDown":
     case "DoubleUp":
     case "DoubleDown":
       return "text-status-critical";

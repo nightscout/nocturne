@@ -1,9 +1,9 @@
 <script lang="ts">
   import { ArrowUp } from "lucide-svelte";
   import {
+    directionArrowCount,
     directionGlyph,
     directionRotation,
-    isDoubleArrow,
   } from "@nocturne/ui/glucose";
 
   interface Props {
@@ -15,6 +15,8 @@
   let { direction, size }: Props = $props();
 
   const rotation = $derived(directionRotation(direction));
+  const arrowCount = $derived(directionArrowCount(direction));
+  const arrowIndices = $derived([...Array(arrowCount).keys()]);
 </script>
 
 {#if rotation === null}
@@ -22,13 +24,12 @@
     {directionGlyph(direction)}
   </span>
 {:else}
-  {#if isDoubleArrow(direction)}
+  {#each arrowIndices as index (index)}
     <ArrowUp
-      style="width: {size}px; height: {size}px; transform: rotate({rotation}deg); margin-right: -{size *
-        0.3}px;"
+      style="width: {size}px; height: {size}px; transform: rotate({rotation}deg);{index <
+      arrowCount - 1
+        ? ` margin-right: -${size * 0.3}px;`
+        : ''}"
     />
-  {/if}
-  <ArrowUp
-    style="width: {size}px; height: {size}px; transform: rotate({rotation}deg);"
-  />
+  {/each}
 {/if}
