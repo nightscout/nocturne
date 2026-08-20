@@ -151,7 +151,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
 
         await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
             sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken,
-            "Twiist", s => s.Timestamp);
+            "Twiist");
     }
 
     private async Task SyncBolusesAsync(
@@ -160,7 +160,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     {
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabledTypes,
             _insulinMapper.MapBoluses(status.InsulinHistory).ToList(), PublishBolusDataAsync,
-            config, cancellationToken, "Twiist", b => b.Timestamp);
+            config, cancellationToken, "Twiist");
     }
 
     private async Task SyncCarbIntakeAsync(
@@ -169,7 +169,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     {
         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabledTypes,
             _mealMapper.MapMeals(status.MealHistory).ToList(), PublishCarbIntakeDataAsync,
-            config, cancellationToken, "Twiist", c => c.Timestamp);
+            config, cancellationToken, "Twiist");
     }
 
     private async Task SyncTempBasalsAsync(
@@ -183,7 +183,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
 
         await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabledTypes,
             tempBasals, PublishTempBasalDataAsync, config, cancellationToken,
-            "Twiist", t => t.StartTimestamp);
+            "Twiist");
     }
 
     /// <summary>

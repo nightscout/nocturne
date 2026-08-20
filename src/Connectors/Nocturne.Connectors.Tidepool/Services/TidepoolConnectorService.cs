@@ -97,7 +97,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 if (bgValues != null)
                     await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                         _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), PublishSensorGlucoseDataAsync,
-                        config, cancellationToken, "Tidepool", s => s.Timestamp);
+                        config, cancellationToken, "Tidepool");
             }
             catch (Exception ex)
             {

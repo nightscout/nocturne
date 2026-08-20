@@ -207,8 +207,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.Glucose] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Glucose] = outcome.NewestTime.Value;
                 if (!outcome.Success)
                 {
                     result.Success = false;
@@ -255,10 +253,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 {
                     // Report count under each enabled treatment sub-type
                     foreach (var tt in treatmentTypes.Where(t => activeTypes.Contains(t)))
-                    {
                         result.ItemsSynced[tt] = outcome.Count;
-                        result.LastEntryTimes[tt] = outcome.NewestTime;
-                    }
                 }
 
                 if (!outcome.Success)
@@ -282,8 +277,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             {
                 var profiles = await FetchProfilesAsync();
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken,
-                    timestampOf: p => TimestampFromMills(p.Mills));
+                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -318,8 +312,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.DeviceStatus] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.DeviceStatus] = outcome.NewestTime;
                 if (!outcome.Success)
                 {
                     result.Success = false;
@@ -385,8 +377,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.Activity] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Activity] = outcome.NewestTime;
                 if (!outcome.Success)
                 {
                     result.Success = false;

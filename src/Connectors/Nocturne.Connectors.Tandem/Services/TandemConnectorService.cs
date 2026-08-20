@@ -133,8 +133,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
             result, SyncDataType.Profiles, enabled, [profile],
-            PublishProfileDataAsync, config, cancellationToken,
-            timestampOf: p => TimestampFromMills(p.Mills));
+            PublishProfileDataAsync, config, cancellationToken);
     }
 
     private async Task SyncEventsAsync(
@@ -209,48 +208,40 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     {
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabled,
-                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken,
-                timestampOf: s => s.Timestamp);
+                cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
             var decomposed = bolus.Map(bolusEvents);
             await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabled,
-                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken,
-                timestampOf: b => b.Timestamp);
+                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken);
             await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabled,
-                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken,
-                timestampOf: c => c.Timestamp);
+                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken);
             await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, enabled,
-                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken,
-                timestampOf: b => b.Timestamp);
+                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken);
         }
 
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabled,
                 basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
-                config, cancellationToken, timestampOf: t => t.StartTimestamp);
+                config, cancellationToken);
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
-            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken,
-            timestampOf: d => d.Timestamp);
+            deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
-            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken,
-            timestampOf: e => TimestampFromMills(e.Mills));
+            systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
             await PublishRecordTypeAsync(result, SyncDataType.StateSpans, enabled,
-                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken,
-                timestampOf: s => s.StartTimestamp);
+                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
             await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, enabled,
-                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken,
-                timestampOf: d => TimestampFromMills(d.Mills));
+                deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
     }
 
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(

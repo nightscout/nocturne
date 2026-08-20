@@ -657,14 +657,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <summary>
     ///     Reusable helper that checks whether a data type is active, reports publish progress,
-    ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts and
-    ///     <see cref="SyncResult.LastEntryTimes"/>, and logs the outcome.
+    ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts, and logs the
+    ///     outcome.
     /// </summary>
-    /// <param name="timestampOf">
-    ///     Extracts a record's canonical timestamp for <see cref="SyncResult.LastEntryTimes"/>.
-    ///     <c>null</c> — the parameter or an individual return — means the record carries no time
-    ///     to report, and nothing is recorded for the type.
-    /// </param>
     /// <returns>
     ///     Whether the batch reached the tenant. An inactive type, an empty batch and a rejected
     ///     publish are alike <c>false</c>: no record was accepted in any of them.
@@ -677,8 +672,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         Func<List<T>, TConfig, CancellationToken, Task<bool>> publishFunc,
         TConfig config,
         CancellationToken cancellationToken,
-        string? context = null,
-        Func<T, DateTime?>? timestampOf = null) where T : class
+        string? context = null) where T : class
     {
         if (!activeTypes.Contains(dataType) || records.Count == 0) return false;
 
@@ -689,7 +683,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         var success = await publishFunc(records, config, cancellationToken);
         result.ItemsSynced.TryGetValue(dataType, out var prev);
         result.ItemsSynced[dataType] = prev + records.Count;
-        RecordLastEntryTime(result, dataType, records, timestampOf);
         if (!success)
         {
             result.Success = false;
@@ -704,43 +697,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return success;
     }
-
-    /// <summary>
-    ///     Raises <see cref="SyncResult.LastEntryTimes"/> for a type to the newest timestamp in a
-    ///     published batch. Max-compare, not assignment: a connector that publishes several batches
-    ///     per type is under no obligation to deliver them in chronological order.
-    /// </summary>
-    private static void RecordLastEntryTime<T>(
-        SyncResult result,
-        SyncDataType dataType,
-        List<T> records,
-        Func<T, DateTime?>? timestampOf)
-    {
-        if (timestampOf is null) return;
-
-        DateTime? newest = null;
-        foreach (var record in records)
-        {
-            var time = timestampOf(record);
-            if (time.HasValue && (newest is null || time.Value > newest.Value))
-                newest = time;
-        }
-
-        if (newest is null) return;
-
-        // A recorded null must still be raised: lifted comparison against null is false, so
-        // `newest > existing` alone would leave a null-valued entry in place forever.
-        if (!result.LastEntryTimes.TryGetValue(dataType, out var existing)
-            || existing is null
-            || newest.Value > existing.Value)
-            result.LastEntryTimes[dataType] = newest;
-    }
-
-    /// <summary>
-    ///     Converts a legacy mills field to a UTC timestamp, treating a non-positive value as absent.
-    /// </summary>
-    protected static DateTime? TimestampFromMills(long mills) =>
-        mills > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime : null;
 
     /// <summary>
     ///     Reports a sync-progress message to the reporter supplied for this run, if any. The

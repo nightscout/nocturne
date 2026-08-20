@@ -7,6 +7,5 @@ public class SyncResult
     public DateTimeOffset StartTime { get; init; }
     public DateTimeOffset EndTime { get; set; }
     public Dictionary<SyncDataType, int> ItemsSynced { get; init; } = new();
-    public Dictionary<SyncDataType, DateTime?> LastEntryTimes { get; init; } = new();
     public List<string> Errors { get; init; } = [];
 }

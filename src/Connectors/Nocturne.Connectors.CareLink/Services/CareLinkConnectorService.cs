@@ -360,7 +360,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 if (systemEvent != null
                     && await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabledTypes,
                         [systemEvent], PublishSystemEventDataAsync, config, cancellationToken,
-                        context: "the last alarm", timestampOf: e => TimestampFromMills(e.Mills)))
+                        context: "the last alarm"))
                     _lastAlarmKey = alarmKey;
             }
         }
@@ -394,20 +394,20 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
             await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabledTypes,
                 CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), PublishBolusDataAsync,
-                config, cancellationToken, timestampOf: b => b.Timestamp);
+                config, cancellationToken);
 
             await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabledTypes,
                 CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), PublishCarbIntakeDataAsync,
-                config, cancellationToken, timestampOf: c => c.Timestamp);
+                config, cancellationToken);
 
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabledTypes,
                 CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), PublishTempBasalDataAsync,
-                config, cancellationToken, timestampOf: t => t.StartTimestamp);
+                config, cancellationToken);
 
             await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabledTypes,
                 CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs),
                 PublishSystemEventDataAsync, config, cancellationToken,
-                context: "notification history", timestampOf: e => TimestampFromMills(e.Mills));
+                context: "notification history");
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)

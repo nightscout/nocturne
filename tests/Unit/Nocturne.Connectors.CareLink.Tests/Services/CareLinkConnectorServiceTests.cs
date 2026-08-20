@@ -1,4 +1,3 @@
-using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -137,34 +136,12 @@ public class CareLinkConnectorServiceTests
             new SyncRequest(), fixture.Config, CancellationToken.None);
 
         result.ItemsSynced.GetValueOrDefault(SyncDataType.DeviceEvents).Should().Be(expectedCount);
-        result.LastEntryTimes.ContainsKey(SyncDataType.DeviceEvents).Should().Be(expectedCount > 0);
         result.Errors.Contains("DeviceEvents publish failed").Should().Be(expectedCount > 0,
             "a switched-off type is never handed to the publisher, so it cannot fail");
     }
 
-    /// <summary>
-    /// DeviceEvents' last-entry time is the newest of the two system-event paths, so each path in
-    /// turn is the one that must report a time: whichever is newer has to win the max-compare.
-    /// </summary>
-    [Theory]
-    [InlineData(NotificationBeforeAlarm, AlarmDateTime)]
-    [InlineData(NotificationAfterAlarm, NotificationAfterAlarm)]
-    public async Task SyncDataAsync_RecordsTheNewestSystemEventTimeUnderDeviceEvents(
-        string notificationDateTime, string expectedNewest)
-    {
-        var fixture = new ServiceFixture(
-            SystemEventHandler(notificationDateTime), AlarmOnlyConfiguration());
-
-        var result = await fixture.Service.SyncDataAsync(
-            new SyncRequest(), fixture.Config, CancellationToken.None);
-
-        result.LastEntryTimes[SyncDataType.DeviceEvents].Should().Be(
-            DateTime.Parse(expectedNewest, CultureInfo.InvariantCulture));
-    }
-
     private const string AlarmDateTime = "2026-01-01T10:00:00";
     private const string NotificationBeforeAlarm = "2026-01-01T09:55:00";
-    private const string NotificationAfterAlarm = "2026-01-01T10:05:00";
 
     /// <summary>A payload feeding both system-event paths: the last alarm and one notification.</summary>
     private static CareLinkFakeHandler SystemEventHandler(string notificationDateTime) => new()
