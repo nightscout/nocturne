@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
@@ -101,6 +103,50 @@ public class UISettingsControllerAlarmProfileTests
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
+    [Fact]
+    public async Task GetAlarmConfiguration_reports500_whenTheStoredConfigurationCannotBeRead()
+    {
+        var controller = NewController(UnreadableAlarmConfiguration().Object);
+
+        var result = await controller.GetAlarmConfiguration();
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+    }
+
+    [Fact]
+    public async Task AddOrUpdateAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    {
+        var settingsService = UnreadableAlarmConfiguration();
+        var controller = NewController(settingsService.Object);
+
+        var result = await controller.AddOrUpdateAlarmProfile(
+            new AlarmProfileConfiguration { Id = "night-high" });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        settingsService.Verify(
+            s => s.SaveAlarmConfigurationAsync(
+                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    {
+        var settingsService = UnreadableAlarmConfiguration();
+        var controller = NewController(settingsService.Object);
+
+        var result = await controller.DeleteAlarmProfile("night-high");
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        settingsService.Verify(
+            s => s.SaveAlarmConfigurationAsync(
+                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     // ----- helpers -----
 
     private static async Task<List<AlarmProfileConfiguration>> StoredProfiles(
@@ -112,5 +158,19 @@ public class UISettingsControllerAlarmProfileTests
         );
 
         return config.Profiles;
+    }
+
+    /// <summary>
+    /// A service whose alarm configuration read fails, which is the only way
+    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> yields null.
+    /// </summary>
+    private static Mock<IUISettingsService> UnreadableAlarmConfiguration()
+    {
+        var settingsService = new Mock<IUISettingsService>();
+        settingsService
+            .Setup(s => s.GetAlarmConfigurationAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAlarmConfiguration?)null);
+
+        return settingsService;
     }
 }

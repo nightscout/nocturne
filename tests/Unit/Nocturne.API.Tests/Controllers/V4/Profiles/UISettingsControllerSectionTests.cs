@@ -9,8 +9,9 @@ using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarn
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
 /// <summary>
-/// Unit coverage for <c>GET ui-settings/{section}</c> on <see cref="UISettingsController"/>: every
-/// <see cref="UISettingsSections"/> entry must be addressable, and nothing else.
+/// Unit coverage for <c>GET ui-settings/{section}</c> and the demo-mode aggregate on
+/// <see cref="UISettingsController"/>. Every <see cref="UISettingsSections"/> entry must be
+/// addressable, and demo mode must inherit whatever it does not fixture itself.
 /// </summary>
 [Trait("Category", "Unit")]
 public class UISettingsControllerSectionTests
@@ -78,5 +79,33 @@ public class UISettingsControllerSectionTests
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task GetUISettings_inDemoMode_inheritsEverySectionItDoesNotFixture()
+    {
+        var controller = NewController(("DemoMode:Enabled", "true"));
+
+        var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
+
+        settings.Features.Widgets.Should().BeEquivalentTo(new FeatureSettings().Widgets);
+        settings.Features.Display.Should().BeEquivalentTo(new DisplaySettings());
+        settings.Algorithm.Should().BeEquivalentTo(new AlgorithmSettings());
+        settings.Notifications.Should().BeEquivalentTo(new NotificationSettings());
+        settings.DataQuality.Should().BeEquivalentTo(new DataQualitySettings());
+        settings.Security.Should().BeEquivalentTo(new SecuritySettings());
+        settings.Services.SyncSettings.Should().BeEquivalentTo(new SyncSettings());
+    }
+
+    [Fact]
+    public async Task GetUISettings_inDemoMode_keepsItsSampleDevicesServicesAndPlugins()
+    {
+        var controller = NewController(("DemoMode:Enabled", "true"));
+
+        var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
+
+        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Services.ConnectedServices.Should().NotBeEmpty();
+        settings.Features.Plugins.Should().ContainKey("delta");
     }
 }
