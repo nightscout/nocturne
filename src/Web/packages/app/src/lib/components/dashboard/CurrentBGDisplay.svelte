@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Entry } from "$lib/api";
   import { TrackerCategory } from "$lib/api";
   import { Badge } from "$lib/components/ui/badge";
   import {
@@ -27,26 +26,11 @@
   import { Clock } from "lucide-svelte";
 
   interface ComponentProps {
-    entries?: Entry[];
-    currentBG?: number;
-    bgDelta?: number;
-    demoMode?: boolean;
-    /**
-     * Profile timezone (e.g., "Europe/Stockholm") - if different from local,
-     * will show offset
-     */
-    profileTimezone?: string;
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
     showPills?: boolean;
   }
 
-  let {
-    currentBG,
-    bgDelta,
-    demoMode,
-    profileTimezone,
-    showPills = true,
-  }: ComponentProps = $props();
+  let { showPills = true }: ComponentProps = $props();
 
   const realtimeStore = getRealtimeStore();
   const settingsStore = getSettingsStore();
@@ -56,9 +40,8 @@
     settingsStore.features?.trackerPills?.enabled ?? true
   );
 
-  // Use realtime store values as fallback when props not provided
-  const rawCurrentBG = $derived(currentBG ?? realtimeStore.currentBG);
-  const rawBgDelta = $derived(bgDelta ?? realtimeStore.bgDelta);
+  const rawCurrentBG = $derived(realtimeStore.currentBG);
+  const rawBgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
 
   // Connection status
@@ -69,7 +52,7 @@
   const units = $derived(glucoseUnits.current);
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
-  const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
+  const displayDemoMode = $derived(realtimeStore.demoMode);
 
   // Current time state (updated every second) from shared store
   const currentTime = $derived(new Date(realtimeStore.now));
@@ -98,8 +81,6 @@
     () => `Last reading: ${formatTimeSinceLastReading()}`
   );
 
-  // Format current time in local timezone. Renders beside the profile-timezone
-  // clock below, so both must resolve the format the same way.
   const formattedLocalTime = $derived(
     currentTime.toLocaleTimeString(formatLocale(), {
       hour: "2-digit",
@@ -107,45 +88,6 @@
       hour12: prefersHour12(),
     })
   );
-
-  // Format time in profile timezone if provided and different
-  const profileTimeInfo = $derived.by(() => {
-    if (!profileTimezone) return null;
-
-    try {
-      const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (localTz === profileTimezone) return null;
-
-      const profileTime = currentTime.toLocaleTimeString(formatLocale(), {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: prefersHour12(),
-        timeZone: profileTimezone,
-      });
-
-      // Calculate offset between timezones
-      const localDate = new Date(
-        currentTime.toLocaleString("en-US", { timeZone: localTz })
-      );
-      const profileDate = new Date(
-        currentTime.toLocaleString("en-US", { timeZone: profileTimezone })
-      );
-      const diffHours = Math.round(
-        (profileDate.getTime() - localDate.getTime()) / (1000 * 60 * 60)
-      );
-      const offsetStr = diffHours >= 0 ? `+${diffHours}h` : `${diffHours}h`;
-
-      return {
-        time: profileTime,
-        timezone:
-          profileTimezone.split("/").pop()?.replace(/_/g, " ") ??
-          profileTimezone,
-        offset: offsetStr,
-      };
-    } catch {
-      return null;
-    }
-  });
 
   // Entry Dialog State
   let showEntryDialog = $state(false);
@@ -244,17 +186,6 @@
       >
         <Clock class="h-4 w-4 text-muted-foreground" />
         {formattedLocalTime}
-        {#if profileTimeInfo}
-          <div
-            class="text-xs text-muted-foreground flex items-center gap-1 ml-1"
-          >
-            <span class="font-medium">{profileTimeInfo.timezone}:</span>
-            <span class="tabular-nums">{profileTimeInfo.time}</span>
-            <Badge variant="outline" class="text-[10px] px-1 py-0">
-              {profileTimeInfo.offset}
-            </Badge>
-          </div>
-        {/if}
       </div>
     </div>
   </div>
