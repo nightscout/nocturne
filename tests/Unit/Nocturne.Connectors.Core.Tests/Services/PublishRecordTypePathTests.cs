@@ -255,14 +255,13 @@ public class PublishRecordTypePathTests
                 [new TimedRecord { At = Newer }], r => r.At);
         }, reporter.Object);
 
-        // Assert
-        reported.Should().HaveCount(2);
-        reported.Should().OnlyContain(e => e.MessageType == SyncMessageType.PublishingDataType
-                                        && e.Phase == SyncPhase.Syncing
-                                        && e.ConnectorId == "test");
-        reported[0].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Glucose))
+        // Assert: the run's own terminal message is not a publish message
+        var publishes = reported.Where(e => e.MessageType == SyncMessageType.PublishingDataType).ToList();
+        publishes.Should().HaveCount(2);
+        publishes.Should().OnlyContain(e => e.Phase == SyncPhase.Syncing && e.ConnectorId == "test");
+        publishes[0].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Glucose))
             .And.Contain("count", "2");
-        reported[1].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Boluses))
+        publishes[1].MessageParams.Should().Contain("dataType", nameof(SyncDataType.Boluses))
             .And.Contain("count", "1");
     }
 
@@ -283,7 +282,9 @@ public class PublishRecordTypePathTests
 
         // Assert
         reporter.Verify(
-            r => r.ReportProgressAsync(It.IsAny<SyncProgressEvent>(), It.IsAny<CancellationToken>()),
+            r => r.ReportProgressAsync(
+                It.Is<SyncProgressEvent>(e => e.MessageType == SyncMessageType.PublishingDataType),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -324,7 +325,9 @@ public class PublishRecordTypePathTests
 
         // Assert
         reporter.Verify(
-            r => r.ReportProgressAsync(It.IsAny<SyncProgressEvent>(), It.IsAny<CancellationToken>()),
+            r => r.ReportProgressAsync(
+                It.Is<SyncProgressEvent>(e => e.MessageType == SyncMessageType.PublishingDataType),
+                It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

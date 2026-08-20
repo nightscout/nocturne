@@ -344,10 +344,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 }
             }
 
-            await ReportSyncMessageAsync(
-                result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
-                null, cancellationToken);
-
             result.EndTime = DateTime.UtcNow;
             return result;
         }
@@ -357,7 +353,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             result.Success = false;
             result.Message = "Sync failed with exception";
             result.Errors.Add(ex.Message);
-            await ReportSyncMessageAsync(SyncMessageType.SyncFailed, null, cancellationToken);
             result.EndTime = DateTime.UtcNow;
             return result;
         }

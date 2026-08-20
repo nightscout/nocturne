@@ -97,25 +97,53 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ISyncProgressReporter? progressReporter = null
     )
     {
-        return await RunSyncInternalAsync(request, config, cancellationToken, progressReporter);
+        return await RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            () => PerformSyncInternalAsync(request, config, cancellationToken));
     }
 
-    private async Task<SyncResult> RunSyncInternalAsync(
-        SyncRequest request,
-        TConfig config,
+    /// <summary>
+    ///     Runs one sync for the lifetime of <paramref name="progressReporter"/> and emits the
+    ///     run's terminal progress message. Owned here rather than by each connector so every
+    ///     sync reaches a terminal <see cref="SyncPhase"/> and the tenant's in-progress indicator
+    ///     always resolves — including when the run never got as far as fetching data.
+    /// </summary>
+    private async Task<SyncResult> RunWithProgressAsync(
+        ISyncProgressReporter? progressReporter,
         CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter
+        Func<Task<SyncResult>> body
     )
     {
         _progressReporter = progressReporter;
         try
         {
-            return await PerformSyncInternalAsync(request, config, cancellationToken);
+            var result = await body();
+            await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await ReportSyncOutcomeAsync(false, ex.Message, cancellationToken);
+            throw;
         }
         finally
         {
             _progressReporter = null;
         }
+    }
+
+    private Task ReportSyncOutcomeAsync(bool success, string? errorMessage, CancellationToken cancellationToken) =>
+        ReportSyncMessageAsync(
+            success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
+            null, cancellationToken, errorMessage);
+
+    private static string? FailureMessage(SyncResult result)
+    {
+        if (result.Success) return null;
+        return result.Errors.Count > 0
+            ? string.Join("; ", result.Errors)
+            : string.IsNullOrWhiteSpace(result.Message) ? null : result.Message;
     }
 
     public void Dispose()
@@ -715,12 +743,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         mills > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime : null;
 
     /// <summary>
-    ///     Reports a sync-progress message to the reporter supplied for this run, if any.
+    ///     Reports a sync-progress message to the reporter supplied for this run, if any. The
+    ///     message type carries the phase, so a terminal message cannot be emitted as in-progress.
     /// </summary>
     protected Task ReportSyncMessageAsync(
         SyncMessageType messageType,
         Dictionary<string, string>? messageParams,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? errorMessage = null)
     {
         if (_progressReporter is null) return Task.CompletedTask;
 
@@ -728,11 +758,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         {
             ConnectorId = ConnectorSource,
             ConnectorName = ServiceName,
-            Phase = SyncPhase.Syncing,
+            Phase = PhaseOf(messageType),
+            ErrorMessage = errorMessage,
             MessageType = messageType,
             MessageParams = messageParams,
         }, cancellationToken);
     }
+
+    private static SyncPhase PhaseOf(SyncMessageType messageType) => messageType switch
+    {
+        SyncMessageType.SyncComplete => SyncPhase.Completed,
+        SyncMessageType.SyncFailed => SyncPhase.Failed,
+        _ => SyncPhase.Syncing,
+    };
 
     #region V4 Publishing Methods
 
@@ -1033,11 +1071,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
-    public virtual async Task<SyncResult> SyncDataAsync(
+    public virtual Task<SyncResult> SyncDataAsync(
         TConfig config,
         CancellationToken cancellationToken = default,
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null
+    ) =>
+        RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            () => RunBackgroundSyncAsync(config, cancellationToken, since));
+
+    private async Task<SyncResult> RunBackgroundSyncAsync(
+        TConfig config,
+        CancellationToken cancellationToken,
+        DateTime? since
     )
     {
         _logger.LogInformation(
@@ -1069,7 +1117,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 DataTypes = SupportedDataTypes,
             };
 
-            var result = await RunSyncInternalAsync(request, config, cancellationToken, progressReporter);
+            var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 
             if (result.Success)
             {
