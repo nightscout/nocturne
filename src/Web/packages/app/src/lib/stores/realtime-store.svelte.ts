@@ -90,6 +90,9 @@ export class RealtimeStore {
   /** Live sync progress by connector ID (from SignalR sync progress events) */
   syncProgressByConnector = $state<Record<string, SyncProgressEvent>>({});
 
+  /** How long a completed/failed sync stays on screen before the entry is dropped. */
+  private static readonly TERMINAL_SYNC_PROGRESS_LINGER_MS = 2_000;
+
   /** Bound event handlers for cleanup */
   private handleVisibilityChange: (() => void) | null = null;
   private handleWindowFocus: (() => void) | null = null;
@@ -522,16 +525,16 @@ export class RealtimeStore {
     });
 
     this.websocketClient.on("syncProgress", (event: SyncProgressEvent) => {
-      if (event.phase === "Syncing") {
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-      } else {
-        // Show completed/failed state briefly, then clear
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-        setTimeout(() => {
-          const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
-          this.syncProgressByConnector = rest;
-        }, 2000);
-      }
+      this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
+      if (event.phase === "Syncing") return;
+
+      // Show the completed/failed state briefly, then clear — unless a new run for the same
+      // connector has already replaced it.
+      setTimeout(() => {
+        if (this.syncProgressByConnector[event.connectorId] !== event) return;
+        const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
+        this.syncProgressByConnector = rest;
+      }, RealtimeStore.TERMINAL_SYNC_PROGRESS_LINGER_MS);
     });
 
   }

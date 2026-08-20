@@ -12,7 +12,7 @@
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
-  import type { SyncMessageType } from "$lib/websocket/types";
+  import type { SyncProgressEvent } from "$lib/websocket/types";
   import { lastSeen as formatAge } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
@@ -39,11 +39,10 @@
     lastSuccessfulSync?: Date;
     totalBreakdown?: Record<string, number>;
     last24hBreakdown?: Record<string, number>;
-    syncProgress?: {
-      phase: string;
-      messageType: SyncMessageType | null;
-      messageParams: Record<string, string> | null;
-    } | null;
+    syncProgress?: Pick<
+      SyncProgressEvent,
+      "phase" | "messageType" | "messageParams"
+    > | null;
     badges?: Snippet;
     actions?: Snippet;
     onclick?: () => void;

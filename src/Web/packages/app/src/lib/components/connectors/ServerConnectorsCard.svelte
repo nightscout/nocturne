@@ -33,19 +33,13 @@
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { mapConnectorStatus } from "$lib/utils/connector-display";
-  import type { SyncMessageType } from "$lib/websocket/types";
-
-  interface SyncProgress {
-    phase: string;
-    messageType: SyncMessageType | null;
-    messageParams: Record<string, string> | null;
-  }
+  import type { SyncProgressEvent } from "$lib/websocket/types";
 
   interface Props {
     availableConnectors: AvailableConnector[];
     connectorStatuses: ConnectorStatusWithDescription[];
     connectorCapabilitiesById: Record<string, ConnectorCapabilities | null>;
-    syncProgressByConnector: Record<string, SyncProgress>;
+    syncProgressByConnector: Record<string, SyncProgressEvent>;
     activeDataSources: DataSourceInfo[];
     isLoadingConnectorStatuses: boolean;
     isManualSyncing: boolean;
