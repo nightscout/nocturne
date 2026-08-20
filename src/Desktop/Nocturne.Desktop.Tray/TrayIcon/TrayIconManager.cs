@@ -9,6 +9,7 @@ using Nocturne.Desktop.Tray.Models;
 using Nocturne.Widget.Contracts;
 using DirectionHelper = Nocturne.Widget.Contracts.Helpers.DirectionHelper;
 using GlucoseUnit = Nocturne.Widget.Contracts.GlucoseUnit;
+using TimeAgoHelper = Nocturne.Widget.Contracts.Helpers.TimeAgoHelper;
 
 namespace Nocturne.Desktop.Tray.TrayIcon;
 
