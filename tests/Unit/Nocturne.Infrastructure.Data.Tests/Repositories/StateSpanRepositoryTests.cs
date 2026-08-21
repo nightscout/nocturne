@@ -54,7 +54,7 @@ public class StateSpanRepositoryTests : IDisposable
         public string? AuthType { get; init; }
         public string? IpAddress { get; init; }
         public Guid? TokenId { get; init; }
-        public string? CorrelationId { get; init; }
+        public string? TraceId { get; init; }
         public string? Endpoint { get; init; }
         public bool IsSystem { get; set; }
     }
