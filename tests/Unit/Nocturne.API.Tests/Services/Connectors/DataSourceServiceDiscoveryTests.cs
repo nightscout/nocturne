@@ -208,6 +208,28 @@ public class DataSourceServiceDiscoveryTests : IDisposable
     }
 
     [Fact]
+    public async Task Discovery_LetsARealDataSourceColumnOutrankEarlierDeviceEvidence()
+    {
+        // MeterGlucose merges before Boluses, so Device evidence arrives first; the bucket's
+        // handle must still resolve to the DataSource a later table proves.
+        Seed(db => db.MeterGlucose.Add(new MeterGlucoseEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId,
+            Device = RigA, Timestamp = DateTime.UtcNow, Mgdl = 100,
+        }));
+        Seed(db => db.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId,
+            DataSource = RigA, Timestamp = DateTime.UtcNow, Insulin = 1.0,
+        }));
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().ContainSingle(s => s.DeviceId == RigA)
+            .Which.DeviceIdHandle.Should().Be(SourceHandle.DataSource);
+    }
+
+    [Fact]
     public async Task Discovery_CallsAStateSpanOnlySourcesHandleUnknown()
     {
         // Nothing but a span: its Source may be either handle and no other table can break the tie.
