@@ -59,6 +59,7 @@ public class HubTokenAuthorizerTests
         _authorizationService.Object,
         _memberService.Object,
         _dbContextFactory,
+        TimeProvider.System,
         configuration ?? new ConfigurationBuilder().Build(),
         NullLogger<HubTokenAuthorizer>.Instance);
 

@@ -32,6 +32,10 @@ public interface IDirectGrantService
     /// <param name="subjectId">The subject the grant is issued to.</param>
     /// <param name="label">The human-readable label.</param>
     /// <param name="scopes">The requested scopes; normalized before storage.</param>
+    /// <param name="expiresAt">
+    /// When the grant stops authenticating; null issues an open-ended grant. Rejected when it is
+    /// not in the future — see <see cref="Validators.Auth.CreateDirectGrantRequestValidator"/>.
+    /// </param>
     /// <param name="ipAddress">The caller's IP address, for the audit trail.</param>
     /// <param name="userAgent">The caller's user agent, for the audit trail.</param>
     /// <param name="actor">
@@ -46,6 +50,7 @@ public interface IDirectGrantService
         Guid subjectId,
         string label,
         IReadOnlyCollection<string>? scopes,
+        DateTime? expiresAt,
         string? ipAddress,
         string? userAgent,
         string? actor = null,
@@ -119,6 +124,7 @@ public class DirectGrantService : IDirectGrantService
         Guid subjectId,
         string label,
         IReadOnlyCollection<string>? scopes,
+        DateTime? expiresAt,
         string? ipAddress,
         string? userAgent,
         string? actor = null,
@@ -157,6 +163,7 @@ public class DirectGrantService : IDirectGrantService
             // api-secret protocol (Loop, AAPS, Trio, iAPS) — which pre-hash the value with SHA-1
             // before sending — authenticate with this same token via ApiKeyHandler's legacy path.
             LegacySecretHash = HashUtils.Sha1Hex(plaintextToken),
+            ExpiresAt = expiresAt,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -180,6 +187,7 @@ public class DirectGrantService : IDirectGrantService
             Label = entity.Label!,
             Scopes = normalizedScopes,
             CreatedAt = entity.CreatedAt,
+            ExpiresAt = entity.ExpiresAt,
         });
     }
 
@@ -200,6 +208,7 @@ public class DirectGrantService : IDirectGrantService
                 Label = g.Label ?? string.Empty,
                 Scopes = g.Scopes,
                 CreatedAt = g.CreatedAt,
+                ExpiresAt = g.ExpiresAt,
                 LastUsedAt = g.LastUsedAt,
                 IsLegacy = g.IsMigrated,
             })

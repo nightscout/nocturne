@@ -35,6 +35,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     private WriteOrigin? _treatmentPublishOrigin;
     private WriteOrigin? _devicePublishOrigin;
 
+    // Carried on the instance rather than through PerformSyncInternalAsync's callees so the shared
+    // publish path can report without every connector threading it; safe for the same reason the
+    // publish-origin memos above are.
+    private ISyncProgressReporter? _progressReporter;
+
     /// <summary>
     ///     Base constructor for connector services using IHttpClientFactory pattern
     /// </summary>
@@ -76,14 +81,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     public abstract Task<bool> AuthenticateAsync();
 
-    /// <summary>
-    ///     Fetch glucose entries from the data source.
-    ///     Connectors that write V4 models directly via <see cref="PerformSyncInternalAsync"/> do
-    ///     not need to override this — the default returns empty.
-    /// </summary>
-    public virtual Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null) =>
-        Task.FromResult(Enumerable.Empty<Entry>());
-
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(
         SyncRequest request,
@@ -92,7 +89,56 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ISyncProgressReporter? progressReporter = null
     )
     {
-        return await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+        return await RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            () => PerformSyncInternalAsync(request, config, cancellationToken));
+    }
+
+    /// <summary>
+    ///     Runs one sync for the lifetime of <paramref name="progressReporter"/> and emits the
+    ///     run's terminal progress message. Owned here rather than by each connector so every
+    ///     sync reaches a terminal <see cref="SyncPhase"/> and the tenant's in-progress indicator
+    ///     always resolves — including when the run never got as far as fetching data.
+    /// </summary>
+    private async Task<SyncResult> RunWithProgressAsync(
+        ISyncProgressReporter? progressReporter,
+        CancellationToken cancellationToken,
+        Func<Task<SyncResult>> body
+    )
+    {
+        _progressReporter = progressReporter;
+        try
+        {
+            var result = await body();
+            await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
+            return result;
+        }
+        // A cancelled run has no outcome to report — the caller withdrew it. The background
+        // entry point's own catch-all converts its timeout into a failed result first, so that
+        // path still reports a terminal message through the success path above.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await ReportSyncOutcomeAsync(false, ex.Message, cancellationToken);
+            throw;
+        }
+        finally
+        {
+            _progressReporter = null;
+        }
+    }
+
+    private Task ReportSyncOutcomeAsync(bool success, string? errorMessage, CancellationToken cancellationToken) =>
+        ReportSyncMessageAsync(
+            success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
+            null, cancellationToken, errorMessage);
+
+    private static string? FailureMessage(SyncResult result)
+    {
+        if (result.Success) return null;
+        return result.Errors.Count > 0
+            ? string.Join("; ", result.Errors)
+            : string.IsNullOrWhiteSpace(result.Message) ? null : result.Message;
     }
 
     public void Dispose()
@@ -373,180 +419,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected static DateTime DefaultInitialSyncFloor() => DateTime.UtcNow.AddMonths(-6);
 
     /// <summary>
-    ///     Core synchronization logic that processes data types sequentially.
-    ///     Shared between manual and background sync flows.
+    ///     Core synchronization logic: fetches and publishes every data type the tenant has enabled,
+    ///     honouring <see cref="BaseConnectorConfiguration.GetEnabledDataTypes"/> over
+    ///     <see cref="SupportedDataTypes"/>. Shared between the manual and background sync flows.
+    ///     There is deliberately no default implementation: a connector that advertises data types it
+    ///     does not sync would fail silently, so the omission is a compile error instead.
     /// </summary>
-    protected virtual async Task<SyncResult> PerformSyncInternalAsync(
+    protected abstract Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
-    {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
-
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var disabledTypes = SupportedDataTypes.Except(enabledTypes).ToList();
-        if (disabledTypes.Count > 0)
-            _logger.LogInformation(
-                "Skipping disabled data types for {Connector}: {DisabledTypes}",
-                ConnectorSource,
-                string.Join(", ", disabledTypes));
-
-        var typesToSync = request.DataTypes.Where(type => enabledTypes.Contains(type)).ToList();
-        var completedTypes = new List<SyncDataType>();
-        var itemsSoFar = new Dictionary<SyncDataType, int>();
-
-        foreach (var type in typesToSync)
-        {
-            if (progressReporter != null)
-            {
-                await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                {
-                    ConnectorId = ConnectorSource,
-                    ConnectorName = ServiceName,
-                    Phase = SyncPhase.Syncing,
-                    CurrentDataType = type,
-                    CompletedDataTypes = [.. completedTypes],
-                    TotalDataTypes = typesToSync.Count,
-                    ItemsSyncedSoFar = new(itemsSoFar),
-                    MessageType = SyncMessageType.FetchingDataType,
-                    MessageParams = new() { ["dataType"] = type.ToString() },
-                }, cancellationToken);
-            }
-
-            try
-            {
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                switch (type)
-                {
-                    case SyncDataType.Glucose:
-                        var entries = await FetchGlucoseDataRangeAsync(
-                            request.From,
-                            request.To
-                        );
-                        var entryList = entries.ToList();
-                        count = entryList.Count;
-                        if (count > 0)
-                            lastTime = entryList.Max(e => e.Date);
-                        publishSuccess = await PublishGlucoseDataInBatchesAsync(
-                            entryList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    case SyncDataType.Profiles:
-                        var profiles = await FetchProfilesAsync();
-                        var profileList = profiles.ToList();
-                        count = profileList.Count;
-                        if (count > 0)
-                            lastTime = profileList
-                                .Where(p => p.Mills > 0)
-                                .Select(p => DateTimeOffset.FromUnixTimeMilliseconds(p.Mills).UtcDateTime)
-                                .DefaultIfEmpty()
-                                .Max();
-                        publishSuccess = await PublishProfileDataAsync(
-                            profileList,
-                            config,
-                            cancellationToken
-                        );
-                        break;
-
-                    default:
-                        _logger.LogDebug(
-                            "Data type {DataType} not supported by this connector",
-                            type
-                        );
-                        break;
-                }
-
-                result.ItemsSynced[type] = count;
-                result.LastEntryTimes[type] = lastTime;
-                if (!publishSuccess)
-                {
-                    result.Success = false;
-                    result.Errors.Add($"{type} publish failed");
-                }
-
-                if (progressReporter != null && count > 0)
-                {
-                    await progressReporter.ReportProgressAsync(new SyncProgressEvent
-                    {
-                        ConnectorId = ConnectorSource,
-                        ConnectorName = ServiceName,
-                        Phase = SyncPhase.Syncing,
-                        CurrentDataType = type,
-                        CompletedDataTypes = [.. completedTypes],
-                        TotalDataTypes = typesToSync.Count,
-                        ItemsSyncedSoFar = new(itemsSoFar) { [type] = count },
-                        MessageType = SyncMessageType.PublishingDataType,
-                        MessageParams = new() { ["dataType"] = type.ToString(), ["count"] = count.ToString() },
-                    }, cancellationToken);
-                }
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = count;
-            }
-            catch (Exception ex)
-            {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-
-                _logger.LogError(
-                    ex,
-                    "Failed to sync {DataType} for {Connector}",
-                    type,
-                    ConnectorSource
-                );
-
-                completedTypes.Add(type);
-                itemsSoFar[type] = 0;
-            }
-        }
-
-        result.EndTime = DateTimeOffset.UtcNow;
-
-        if (progressReporter != null)
-        {
-            await progressReporter.ReportProgressAsync(new SyncProgressEvent
-            {
-                ConnectorId = ConnectorSource,
-                ConnectorName = ServiceName,
-                Phase = result.Success ? SyncPhase.Completed : SyncPhase.Failed,
-                CurrentDataType = null,
-                CompletedDataTypes = [.. completedTypes],
-                TotalDataTypes = typesToSync.Count,
-                ItemsSyncedSoFar = new(itemsSoFar),
-                ErrorMessage = result.Success ? null : string.Join("; ", result.Errors),
-                MessageType = result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
-            }, cancellationToken);
-        }
-
-        return result;
-    }
-
-    protected virtual Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return FetchGlucoseDataAsync(from);
-    }
-
-    protected virtual Task<IEnumerable<Treatment>> FetchTreatmentsAsync(
-        DateTime? from,
-        DateTime? to
-    )
-    {
-        return Task.FromResult(Enumerable.Empty<Treatment>());
-    }
+        CancellationToken cancellationToken);
 
     protected virtual Task<IEnumerable<Profile>> FetchProfilesAsync()
     {
@@ -744,7 +626,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits system event data directly to the API via HTTP
+    ///     Submits system event data directly to the API via HTTP. System events have no
+    ///     <see cref="SyncDataType"/> of their own, so a connector routing them through
+    ///     <see cref="PublishRecordTypeAsync{T}"/> gates and counts them under
+    ///     <see cref="SyncDataType.DeviceEvents"/>.
     /// </summary>
     protected virtual async Task<bool> PublishSystemEventDataAsync(
         IEnumerable<SystemEvent> systemEvents,
@@ -766,10 +651,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Reusable helper that checks whether a data type is active, publishes a batch of records,
-    ///     updates the <see cref="SyncResult"/> counts, and logs the outcome.
+    ///     Reusable helper that checks whether a data type is active, reports publish progress,
+    ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts, and logs the
+    ///     outcome.
     /// </summary>
-    protected async Task PublishRecordTypeAsync<T>(
+    /// <returns>
+    ///     Whether the batch reached the tenant. An inactive type, an empty batch and a rejected
+    ///     publish are alike <c>false</c>: no record was accepted in any of them.
+    /// </returns>
+    protected async Task<bool> PublishRecordTypeAsync<T>(
         SyncResult result,
         SyncDataType dataType,
         HashSet<SyncDataType> activeTypes,
@@ -779,7 +669,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken,
         string? context = null) where T : class
     {
-        if (!activeTypes.Contains(dataType) || records.Count == 0) return;
+        if (!activeTypes.Contains(dataType) || records.Count == 0) return false;
+
+        await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
+            new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
+            cancellationToken);
 
         var success = await publishFunc(records, config, cancellationToken);
         result.ItemsSynced.TryGetValue(dataType, out var prev);
@@ -795,7 +689,39 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             _logger.LogInformation("Synced {Count} {Type} records{Context}",
                 records.Count, dataType, ctx);
         }
+
+        return success;
     }
+
+    /// <summary>
+    ///     Reports a sync-progress message to the reporter supplied for this run, if any. The
+    ///     message type carries the phase, so a terminal message cannot be emitted as in-progress.
+    /// </summary>
+    protected Task ReportSyncMessageAsync(
+        SyncMessageType messageType,
+        Dictionary<string, string>? messageParams,
+        CancellationToken cancellationToken,
+        string? errorMessage = null)
+    {
+        if (_progressReporter is null) return Task.CompletedTask;
+
+        return _progressReporter.ReportProgressAsync(new SyncProgressEvent
+        {
+            ConnectorId = ConnectorSource,
+            ConnectorName = ServiceName,
+            Phase = PhaseOf(messageType),
+            ErrorMessage = errorMessage,
+            MessageType = messageType,
+            MessageParams = messageParams,
+        }, cancellationToken);
+    }
+
+    private static SyncPhase PhaseOf(SyncMessageType messageType) => messageType switch
+    {
+        SyncMessageType.SyncComplete => SyncPhase.Completed,
+        SyncMessageType.SyncFailed => SyncPhase.Failed,
+        _ => SyncPhase.Syncing,
+    };
 
     #region V4 Publishing Methods
 
@@ -1096,11 +1022,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
-    public virtual async Task<SyncResult> SyncDataAsync(
+    public virtual Task<SyncResult> SyncDataAsync(
         TConfig config,
         CancellationToken cancellationToken = default,
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null
+    ) =>
+        RunWithProgressAsync(
+            progressReporter,
+            cancellationToken,
+            () => RunBackgroundSyncAsync(config, cancellationToken, since));
+
+    private async Task<SyncResult> RunBackgroundSyncAsync(
+        TConfig config,
+        CancellationToken cancellationToken,
+        DateTime? since
     )
     {
         _logger.LogInformation(
@@ -1132,7 +1068,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 DataTypes = SupportedDataTypes,
             };
 
-            var result = await PerformSyncInternalAsync(request, config, cancellationToken, progressReporter);
+            var result = await PerformSyncInternalAsync(request, config, cancellationToken);
 
             if (result.Success)
             {

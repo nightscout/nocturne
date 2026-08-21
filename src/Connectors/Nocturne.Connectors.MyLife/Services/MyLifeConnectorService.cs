@@ -46,15 +46,6 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Legacy method required by IConnectorService interface.
-    /// Returns empty - use PerformSyncInternalAsync for glucose data.
-    /// </summary>
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
-
-    /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
     /// is established.
     /// </summary>
@@ -96,9 +87,7 @@ public class MyLifeConnectorService(
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         MyLifeConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
@@ -183,29 +172,8 @@ public class MyLifeConnectorService(
                         .MapSensorGlucose(batch.Events.Where(e => e.EventDateTime >= glucoseSinceTicks))
                         .ToList();
 
-                    if (sgList.Count > 0)
-                    {
-                        var success = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                        result.ItemsSynced.TryGetValue(SyncDataType.Glucose, out var prevCount);
-                        result.ItemsSynced[SyncDataType.Glucose] = prevCount + sgList.Count;
-
-                        if (!success)
-                        {
-                            result.Success = false;
-                            result.Errors.Add("SensorGlucose publish failed");
-                        }
-                        else
-                        {
-                            var maxMills = sgList.Max(s => s.Mills);
-                            var maxTime = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-                            if (!result.LastEntryTimes.TryGetValue(SyncDataType.Glucose, out var existing) || maxTime > existing)
-                                result.LastEntryTimes[SyncDataType.Glucose] = maxTime;
-
-                            _logger.LogInformation(
-                                "Synced {Count} SensorGlucose records from {Month}",
-                                sgList.Count, batch.Month);
-                        }
-                    }
+                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month);
                 }
 
                 // Shared treatment filtering and context for records + state spans
@@ -266,13 +234,8 @@ public class MyLifeConnectorService(
                     profiles, PublishProfileDataAsync, config, cancellationToken);
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
-                if (profileStateSpans.Count > 0)
-                {
-                    await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
-                    _logger.LogInformation(
-                        "Published {Count} profile state spans from pump settings",
-                        profileStateSpans.Count);
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings");
             }
         }
         catch (Exception ex)

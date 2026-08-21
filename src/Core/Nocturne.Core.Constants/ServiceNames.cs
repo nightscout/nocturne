@@ -188,6 +188,18 @@ public static class ServiceNames
         /// that request to admin and bypass per-tenant public-access controls.
         /// </summary>
         public const string InstanceService = "X-Instance-Service";
+
+        /// <summary>
+        /// Header carrying the address of the end user a service call is being made on behalf of,
+        /// for a caller (the SSR server) the API cannot see the browser behind.
+        /// </summary>
+        public const string ClientIp = "X-Nocturne-Client-Ip";
+
+        /// <summary>
+        /// Header carrying the HMAC-SHA256 of <see cref="ClientIp"/>, keyed on the shared instance
+        /// key. Without it the address is ignored, since any caller can write the address header.
+        /// </summary>
+        public const string ClientIpSignature = "X-Nocturne-Client-Ip-Signature";
     }
 
     /// <summary>

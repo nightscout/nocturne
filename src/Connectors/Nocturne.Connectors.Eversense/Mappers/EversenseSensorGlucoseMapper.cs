@@ -24,8 +24,6 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
         { 7, GlucoseDirection.DoubleUp },
     };
 
-    private const double MmolToMgdlFactor = 18.0182;
-
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public SensorGlucose? Map(EversensePatientDatum patient)
@@ -39,7 +37,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
             }
 
             var mgdl = patient.Units == 1
-                ? patient.CurrentGlucose * MmolToMgdlFactor
+                ? patient.CurrentGlucose * GlucoseConstants.MgdlPerMmol
                 : (double)patient.CurrentGlucose;
 
             var direction = TrendDirections.GetValueOrDefault(patient.GlucoseTrend, GlucoseDirection.None);

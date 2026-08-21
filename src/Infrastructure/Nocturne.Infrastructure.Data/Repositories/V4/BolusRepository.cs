@@ -197,7 +197,7 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.Boluses.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, ct);
+            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>

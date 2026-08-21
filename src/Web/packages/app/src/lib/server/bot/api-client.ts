@@ -168,6 +168,7 @@ function mapCandidate(c: {
   nocturneUserId?: string;
   label?: string;
   displayName?: string;
+  isDefault?: boolean;
 }): DirectoryCandidate {
   return {
     id: c.id ?? "",
@@ -176,5 +177,6 @@ function mapCandidate(c: {
     nocturneUserId: c.nocturneUserId ?? "",
     label: c.label ?? "",
     displayName: c.displayName ?? "",
+    isDefault: c.isDefault ?? false,
   };
 }

@@ -13,8 +13,7 @@ public class PostgresFixture : IAsyncDisposable
 
     public PostgresFixture()
     {
-        _container = new PostgreSqlBuilder()
-            .WithImage("postgres:17.6")
+        _container = new PostgreSqlBuilder("postgres:17.6")
             .WithDatabase("nocturne_perf")
             .WithUsername("test")
             .WithPassword("test")

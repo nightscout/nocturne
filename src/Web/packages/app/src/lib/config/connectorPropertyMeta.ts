@@ -3,57 +3,6 @@
  * Maps backend ConnectorPropertyKey enum values to localized labels, descriptions, and categories.
  */
 
-// Local type definition for connector property keys
-export enum ConnectorPropertyKey {
-  TimezoneOffset = "TimezoneOffset",
-  Enabled = "Enabled",
-  MaxRetryAttempts = "MaxRetryAttempts",
-  BatchSize = "BatchSize",
-  SyncIntervalMinutes = "SyncIntervalMinutes",
-  SyncGlucose = "SyncGlucose",
-  SyncManualBG = "SyncManualBG",
-  SyncBoluses = "SyncBoluses",
-  SyncCarbIntake = "SyncCarbIntake",
-  SyncBolusCalculations = "SyncBolusCalculations",
-  SyncNotes = "SyncNotes",
-  SyncDeviceEvents = "SyncDeviceEvents",
-  SyncStateSpans = "SyncStateSpans",
-  SyncProfiles = "SyncProfiles",
-  SyncDeviceStatus = "SyncDeviceStatus",
-  SyncActivity = "SyncActivity",
-  SyncFood = "SyncFood",
-  Username = "Username",
-  Password = "Password",
-  Email = "Email",
-  Server = "Server",
-  Region = "Region",
-  PatientId = "PatientId",
-  UserId = "UserId",
-  Url = "Url",
-  ApiSecret = "ApiSecret",
-  MaxCount = "MaxCount",
-  UseV3Api = "UseV3Api",
-  V3IncludeCgmBackfill = "V3IncludeCgmBackfill",
-  ServiceUrl = "ServiceUrl",
-  EnableMealCarbConsolidation = "EnableMealCarbConsolidation",
-  EnableTempBasalConsolidation = "EnableTempBasalConsolidation",
-  TempBasalConsolidationWindowMinutes = "TempBasalConsolidationWindowMinutes",
-  AppPlatform = "AppPlatform",
-  AppVersion = "AppVersion",
-  LookbackDays = "LookbackDays",
-  AccessToken = "AccessToken",
-  WebhookEnabled = "WebhookEnabled",
-  WebhookSecret = "WebhookSecret",
-  ActiveThresholdMinutes = "ActiveThresholdMinutes",
-  StaleThresholdMinutes = "StaleThresholdMinutes",
-  WriteBackEnabled = "WriteBackEnabled",
-  WriteBackBatchSize = "WriteBackBatchSize",
-  GlucoseProcessing = "GlucoseProcessing",
-}
-
-/** String key names derived from the generated enum */
-type ConnectorPropertyKeyName = keyof typeof ConnectorPropertyKey;
-
 export type PropertyCategory = 'General' | 'Credentials' | 'Sync' | 'Advanced';
 
 export type PropertyMeta = {
@@ -62,7 +11,11 @@ export type PropertyMeta = {
   category: PropertyCategory;
 };
 
-export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMeta> = {
+/**
+ * One entry per backend ConnectorPropertyKey; ConnectorPropertyMetaMirrorTests reads this file and
+ * that enum and fails if the two sets differ.
+ */
+export const connectorPropertyMeta = {
   // Base configuration
   TimezoneOffset: {
     label: 'Timezone Offset',
@@ -75,8 +28,8 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
     category: 'General',
   },
   MaxRetryAttempts: {
-    label: 'Max Retry Attempts',
-    description: 'Maximum number of retry attempts on failure',
+    label: 'Max Attempts',
+    description: 'Total connection attempts per sync before giving up (minimum 1)',
     category: 'Advanced',
   },
   BatchSize: {
@@ -106,6 +59,11 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
     description: 'Sync insulin bolus delivery records',
     category: 'Sync',
   },
+  SyncBasalInjections: {
+    label: 'Sync Basal Injections',
+    description: 'Sync long-acting basal insulin injections',
+    category: 'Sync',
+  },
   SyncCarbIntake: {
     label: 'Sync Carb Intake',
     description: 'Sync carbohydrate intake entries',
@@ -129,6 +87,11 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
   SyncStateSpans: {
     label: 'Sync State Spans',
     description: 'Sync device state periods like suspend, resume, and mode changes',
+    category: 'Sync',
+  },
+  SyncTempBasals: {
+    label: 'Sync Temp Basals',
+    description: 'Sync temporary basal rate adjustments',
     category: 'Sync',
   },
   SyncProfiles: {
@@ -190,6 +153,16 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
   UserId: {
     label: 'User ID',
     description: 'User identifier for the account',
+    category: 'Credentials',
+  },
+  PatientUsername: {
+    label: 'Patient Username',
+    description: 'Username of the patient to follow when the account follows more than one',
+    category: 'Credentials',
+  },
+  RefreshToken: {
+    label: 'Refresh Token',
+    description: 'Long-lived token used in place of the password once issued',
     category: 'Credentials',
   },
 
@@ -260,6 +233,40 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
     description: 'Number of days of historical data to retrieve',
     category: 'Sync',
   },
+  LastFullWalkAt: {
+    label: 'Last Full Walk',
+    description: 'When the diary was last read back to its first entry',
+    category: 'Advanced',
+  },
+
+  // CareLink-specific
+  CountryCode: {
+    label: 'Country Code',
+    description: 'Two-letter country code of the CareLink account',
+    category: 'General',
+  },
+  LanguageCode: {
+    label: 'Language Code',
+    description: 'Two-letter language code of the CareLink account',
+    category: 'General',
+  },
+
+  // Tandem-specific
+  PumpSerialNumber: {
+    label: 'Pump Serial Number',
+    description: 'Serial number of the pump to follow when the account has more than one',
+    category: 'General',
+  },
+  FetchAllEventTypes: {
+    label: 'Fetch All Event Types',
+    description: 'Read every pump history event type rather than the default filtered set',
+    category: 'Advanced',
+  },
+  IgnoreZeroUnitBasal: {
+    label: 'Ignore Zero-Unit Basal',
+    description: 'Skip basal entries that resolve to a near-zero rate',
+    category: 'Advanced',
+  },
   // OAuth and Webhooks
   AccessToken: {
     label: 'Access Token',
@@ -303,7 +310,10 @@ export const connectorPropertyMeta: Record<ConnectorPropertyKeyName, PropertyMet
     description: 'How the connector labels its glucose readings (smoothed or unsmoothed)',
     category: 'General',
   },
-};
+} satisfies Record<string, PropertyMeta>;
+
+/** String key names, taken from the entries above. */
+export type ConnectorPropertyKeyName = keyof typeof connectorPropertyMeta;
 
 /**
  * Convert PascalCase/camelCase to Title Case with spaces.

@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -44,6 +45,7 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ILogger<AlertRulesController>>());
 
         var http = new DefaultHttpContext();

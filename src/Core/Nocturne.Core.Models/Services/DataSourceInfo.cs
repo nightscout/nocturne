@@ -431,4 +431,43 @@ public class DataSourceDeleteResult
     /// </summary>
     [JsonPropertyName("error")]
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Failure kind for programmatic handling. <see cref="Error"/> is diagnostic only.
+    /// </summary>
+    [JsonPropertyName("errorCode")]
+    public DataSourceDeleteError? ErrorCode { get; set; }
+
+    /// <summary>
+    /// Create a failed result for the named data source.
+    /// </summary>
+    public static DataSourceDeleteResult Failed(
+        string dataSource,
+        DataSourceDeleteError errorCode,
+        string error
+    ) =>
+        new()
+        {
+            Success = false,
+            DataSource = dataSource,
+            ErrorCode = errorCode,
+            Error = error,
+        };
+}
+
+/// <summary>
+/// Why a data source deletion failed.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<DataSourceDeleteError>))]
+public enum DataSourceDeleteError
+{
+    /// <summary>
+    /// No data source or connector matches the requested identifier.
+    /// </summary>
+    NotFound,
+
+    /// <summary>
+    /// The deletion itself failed.
+    /// </summary>
+    DeleteFailed,
 }

@@ -45,3 +45,59 @@ public enum GlucoseDirection
     /// <summary>Rate of change is outside the computable range.</summary>
     RateOutOfRange
 }
+
+/// <summary>
+/// Bridges <see cref="GlucoseDirection"/> to the legacy <see cref="Direction"/>, which owns the
+/// Nightscout wire spellings.
+/// </summary>
+public static class GlucoseDirectionExtensions
+{
+    /// <summary>
+    /// Gets the equivalent legacy <see cref="Direction"/>. <see cref="GlucoseDirection"/> is a subset:
+    /// it has no triple arrows and no CGM-error value.
+    /// </summary>
+    public static Direction ToDirection(this GlucoseDirection direction) =>
+        direction switch
+        {
+            GlucoseDirection.None => Direction.NONE,
+            GlucoseDirection.DoubleUp => Direction.DoubleUp,
+            GlucoseDirection.SingleUp => Direction.SingleUp,
+            GlucoseDirection.FortyFiveUp => Direction.FortyFiveUp,
+            GlucoseDirection.Flat => Direction.Flat,
+            GlucoseDirection.FortyFiveDown => Direction.FortyFiveDown,
+            GlucoseDirection.SingleDown => Direction.SingleDown,
+            GlucoseDirection.DoubleDown => Direction.DoubleDown,
+            GlucoseDirection.NotComputable => Direction.NotComputable,
+            GlucoseDirection.RateOutOfRange => Direction.RateOutOfRange,
+            _ => Direction.NONE,
+        };
+
+    /// <summary>
+    /// Gets the equivalent <see cref="GlucoseDirection"/>, or <see langword="null"/> for the legacy
+    /// values this enum does not model.
+    /// </summary>
+    public static GlucoseDirection? ToGlucoseDirection(this Direction direction) =>
+        direction switch
+        {
+            Direction.NONE => GlucoseDirection.None,
+            Direction.DoubleUp => GlucoseDirection.DoubleUp,
+            Direction.SingleUp => GlucoseDirection.SingleUp,
+            Direction.FortyFiveUp => GlucoseDirection.FortyFiveUp,
+            Direction.Flat => GlucoseDirection.Flat,
+            Direction.FortyFiveDown => GlucoseDirection.FortyFiveDown,
+            Direction.SingleDown => GlucoseDirection.SingleDown,
+            Direction.DoubleDown => GlucoseDirection.DoubleDown,
+            Direction.NotComputable => GlucoseDirection.NotComputable,
+            Direction.RateOutOfRange => GlucoseDirection.RateOutOfRange,
+            _ => null,
+        };
+
+    /// <summary>
+    /// Gets the legacy Nightscout wire spelling — see
+    /// <see cref="DirectionExtensions.ToWireString(Direction)"/>. Required wherever a V4 direction is
+    /// projected onto the v1/v2/v3 surface, where <c>ToString()</c> would emit an unrecognised
+    /// PascalCase name.
+    /// </summary>
+    public static string ToWireString(this GlucoseDirection direction) =>
+        direction.ToDirection().ToWireString();
+}

@@ -24,6 +24,10 @@ export const COOKIE_PLATFORM_ACCESS_NAME = ".Nocturne.PlatformAccess";
 // Guest-link session, issued by the API. Set by the API (not this app), so the
 // name is fixed by the server side.
 export const COOKIE_GUEST_SESSION_NAME = "nocturne-guest-session";
+// Short-lived proof that a recovery code was spent, issued by the API. Carries no session:
+// the API accepts it for passkey enrolment only, so it has to reach that ceremony and
+// nothing about it makes the visitor signed in.
+export const COOKIE_RECOVERY_SESSION_NAME = ".Nocturne.RecoverySession";
 
 // OpenTelemetry service identity (build-time, not deployment config)
 export const OTEL_SERVICE_NAME = "nocturne-web";

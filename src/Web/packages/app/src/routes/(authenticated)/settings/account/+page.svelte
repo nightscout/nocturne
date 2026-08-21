@@ -168,6 +168,7 @@
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
       });
+      await credentialsQuery.refresh();
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";

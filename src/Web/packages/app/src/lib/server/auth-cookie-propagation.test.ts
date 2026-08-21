@@ -140,6 +140,39 @@ describe("propagateAuthCookies", () => {
     });
   });
 
+  it("propagates the recovery session, and the expiry that spends it", () => {
+    // Recovery-code sign-in is a server-side form: dropped here, the visitor never receives the
+    // credential their code bought and cannot register the passkey that gets them back in.
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.recoverySession}=recovery-token; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=600`,
+      ],
+      cookies
+    );
+
+    expect(calls[0]).toMatchObject({
+      op: "set",
+      name: AUTH_COOKIE_NAMES.recoverySession,
+      value: "recovery-token",
+      opts: { path: "/", httpOnly: true, sameSite: "strict", maxAge: 600 },
+    });
+
+    const spent = createRecordingCookies();
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.recoverySession}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+      ],
+      spent.cookies
+    );
+
+    expect(spent.calls[0]).toMatchObject({
+      op: "delete",
+      name: AUTH_COOKIE_NAMES.recoverySession,
+    });
+  });
+
   it("propagates cookie deletion when the server expires an auth cookie", () => {
     const { cookies, calls } = createRecordingCookies();
 
