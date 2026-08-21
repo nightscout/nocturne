@@ -52,7 +52,7 @@
   }
 
   const canSubmit = $derived(
-    availability.valid && displayName.trim().length > 0 && !submitting
+    availability.submittable && displayName.trim().length > 0 && !submitting
   );
 </script>
 

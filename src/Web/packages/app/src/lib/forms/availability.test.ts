@@ -145,6 +145,60 @@ describe("useAvailability", () => {
     expect(availability.valid).toBe(false);
   });
 
+  it("lets a value whose check failed be submitted anyway", () => {
+    const availability = useAvailability(
+      () => "myslug",
+      () => query({ error: { status: 429 }, current: { isValid: true } }),
+      { label: "Slug" }
+    );
+
+    // The remote query caches its rejection against this argument, so a probe
+    // the rate limiter turned away would otherwise hold the value behind a
+    // disabled button until the page is reloaded.
+    expect(availability.submittable).toBe(true);
+    expect(availability.valid).toBe(false);
+    expect(availability.error).toBe("Could not validate slug");
+  });
+
+  it("does not latch the failure: the same value settles again on a later answer", () => {
+    let throttled = true;
+    const availability = useAvailability(
+      () => "myslug",
+      () =>
+        throttled
+          ? query({ error: { status: 429 }, current: { isValid: true } })
+          : query({ current: { isValid: true } }),
+      { label: "Slug" }
+    );
+
+    expect(availability.error).toBe("Could not validate slug");
+    expect(availability.submittable).toBe(true);
+
+    throttled = false;
+
+    expect(availability.error).toBeNull();
+    expect(availability.valid).toBe(true);
+    expect(availability.submittable).toBe(true);
+  });
+
+  it("still holds back a value the server refused", () => {
+    const availability = useAvailability(
+      () => "myslug",
+      () => query({ current: { isValid: false, message: "Already taken" } }),
+      { label: "Slug" }
+    );
+
+    expect(availability.submittable).toBe(false);
+  });
+
+  it("holds back a value too short to ask about", () => {
+    const availability = useAvailability(() => "ab", () => query({}), {
+      label: "Slug",
+    });
+
+    expect(availability.submittable).toBe(false);
+  });
+
   it("tracks the value it is given", () => {
     let value = "";
     const availability = useAvailability(

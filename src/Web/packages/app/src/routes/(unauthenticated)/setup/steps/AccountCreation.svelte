@@ -62,7 +62,7 @@
   );
 
   const canSubmit = $derived(
-    displayName.trim().length > 0 && availability.valid,
+    displayName.trim().length > 0 && availability.submittable,
   );
 
   // ── OIDC login ───────────────────────────────────────────────────

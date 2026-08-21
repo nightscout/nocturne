@@ -130,9 +130,10 @@ public static class ServiceRegistrationExtensions
         ("setup", 20, TimeSpan.FromMinutes(1)),
         // The "is this name free?" probes — owner username and tenant slug — which a form issues
         // per keystroke behind a 400ms debounce, so a hunt-and-peck typist spends a permit per
-        // character. Sized well clear of a full name so a wizard cannot throttle itself, while
-        // still bounding what each anonymous request costs: a membership or tenant lookup, and for
-        // the username the operator's optional validation webhook.
+        // character. Sized for a full name typed that way plus a retry; past that the frontend
+        // carries it, treating a probe it could not complete as unverified rather than refused.
+        // The ceiling bounds what each anonymous request costs: a membership or tenant lookup,
+        // and for the username the operator's optional validation webhook.
         ("name-availability", 60, TimeSpan.FromMinutes(1)),
         // The anonymous invite lookups, member and alert. Their tokens are long random strings, so
         // grinding one is infeasible at any rate; what the ceiling bounds is the database query
