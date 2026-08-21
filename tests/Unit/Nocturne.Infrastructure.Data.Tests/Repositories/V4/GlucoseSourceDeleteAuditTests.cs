@@ -172,19 +172,23 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : IDisposable
     {
         var from = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         var to = new DateTime(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc);
+        var beforeFrom = Seed(from.AddHours(-1), dataSource: "dexcom");
+        var atLowerBound = Seed(from, dataSource: "dexcom");
         var inRange = Seed(new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), dataSource: "dexcom");
         var atUpperBound = Seed(to, dataSource: "dexcom");
 
         var deleted = await DeleteByTimeRangeAsync(from, to);
 
-        deleted.Should().Be(1);
+        deleted.Should().Be(2);
         (await ReadDeleteStateAsync(inRange)).DeletedByUser.Should().BeTrue();
-        (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().BeNull();
+        (await ReadDeleteStateAsync(atLowerBound)).DeletedAt.Should().NotBeNull("the lower bound is inclusive");
+        (await ReadDeleteStateAsync(beforeFrom)).DeletedAt.Should().BeNull("rows before the window are out of scope");
+        (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().BeNull("the upper bound is exclusive");
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.Action.Should().Be("bulk_delete");
         log.EntityType.Should().Be(AuditEntityType);
-        ReadSummary(log.ChangesJson).Should().Be((1, $"timestamp={from:O}..{to:O}"));
+        ReadSummary(log.ChangesJson).Should().Be((2, $"timestamp={from:O}..{to:O}"));
     }
 }
 
