@@ -296,7 +296,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 : context.TimeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6)).AddDays(-1);
             var to = context.TimeMapper.ToGlookoTime(DateTime.UtcNow).AddDays(1);
 
-            var chunks = DateChunker.Chunk(from, to, TimeSpan.FromDays(14)).ToList();
+            var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
 
             _logger.LogInformation(
                 "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
