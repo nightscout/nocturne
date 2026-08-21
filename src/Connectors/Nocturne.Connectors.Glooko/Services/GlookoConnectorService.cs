@@ -58,6 +58,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     public override string ServiceName => "Glooko";
     protected override string ConnectorSource => DataSources.GlookoConnector;
 
+    private const string SyncSucceededMessage = "Sync completed successfully";
+    private const string PublishFailedMessage = "Sync failed while publishing data";
+
 
     // ── Authentication ──────────────────────────────────────────────────
 
@@ -255,7 +258,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var result = new SyncResult
         {
             Success = true,
-            Message = "Sync completed successfully",
+            Message = SyncSucceededMessage,
             StartTime = DateTime.UtcNow
         };
 
@@ -335,13 +338,18 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     result.ItemsSynced.Clear();
                     result.Errors.Clear();
                     result.Success = true;
-                    result.Message = "Sync completed successfully";
+                    result.Message = SyncSucceededMessage;
 
                     _logger.LogInformation(
                         "[{ConnectorSource}] Re-authenticated after 403; retrying sync with patient code {Code}",
                         ConnectorSource, context.PatientCode);
                 }
             }
+
+            // Fetch and authentication failures name themselves; a publish rejection only flips
+            // Success, and Message is the documented fallback for consumers that have no Errors.
+            if (!result.Success && result.Message == SyncSucceededMessage)
+                result.Message = PublishFailedMessage;
 
             result.EndTime = DateTime.UtcNow;
             return result;
@@ -418,13 +426,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                         PublishProfileDataAsync, context.Config, cancellationToken,
                         "device settings");
 
-                    var profileStateSpans = context.ProfileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
-                    if (profileStateSpans.Count > 0)
-                    {
-                        await PublishStateSpanDataAsync(profileStateSpans, context.Config, cancellationToken);
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} profile state spans from device settings",
-                            ConnectorSource, profileStateSpans.Count);
-                    }
+                    // The spans derive from the device settings but are state spans, so they gate and
+                    // count under StateSpans like every other state-span publish, not under Profiles.
+                    await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                        context.ProfileMapper.TransformDeviceSettingsToStateSpans(deviceSettings),
+                        PublishStateSpanDataAsync, context.Config, cancellationToken,
+                        "device settings");
                 }
             }
             catch (GlookoDataForbiddenException) { throw; }
@@ -474,7 +481,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
         Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
         await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, config, cancellationToken);
+            foodEntryImports, carbs, foodResolver, result, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
             context.StateSpanMapper.TransformV2ToStateSpans(batchData),
@@ -587,7 +594,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         }
 
         await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, allCarbs, foodResolver, config, cancellationToken);
+            foodEntryImports, allCarbs, foodResolver, result, config, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
         stateSpans.AddRange(context.StateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
@@ -620,6 +627,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         List<ConnectorFoodEntryImport> foodEntryImports,
         List<CarbIntake> carbIntakes,
         Func<string, string?>? foodEntryToCarbLegacyId,
+        SyncResult result,
         GlookoConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
@@ -629,7 +637,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
             foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
 
-        if (importedEntries is not { Count: > 0 })
+        // The publisher returns null only from its own catch; an import that reached the catalog
+        // returns a list, empty when nothing was accepted. Food has no SyncDataType toggle on this
+        // connector, so the failure is reported rather than routed through PublishRecordTypeAsync.
+        if (importedEntries is null)
+        {
+            result.Success = false;
+            result.Errors.Add("Food entries publish failed");
+            return;
+        }
+
+        if (importedEntries.Count == 0)
             return;
 
         _logger.LogInformation("[{ConnectorSource}] Published {Count} food entries to connector food catalog",
