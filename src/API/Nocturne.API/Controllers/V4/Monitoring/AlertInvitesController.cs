@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
@@ -108,6 +109,7 @@ public class AlertInvitesController : ControllerBase
     /// </summary>
     [HttpGet("{token}")]
     [AllowAnonymous]
+    [EnableRateLimiting("invite-lookup")]
     [RemoteQuery]
     [ProducesResponseType(typeof(AlertInviteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -109,6 +110,7 @@ public class MyTenantsController : ControllerBase
     [HttpGet("validate-slug")]
     [AllowAnonymous]
     [AllowDuringSetup]
+    [EnableRateLimiting("name-availability")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ValidateSlug([FromQuery] string slug, CancellationToken ct)

@@ -123,6 +123,22 @@ public static class ServiceRegistrationExtensions
         // files a pending subject under a display name not already taken, and nothing else prunes
         // them.
         ("passkey-access-request", 5, TimeSpan.FromMinutes(10)),
+        // First-run setup: creating the tenant, the owner ceremonies (options then complete, so two
+        // permits each) and the OIDC callback that exchanges a code with the provider. Only
+        // reachable while no member of the instance holds a credential, so the ceiling covers one
+        // operator retrying a ceremony rather than a population signing in.
+        ("setup", 20, TimeSpan.FromMinutes(1)),
+        // The "is this name free?" probes — owner username and tenant slug — which a form issues
+        // per keystroke behind a 400ms debounce, so a hunt-and-peck typist spends a permit per
+        // character. Sized well clear of a full name so a wizard cannot throttle itself, while
+        // still bounding what each anonymous request costs: a membership or tenant lookup, and for
+        // the username the operator's optional validation webhook.
+        ("name-availability", 60, TimeSpan.FromMinutes(1)),
+        // The anonymous invite lookups, member and alert. Their tokens are long random strings, so
+        // grinding one is infeasible at any rate; what the ceiling bounds is the database query
+        // each anonymous request costs. An invite page reads once per visit, which leaves the
+        // ceiling room for reloads and for a clinic behind one NAT.
+        ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
         ("guest-activate", 5, TimeSpan.FromMinutes(10)),
         // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.

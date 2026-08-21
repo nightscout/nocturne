@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -85,6 +86,7 @@ public partial class SetupController : ControllerBase
     /// Create the first tenant on a fresh install. Only succeeds when zero tenants exist.
     /// </summary>
     [HttpPost("tenant")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupTenantResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -112,6 +114,7 @@ public partial class SetupController : ControllerBase
     /// Check whether a username is available for the owner account.
     /// </summary>
     [HttpGet("validate-username")]
+    [EnableRateLimiting("name-availability")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ValidateUsername(
@@ -174,6 +177,7 @@ public partial class SetupController : ControllerBase
     /// Guard: exactly one tenant must exist with zero non-system members.
     /// </summary>
     [HttpPost("owner/options")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -215,6 +219,7 @@ public partial class SetupController : ControllerBase
     /// Verifies attestation, generates recovery codes, issues a full JWT session.
     /// </summary>
     [HttpPost("owner/complete")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -281,6 +286,7 @@ public partial class SetupController : ControllerBase
     /// then redirects to the OIDC provider to link an identity.
     /// </summary>
     [HttpPost("owner/oidc")]
+    [EnableRateLimiting("setup")]
     [RemoteCommand]
     [ProducesResponseType(typeof(SetupOwnerOidcResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -335,6 +341,7 @@ public partial class SetupController : ControllerBase
     [HttpGet("oidc/callback")]
     [AllowAnonymous]
     [AllowDuringSetup]
+    [EnableRateLimiting("setup")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     public async Task<IActionResult> OidcCallback(
         [FromQuery] string? code,

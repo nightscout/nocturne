@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
@@ -177,6 +178,7 @@ public class MemberInviteController : ControllerBase
     /// </remarks>
     [HttpGet("{token}/info")]
     [AllowAnonymous]
+    [EnableRateLimiting("invite-lookup")]
     [InviteTokenAuthorized]
     [RemoteQuery]
     [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
