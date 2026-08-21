@@ -17,20 +17,11 @@ The testing framework provides:
 ```
 tests/
 ├── Unit/                          # Fast unit tests with mocking
-│   ├── Nocturne.API.Tests/       # API component tests
-│   └── Nocturne.Tools.Migration.Tests/  # Migration tool unit tests
-│       ├── Services/              # Service layer tests
-│       ├── ErrorHandling/         # Error scenario tests
-│       ├── TestDataGeneration/    # Automated test data generators
-│       └── Infrastructure/        # Test database management
+│   └── Nocturne.API.Tests/       # API component tests
 ├── Integration/                   # Integration tests with real databases
-│   ├── Nocturne.API.Tests/       # API integration tests
-│   └── Nocturne.Tools.Migration.Integration.Tests/  # Migration integration tests
-│       └── DataIntegrity/         # Data integrity validation
+│   └── Nocturne.API.Tests/       # API integration tests
+├── E2E/                           # Aspire-hosted end-to-end tests (opt-in, see below)
 ├── Performance/                   # Performance and load testing
-│   └── Nocturne.Tools.Migration.Performance.Tests/
-│       ├── PerformanceBenchmarks.cs    # BenchmarkDotNet tests
-│       └── LoadAndStressTests.cs       # NBomber load tests
 └── Infrastructure/                # Test environment setup
     └── Docker/                    # Docker containers for testing
         ├── docker-compose.test.yml
@@ -98,7 +89,7 @@ The framework supports multiple test data scenarios:
 cd tests/Infrastructure/Docker
 docker-compose -f docker-compose.test.yml up -d
 
-# Run all tests
+# Run every collected test (the E2E suite is opt-in and stays out)
 dotnet test
 
 # Run specific test categories
@@ -106,12 +97,8 @@ dotnet test tests/Unit/                    # Unit tests only
 dotnet test tests/Integration/             # Integration tests only
 dotnet test tests/Performance/             # Performance tests
 
-# Run migration tool tests specifically
-dotnet test tests/Unit/Nocturne.Tools.Migration.Tests/
-dotnet test tests/Integration/Nocturne.Tools.Migration.Integration.Tests/
-
-# Run performance benchmarks
-dotnet run --project tests/Performance/Nocturne.Tools.Migration.Performance.Tests/
+# Run the end-to-end suite (stands up the whole Aspire stack)
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 ```
 
 ## API Testing (Legacy)
@@ -213,11 +200,11 @@ Nocturne.API.Tests/
 ## Fast Tests (Excludes slow tests by default)
 
 ```bash
-# Run all unit tests (excludes Performance, Integration, Load, Stress tests)
-dotnet test --filter "Category!=Performance&Category!=Integration&Category!=Load&Category!=Stress&Category!=BenchmarkDotNet"
+# Run all unit tests (excludes Integration, Performance and E2E tests)
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run unit tests with coverage
-dotnet test --filter "Category!=Performance&Category!=Integration&Category!=Load&Category!=Stress&Category!=BenchmarkDotNet" --collect:"XPlat Code Coverage"
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E" --collect:"XPlat Code Coverage"
 ```
 
 ## Slow Tests (Run only when needed)
@@ -230,9 +217,6 @@ dotnet test --filter "Category=Performance|Category=BenchmarkDotNet"
 
 # Run cache performance tests specifically
 dotnet test --filter "FullyQualifiedName~CachePerformanceBenchmarks"
-
-# Run migration performance tests
-dotnet test tests/Performance/Nocturne.Tools.Migration.Performance.Tests/
 ```
 
 ### Integration Tests
@@ -243,8 +227,6 @@ dotnet test --filter "Category=Integration"
 
 # Run integration tests with containers (Docker required)
 dotnet test --filter "Category=Integration&Category=Docker"
-
-dotnet test tests/Integration/Nocturne.Infrastructure.Messaging.Tests/
 ```
 
 ### Load & Stress Tests
@@ -252,15 +234,12 @@ dotnet test tests/Integration/Nocturne.Infrastructure.Messaging.Tests/
 ```bash
 # Run load/stress tests (takes significant time)
 dotnet test --filter "Category=Load|Category=Stress"
-
-# Run specific NBomber load tests
-dotnet run --project tests/Performance/Nocturne.Tools.Migration.Performance.Tests/ -- --load
 ```
 
 ## Complete Test Suite (All tests including slow ones)
 
 ```bash
-# Run absolutely everything (will take a long time)
+# Run everything that is collected (will take a long time; E2E still needs -p:RunE2E=true)
 dotnet test
 
 # Run everything with coverage
@@ -272,7 +251,7 @@ dotnet test --collect:"XPlat Code Coverage"
 ### Pull Request Validation (Fast)
 
 ```bash
-dotnet test --filter "Category!=Performance&Category!=Integration&Category!=Load&Category!=Stress&Category!=BenchmarkDotNet" --logger "trx" --results-directory TestResults
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E" --logger "trx" --results-directory TestResults
 ```
 
 ### Nightly/Weekly Full Test Suite
@@ -295,7 +274,7 @@ dotnet test --filter "Category=Integration" --logger "trx" --results-directory T
 
 ### Migration Tool Tests
 
-1. **Unit Tests**: Add to appropriate service test class in `tests/Unit/Nocturne.Tools.Migration.Tests/`
+1. **Unit Tests**: Add to the appropriate service test class in `tests/Unit/`
 2. **Integration Tests**: Use `TestDatabaseManager` for database setup in `tests/Integration/`
 3. **Performance Tests**: Add benchmarks using BenchmarkDotNet patterns
 4. **Test Data**: Extend `TestDataGenerator` for new scenarios
