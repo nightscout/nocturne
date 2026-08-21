@@ -1230,18 +1230,15 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     #region Retry and HTTP Helpers
 
     /// <summary>
-    ///     Executes an async operation with retry logic and exponential backoff.
-    ///     Automatically tracks success/failure for health monitoring.
+    ///     Executes an async operation under the shared connector retry loop, tracking success and
+    ///     failure for health monitoring. See <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the
+    ///     attempt-budget and delay contract.
     /// </summary>
     /// <typeparam name="T">The return type of the operation</typeparam>
     /// <param name="operation">The async operation to execute</param>
     /// <param name="retryStrategy">Strategy for calculating retry delays</param>
     /// <param name="reAuthenticateOnUnauthorized">Optional callback to re-authenticate on 401 responses</param>
-    /// <param name="maxRetries">
-    ///     Maximum number of attempts (default: 3). Clamped to a floor of 1 so a connector's
-    ///     configured MaxRetryAttempts of 0 still makes a single attempt instead of skipping
-    ///     the operation entirely.
-    /// </param>
+    /// <param name="maxRetries">Maximum number of attempts (default: 3)</param>
     /// <param name="operationName">Name of the operation for logging</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The result of the operation, or default(T) on failure</returns>
@@ -1254,131 +1251,128 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken = default
     )
     {
-        // Connectors pass their configured MaxRetryAttempts, which allows 0; the loop needs at
-        // least one attempt for the operation to run.
-        maxRetries = Math.Max(1, maxRetries);
-
         var opName = operationName ?? "operation";
         HttpRequestException? lastException = null;
 
-        for (var attempt = 0; attempt < maxRetries; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
+        return await ConnectorRetryLoop.RunAsync<T>(
+            async (attempt, attempts) =>
             {
-                _logger.LogDebug(
-                    "[{ConnectorSource}] Executing {Operation} (attempt {Attempt}/{MaxRetries})",
-                    ConnectorSource,
-                    opName,
-                    attempt + 1,
-                    maxRetries
-                );
-
-                var result = await operation();
-
-                // Success - track it and return
-                TrackSuccessfulRequest();
-                return result;
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Unauthorized response during {Operation}, attempting re-authentication",
-                    ConnectorSource,
-                    opName
-                );
-
-                if (reAuthenticateOnUnauthorized != null)
+                try
                 {
-                    var reAuthSuccess = await reAuthenticateOnUnauthorized();
-                    if (reAuthSuccess)
-                    {
-                        _logger.LogInformation(
-                            "[{ConnectorSource}] Re-authentication successful, retrying {Operation}",
-                            ConnectorSource,
-                            opName
-                        );
-                        continue; // Retry with new credentials
-                    }
+                    _logger.LogDebug(
+                        "[{ConnectorSource}] Executing {Operation} (attempt {Attempt}/{MaxRetries})",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1,
+                        attempts
+                    );
+
+                    var result = await operation();
+
+                    TrackSuccessfulRequest();
+                    return RetryStep<T>.Complete(result);
                 }
+                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Unauthorized response during {Operation}, attempting re-authentication",
+                        ConnectorSource,
+                        opName
+                    );
 
-                TrackFailedRequest("Unauthorized and re-authentication failed");
-                return default;
-            }
-            catch (HttpRequestException ex) when (IsRetryableStatusCode(ex.StatusCode))
+                    if (reAuthenticateOnUnauthorized != null)
+                    {
+                        var reAuthSuccess = await reAuthenticateOnUnauthorized();
+                        if (reAuthSuccess)
+                        {
+                            _logger.LogInformation(
+                                "[{ConnectorSource}] Re-authentication successful, retrying {Operation}",
+                                ConnectorSource,
+                                opName
+                            );
+                            return RetryStep<T>.RetryImmediately;
+                        }
+                    }
+
+                    TrackFailedRequest("Unauthorized and re-authentication failed");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (HttpRequestException ex) when (IsRetryableStatusCode(ex.StatusCode))
+                {
+                    lastException = ex;
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Retryable error during {Operation} (attempt {Attempt}): {StatusCode}",
+                        ConnectorSource,
+                        opName,
+                        attempt + 1,
+                        ex.StatusCode
+                    );
+
+                    return RetryStep<T>.RetryAfterDelay;
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] Non-retryable HTTP error during {Operation}: {StatusCode}",
+                        ConnectorSource,
+                        opName,
+                        ex.StatusCode
+                    );
+                    TrackFailedRequest($"HTTP {ex.StatusCode}");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] JSON parsing error during {Operation}",
+                        ConnectorSource,
+                        opName
+                    );
+                    TrackFailedRequest("JSON parsing error");
+                    return RetryStep<T>.Complete(default);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation(
+                        "[{ConnectorSource}] {Operation} was cancelled",
+                        ConnectorSource,
+                        opName
+                    );
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[{ConnectorSource}] Unexpected error during {Operation}",
+                        ConnectorSource,
+                        opName
+                    );
+                    TrackFailedRequest($"Unexpected error: {ex.Message}");
+                    return RetryStep<T>.Complete(default);
+                }
+            },
+            retryStrategy,
+            maxRetries,
+            attempts =>
             {
-                lastException = ex;
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Retryable error during {Operation} (attempt {Attempt}): {StatusCode}",
+                TrackFailedRequest($"All {attempts} attempts failed");
+                _logger.LogError(
+                    "[{ConnectorSource}] {Operation} failed after {MaxRetries} attempts",
                     ConnectorSource,
                     opName,
-                    attempt + 1,
-                    ex.StatusCode
+                    attempts
                 );
 
-                if (attempt < maxRetries - 1)
-                    await retryStrategy.ApplyRetryDelayAsync(attempt);
-            }
-            catch (HttpRequestException ex)
-            {
-                // Non-retryable HTTP error
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] Non-retryable HTTP error during {Operation}: {StatusCode}",
-                    ConnectorSource,
-                    opName,
-                    ex.StatusCode
-                );
-                TrackFailedRequest($"HTTP {ex.StatusCode}");
-                return default;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] JSON parsing error during {Operation}",
-                    ConnectorSource,
-                    opName
-                );
-                TrackFailedRequest("JSON parsing error");
-                return default;
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogInformation(
-                    "[{ConnectorSource}] {Operation} was cancelled",
-                    ConnectorSource,
-                    opName
-                );
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "[{ConnectorSource}] Unexpected error during {Operation}",
-                    ConnectorSource,
-                    opName
-                );
-                TrackFailedRequest($"Unexpected error: {ex.Message}");
-                return default;
-            }
-        }
+                if (lastException != null)
+                    throw lastException;
 
-        // All retries exhausted
-        TrackFailedRequest($"All {maxRetries} attempts failed");
-        _logger.LogError(
-            "[{ConnectorSource}] {Operation} failed after {MaxRetries} attempts",
-            ConnectorSource,
-            opName,
-            maxRetries
+                return default;
+            },
+            cancellationToken
         );
-
-        if (lastException != null)
-            throw lastException;
-
-        return default;
     }
 
     /// <summary>

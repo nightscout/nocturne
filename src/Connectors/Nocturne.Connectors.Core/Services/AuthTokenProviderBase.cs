@@ -159,6 +159,14 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected abstract Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TConfig config, CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Attempts <paramref name="operation"/> under the shared connector retry loop; see
+    ///     <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and delay contract.
+    /// </summary>
+    /// <param name="operation">
+    ///     Receives the 0-based attempt index and returns the token it acquired, or null plus whether
+    ///     the failure is worth another attempt.
+    /// </param>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<int, Task<(T? Result, bool ShouldRetry)>> operation,
         IRetryDelayStrategy retryDelayStrategy,
@@ -167,46 +175,46 @@ public abstract class AuthTokenProviderBase<TConfig>(
         CancellationToken cancellationToken)
         where T : class
     {
-        for (var attempt = 0; attempt < maxRetries; attempt++)
-        {
-            try
+        return await ConnectorRetryLoop.RunAsync<T>(
+            async (attempt, _) =>
             {
-                var (result, shouldRetry) = await operation(attempt);
-                if (result != null)
-                    return result;
+                try
+                {
+                    var (result, shouldRetry) = await operation(attempt);
+                    if (result != null)
+                        return RetryStep<T>.Complete(result);
 
-                if (!shouldRetry)
-                    return null;
+                    return shouldRetry ? RetryStep<T>.RetryAfterDelay : RetryStep<T>.Complete(default);
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "HTTP error during {OperationName} attempt {Attempt}",
+                        operationName,
+                        attempt + 1);
 
-                if (attempt < maxRetries - 1)
-                    await retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-            }
-            catch (HttpRequestException ex)
+                    return RetryStep<T>.RetryAfterDelay;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Unexpected error during {OperationName} attempt {Attempt}",
+                        operationName,
+                        attempt + 1);
+
+                    return RetryStep<T>.Complete(default);
+                }
+            },
+            retryDelayStrategy,
+            maxRetries,
+            attempts =>
             {
-                _logger.LogWarning(
-                    ex,
-                    "HTTP error during {OperationName} attempt {Attempt}",
-                    operationName,
-                    attempt + 1);
-
-                if (attempt < maxRetries - 1)
-                    await retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Unexpected error during {OperationName} attempt {Attempt}",
-                    operationName,
-                    attempt + 1);
+                _logger.LogError("{OperationName} failed after {MaxRetries} attempts", operationName, attempts);
                 return null;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        _logger.LogError("{OperationName} failed after {MaxRetries} attempts", operationName, maxRetries);
-        return null;
+            },
+            cancellationToken);
     }
 
     /// <summary>

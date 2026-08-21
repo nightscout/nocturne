@@ -34,6 +34,9 @@ public interface IConnectorConfiguration
     /// </summary>
     int BatchSize { get; set; }
 
+    /// <summary>
+    ///     Minimum minutes between syncs for one tenant; 0 or less leaves the connector unscheduled.
+    /// </summary>
     int SyncIntervalMinutes { get; set; }
 
     /// <summary>
