@@ -385,6 +385,46 @@ public class NightscoutConnectorPaginationTests
     }
 
     [Fact]
+    public async Task FetchTreatments_ActiveTypesWithNoTreatments_RecordExplicitZeros()
+    {
+        // One fetch covers every treatment sub-type, and each active one has to say zero when it
+        // came back empty: the tenant's sync card renders a badge per key, so a missing key reads
+        // as "never checked" rather than "checked, found nothing".
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(Array.Empty<Treatment>()));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+        var service = CreateService(handler, config, withPublisher: true);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-2).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = 0,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = 0,
+            });
+    }
+
+    [Fact]
     public async Task FetchTreatments_MultiplePages_ReturnsAll()
     {
         var page1 = CreateTreatments(MaxCount, BaseTime);

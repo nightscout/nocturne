@@ -58,6 +58,15 @@ public class PublishRecordTypePathTests
             => PublishRecordTypeAsync(result, dataType, activeTypes, records,
                 (_, _, _) => Task.FromResult(publishSucceeds),
                 new TestConfig(), cancellationToken);
+
+        public Task<bool> PublishThrowingAsync(
+            SyncResult result,
+            SyncDataType dataType,
+            HashSet<SyncDataType> activeTypes,
+            List<PublishedRecord> records)
+            => PublishRecordTypeAsync(result, dataType, activeTypes, records,
+                (_, _, _) => throw new InvalidOperationException("publisher exploded"),
+                new TestConfig(), CancellationToken.None);
     }
 
     private static Task<SyncResult> RunAsync(
@@ -139,6 +148,25 @@ public class PublishRecordTypePathTests
         // Assert
         result.Success.Should().BeFalse();
         result.ItemsSynced[SyncDataType.Glucose].Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ThrowingPublish_RecordsNoCount()
+    {
+        // Arrange: the count is recorded once the publish has returned, so a batch whose publish
+        // threw is not reported as handed over — unlike one the publisher rejected, which is.
+        // Connectors catch the throw and report it as a sync error instead.
+        var active = new HashSet<SyncDataType> { SyncDataType.Glucose };
+        var result = new SyncResult { Success = true };
+        var service = new TestConnectorService((_, _) => Task.CompletedTask);
+
+        // Act
+        var publish = () => service.PublishThrowingAsync(result, SyncDataType.Glucose, active,
+            [new PublishedRecord()]);
+
+        // Assert
+        await publish.Should().ThrowAsync<InvalidOperationException>();
+        result.ItemsSynced.Should().BeEmpty();
     }
 
     [Fact]

@@ -186,17 +186,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     oldestOf: OldestEntryTime,
                     publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken));
 
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
-                    ConnectorSource,
-                    outcome.Count);
-
-                result.ItemsSynced[SyncDataType.Glucose] = outcome.Count;
-                if (!outcome.Success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("Glucose publish failed");
-                }
+                RecordPublishOutcome(result, SyncDataType.Glucose, outcome.Count, outcome.Success);
             }
             catch (Exception ex)
             {
@@ -228,23 +218,10 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
                     publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
 
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
-                    ConnectorSource,
-                    outcome.Count);
-
-                if (outcome.Count > 0)
-                {
-                    // Report count under each enabled treatment sub-type
-                    foreach (var tt in treatmentTypes.Where(t => activeTypes.Contains(t)))
-                        result.ItemsSynced[tt] = outcome.Count;
-                }
-
-                if (!outcome.Success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("Treatments publish failed");
-                }
+                // One fetch covers every treatment sub-type, so each active one carries the whole
+                // batch's outcome.
+                foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
+                    RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
             }
             catch (Exception ex)
             {
@@ -289,17 +266,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     oldestOf: p => OldestCreatedAt(p, d => d.CreatedAt),
                     publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken));
 
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Retrieved {Count} device statuses from Nightscout",
-                    ConnectorSource,
-                    outcome.Count);
-
-                result.ItemsSynced[SyncDataType.DeviceStatus] = outcome.Count;
-                if (!outcome.Success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("DeviceStatus publish failed");
-                }
+                RecordPublishOutcome(result, SyncDataType.DeviceStatus, outcome.Count, outcome.Success);
             }
             catch (Exception ex)
             {
@@ -315,18 +282,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 var foods = await FetchFoodAsync();
-                var foodList = foods.ToList();
-                result.ItemsSynced[SyncDataType.Food] = foodList.Count;
-                if (foodList.Count > 0)
-                {
-                    var publishSuccess = await PublishFoodDataAsync(
-                        foodList, config, cancellationToken);
-                    if (!publishSuccess)
-                    {
-                        result.Success = false;
-                        result.Errors.Add("Food publish failed");
-                    }
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
+                    foods.ToList(), PublishFoodDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -353,17 +310,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
                     publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
 
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Retrieved {Count} activities from Nightscout",
-                    ConnectorSource,
-                    outcome.Count);
-
-                result.ItemsSynced[SyncDataType.Activity] = outcome.Count;
-                if (!outcome.Success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("Activity publish failed");
-                }
+                RecordPublishOutcome(result, SyncDataType.Activity, outcome.Count, outcome.Success);
             }
             catch (Exception ex)
             {

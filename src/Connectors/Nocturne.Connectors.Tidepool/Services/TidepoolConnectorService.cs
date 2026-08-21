@@ -76,11 +76,8 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
             if (string.IsNullOrEmpty(token))
             {
-                result.Success = false;
-                result.Errors.Add("Authentication failed");
-                result.EndTime = DateTimeOffset.UtcNow;
                 _logger.LogWarning("[{ConnectorSource}] Sync failed: authentication unsuccessful", ConnectorSource);
-                return result;
+                return AuthenticationFailedResult();
             }
         }
 
@@ -122,35 +119,11 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                 var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
-                if (activeTypes.Contains(SyncDataType.Boluses) && mappedBoluses.Count > 0)
-                {
-                    var success = await PublishBolusDataAsync(mappedBoluses, config, cancellationToken);
-                    if (success)
-                    {
-                        result.ItemsSynced[SyncDataType.Boluses] = mappedBoluses.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Synced {Count} Bolus records", ConnectorSource, mappedBoluses.Count);
-                    }
-                    else
-                    {
-                        result.Success = false;
-                        result.Errors.Add($"{SyncDataType.Boluses} publish failed");
-                    }
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+                    mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
 
-                if (activeTypes.Contains(SyncDataType.CarbIntake) && mappedCarbs.Count > 0)
-                {
-                    var success = await PublishCarbIntakeDataAsync(mappedCarbs, config, cancellationToken);
-                    if (success)
-                    {
-                        result.ItemsSynced[SyncDataType.CarbIntake] = mappedCarbs.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Synced {Count} CarbIntake records", ConnectorSource, mappedCarbs.Count);
-                    }
-                    else
-                    {
-                        result.Success = false;
-                        result.Errors.Add("CarbIntake publish failed");
-                    }
-                }
+                await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                    mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {

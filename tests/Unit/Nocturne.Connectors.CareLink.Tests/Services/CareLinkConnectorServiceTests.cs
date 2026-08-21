@@ -141,6 +141,45 @@ public class CareLinkConnectorServiceTests
             "a switched-off type is never handed to the publisher, so it cannot fail");
     }
 
+    /// <summary>
+    /// A payload with no sensor readings still records a zero for glucose: the tenant's sync card
+    /// renders a badge per key, so a missing key reads as "never checked" rather than "checked,
+    /// found nothing".
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenGlucoseIsActiveButEmpty_RecordsAnExplicitZero()
+    {
+        // lastSG present (so the monitor payload is used) but no sgs array, and no medical-device
+        // update time, so the data does not read as stale and the glucose step does run.
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": {}
+                }
+                """
+        };
+        var fixture = new ServiceFixture(handler, new CareLinkConnectorConfiguration
+        {
+            Username = "user@example.com",
+            Server = "EU",
+            SyncDeviceStatus = false,
+            SyncBoluses = false,
+            SyncCarbIntake = false,
+            SyncTempBasals = false,
+            SyncDeviceEvents = false,
+        });
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 0,
+        });
+    }
+
     private const string AlarmDateTime = "2026-01-01T10:00:00";
     private const string NotificationBeforeAlarm = "2026-01-01T09:55:00";
 

@@ -685,8 +685,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <summary>
     ///     Reusable helper that checks whether a data type is active, reports publish progress,
-    ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts, and logs the
-    ///     outcome.
+    ///     publishes a batch of records, and records the outcome through
+    ///     <see cref="RecordPublishOutcome"/>.
     /// </summary>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
@@ -710,10 +710,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         if (records.Count == 0)
         {
-            // An active type the sync did look at reports an explicit zero: the tenant's sync card
-            // renders a badge per key, so a missing key reads as "never checked" rather than
-            // "checked, found nothing". TryAdd so a later empty page cannot erase an earlier count.
-            result.ItemsSynced.TryAdd(dataType, 0);
+            RecordPublishOutcome(result, dataType, 0, success: true);
             return false;
         }
 
@@ -722,20 +719,50 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             cancellationToken);
 
         var success = await publishFunc(records, config, cancellationToken);
-        result.ItemsSynced.TryGetValue(dataType, out var prev);
-        result.ItemsSynced[dataType] = prev + records.Count;
+        RecordPublishOutcome(result, dataType, records.Count, success, context);
+        return success;
+    }
+
+    /// <summary>
+    ///     The bookkeeping every published record type owes the run: the per-type count the tenant's
+    ///     sync card renders, the canonical failure string, and the success log. Connectors whose
+    ///     publish shape does not fit <see cref="PublishRecordTypeAsync{T}"/> — a streaming crawl that
+    ///     publishes page by page, or one fetch feeding several types — record through this instead of
+    ///     writing the three by hand.
+    /// </summary>
+    /// <remarks>
+    ///     A type the sync looked at records a count even when it came back empty: the card renders a
+    ///     badge per key, so a missing key reads as "never checked" rather than "checked, found
+    ///     nothing". Counts accumulate, so a paginated crawl can report each page and a later empty
+    ///     page cannot erase what an earlier one landed. Callers report the count once the publish has
+    ///     returned, so a publish that throws records nothing while one that reports failure records
+    ///     the batch it handed over — the count is what reached the publisher, not what the publisher
+    ///     accepted.
+    /// </remarks>
+    /// <param name="context">
+    ///     Detail about this batch — where it came from, or what it held — appended to the success log
+    ///     in parentheses.
+    /// </param>
+    protected void RecordPublishOutcome(
+        SyncResult result,
+        SyncDataType dataType,
+        int count,
+        bool success,
+        string? context = null)
+    {
+        result.ItemsSynced.TryGetValue(dataType, out var previous);
+        result.ItemsSynced[dataType] = previous + count;
+
         if (!success)
         {
             result.Success = false;
             result.Errors.Add($"{dataType} publish failed");
         }
-        else
+        else if (count > 0)
         {
             _logger.LogInformation("[{ConnectorSource}] Synced {Count} {Type} records{Context}",
-                ConnectorSource, records.Count, dataType, context != null ? $" ({context})" : "");
+                ConnectorSource, count, dataType, context != null ? $" ({context})" : "");
         }
-
-        return success;
     }
 
     /// <summary>

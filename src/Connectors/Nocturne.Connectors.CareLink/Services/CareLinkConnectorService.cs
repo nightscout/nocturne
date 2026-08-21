@@ -249,23 +249,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         try
         {
-            var sgRecords = _sgMapper.Map(data);
-            if (sgRecords.Count > 0)
-            {
-                var success = await PublishSensorGlucoseDataAsync(sgRecords, config, cancellationToken);
-                result.ItemsSynced[SyncDataType.Glucose] = sgRecords.Count;
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add($"{SyncDataType.Glucose} publish failed");
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "[{ConnectorSource}] Synced {Count} SensorGlucose records",
-                        ConnectorSource, sgRecords.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
+                _sgMapper.Map(data), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -292,23 +277,17 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         SyncResult result,
         CancellationToken cancellationToken)
     {
+        // Gated here as well as in the shared path, so a switched-off type is not mapped at all.
         if (!enabledTypes.Contains(SyncDataType.DeviceStatus))
             return;
 
         try
         {
-            var deviceStatus = CareLinkDeviceStatusMapper.Map(data);
-            var success = await PublishDeviceStatusAsync([deviceStatus], config, cancellationToken);
-            result.ItemsSynced[SyncDataType.DeviceStatus] = 1;
-            if (!success)
-            {
-                result.Success = false;
-                result.Errors.Add("DeviceStatus publish failed");
-            }
-            else
-            {
-                _logger.LogInformation("[{ConnectorSource}] Synced DeviceStatus", ConnectorSource);
-            }
+            List<Nocturne.Core.Models.DeviceStatus> deviceStatuses =
+                CareLinkDeviceStatusMapper.Map(data) is { } deviceStatus ? [deviceStatus] : [];
+
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, enabledTypes,
+                deviceStatuses, PublishDeviceStatusAsync, config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
