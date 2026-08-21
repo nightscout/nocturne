@@ -13,9 +13,6 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// <summary>
     /// Identifier of the tenant this discrepancy analysis belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
