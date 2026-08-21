@@ -52,8 +52,8 @@ public class GlookoConnectorServiceMultiChunkTests
     }
 
     /// <summary>
-    /// State spans are the one publish with no chunk-level toggle of its own on the V2 path, so a
-    /// sync that asks for nothing else must still report the spans it landed.
+    /// A sync that asks for state spans and nothing else must still report the spans it landed,
+    /// rather than publishing them uncounted and summarising the run as zero work.
     /// </summary>
     [Theory]
     [InlineData(true)]
