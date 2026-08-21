@@ -1232,6 +1232,9 @@ void LoadSettings() {
         Wh_FreeStringSetting(s);
         return v;
     };
+    // The range defaults are the settings block's mmol/L rendering of
+    // GlucoseConstants.TargetBottomMgdl/TargetTopMgdl, and the colour defaults must equal
+    // GlucoseConstants.StatusPalette; GlucoseMirrorTests fails if either drifts.
     g_settings.rangeLow = getDouble(L"rangeLow", 3.9);
     g_settings.rangeHigh = getDouble(L"rangeHigh", 10.0);
 

@@ -10,9 +10,19 @@ export type GlucoseUnits = "mg/dl" | "mmol";
 
 /**
  * Milligrams per decilitre in one millimole per litre of glucose. Must equal
- * `GlucoseConstants.MgdlPerMmol`; `GlucoseConversionFactorMirrorTests` fails if it does not.
+ * `GlucoseConstants.MgdlPerMmol`; `GlucoseMirrorTests` fails if it does not.
  */
 export const MGDL_PER_MMOL = 18.0182;
+
+/**
+ * Tile fill per glucose status. Must equal `GlucoseConstants.StatusPalette`;
+ * `GlucoseMirrorTests` fails if it does not.
+ */
+export const GLUCOSE_STATUS_COLORS = {
+  inRange: "#36C76A",
+  high: "#E6B800",
+  low: "#E0533D",
+} as const;
 
 /** Convert a glucose value from mg/dL to the given display units. */
 export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number {

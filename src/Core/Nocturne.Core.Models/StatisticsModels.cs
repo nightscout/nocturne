@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
@@ -183,14 +184,14 @@ public class GlycemicThresholds
     public double Low { get; set; } = 70;
 
     /// <summary>
-    /// Target range bottom threshold (default: 70 mg/dL)
+    /// Target range bottom threshold (defaults to <see cref="GlucoseConstants.TargetBottomMgdl"/>)
     /// </summary>
-    public double TargetBottom { get; set; } = 70;
+    public double TargetBottom { get; set; } = GlucoseConstants.TargetBottomMgdl;
 
     /// <summary>
-    /// Target range top threshold (default: 180 mg/dL)
+    /// Target range top threshold (defaults to <see cref="GlucoseConstants.TargetTopMgdl"/>)
     /// </summary>
-    public double TargetTop { get; set; } = 180;
+    public double TargetTop { get; set; } = GlucoseConstants.TargetTopMgdl;
 
     /// <summary>
     /// Tight target range bottom threshold (default: 70 mg/dL)

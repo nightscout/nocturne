@@ -10,4 +10,32 @@ public static class GlucoseConstants
     /// factor, about 1 part in 7,000 above the 180.156 g/mol molar mass divided by 10.
     /// </summary>
     public const double MgdlPerMmol = 18.0182;
+
+    /// <summary>
+    /// Bottom of the consensus target range in mg/dL — the boundary below which a reading reads as
+    /// low, before any tenant threshold overrides it.
+    /// </summary>
+    public const double TargetBottomMgdl = 70;
+
+    /// <summary>
+    /// Top of the consensus target range in mg/dL. See <see cref="TargetBottomMgdl"/>.
+    /// </summary>
+    public const double TargetTopMgdl = 180;
+
+    /// <summary>
+    /// Tile fill per glucose status as <c>RRGGBB</c>, for the surfaces that draw a reading as a
+    /// block of colour rather than a themed element: the web glucose icon, the desktop tray tile and
+    /// the taskbar sparkline.
+    /// </summary>
+    public static class StatusPalette
+    {
+        /// <summary>Between <see cref="TargetBottomMgdl"/> and <see cref="TargetTopMgdl"/>.</summary>
+        public const string InRange = "36C76A";
+
+        /// <summary>Above <see cref="TargetTopMgdl"/>.</summary>
+        public const string High = "E6B800";
+
+        /// <summary>Below <see cref="TargetBottomMgdl"/>.</summary>
+        public const string Low = "E0533D";
+    }
 }

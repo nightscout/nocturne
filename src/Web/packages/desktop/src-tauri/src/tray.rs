@@ -20,9 +20,6 @@ use tauri::{AppHandle, Manager};
 pub const TRAY_ID: &str = "nocturne-companion";
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
-/// Attention-tile fill for the flash "on" frame — a high-contrast alert red drawn behind the value.
-const COLOR_ATTENTION: (u8, u8, u8) = (0xE0, 0x53, 0x3D);
-
 /// Flash pulse cadence: the icon alternates between the normal tile and the attention tile every
 /// this many milliseconds while flashing is active.
 const FLASH_INTERVAL_MS: u64 = 600;
@@ -38,14 +35,18 @@ const ICON_SIZE: u32 = 32;
 const ICON_RADIUS: f32 = 6.0;
 
 /// Glucose status thresholds (mg/dL). A 3-state model (Low / InRange / High) to match the
-/// taskbar mod, not the web's 5-state. Kept aligned with the `@nocturne/ui` glucose palette.
+/// taskbar mod, not the web's 5-state. Must equal `GlucoseConstants.TargetBottomMgdl` and
+/// `GlucoseConstants.TargetTopMgdl`; `GlucoseMirrorTests` fails if they do not.
 const LOW_THRESHOLD_MGDL: f64 = 70.0;
 const HIGH_THRESHOLD_MGDL: f64 = 180.0;
 
-/// Status-tile fill colors as (R, G, B). Mirrors the mod defaults / `@nocturne/ui` palette.
+/// Status-tile fill colors as (R, G, B). Must equal `GlucoseConstants.StatusPalette`;
+/// `GlucoseMirrorTests` fails if they do not.
 const COLOR_IN_RANGE: (u8, u8, u8) = (0x36, 0xC7, 0x6A);
 const COLOR_HIGH: (u8, u8, u8) = (0xE6, 0xB8, 0x00);
 const COLOR_LOW: (u8, u8, u8) = (0xE0, 0x53, 0x3D);
+/// Attention-tile fill for the flash "on" frame: the alert red a low is already drawn in.
+const COLOR_ATTENTION: (u8, u8, u8) = COLOR_LOW;
 /// No-data (`--`) state.
 const COLOR_NO_DATA: (u8, u8, u8) = (0x6B, 0x72, 0x80);
 const COLOR_FG: (u8, u8, u8) = (0xFF, 0xFF, 0xFF);
@@ -572,10 +573,6 @@ mod tests {
         assert_eq!(status_color(GlucoseStatus::Low), COLOR_LOW);
         assert_eq!(status_color(GlucoseStatus::InRange), COLOR_IN_RANGE);
         assert_eq!(status_color(GlucoseStatus::High), COLOR_HIGH);
-        // Palette matches the mod defaults / @nocturne/ui glucose palette.
-        assert_eq!(COLOR_IN_RANGE, (0x36, 0xC7, 0x6A));
-        assert_eq!(COLOR_HIGH, (0xE6, 0xB8, 0x00));
-        assert_eq!(COLOR_LOW, (0xE0, 0x53, 0x3D));
     }
 
     #[test]
@@ -586,9 +583,9 @@ mod tests {
         assert_eq!(buf[3], 0);
         // Center pixel is filled at full alpha with the tile color.
         let mid = ((ICON_SIZE / 2 * ICON_SIZE + ICON_SIZE / 2) * 4) as usize;
-        assert_eq!(buf[mid], 0x36);
-        assert_eq!(buf[mid + 1], 0xC7);
-        assert_eq!(buf[mid + 2], 0x6A);
+        assert_eq!(buf[mid], COLOR_IN_RANGE.0);
+        assert_eq!(buf[mid + 1], COLOR_IN_RANGE.1);
+        assert_eq!(buf[mid + 2], COLOR_IN_RANGE.2);
         assert_eq!(buf[mid + 3], 255);
     }
 
