@@ -145,7 +145,7 @@ public class ForwardedHeadersPipelineTests
     public async Task WithTheHopCountRaised_AnAppendingEdgesChainIsWalked()
     {
         var resolved = await ResolveAsync(
-            Config(forwardLimit: 2), peer: Gateway, forwardedFor: $"{Client}, 172.71.0.4");
+            Config(forwardLimit: "2"), peer: Gateway, forwardedFor: $"{Client}, 172.71.0.4");
 
         resolved.Address.Should().Be(Client);
     }
@@ -186,35 +186,60 @@ public class ForwardedHeadersPipelineTests
     // ── Configuration parsing ────────────────────────────────────────────────
 
     [Fact]
-    public void AnUnparsableProxyOrNetwork_IsDropped()
+    public void OneUnparsableEntryAmongGoodOnes_IsDropped()
     {
         var options = NocturneForwardedHeadersExtensions.ClientAddressOptions(
-            Config(knownProxies: "not-an-address", knownNetworks: "not-a-network"));
+            Config(knownProxies: $"not-an-address, {Gateway}", knownNetworks: "nonsense, 10.0.0.0/16"));
 
-        options.KnownProxies.Should().BeEmpty();
-        options.KnownIPNetworks.Should().BeEmpty();
+        options.KnownProxies.Should().ContainSingle().Which.Should().Be(IPAddress.Parse(Gateway));
+        options.KnownIPNetworks.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// A trust list that parses to nothing does the opposite of what declaring it asks for.
+    /// </summary>
+    [Theory]
+    [InlineData("nocturne-gateway", null)]
+    [InlineData("not-an-address, also-not-one", null)]
+    [InlineData(null, "10.0.0.0")]
+    public void ATrustListWithNoUsableEntry_RefusesToStart(string? proxies, string? networks)
+    {
+        var act = () => NocturneForwardedHeadersExtensions.ClientAddressOptions(
+            Config(knownProxies: proxies, knownNetworks: networks));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*trust whichever peer connects*");
+    }
+
+    [Fact]
+    public void AnAbsentHopCount_FallsBackToOne()
+    {
+        NocturneForwardedHeadersExtensions.ClientAddressOptions(Config())
+            .ForwardLimit.Should().Be(1);
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public void AnAbsentOrNonsensicalHopCount_FallsBackToOne(int? configured)
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("two")]
+    public void ANonsensicalHopCount_RefusesToStart(string configured)
     {
-        NocturneForwardedHeadersExtensions.ClientAddressOptions(Config(forwardLimit: configured))
-            .ForwardLimit.Should().Be(1);
+        var act = () => NocturneForwardedHeadersExtensions.ClientAddressOptions(
+            Config(forwardLimit: configured));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*not a hop count*");
     }
 
     // ── Harness ──────────────────────────────────────────────────────────────
 
     private static IConfiguration Config(
-        int? forwardLimit = null,
+        string? forwardLimit = null,
         string? knownProxies = null,
         string? knownNetworks = null) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [NocturneForwardedHeadersExtensions.ForwardLimitKey] = forwardLimit?.ToString(),
+                [NocturneForwardedHeadersExtensions.ForwardLimitKey] = forwardLimit,
                 [NocturneForwardedHeadersExtensions.KnownProxiesKey] = knownProxies,
                 [NocturneForwardedHeadersExtensions.KnownNetworksKey] = knownNetworks,
             })

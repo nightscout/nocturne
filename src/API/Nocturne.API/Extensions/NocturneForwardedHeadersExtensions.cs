@@ -28,7 +28,15 @@ namespace Nocturne.API.Extensions;
 /// </remarks>
 public static class NocturneForwardedHeadersExtensions
 {
-    /// <summary>Number of <c>X-Forwarded-For</c> entries to consume, counted from the right.</summary>
+    /// <summary>
+    /// Number of <c>X-Forwarded-For</c> entries to consume, counted from the right.
+    /// </summary>
+    /// <remarks>
+    /// Raising this above 1 alongside <see cref="KnownProxiesKey"/> or
+    /// <see cref="KnownNetworksKey"/> means every intermediate hop must be declared too: the walk
+    /// stops at the first address not on the list, so an undeclared middle hop silently costs the
+    /// entries beyond it.
+    /// </remarks>
     public const string ForwardLimitKey = "ForwardedHeaders:ForwardLimit";
 
     /// <summary>Comma-separated proxy addresses whose forwarded address is honoured.</summary>
@@ -41,8 +49,12 @@ public static class NocturneForwardedHeadersExtensions
         this IApplicationBuilder app,
         IConfiguration configuration)
     {
+        var logger = app.ApplicationServices
+            .GetService<ILoggerFactory>()
+            ?.CreateLogger(typeof(NocturneForwardedHeadersExtensions));
+
         app.UseForwardedHeaders(HostAndSchemeOptions());
-        app.UseForwardedHeaders(ClientAddressOptions(configuration));
+        app.UseForwardedHeaders(ClientAddressOptions(configuration, logger));
         return app;
     }
 
@@ -69,36 +81,101 @@ public static class NocturneForwardedHeadersExtensions
     /// <summary>
     /// The calling client's address, which rate-limit partitions and audit rows record.
     /// </summary>
-    internal static ForwardedHeadersOptions ClientAddressOptions(IConfiguration configuration)
+    internal static ForwardedHeadersOptions ClientAddressOptions(
+        IConfiguration configuration,
+        ILogger? logger = null)
     {
         var options = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor,
-            ForwardLimit = configuration.GetValue<int?>(ForwardLimitKey) is int limit and > 0
-                ? limit
-                : 1,
+            ForwardLimit = ForwardLimit(configuration),
         };
 
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
 
-        foreach (var value in Split(configuration[KnownProxiesKey]))
+        Populate(configuration[KnownProxiesKey], KnownProxiesKey, logger, value =>
         {
-            if (IPAddress.TryParse(value, out var address))
-                options.KnownProxies.Add(address);
-        }
+            if (!IPAddress.TryParse(value, out var address))
+                return false;
 
-        foreach (var value in Split(configuration[KnownNetworksKey]))
+            options.KnownProxies.Add(address);
+            return true;
+        });
+
+        Populate(configuration[KnownNetworksKey], KnownNetworksKey, logger, value =>
         {
-            if (System.Net.IPNetwork.TryParse(value, out var network))
-                options.KnownIPNetworks.Add(network);
-        }
+            if (!System.Net.IPNetwork.TryParse(value, out var network))
+                return false;
+
+            options.KnownIPNetworks.Add(network);
+            return true;
+        });
 
         return options;
     }
 
-    private static IEnumerable<string> Split(string? value) =>
-        string.IsNullOrWhiteSpace(value)
+    private static int ForwardLimit(IConfiguration configuration)
+    {
+        var configured = configuration[ForwardLimitKey];
+        if (string.IsNullOrWhiteSpace(configured))
+            return 1;
+
+        if (!int.TryParse(configured, out var limit) || limit < 1)
+        {
+            throw new InvalidOperationException(
+                $"{ForwardLimitKey} is '{configured}', which is not a hop count. It must be a "
+                + "positive whole number: how many X-Forwarded-For entries, counted from the "
+                + "right, were written by hops you trust.");
+        }
+
+        return limit;
+    }
+
+    /// <summary>
+    /// Parses a declared trust list, refusing to start rather than quietly trusting everyone.
+    /// </summary>
+    /// <remarks>
+    /// These lists exist to stop trusting whoever connects, so a list that parses to nothing does
+    /// the opposite of what it was written to do — silently, and to an operator who believes the
+    /// peer is pinned. Individual bad entries are dropped loudly; a list with no good entry at all
+    /// is a configuration error.
+    /// </remarks>
+    private static void Populate(
+        string? configured,
+        string key,
+        ILogger? logger,
+        Func<string, bool> tryAdd)
+    {
+        var values = string.IsNullOrWhiteSpace(configured)
             ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            : configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (values.Length == 0)
+            return;
+
+        var parsed = 0;
+        foreach (var value in values)
+        {
+            if (tryAdd(value))
+            {
+                parsed++;
+            }
+            else
+            {
+                logger?.LogWarning(
+                    "Ignoring {ConfigKey} entry '{Value}': it is not an address or range this "
+                    + "can match a peer against.",
+                    key, value);
+            }
+        }
+
+        if (parsed == 0)
+        {
+            throw new InvalidOperationException(
+                $"{key} was set to '{configured}', none of which is a usable address or range. "
+                + "Leaving it in place would trust whichever peer connects — the opposite of what "
+                + "declaring it asks for. Correct the value or remove the setting.");
+        }
+    }
 }

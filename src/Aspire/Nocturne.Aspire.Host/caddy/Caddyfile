@@ -23,12 +23,19 @@
 # only the socket peer counts, so a forged CF-Connecting-IP is ignored. Set it to the
 # CDN's published ranges (Cloudflare: https://www.cloudflare.com/ips/) to have the
 # visitor's address recorded instead of the CDN edge's.
+#
+# trusted_proxies_strict is what makes that safe for a CDN that appends to
+# X-Forwarded-For rather than sending CF-Connecting-IP. Without it Caddy falls back to the
+# leftmost valid entry of the chain — the one a caller prepends — and would stamp it as the
+# definitive client. Strict walks from the right instead, skipping declared proxies, so the
+# address is the first hop nobody vouched for.
 {
 	on_demand_tls {
 		ask http://nocturne-api:8080/api/v4/platform/tls-authorize
 	}
 	servers {
 		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+		trusted_proxies_strict
 		client_ip_headers CF-Connecting-IP X-Forwarded-For
 	}
 }
