@@ -97,7 +97,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 if (bgValues != null)
                     await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                         _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), PublishSensorGlucoseDataAsync,
-                        config, cancellationToken, "Tidepool");
+                        config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -133,7 +133,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                     else
                     {
                         result.Success = false;
-                        result.Errors.Add("Bolus publish failed");
+                        result.Errors.Add($"{SyncDataType.Boluses} publish failed");
                     }
                 }
 

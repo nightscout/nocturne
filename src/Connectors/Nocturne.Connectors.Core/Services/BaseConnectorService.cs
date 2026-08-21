@@ -688,6 +688,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     publishes a batch of records, updates the <see cref="SyncResult"/> counts, and logs the
     ///     outcome.
     /// </summary>
+    /// <param name="context">
+    ///     Detail about this batch — where it came from, or what it held — appended to the success log
+    ///     in parentheses.
+    /// </param>
     /// <returns>
     ///     Whether the batch reached the tenant. An inactive type, an empty batch and a rejected
     ///     publish are alike <c>false</c>: no record was accepted in any of them.
@@ -727,9 +731,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         else
         {
-            var ctx = context != null ? $" from {context}" : "";
-            _logger.LogInformation("Synced {Count} {Type} records{Context}",
-                records.Count, dataType, ctx);
+            _logger.LogInformation("[{ConnectorSource}] Synced {Count} {Type} records{Context}",
+                ConnectorSource, records.Count, dataType, context != null ? $" ({context})" : "");
         }
 
         return success;

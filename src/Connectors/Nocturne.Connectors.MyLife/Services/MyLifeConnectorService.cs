@@ -235,7 +235,7 @@ public class MyLifeConnectorService(
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
                 await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings");
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "from pump settings");
             }
         }
         catch (Exception ex)

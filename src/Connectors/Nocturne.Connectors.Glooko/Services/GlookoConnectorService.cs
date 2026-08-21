@@ -416,7 +416,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                         context.ProfileMapper.TransformDeviceSettingsToProfiles(deviceSettings),
                         PublishProfileDataAsync, context.Config, cancellationToken,
-                        "device settings");
+                        "from device settings");
 
                     var profileStateSpans = context.ProfileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
                     if (profileStateSpans.Count > 0)
