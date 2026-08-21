@@ -3,6 +3,18 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Services;
 
 /// <summary>
+/// Which of the two independent origin handles a row carries — the data source stamped by connector
+/// imports, the demo seeder and the V4 write endpoints, or the device string the uploader reported
+/// for itself — a given identifier names.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SourceHandle>))]
+public enum SourceHandle
+{
+    [JsonStringEnumMemberName("device")] Device,
+    [JsonStringEnumMemberName("dataSource")] DataSource,
+}
+
+/// <summary>
 /// Represents information about a data source that's been pushing data to Nocturne.
 /// This is derived from analyzing the `device` field on entries and devicestatus records.
 /// </summary>
@@ -25,6 +37,13 @@ public class DataSourceInfo
     /// </summary>
     [JsonPropertyName("deviceId")]
     public string DeviceId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Which origin handle <see cref="DeviceId"/> names, so a consumer holding a list entry does not
+    /// have to guess whether it is a data source or a reported device string.
+    /// </summary>
+    [JsonPropertyName("deviceIdHandle")]
+    public SourceHandle DeviceIdHandle { get; set; } = SourceHandle.Device;
 
     /// <summary>
     /// Category of data source: cgm, pump, uploader, aid-system, connector, manual, unknown
