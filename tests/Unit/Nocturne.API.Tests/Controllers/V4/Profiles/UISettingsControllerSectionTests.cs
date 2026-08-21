@@ -99,7 +99,7 @@ public class UISettingsControllerSectionTests
     [Fact]
     public async Task GetUISettings_inDemoMode_inheritsEverySectionItDoesNotFixture()
     {
-        var controller = NewController(("DemoMode:Enabled", "true"));
+        var controller = NewController(demoMode: true);
 
         var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
 
@@ -115,7 +115,7 @@ public class UISettingsControllerSectionTests
     [Fact]
     public async Task GetUISettings_inDemoMode_keepsItsSampleDevicesServicesAndPlugins()
     {
-        var controller = NewController(("DemoMode:Enabled", "true"));
+        var controller = NewController(demoMode: true);
 
         var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
 

@@ -2,11 +2,11 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Infrastructure.Data;
@@ -21,21 +21,19 @@ internal static class UISettingsControllerHarness
 {
     private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    internal static UISettingsController NewController(
-        params (string Key, string Value)[] configuration
-    )
+    internal static UISettingsController NewController(bool demoMode = false)
     {
-        return NewController(NewDatabase(), configuration);
+        return NewController(NewDatabase(), demoMode);
     }
 
     internal static UISettingsController NewController(
         NocturneDbContext dbContext,
-        params (string Key, string Value)[] configuration
+        bool demoMode = false
     )
     {
         return NewController(
             new UISettingsService(dbContext, NullLogger<UISettingsService>.Instance),
-            configuration
+            demoMode
         );
     }
 
@@ -54,7 +52,32 @@ internal static class UISettingsControllerHarness
 
     internal static UISettingsController NewController(
         IUISettingsService settingsService,
-        params (string Key, string Value)[] configuration
+        bool demoMode = false
+    )
+    {
+        return NewController(settingsService, DemoMode(demoMode), Mock.Of<IHttpClientFactory>());
+    }
+
+    /// <summary>
+    /// Demo mode as <see cref="IDemoModeService"/> reports it. Without a service URL the controller
+    /// has nothing to proxy to and serves its own demo fixtures.
+    /// </summary>
+    internal static IDemoModeService DemoMode(bool enabled, string? serviceUrl = null)
+    {
+        var demoMode = new Mock<IDemoModeService>();
+        demoMode.SetupGet(d => d.IsEnabled).Returns(enabled);
+        demoMode
+            .SetupGet(d => d.IsConfigured)
+            .Returns(enabled && !string.IsNullOrWhiteSpace(serviceUrl));
+        demoMode.SetupGet(d => d.ServiceUrl).Returns(serviceUrl);
+
+        return demoMode.Object;
+    }
+
+    internal static UISettingsController NewController(
+        IUISettingsService settingsService,
+        IDemoModeService demoMode,
+        IHttpClientFactory httpClientFactory
     )
     {
         var services = new ServiceCollection();
@@ -62,12 +85,8 @@ internal static class UISettingsControllerHarness
 
         return new UISettingsController(
             NullLogger<UISettingsController>.Instance,
-            new ConfigurationBuilder()
-                .AddInMemoryCollection(
-                    configuration.Select(c => new KeyValuePair<string, string?>(c.Key, c.Value))
-                )
-                .Build(),
-            Mock.Of<IHttpClientFactory>(),
+            demoMode,
+            httpClientFactory,
             settingsService
         )
         {
