@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Widget;
 
 namespace Nocturne.Widget.Windows11;
@@ -13,8 +14,8 @@ namespace Nocturne.Widget.Windows11;
 /// </summary>
 internal static class GlucoseSparkline
 {
-    private const double TargetLow = 70;
-    private const double TargetHigh = 180;
+    private const double TargetLow = GlucoseConstants.TargetBottomMgdl;
+    private const double TargetHigh = GlucoseConstants.TargetTopMgdl;
 
     private static readonly Color InRange = Color.FromArgb(255, 34, 197, 94);     // green
     private static readonly Color Low = Color.FromArgb(255, 239, 68, 68);         // red

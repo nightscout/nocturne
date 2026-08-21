@@ -7,14 +7,14 @@ namespace Nocturne.Core.Constants.Tests;
 
 /// <summary>
 /// TypeScript, Rust and the Windhawk mod cannot link the constants that decide how a reading is
-/// rendered, so each declares its own copy: the mg/dL-per-mmol factor, the target range that splits
-/// low from in-range from high, and the tile colour per status. Drift is invisible at build time and
-/// silent at runtime — a factor off by 1 part in 7,000 moves a rounded mmol reading, and a range or
-/// colour off by any amount means two surfaces describe the same reading differently. Each theory
-/// reads the declaration out of its source file and fails on the difference; a declaration that has
-/// been renamed or deleted fails too, so no case can pass by matching nothing. The mod is covered
-/// twice over — the settings block Windhawk parses and the fallback the mod compiles in — because
-/// either alone leaves a default that nothing checks.
+/// rendered, so each declares its own copy of the ones it needs: the mg/dL-per-mmol factor, the
+/// target range that splits low from in-range from high, and the tile colour per status. Drift is
+/// invisible at build time and silent at runtime — a factor off by 1 part in 7,000 moves a rounded
+/// mmol reading, and a range or colour off by any amount means two surfaces describe the same
+/// reading differently. Each theory reads the declaration out of its source file and fails on the
+/// difference; a declaration that has been renamed or deleted fails too, so no case can pass by
+/// matching nothing. The mod is covered twice over — the settings block Windhawk parses and the
+/// fallback the mod compiles in — because either alone leaves a default that nothing checks.
 /// </summary>
 public class GlucoseMirrorTests
 {
@@ -75,9 +75,6 @@ public class GlucoseMirrorTests
 
     public static TheoryData<string, string, string> PaletteDeclarations() => new()
     {
-        { UiGlucose, UiColor("inRange"), GlucoseConstants.StatusPalette.InRange },
-        { UiGlucose, UiColor("high"), GlucoseConstants.StatusPalette.High },
-        { UiGlucose, UiColor("low"), GlucoseConstants.StatusPalette.Low },
         { TrayIcon, RustColor("COLOR_IN_RANGE"), GlucoseConstants.StatusPalette.InRange },
         { TrayIcon, RustColor("COLOR_HIGH"), GlucoseConstants.StatusPalette.High },
         { TrayIcon, RustColor("COLOR_LOW"), GlucoseConstants.StatusPalette.Low },
@@ -95,8 +92,6 @@ public class GlucoseMirrorTests
     {
         ReadHex(relativePath, pattern).Should().Be(expected);
     }
-
-    private static string UiColor(string key) => $@"{key}: ""#([0-9A-Fa-f]{{6}})"",";
 
     private static string RustColor(string name) =>
         $@"const {name}: \(u8, u8, u8\) = \(0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}})\);";

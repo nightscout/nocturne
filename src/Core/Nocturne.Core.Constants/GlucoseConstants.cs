@@ -23,9 +23,9 @@ public static class GlucoseConstants
     public const double TargetTopMgdl = 180;
 
     /// <summary>
-    /// Tile fill per glucose status as <c>RRGGBB</c>, for the surfaces that draw a reading as a
-    /// block of colour rather than a themed element: the web glucose icon, the desktop tray tile and
-    /// the taskbar sparkline.
+    /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading
+    /// directly — the desktop tray tile and the taskbar sparkline — instead of resolving the web
+    /// theme's status tokens.
     /// </summary>
     public static class StatusPalette
     {
