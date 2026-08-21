@@ -149,14 +149,6 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>, IDevic
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Count <see cref="SensorGlucose"/> records matching the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier (e.g., connector name).</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of matching records.</returns>
-    Task<int> CountBySourceAsync(string source, CancellationToken ct = default);
-
-    /// <summary>
     /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
     /// </summary>
     /// <param name="source">Data source identifier (e.g., connector name).</param>

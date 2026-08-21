@@ -442,21 +442,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     }
 
     /// <summary>
-    /// Counts sensor glucose records for the given data source.
-    /// </summary>
-    /// <param name="source">Data source identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>Number of matching records.</returns>
-    public async Task<int> CountBySourceAsync(string source, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.SensorGlucose
-            .AsNoTracking()
-            .FromSource(source)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
     /// Deletes all sensor glucose records for the given data source.
     /// </summary>
     /// <param name="source">Data source identifier.</param>
