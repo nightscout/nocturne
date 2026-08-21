@@ -38,6 +38,13 @@ export default {
     // message to the user. Falls through to a 500 with the extracted message
     // so the real error is still visible in dev.
     //
+    // 429 is forwarded too, and with a fixed reason rather than the extracted
+    // message: the rate limiter's body declares no typed schema, so NSwag
+    // supplies its own "status code was not expected" text, and flattened to a
+    // 500 the status a caller needs to tell "you were throttled" from "this
+    // failed" never reaches the browser. `describeSubmitError` and
+    // `remoteErrorMessage` resolve the wording from the status.
+    //
     // NSwag throws ProblemDetails directly (not wrapped in ApiException) for
     // responses that declare a typed error schema, so the title/detail/errors
     // fields live on `err` itself — not on `err.body` or `err.response`.
@@ -47,6 +54,7 @@ export default {
       `    const errors = body?.errors ?? e?.errors;\n` +
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;\n` +
+      `    if (status === 429) throw error(429, 'Too many requests');\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
   },
