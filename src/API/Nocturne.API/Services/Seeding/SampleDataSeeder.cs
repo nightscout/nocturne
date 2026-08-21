@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
 
@@ -466,9 +467,7 @@ public class SampleDataSeeder
             }
 
             // Rebuild instances from the schedule (idempotent re-seed).
-            await _db.TrackerInstances
-                .Where(i => i.DefinitionId == definition.Id)
-                .ExecuteDeleteAsync(ct);
+            await _db.TrackerInstances.PurgeAsync(i => i.DefinitionId == definition.Id, ct);
 
             var changes = schedule
                 .Where(e => e.EventType == spec.TriggerEventType)
@@ -548,12 +547,9 @@ public class SampleDataSeeder
 
         // Rebuild alarm history for the seeded rules (idempotent re-seed).
         var seededRuleIds = rulesByName.Values.Select(r => r.Id).ToList();
-        await _db.AlertInstances
-            .Where(i => i.AlertExcursion != null && seededRuleIds.Contains(i.AlertExcursion.AlertRuleId))
-            .ExecuteDeleteAsync(ct);
-        await _db.AlertExcursions
-            .Where(e => seededRuleIds.Contains(e.AlertRuleId))
-            .ExecuteDeleteAsync(ct);
+        await _db.AlertInstances.PurgeAsync(
+            i => i.AlertExcursion != null && seededRuleIds.Contains(i.AlertExcursion.AlertRuleId), ct);
+        await _db.AlertExcursions.PurgeAsync(e => seededRuleIds.Contains(e.AlertRuleId), ct);
 
         var excursionsCreated = 0;
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmEpisodes))
@@ -673,9 +669,7 @@ public class SampleDataSeeder
                 .Select(c => new { c.Id, c.Timestamp, c.Carbs })
                 .ToListAsync(ct);
             var linkedIntakeIds = intakes.Select(i => i.Id).ToList();
-            await _db.TreatmentFoods
-                .Where(tf => linkedIntakeIds.Contains(tf.CarbIntakeId))
-                .ExecuteDeleteAsync(ct);
+            await _db.TreatmentFoods.PurgeAsync(tf => linkedIntakeIds.Contains(tf.CarbIntakeId), ct);
 
             foreach (var (time, mealName) in mealCarbLinks)
             {
@@ -720,9 +714,7 @@ public class SampleDataSeeder
     private async Task<int> SeedStateSpansAsync(
         DateTime localToday, int days, string dataSource, CancellationToken ct)
     {
-        await _db.StateSpans
-            .Where(s => s.Source == dataSource)
-            .ExecuteDeleteAsync(ct);
+        await _db.StateSpans.PurgeAsync(s => s.Source == dataSource, ct);
 
         var spans = DemoLifestyleSeeds.BuildSpans(localToday, days);
         foreach (var seed in spans)
@@ -959,9 +951,7 @@ public class SampleDataSeeder
             return 0;
 
         var userId = owner.ToString();
-        await _db.InAppNotifications
-            .Where(n => n.UserId == userId && n.Source == "sample-seed")
-            .ExecuteDeleteAsync(ct);
+        await _db.InAppNotifications.PurgeAsync(n => n.UserId == userId && n.Source == "sample-seed", ct);
 
         var created = 0;
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmNotifications))

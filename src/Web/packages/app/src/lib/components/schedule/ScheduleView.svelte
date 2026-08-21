@@ -13,8 +13,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Plus, Trash2 } from "lucide-svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-
-  const MGDL_TO_MMOL = 18.01559;
+  import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
 
   interface ScheduleEntry {
     time?: string;
@@ -90,11 +89,11 @@
     }
 
     if (src === "mgdl" && dst === "mmol") {
-      return Math.round((value / MGDL_TO_MMOL) * 10) / 10;
+      return Math.round((value / MGDL_PER_MMOL) * 10) / 10;
     }
 
     if (src === "mmol" && dst === "mgdl") {
-      return Math.round(value * MGDL_TO_MMOL);
+      return Math.round(value * MGDL_PER_MMOL);
     }
 
     return value;

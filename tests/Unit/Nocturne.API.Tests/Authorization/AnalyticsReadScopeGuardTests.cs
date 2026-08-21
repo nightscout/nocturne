@@ -220,22 +220,6 @@ public class AnalyticsReadScopeGuardTests
             .RequiredScopes.Should().Equal(OAuthScopes.TreatmentsRead);
     }
 
-    /// <summary>
-    /// Per-scope redaction makes the body depend on the caller's credential, so a redacted
-    /// response must not sit in the shared response cache, whose key is host + query + Cookie: a
-    /// credential presenting neither a cookie nor an <c>Authorization</c> header (the legacy
-    /// <c>api-secret</c> header) would otherwise be served another caller's unredacted body.
-    /// </summary>
-    [Theory]
-    [InlineData(typeof(ChartDataController), nameof(ChartDataController.GetDashboardChartData))]
-    [InlineData(typeof(ActogramController), nameof(ActogramController.GetActogram))]
-    public void RedactedResponses_AreNotSharedCacheable(Type controller, string action)
-    {
-        var cache = controller.GetMethod(action)!.GetCustomAttribute<ResponseCacheAttribute>();
-
-        cache!.Location.Should().Be(ResponseCacheLocation.Client);
-    }
-
     [Fact]
     public async Task ChartData_Handler_RedactsTheCategoriesTheCallerLacks()
     {

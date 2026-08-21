@@ -37,8 +37,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
     {
         var initScriptPath = ResolveInitScriptPath();
 
-        _container = new PostgreSqlBuilder()
-            .WithImage("postgres:17.6")
+        _container = new PostgreSqlBuilder("postgres:17.6")
             .WithDatabase(DbName)
             .WithUsername(BootstrapUser)
             .WithPassword(BootstrapPassword)

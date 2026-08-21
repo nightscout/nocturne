@@ -10,18 +10,23 @@
         <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Tests" />
     </ItemGroup>
     <ItemGroup>
+        <!-- IHttpContextAccessor, for the reason given on MutationAuditInterceptor. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
-        <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-        <!-- Added for design-time configuration loading -->
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-        <!-- Added to take vulnerability patched version -->
-        <PackageReference Include="System.Security.Cryptography.Xml" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Microsoft.AspNetCore.App supplies the assembly, so this reference delivers nothing and
+             NuGet reports it as redundant (NU1510). It stays because NuGet audits the pre-pruning
+             graph: without it the transitive resolves to the 10.0.8 that GHSA-23rf-6693-g89p and
+             four sibling advisories cover, and the solution restore reports 120 NU1903. Deleting it
+             needs the EF Core family on 10.0.10 first, so that Microsoft.AspNetCore.DataProtection
+             10.0.10 can carry the fixed transitive without an NU1605 downgrade. -->
+        <PackageReference Include="System.Security.Cryptography.Xml" NoWarn="NU1510" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />

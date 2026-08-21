@@ -11,6 +11,7 @@ import {
   COOKIE_REFRESH_TOKEN_NAME,
   COOKIE_PLATFORM_ACCESS_NAME,
   COOKIE_GUEST_SESSION_NAME,
+  COOKIE_RECOVERY_SESSION_NAME,
 } from "./constants";
 
 export function getAccessTokenCookieName(): string {
@@ -26,6 +27,7 @@ export const AUTH_COOKIE_NAMES = {
   refreshToken: COOKIE_REFRESH_TOKEN_NAME,
   platformAccess: COOKIE_PLATFORM_ACCESS_NAME,
   guestSession: COOKIE_GUEST_SESSION_NAME,
+  recoverySession: COOKIE_RECOVERY_SESSION_NAME,
   isAuthenticated: "IsAuthenticated",
 } as const;
 

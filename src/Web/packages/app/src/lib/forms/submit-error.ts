@@ -2,6 +2,10 @@
 export const GENERIC_SUBMIT_ERROR =
   "We couldn't save your changes. Please try again.";
 
+/** Shown when a rate limiter turned the attempt away, so the credential is unspent. */
+export const RATE_LIMITED_ERROR =
+  "Too many attempts. Please wait a few minutes and try again.";
+
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
   if (err && typeof err === "object" && "status" in err) {

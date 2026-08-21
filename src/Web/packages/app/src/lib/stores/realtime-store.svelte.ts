@@ -90,6 +90,9 @@ export class RealtimeStore {
   /** Live sync progress by connector ID (from SignalR sync progress events) */
   syncProgressByConnector = $state<Record<string, SyncProgressEvent>>({});
 
+  /** How long a completed/failed sync stays on screen before the entry is dropped. */
+  private static readonly TERMINAL_SYNC_PROGRESS_LINGER_MS = 2_000;
+
   /** Bound event handlers for cleanup */
   private handleVisibilityChange: (() => void) | null = null;
   private handleWindowFocus: (() => void) | null = null;
@@ -185,8 +188,12 @@ export class RealtimeStore {
     return this.currentBG - this.previousBG;
   });
 
-  /** Direction and trend */
-  direction = $derived(this.currentEntry?.direction || "Flat");
+  /**
+   * Trend direction exactly as the reading carried it, empty when it carried none.
+   * Consumers render the unknown state; substituting a drawable direction here would
+   * report a trend the CGM never sent.
+   */
+  direction = $derived(this.currentEntry?.direction ?? "");
 
   /** Time since last update */
   lastUpdated = $derived(this.currentEntry?.mills || Date.now());
@@ -518,16 +525,16 @@ export class RealtimeStore {
     });
 
     this.websocketClient.on("syncProgress", (event: SyncProgressEvent) => {
-      if (event.phase === "Syncing") {
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-      } else {
-        // Show completed/failed state briefly, then clear
-        this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
-        setTimeout(() => {
-          const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
-          this.syncProgressByConnector = rest;
-        }, 2000);
-      }
+      this.syncProgressByConnector = { ...this.syncProgressByConnector, [event.connectorId]: event };
+      if (event.phase === "Syncing") return;
+
+      // Show the completed/failed state briefly, then clear — unless a new run for the same
+      // connector has already replaced it.
+      setTimeout(() => {
+        if (this.syncProgressByConnector[event.connectorId] !== event) return;
+        const { [event.connectorId]: _, ...rest } = this.syncProgressByConnector;
+        this.syncProgressByConnector = rest;
+      }, RealtimeStore.TERMINAL_SYNC_PROGRESS_LINGER_MS);
     });
 
   }
@@ -1181,6 +1188,7 @@ export function tryGetRealtimeStore(): RealtimeStore | null {
 export interface ClockGlucoseSource {
   readonly currentBG: number;
   readonly bgDelta: number;
+  /** Empty when the reading carried no direction. */
   readonly direction: string;
   readonly lastUpdated: number;
   readonly demoMode: boolean;

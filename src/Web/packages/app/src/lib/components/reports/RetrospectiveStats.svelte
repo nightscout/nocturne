@@ -6,14 +6,12 @@
     Droplet,
     Syringe,
     Apple,
-    TrendingUp,
-    TrendingDown,
-    Minus,
     Activity,
     AlertTriangle,
     RefreshCw,
   } from "lucide-svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { getDirectionInfo } from "$lib/utils";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import { getRetrospectiveData } from "$api/generated/retrospectives.generated.remote";
 
@@ -38,23 +36,6 @@
       minute: "2-digit",
     })
   );
-
-  // Trend arrow component
-  function getTrendIcon(direction: string | null | undefined) {
-    if (!direction) return Minus;
-    const dir = direction.toLowerCase();
-    if (dir.includes("up") || dir.includes("rising")) return TrendingUp;
-    if (dir.includes("down") || dir.includes("falling")) return TrendingDown;
-    return Minus;
-  }
-
-  function getTrendColor(direction: string | null | undefined): string {
-    if (!direction) return "text-muted-foreground";
-    const dir = direction.toLowerCase();
-    if (dir.includes("up") || dir.includes("rising")) return "text-yellow-500";
-    if (dir.includes("down") || dir.includes("falling")) return "text-red-500";
-    return "text-green-500";
-  }
 </script>
 
 {#if !retrospectiveQuery.current && !retrospectiveQuery.error}
@@ -138,19 +119,16 @@
             <span class="text-xs font-medium">Glucose</span>
           </div>
           {#if data?.glucose}
-            {@const TrendIcon = getTrendIcon(data.glucose.direction)}
+            {@const trend = getDirectionInfo(data.glucose.direction)}
+            {@const TrendIcon = trend.icon}
             <div class="flex items-center gap-1">
               <span class="text-2xl font-bold tabular-nums">
                 {formatGlucoseValue(data.glucose.value ?? 0, units)}
               </span>
               <span class="text-sm text-muted-foreground">{unitLabel}</span>
             </div>
-            <div
-              class="flex items-center gap-1 text-sm {getTrendColor(
-                data.glucose.direction
-              )}"
-            >
-              <TrendIcon class="h-4 w-4" />
+            <div class="flex items-center gap-1 text-sm {trend.css}">
+              <TrendIcon class="h-4 w-4" aria-label={trend.label} />
               {#if data.glucose.delta !== null && data.glucose.delta !== undefined}
                 <span class="tabular-nums">
                   {data.glucose.delta > 0 ? "+" : ""}{formatGlucoseValue(

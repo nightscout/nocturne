@@ -3,8 +3,9 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
-/// Complete UI settings configuration that can be served to frontend clients.
-/// This model aggregates all settings pages data - devices, algorithm, features, notifications, and services.
+/// Complete UI settings configuration that can be served to frontend clients. It aggregates the
+/// settings pages listed in <see cref="UISettingsSections"/>, each of which is separately
+/// addressable and separately persisted.
 /// In demo mode, these are generated from demo configuration; in production, they come from the database.
 /// Note: Therapy settings are managed via Nightscout Profiles (/api/v1/profile).
 /// </summary>

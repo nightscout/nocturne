@@ -102,6 +102,21 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
+    /// The coarse substitute for per-record delete events when a delete matched more rows than
+    /// <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/>: the legacy entries sink's
+    /// collection-level bulk-delete signal (cache invalidation plus a count-only storage-delete
+    /// broadcast). The native V4 port has no coarse form — <see cref="IV4RecordBroadcaster{TModel}"/>
+    /// carries record ids only — so V4 subscribers see no delete event and converge on their next read.
+    /// </summary>
+    private async Task RaiseBulkDeleteBroadcastAsync(int deletedCount, WriteOrigin origin, CancellationToken ct)
+    {
+        if (origin != WriteOrigin.Live || _entrySink is null || deletedCount <= 0)
+            return;
+
+        await _entrySink.OnBulkDeletedAsync(deletedCount, ct);
+    }
+
+    /// <summary>
     /// Projects glucose-family writes to the legacy <see cref="Entry"/> shape and fires the legacy entry
     /// sink — gated to <see cref="WriteOrigin.Live"/>, and a no-op when no sink is wired or the type has no
     /// projection (<see cref="ProjectToLegacyEntry"/> returns null).
@@ -328,11 +343,15 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.AuditedSoftDeleteWithEntitiesAsync(
-            ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, ct);
-        var models = entities.Select(ToDomain).ToList();
-        await RaiseBroadcastAsync([], [], models, origin, ct);
-        return models.Count;
+        var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(
+            ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, $"legacy_id={legacyId}", ct);
+
+        if (result.Collapsed)
+            await RaiseBulkDeleteBroadcastAsync(result.Count, origin, ct);
+        else
+            await RaiseBroadcastAsync([], [], result.Entities.Select(ToDomain).ToList(), origin, ct);
+
+        return result.Count;
     }
 
     /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>

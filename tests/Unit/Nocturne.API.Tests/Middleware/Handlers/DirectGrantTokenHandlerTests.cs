@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.Sqlite;
@@ -22,6 +23,9 @@ public class DirectGrantTokenHandlerTests : IDisposable
 
     private readonly Guid _testTenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
+
+    private static readonly DateTime Now = new(2026, 8, 17, 12, 0, 0, DateTimeKind.Utc);
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(Now, TimeSpan.Zero));
 
     public DirectGrantTokenHandlerTests()
     {
@@ -60,7 +64,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
             .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = _testTenantId });
 
         var logger = new Mock<ILogger<DirectGrantTokenHandler>>();
-        _handler = new DirectGrantTokenHandler(_dbContextFactory.Object, logger.Object);
+        _handler = new DirectGrantTokenHandler(_dbContextFactory.Object, _clock, logger.Object);
     }
 
     public void Dispose()
@@ -257,6 +261,75 @@ public class DirectGrantTokenHandlerTests : IDisposable
 
         Assert.True(result.ShouldSkip);
         Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiringOneTickFromNow_ReturnsSuccess()
+    {
+        var token = await SeedGrantAsync("noc_expiringtoken001", Now.AddTicks(1));
+
+        var result = await _handler.AuthenticateAsync(BearerContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiringExactlyNow_ReturnsSkip()
+    {
+        var token = await SeedGrantAsync("noc_expiringtoken002", Now);
+
+        var result = await _handler.AuthenticateAsync(BearerContext(token));
+
+        Assert.True(result.ShouldSkip);
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiredOneTickAgo_ReturnsSkip()
+    {
+        var token = await SeedGrantAsync("noc_expiringtoken003", Now.AddTicks(-1));
+
+        var result = await _handler.AuthenticateAsync(BearerContext(token));
+
+        Assert.True(result.ShouldSkip);
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantWithNoExpiry_ReturnsSuccessYearsAfterCreation()
+    {
+        var token = await SeedGrantAsync("noc_openendedtoken01", expiresAt: null, createdAt: Now.AddYears(-5));
+
+        var result = await _handler.AuthenticateAsync(BearerContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    private async Task<string> SeedGrantAsync(string token, DateTime? expiresAt, DateTime? createdAt = null)
+    {
+        await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId };
+        ctx.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _subjectId,
+            TenantId = _testTenantId,
+            GrantType = OAuthGrantTypes.Direct,
+            TokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token),
+            Scopes = ["glucose.read"],
+            CreatedAt = createdAt ?? Now,
+            ExpiresAt = expiresAt,
+        });
+        await ctx.SaveChangesAsync();
+        return token;
+    }
+
+    private DefaultHttpContext BearerContext(string token)
+    {
+        var context = CreateHttpContext();
+        context.Request.Headers.Authorization = $"Bearer {token}";
+        return context;
     }
 
     [Fact]

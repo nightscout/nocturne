@@ -306,13 +306,18 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
+    /// <remarks>
+    /// Above <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> the ids are not
+    /// materialized and no delete event fires: temp basals ride only the native V4 port, which has no
+    /// coarse collection-level signal to fall back to (unlike the glucose family's entries sink).
+    /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var deletedIds = await ctx.AuditedSoftDeleteWithIdsAsync(
-            ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, ct);
-        await RaiseBroadcastAsync([], [], deletedIds, origin, ct);
-        return deletedIds.Count;
+        var result = await ctx.AuditedSoftDeleteWithIdsAsync(
+            ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, $"legacy_id={legacyId}", ct);
+        await RaiseBroadcastAsync([], [], result.Entities, origin, ct);
+        return result.Count;
     }
 
     /// <summary>
@@ -446,7 +451,7 @@ public class TempBasalRepository : ITempBasalRepository
             ctx.TempBasals.Where(e => e.DataSource == source
                 && e.StartTimestamp >= from && e.StartTimestamp <= to
                 && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
-            _auditContext, ct);
+            _auditContext, $"data_source={source}", ct);
     }
 
     /// <inheritdoc />

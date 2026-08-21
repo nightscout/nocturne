@@ -1,3 +1,5 @@
+using Nocturne.Core.Constants;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -11,10 +13,9 @@ namespace Nocturne.Core.Models.V4;
 /// computed properties that normalize to both unit systems.
 /// </para>
 /// <para>
-/// <see cref="Mgdl"/> is computed as: if <see cref="Units"/> is <see cref="GlucoseUnit.Mmol"/>,
-/// then <c>Glucose * 18.0182</c>; otherwise <c>Glucose</c> as-is.
-/// <see cref="Mmol"/> is the inverse: if already mmol/L, returns <c>Glucose</c>; otherwise
-/// <c>Glucose / 18.0182</c>.
+/// <see cref="Mgdl"/> and <see cref="Mmol"/> convert through
+/// <see cref="GlucoseConstants.MgdlPerMmol"/> when <see cref="Units"/> is not already the
+/// requested unit.
 /// </para>
 /// </remarks>
 /// <seealso cref="Treatment"/>
@@ -98,18 +99,14 @@ public class BGCheck : IV4Record
     /// <summary>
     /// Glucose in mg/dL, computed from <see cref="Glucose"/> and <see cref="Units"/>.
     /// </summary>
-    /// <remarks>
-    /// Computed as <c>Units == GlucoseUnit.Mmol ? Glucose * 18.0182 : Glucose</c>.
-    /// </remarks>
-    public double Mgdl => Units == GlucoseUnit.Mmol ? Glucose * 18.0182 : Glucose;
+    public double Mgdl =>
+        Units == GlucoseUnit.Mmol ? Glucose * GlucoseConstants.MgdlPerMmol : Glucose;
 
     /// <summary>
     /// Glucose in mmol/L, computed from <see cref="Glucose"/> and <see cref="Units"/>.
     /// </summary>
-    /// <remarks>
-    /// Computed as <c>Units == GlucoseUnit.Mmol ? Glucose : Glucose / 18.0182</c>.
-    /// </remarks>
-    public double Mmol => Units == GlucoseUnit.Mmol ? Glucose : Glucose / 18.0182;
+    public double Mmol =>
+        Units == GlucoseUnit.Mmol ? Glucose : Glucose / GlucoseConstants.MgdlPerMmol;
 
     /// <summary>
     /// APS system sync/deduplication identifier (used by Loop and AAPS)

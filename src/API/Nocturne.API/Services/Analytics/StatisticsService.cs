@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -2578,7 +2579,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Glucose value in mmol/L</returns>
     public double MgdlToMMOL(double mgdl)
     {
-        return Math.Round((mgdl / 18.01559) * 10) / 10;
+        return Math.Round((mgdl / GlucoseConstants.MgdlPerMmol) * 10) / 10;
     }
 
     /// <summary>
@@ -2588,7 +2589,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Glucose value in mg/dL</returns>
     public double MmolToMGDL(double mmol)
     {
-        return Math.Round(mmol * 18.01559);
+        return Math.Round(mmol * GlucoseConstants.MgdlPerMmol);
     }
 
     /// <summary>

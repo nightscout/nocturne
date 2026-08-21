@@ -64,12 +64,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         return Task.FromResult(true);
     }
 
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        // MFP doesn't provide glucose data
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
-
     /// <summary>
     /// Entry point for the scheduled sync.
     /// </summary>
@@ -95,9 +89,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 

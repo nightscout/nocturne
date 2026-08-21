@@ -16,8 +16,6 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <remarks>
 /// Inherits standard list, get-by-ID, create, update, and delete operations from
 /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
-/// The <c>GetAll</c> response is cached for 120 seconds with vary-by-query-keys to minimise
-/// database pressure when the dashboard polls for calibration data.
 /// </remarks>
 /// <seealso cref="ICalibrationRepository"/>
 /// <seealso cref="Calibration"/>
@@ -36,8 +34,11 @@ public class CalibrationController(ICalibrationRepository repo)
     public override string WriteScope => OAuthScopes.GlucoseReadWrite;
 
     /// <inheritdoc/>
-    /// <remarks>Response is cached for 120 seconds, varied by all query parameters.</remarks>
-    [ResponseCache(Duration = 120, VaryByQueryKeys = new[] { "*" })]
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a calibration the
+    /// patient just entered must not be invisible until a cached list body expires.
+    /// </remarks>
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public override Task<ActionResult<PaginatedResponse<Calibration>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,

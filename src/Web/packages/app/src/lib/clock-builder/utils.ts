@@ -31,29 +31,6 @@ export function getBgColor(bg: number): string {
 }
 
 /**
- * Get rotation degrees for Lucide arrow based on direction
- */
-export function getDirectionRotation(direction: string): number {
-  const rotations: Record<string, number> = {
-    DoubleUp: 0,
-    SingleUp: 0,
-    FortyFiveUp: 45,
-    Flat: 90,
-    FortyFiveDown: 135,
-    SingleDown: 180,
-    DoubleDown: 180,
-  };
-  return rotations[direction] ?? 90;
-}
-
-/**
- * Check if direction is double arrow
- */
-export function isDoubleArrow(direction: string): boolean {
-  return direction === "DoubleUp" || direction === "DoubleDown";
-}
-
-/**
  * Get tracker name from definition ID
  */
 export function getTrackerName(

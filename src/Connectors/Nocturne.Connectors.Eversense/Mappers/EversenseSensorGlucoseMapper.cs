@@ -8,8 +8,9 @@ namespace Nocturne.Connectors.Eversense.Mappers;
 public class EversenseSensorGlucoseMapper(ILogger logger)
 {
     /// <summary>
-    /// Eversense trend values mapped to GlucoseDirection.
-    /// Mapping verified via LoopKit GlucoseTrend enum and the EversenseNowClient trendmap.
+    /// Eversense trend values mapped to GlucoseDirection. The wire value is the ordinal of the
+    /// Eversense app's own ARROW_TYPE enum, which runs falling-to-rising — the inverse of LoopKit's
+    /// GlucoseTrend, so this table reads as reversed if checked against LoopKit.
     /// </summary>
     private static readonly Dictionary<int, GlucoseDirection> TrendDirections = new()
     {
@@ -22,8 +23,6 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
         { 6, GlucoseDirection.DoubleDown },
         { 7, GlucoseDirection.DoubleUp },
     };
-
-    private const double MmolToMgdlFactor = 18.0182;
 
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -38,7 +37,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
             }
 
             var mgdl = patient.Units == 1
-                ? patient.CurrentGlucose * MmolToMgdlFactor
+                ? patient.CurrentGlucose * GlucoseConstants.MgdlPerMmol
                 : (double)patient.CurrentGlucose;
 
             var direction = TrendDirections.GetValueOrDefault(patient.GlucoseTrend, GlucoseDirection.None);

@@ -399,7 +399,8 @@ public class StateSpanRepository : IStateSpanRepository
     )
     {
         var deletedCount = await _context.AuditedSoftDeleteAsync(
-            _context.StateSpans.Where(s => s.Source == source), _auditContext, cancellationToken);
+            _context.StateSpans.Where(s => s.Source == source), _auditContext,
+            $"data_source={source}", cancellationToken);
         return deletedCount;
     }
 

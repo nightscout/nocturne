@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -15,6 +16,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Models.Timezones;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.Glooko.Tests.Services;
@@ -82,15 +84,16 @@ public class GlookoConnectorServiceStateIsolationTests
         var configA = BuildConfig("a@example.com", GlookoConstants.RegionEU, includeCgmBackfill: true);
         var configB = BuildConfig("b@example.com", GlookoConstants.RegionUS, includeCgmBackfill: true);
 
-        var results = await Task.WhenAll(
+        await Task.WhenAll(
             RunSyncAsync(service, TenantA, configA),
             RunSyncAsync(service, TenantB, configB));
 
         handler.RunsOverlapped.Should().BeTrue(
             "the runs must actually overlap for the timeline isolation to be under test");
 
-        results[0].LastEntryTimes[SyncDataType.Glucose].Should().Be(SydneyUtc);
-        results[1].LastEntryTimes[SyncDataType.Glucose].Should().Be(TorontoUtc);
+        service.PublishedGlucose.Should().BeEquivalentTo(
+            new[] { (TenantA, SydneyUtc), (TenantB, TorontoUtc) },
+            "each run must resolve the reading through its own tenant's timeline");
     }
 
     /// <summary>
@@ -155,7 +158,7 @@ public class GlookoConnectorServiceStateIsolationTests
         V3IncludeCgmBackfill = includeCgmBackfill,
     };
 
-    private static GlookoConnectorService BuildService(
+    private static CapturingGlookoConnectorService BuildService(
         InterleavingHandler handler, ITimezoneTimelineService? timezoneTimelineService = null) =>
         new(
             new HttpClient(handler),
@@ -164,7 +167,35 @@ public class GlookoConnectorServiceStateIsolationTests
             Mock.Of<IRetryDelayStrategy>(),
             Mock.Of<IRateLimitingStrategy>(),
             new PerTenantGlookoTokenProvider(),
-            timezoneTimelineService: timezoneTimelineService);
+            timezoneTimelineService);
+
+    /// <summary>
+    /// Records the tenant each published reading was published under. The publish sink is the only
+    /// place a run's resolved timezone timeline is observable from outside the service.
+    /// </summary>
+    private sealed class CapturingGlookoConnectorService(
+        HttpClient httpClient,
+        IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
+        ILogger<GlookoConnectorService> logger,
+        IRetryDelayStrategy retryDelayStrategy,
+        IRateLimitingStrategy rateLimitingStrategy,
+        GlookoAuthTokenProvider tokenProvider,
+        ITimezoneTimelineService? timezoneTimelineService)
+        : GlookoConnectorService(httpClient, serverResolver, logger, retryDelayStrategy,
+            rateLimitingStrategy, tokenProvider, timezoneTimelineService: timezoneTimelineService)
+    {
+        public ConcurrentBag<(Guid TenantId, DateTime Timestamp)> PublishedGlucose { get; } = [];
+
+        protected override Task<bool> PublishSensorGlucoseDataAsync(
+            IEnumerable<SensorGlucose> records,
+            GlookoConnectorConfiguration config,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var record in records)
+                PublishedGlucose.Add((AmbientTenant.Id, record.Timestamp));
+            return Task.FromResult(true);
+        }
+    }
 
     /// <summary>
     /// The tenant each run is pinned to, per async flow — standing in for the per-tenant DI scope a

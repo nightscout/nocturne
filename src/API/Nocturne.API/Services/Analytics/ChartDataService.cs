@@ -146,7 +146,7 @@ public class ChartDataService : IChartDataService
             {
                 Time = r.Mills,
                 Sgv = r.Mgdl,
-                Direction = r.Direction?.ToString(),
+                Direction = r.Direction?.ToWireString(),
                 DataSource = r.DataSource ?? r.Device,
             })
             .ToList(); // Already sorted

@@ -207,34 +207,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets the direction as a strongly-typed enum value
     /// </summary>
     [JsonIgnore]
-    public Models.Direction DirectionEnum => ParseDirection(Direction);
-
-    /// <summary>
-    /// Parse direction string to enum - handles legacy string values
-    /// </summary>
-    private static Models.Direction ParseDirection(string? directionString)
-    {
-        if (string.IsNullOrEmpty(directionString))
-            return Models.Direction.NONE;
-
-        return directionString switch
-        {
-            "NONE" => Models.Direction.NONE,
-            "TripleUp" => Models.Direction.TripleUp,
-            "DoubleUp" => Models.Direction.DoubleUp,
-            "SingleUp" => Models.Direction.SingleUp,
-            "FortyFiveUp" => Models.Direction.FortyFiveUp,
-            "Flat" => Models.Direction.Flat,
-            "FortyFiveDown" => Models.Direction.FortyFiveDown,
-            "SingleDown" => Models.Direction.SingleDown,
-            "DoubleDown" => Models.Direction.DoubleDown,
-            "TripleDown" => Models.Direction.TripleDown,
-            "NOT COMPUTABLE" => Models.Direction.NotComputable,
-            "RATE OUT OF RANGE" => Models.Direction.RateOutOfRange,
-            "CGM ERROR" => Models.Direction.CgmError,
-            _ => Models.Direction.NONE,
-        };
-    }
+    public Models.Direction DirectionEnum => DirectionExtensions.Parse(Direction);
 
     /// <summary>
     /// Gets or sets the entry type (e.g., "sgv", "cal", "mbg")

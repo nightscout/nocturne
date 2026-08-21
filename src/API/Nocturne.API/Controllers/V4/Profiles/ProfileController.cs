@@ -78,10 +78,12 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// </summary>
     [HttpGet("summary")]
     [RemoteQuery]
-    // Never cached: profile mutations invalidate the client-side query, but a
-    // cached body could answer the refetch with therapy settings up to the cache
-    // duration old, so edited target ranges and the active-profile badge would
-    // read as unchanged. Matches PredictionController.GetProfileSnapshot.
+    // Never cached: UseResponseCaching keys only on host + query + Cookie, so a mutation that
+    // correctly invalidates its client-side query can still have the refetch answered from a body
+    // up to the cache duration old — an edited target range, the active-profile badge, or a
+    // just-entered record reads as unchanged. Every per-user therapy and glucose read that a
+    // caller can mutate carries this attribute for that reason.
+    // Matches PredictionController.GetProfileSnapshot.
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<ProfileSummary>> GetProfileSummary(

@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Services.Audit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -1519,44 +1520,38 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var scope = $"legacy_id={legacyId}";
+        var deleted = 0;
 
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
-            var now = DateTime.UtcNow;
-            var deleted = 0;
+        deleted += await DeleteRecordsByLegacyId(_dbContext.Boluses, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.TempBasals, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.CarbIntakes, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.BGChecks, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.Notes, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.DeviceEvents, legacyId, scope, ct);
+        deleted += await DeleteRecordsByLegacyId(_dbContext.BolusCalculations, legacyId, scope, ct);
 
-            deleted += await _dbContext.Boluses
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.TempBasals
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.CarbIntakes
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.BGChecks
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.Notes
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.DeviceEvents
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.BolusCalculations
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
+        if (deleted > 0)
+            _logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
 
-            await tx.CommitAsync(ct);
-
-            if (deleted > 0)
-                _logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
-
-            return deleted;
-        });
+        return deleted;
     }
+
+    /// <summary>
+    /// Soft-deletes one legacy treatment's decomposed records through the audited path, so a
+    /// user-issued delete is attributed and a later connector resync cannot re-create it
+    /// (<see cref="SoftDeleteDedupExtensions"/>).
+    /// </summary>
+    /// <remarks>
+    /// A legacy id fans out to a handful of correlated rows, never a set, so the per-record audit
+    /// rows <see cref="AuditedBulkDeleteExtensions.AuditedSoftDeleteWithEntitiesAsync{T}"/> writes
+    /// below its cap are the right shape.
+    /// </remarks>
+    private async Task<int> DeleteRecordsByLegacyId<T>(
+        DbSet<T> dbSet, string legacyId, string scope, CancellationToken ct)
+        where T : class, IV4Entity, IAuditable
+        => (await _dbContext.AuditedSoftDeleteWithEntitiesAsync(
+            dbSet.Where(e => e.LegacyId == legacyId), _auditContext, scope, ct)).Count;
 
     /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
@@ -1594,73 +1589,53 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
             : null;
 
+        var scope = $"timestamp={from:O}..{to:O}";
+
         long total = 0;
-        total += await DeleteEntitiesByTimeRange(_dbContext.Boluses, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.CarbIntakes, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.BGChecks, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.Notes, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.DeviceEvents, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.BolusCalculations, from, to, ct);
-        total += await DeleteEntitiesByTimeRange(_dbContext.TempBasals, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.Boluses, from, to, scope, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.CarbIntakes, from, to, scope, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.BGChecks, from, to, scope, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.Notes, from, to, scope, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.DeviceEvents, from, to, scope, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.BolusCalculations, from, to, scope, ct);
+        total += await DeleteSpansByTimeRange(from, to, scope, ct);
 
         _logger.LogInformation("BulkDelete: removed {Total} v4 treatment records for find={Find}", total, findForLog);
         return total;
     }
 
-    private static async Task<int> DeleteEntitiesByTimeRange<T>(
-        Microsoft.EntityFrameworkCore.DbSet<T> dbSet, DateTime? from, DateTime? to, CancellationToken ct)
-        where T : class, ISoftDeletable
+    /// <summary>
+    /// Soft-deletes the point-in-time records in the window through the audited bulk-delete path, so a
+    /// user-issued delete is attributed and a later connector resync cannot re-create it
+    /// (<see cref="SoftDeleteDedupExtensions"/>).
+    /// </summary>
+    private Task<int> DeleteEntitiesByTimeRange<T>(
+        DbSet<T> dbSet, DateTime? from, DateTime? to, string scope, CancellationToken ct)
+        where T : class, IV4TimeSeriesEntity, IAuditable
     {
         var query = dbSet.AsQueryable();
 
-        // All V4 entity types have a Timestamp column (point-in-time) or StartTimestamp (span-based).
-        // Use the dynamic interface approach: filter via the entity's timestamp property.
-        if (from.HasValue || to.HasValue)
-        {
-            // Use ExecuteDeleteAsync with raw filtering — entities all have Timestamp or StartTimestamp
-            // mapped as the primary time column. We filter through the queryable.
-            if (typeof(T).GetProperty("Timestamp") != null)
-            {
-                var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "e");
-                var timestampProp = System.Linq.Expressions.Expression.Property(param, "Timestamp");
+        if (from.HasValue)
+            query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Timestamp <= to.Value);
 
-                if (from.HasValue)
-                {
-                    var fromExpr = System.Linq.Expressions.Expression.Constant(from.Value, typeof(DateTime));
-                    var gte = System.Linq.Expressions.Expression.GreaterThanOrEqual(timestampProp, fromExpr);
-                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(gte, param);
-                    query = query.Where(lambda);
-                }
-                if (to.HasValue)
-                {
-                    var toExpr = System.Linq.Expressions.Expression.Constant(to.Value, typeof(DateTime));
-                    var lte = System.Linq.Expressions.Expression.LessThanOrEqual(timestampProp, toExpr);
-                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(lte, param);
-                    query = query.Where(lambda);
-                }
-            }
-            else if (typeof(T).GetProperty("StartTimestamp") != null)
-            {
-                var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "e");
-                var timestampProp = System.Linq.Expressions.Expression.Property(param, "StartTimestamp");
+        return _dbContext.AuditedSoftDeleteAsync(query, _auditContext, scope, ct);
+    }
 
-                if (from.HasValue)
-                {
-                    var fromExpr = System.Linq.Expressions.Expression.Constant(from.Value, typeof(DateTime));
-                    var gte = System.Linq.Expressions.Expression.GreaterThanOrEqual(timestampProp, fromExpr);
-                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(gte, param);
-                    query = query.Where(lambda);
-                }
-                if (to.HasValue)
-                {
-                    var toExpr = System.Linq.Expressions.Expression.Constant(to.Value, typeof(DateTime));
-                    var lte = System.Linq.Expressions.Expression.LessThanOrEqual(timestampProp, toExpr);
-                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(lte, param);
-                    query = query.Where(lambda);
-                }
-            }
-        }
+    /// <summary>
+    /// <see cref="DeleteEntitiesByTimeRange{T}"/> for temp basals, which key on
+    /// <see cref="TempBasalEntity.StartTimestamp"/> and so stay off <see cref="IV4TimeSeriesEntity"/>.
+    /// </summary>
+    private Task<int> DeleteSpansByTimeRange(DateTime? from, DateTime? to, string scope, CancellationToken ct)
+    {
+        var query = _dbContext.TempBasals.AsQueryable();
 
-        return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        if (from.HasValue)
+            query = query.Where(e => e.StartTimestamp >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.StartTimestamp <= to.Value);
+
+        return _dbContext.AuditedSoftDeleteAsync(query, _auditContext, scope, ct);
     }
 }

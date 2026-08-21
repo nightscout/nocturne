@@ -591,8 +591,24 @@ export function buildBody(state: RuleEditorState) {
 			// device_action carries its selected capabilities as a JSON object;
 			// the server serialises it to JSONB. Omit for channels without metadata.
 			metadata: c.metadata ?? undefined,
+			// Omitted keeps the stored secret, empty clears it — the editor only ever
+			// knows whether one exists, never what it is.
+			secret: c.secret ? c.secret : c.hasSecret ? undefined : "",
 		})),
 	};
+}
+
+/**
+ * Applies a destination edit to a channel row. A stored secret is held against the
+ * channel's type and destination, so retyping the destination leaves it behind — the
+ * row must stop reporting a saved secret unless the editor is carrying a replacement
+ * the user typed.
+ */
+export function applyChannelDestination(channel: ChannelDef, destination: string): void {
+	if (channel.hasSecret && !channel.secret && destination !== channel.destination) {
+		channel.hasSecret = false;
+	}
+	channel.destination = destination;
 }
 
 /**
@@ -673,6 +689,14 @@ export interface ChannelDef {
 	 * serialises it; do not pre-stringify.
 	 */
 	metadata?: DeviceActionMetadata | null;
+	/** Signing secret typed into the webhook editor. Write-only; never read back. */
+	secret?: string;
+	/**
+	 * Whether a stored signing secret backs this channel. Loaded from the server and
+	 * cleared by the editor's remove action, which is what distinguishes "keep the
+	 * secret I was never shown" from "there should be no secret".
+	 */
+	hasSecret?: boolean;
 }
 
 /** Metadata shape for a <c>device_action</c> channel. */
@@ -856,6 +880,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 				destination: c.destination ?? "",
 				destinationLabel: c.destinationLabel ?? "",
 				metadata: parseChannelMetadata(c.metadata),
+				hasSecret: c.hasSecret ?? false,
 			}));
 
 	return {

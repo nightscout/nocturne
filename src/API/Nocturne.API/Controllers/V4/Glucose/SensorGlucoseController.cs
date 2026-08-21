@@ -55,8 +55,12 @@ public class SensorGlucoseController(
     /// The <c>patientDeviceId</c> query parameter is read directly from the request because the base list
     /// signature (shared by every V4 read controller) has no device-attribution concept — binding it here keeps
     /// a single <c>GET</c> action while adding the sensor-glucose-only filter.
+    /// <para>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a newly arrived or
+    /// corrected reading must not be invisible until a cached list body expires.
+    /// </para>
     /// </remarks>
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public override async Task<ActionResult<PaginatedResponse<SensorGlucose>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,
