@@ -91,6 +91,28 @@ public class GuestSessionHandlerTests
         result.AuthContext.ActingAsSubjectId.Should().Be(_dataOwnerId);
     }
 
+    /// <summary>
+    /// A guest session authenticates with no subject of its own, so the audit trail has to name it
+    /// by the grant it presented; a constant would put every guest of every tenant on one row key.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticatedGuest_IsIdentifiedByItsGrantInTheAuditTrail()
+    {
+        var grantId = await SeedActivatedGrantAsync(_tenantId);
+        var otherGrantId = await SeedActivatedGrantAsync(_tenantId);
+
+        var result = await _handler.AuthenticateAsync(BuildContext(_tenantId, ProtectCookie(grantId)));
+        var other = await _handler.AuthenticateAsync(BuildContext(_tenantId, ProtectCookie(otherGrantId)));
+
+        var actor = AuthAuditActor.FromCallerOtherThan(result.AuthContext, subjectId: null);
+        var otherActor = AuthAuditActor.FromCallerOtherThan(other.AuthContext, subjectId: null);
+
+        actor.Should().NotBeNull();
+        actor!.Credential.Should().Be($"Guest:{grantId}");
+        actor.SubjectId.Should().BeNull();
+        otherActor!.Credential.Should().NotBe(actor.Credential);
+    }
+
     [Fact]
     public async Task SessionWarmedOnOneTenant_IsRejectedOnAnother()
     {

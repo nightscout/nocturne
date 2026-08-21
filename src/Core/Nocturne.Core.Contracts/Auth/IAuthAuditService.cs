@@ -8,8 +8,8 @@ namespace Nocturne.Core.Contracts.Auth;
 /// <param name="SubjectId">The acting subject, when the caller has one of its own.</param>
 /// <param name="Credential">
 /// Identifies the acting credential for callers with no subject, e.g.
-/// <c>InstanceKey:&lt;fingerprint&gt;</c>. Never carries key material; see
-/// <see cref="AuthContext.CredentialFingerprint"/>.
+/// <c>InstanceKey:&lt;fingerprint&gt;</c> or <c>Guest:&lt;grant id&gt;</c>. Never carries key
+/// material; see <see cref="AuthContext.CredentialFingerprint"/>.
 /// </param>
 public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
 {
@@ -26,6 +26,7 @@ public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
         { SubjectId: not null } => new AuthAuditActor(auth.SubjectId, null),
         { CredentialFingerprint: not null } =>
             new AuthAuditActor(null, $"{auth.AuthType}:{auth.CredentialFingerprint}"),
+        { TokenId: not null } => new AuthAuditActor(null, $"{auth.AuthType}:{auth.TokenId}"),
         _ => new AuthAuditActor(null, auth.AuthType.ToString()),
     };
 
@@ -35,9 +36,11 @@ public sealed record AuthAuditActor(Guid? SubjectId, string? Credential)
     /// </summary>
     /// <remarks>
     /// A credential with no subject of its own is always worth naming, since it can never be the
-    /// subject the event happened to. An unauthenticated request has no caller to name — a login
-    /// carries <see cref="AuthContext.Unauthenticated"/> until it succeeds, and the Public subject
-    /// of a share is not an actor — so it yields null and leaves the subject as its own actor.
+    /// subject the event happened to: <see cref="From"/> identifies it by its fingerprint, or by
+    /// the grant it authenticated with when it has no fingerprint (a guest session). Only an
+    /// unauthenticated request has no caller to name — a login carries
+    /// <see cref="AuthContext.Unauthenticated"/> until it succeeds — so it yields null and leaves
+    /// the subject as its own actor.
     /// </remarks>
     public static AuthAuditActor? FromCallerOtherThan(AuthContext? auth, Guid? subjectId) =>
         auth is { IsAuthenticated: true } && (auth.SubjectId is null || auth.SubjectId != subjectId)
