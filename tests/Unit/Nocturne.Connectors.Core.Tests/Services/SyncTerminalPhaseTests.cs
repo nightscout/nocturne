@@ -35,10 +35,25 @@ public class SyncTerminalPhaseTests
 
         public bool AuthenticationSucceeds { get; init; } = true;
 
+        public int AuthenticateCalls { get; private set; }
+        public int EnsureAuthenticatedCalls { get; private set; }
+
         protected override string ConnectorSource => "test";
         public override string ServiceName => "Test";
 
-        public override Task<bool> AuthenticateAsync() => Task.FromResult(AuthenticationSucceeds);
+        public override Task<bool> AuthenticateAsync()
+        {
+            AuthenticateCalls++;
+            return Task.FromResult(AuthenticationSucceeds);
+        }
+
+        protected override Task<bool> EnsureAuthenticatedAsync(
+            TestConfig config,
+            CancellationToken cancellationToken)
+        {
+            EnsureAuthenticatedCalls++;
+            return Task.FromResult(AuthenticationSucceeds);
+        }
 
         protected override async Task<SyncResult> PerformSyncInternalAsync(
             SyncRequest request,
@@ -207,6 +222,63 @@ public class SyncTerminalPhaseTests
 
         // Assert: one wrapper owns the outcome, so the two entry points cannot double-report
         reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Completed);
+    }
+
+    [Fact]
+    public async Task RequestedSync_AuthenticationFailure_ReportsOneFailedPhaseAndSkipsTheSync()
+    {
+        // Arrange: the guard runs inside the run wrapper, so a rejected credential on the
+        // requested-range entry point still resolves the tenant's in-progress indicator.
+        var (reporter, reported) = BuildReporter();
+        var syncRan = false;
+        var service = new TestConnectorService(_ =>
+        {
+            syncRan = true;
+            return Task.CompletedTask;
+        }) { AuthenticationSucceeds = false };
+
+        // Act
+        var result = await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            new TestConfig(),
+            CancellationToken.None,
+            reporter.Object);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        syncRan.Should().BeFalse();
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().Be("Authentication failed for test");
+    }
+
+    [Fact]
+    public async Task RequestedSync_AuthenticatesThroughTheGuardOnly()
+    {
+        // Arrange
+        var service = new TestConnectorService(_ => Task.CompletedTask);
+
+        // Act
+        await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, new TestConfig(), CancellationToken.None);
+
+        // Assert
+        service.EnsureAuthenticatedCalls.Should().Be(1);
+        service.AuthenticateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BackgroundSync_AuthenticatesOnceAndNotThroughTheGuard()
+    {
+        // Arrange: the background entry point owns its own hand-shake, so a connector overriding
+        // both hooks must not authenticate twice for one run.
+        var service = new TestConnectorService(_ => Task.CompletedTask);
+
+        // Act
+        await service.SyncDataAsync(new TestConfig(), CancellationToken.None);
+
+        // Assert
+        service.AuthenticateCalls.Should().Be(1);
+        service.EnsureAuthenticatedCalls.Should().Be(0);
     }
 
     [Fact]

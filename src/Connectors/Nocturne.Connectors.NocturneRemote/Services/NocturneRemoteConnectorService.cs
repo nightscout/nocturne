@@ -92,23 +92,9 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
     }
 
-    public override async Task<SyncResult> SyncDataAsync(
-        SyncRequest request,
+    protected override Task<bool> EnsureAuthenticatedAsync(
         NocturneRemoteConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
-    {
-        if (!await AuthenticateWithConfigAsync(config))
-        {
-            return new SyncResult
-            {
-                Success = false,
-                Message = "Authentication failed"
-            };
-        }
-
-        return await base.SyncDataAsync(request, config, cancellationToken, progressReporter);
-    }
+        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config);
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,

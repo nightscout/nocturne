@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
@@ -82,6 +83,45 @@ public class NocturneRemoteBackgroundSyncAuthTests
 
         var result = await act.Should().NotThrowAsync();
         result.Subject.Success.Should().BeFalse();
+    }
+
+    /// <summary>
+    ///     The terminal progress message belongs to the shared run wrapper. A rejected token returns
+    ///     before any data is fetched, and that path still owes the tenant exactly one terminal
+    ///     message — without it the connector's badge stays on "syncing" until the page is reloaded.
+    /// </summary>
+    [Theory]
+    [InlineData(true, SyncPhase.Completed)]
+    [InlineData(false, SyncPhase.Failed)]
+    public async Task RequestedSync_ReportsExactlyOneTerminalMessage(
+        bool tokenAccepted, SyncPhase expectedPhase)
+    {
+        var handler = tokenAccepted
+            ? RespondOkJson()
+            : new FuncHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("unauthorized")
+            });
+        var service = CreateService(handler, new NocturneRemoteConnectorConfiguration());
+        var config = new NocturneRemoteConnectorConfiguration
+        {
+            Url = "https://remote.nocturne.example.com",
+            Token = "bearer-token",
+        };
+
+        var reported = new List<SyncProgressEvent>();
+        var reporter = new Mock<ISyncProgressReporter>();
+        reporter
+            .Setup(r => r.ReportProgressAsync(It.IsAny<SyncProgressEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<SyncProgressEvent, CancellationToken>((e, _) => reported.Add(e))
+            .Returns(Task.CompletedTask);
+
+        await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose], From = DateTime.UtcNow.AddHours(-1) },
+            config, CancellationToken.None, reporter.Object);
+
+        reported.Where(e => e.Phase != SyncPhase.Syncing)
+            .Should().ContainSingle().Which.Phase.Should().Be(expectedPhase);
     }
 
     private sealed class FuncHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

@@ -92,7 +92,40 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         return await RunWithProgressAsync(
             progressReporter,
             cancellationToken,
-            () => PerformSyncInternalAsync(request, config, cancellationToken));
+            async () => await EnsureAuthenticatedAsync(config, cancellationToken)
+                ? await PerformSyncInternalAsync(request, config, cancellationToken)
+                : AuthenticationFailedResult());
+    }
+
+    /// <summary>
+    ///     Hand-shake run before <see cref="PerformSyncInternalAsync"/> on the requested-range entry
+    ///     point. Connectors that must authenticate before they can fetch override this instead of the
+    ///     <see cref="SyncRequest"/> overload, so a rejected credential still passes through
+    ///     <see cref="RunWithProgressAsync"/> and produces the run's one terminal progress message.
+    ///     The background entry point authenticates through <see cref="AuthenticateAsync"/> in
+    ///     <see cref="RunBackgroundSyncAsync"/> and never reaches this overload, so a connector
+    ///     overriding both is not authenticated twice for one run.
+    /// </summary>
+    protected virtual Task<bool> EnsureAuthenticatedAsync(
+        TConfig config,
+        CancellationToken cancellationToken) => Task.FromResult(true);
+
+    /// <summary>
+    ///     The result of a run that never got past authentication. Carries the detail in
+    ///     <see cref="SyncResult.Errors"/> and the summary in <see cref="SyncResult.Message"/>
+    ///     because the terminal progress message reads the former and the tenant's sync card the latter.
+    /// </summary>
+    private SyncResult AuthenticationFailedResult()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new SyncResult
+        {
+            Success = false,
+            StartTime = now,
+            EndTime = now,
+            Message = "Authentication failed",
+            Errors = { $"Authentication failed for {ConnectorSource}" },
+        };
     }
 
     /// <summary>
@@ -1049,13 +1082,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             if (!await AuthenticateAsync())
             {
                 _logger.LogError("Authentication failed for {ConnectorSource}", ConnectorSource);
-                return new SyncResult
-                {
-                    Success = false,
-                    StartTime = DateTimeOffset.UtcNow,
-                    EndTime = DateTimeOffset.UtcNow,
-                    Errors = { $"Authentication failed for {ConnectorSource}" }
-                };
+                return AuthenticationFailedResult();
             }
 
             // Determine catch-up timestamp
