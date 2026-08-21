@@ -113,7 +113,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : IDisposable
         public string? AuthType => "SessionCookie";
         public string? IpAddress => "127.0.0.1";
         public Guid? TokenId => null;
-        public string? CorrelationId => null;
+        public string? TraceId => null;
         public string? Endpoint => "DELETE /api/v4/data-sources/dexcom";
         public bool IsSystem => false;
     }
