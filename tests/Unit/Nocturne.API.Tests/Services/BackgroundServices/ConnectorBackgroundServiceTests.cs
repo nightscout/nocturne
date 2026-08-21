@@ -303,13 +303,11 @@ public class ConnectorBackgroundServiceTests
     }
 
     /// <summary>
-    /// Connectors report one error per failing type per chunk, so a backfill window against a
-    /// persistently failing publisher repeats the same message once per chunk. The joined health
-    /// message must carry it once: an unbounded join overflows last_error_message and fails the very
-    /// write that records the failure.
+    /// A repeated error must reach the health message once, and two errors that differ only in case
+    /// are different errors; see <c>ConnectorConfigurationEntity.LastErrorMessageMaxLength</c>.
     /// </summary>
     [Fact]
-    public async Task FailedSync_WithRepeatedErrors_JoinsEachDistinctMessageOnce()
+    public async Task FailedSync_WithRepeatedErrors_JoinsEachDistinctMessageOnceCaseSensitively()
     {
         var (cleanup, connStr) = CreateSqliteDb();
         using var _ = cleanup;
@@ -318,7 +316,11 @@ public class ConnectorBackgroundServiceTests
         {
             Success = false,
             Message = "Fallback message",
-            Errors = [.. Enumerable.Repeat("StateSpans publish failed", 20)]
+            Errors =
+            [
+                .. Enumerable.Repeat("StateSpans publish failed", 20),
+                .. Enumerable.Repeat("statespans publish failed", 20),
+            ]
         };
 
         var configServiceMock = BuildEnabledConfigMock();
@@ -337,12 +339,12 @@ public class ConnectorBackgroundServiceTests
                 "TestConnector",
                 It.IsAny<DateTime?>(),
                 It.IsAny<DateTime?>(),
-                "StateSpans publish failed",
+                "StateSpans publish failed; statespans publish failed",
                 It.IsAny<DateTime?>(),
                 false,
                 It.IsAny<CancellationToken>()),
             Times.Once,
-            "twenty identical chunk errors must collapse to one entry in the health message");
+            "identical chunk errors collapse to one entry, but a case difference is a different error");
     }
 
     [Fact]

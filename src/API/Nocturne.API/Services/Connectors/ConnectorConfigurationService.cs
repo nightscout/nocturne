@@ -977,18 +977,22 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     }
 
     /// <summary>
-    ///     Fits a health error message inside
+    ///     Fits a health error message to
     ///     <see cref="ConnectorConfigurationEntity.LastErrorMessageMaxLength"/>, marking the cut so a
-    ///     reader can tell the message is incomplete. Callers join every error of a run, which a long
-    ///     backfill against a failing publisher can grow past the column.
+    ///     reader can tell the message is incomplete.
     /// </summary>
     private static string FitErrorMessageToColumn(string message)
     {
         const string marker = "... (truncated)";
         const int max = ConnectorConfigurationEntity.LastErrorMessageMaxLength;
 
-        return message.Length <= max
-            ? message
-            : string.Concat(message.AsSpan(0, max - marker.Length), marker);
+        if (message.Length <= max)
+            return message;
+
+        var cut = max - marker.Length;
+        if (char.IsHighSurrogate(message[cut - 1]))
+            cut--;
+
+        return string.Concat(message.AsSpan(0, cut), marker);
     }
 }

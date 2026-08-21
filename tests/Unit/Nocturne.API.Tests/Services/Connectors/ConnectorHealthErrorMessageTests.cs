@@ -1,3 +1,4 @@
+using System.Text;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -18,9 +19,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Connectors;
 
 /// <summary>
-/// <c>last_error_message</c> is length-constrained, and its writer is handed the join of every error
-/// a sync produced — one per failing type per chunk. An over-length assignment fails the write that
-/// was recording the failure, so the service fits the message to the column instead.
+/// The health-state write fits the joined sync errors to the column; see
+/// <see cref="ConnectorConfigurationEntity.LastErrorMessageMaxLength"/>.
 /// </summary>
 public class ConnectorHealthErrorMessageTests : IDisposable
 {
@@ -97,6 +97,31 @@ public class ConnectorHealthErrorMessageTests : IDisposable
         stored.Length.Should().Be(ConnectorConfigurationEntity.LastErrorMessageMaxLength);
         stored.Should().EndWith(TruncationMarker);
         stored.Should().StartWith(joined[..100]);
+    }
+
+    /// <summary>
+    /// A cut that lands between a surrogate pair leaves a lone surrogate, which the driver's strict
+    /// UTF-8 encoder rejects — the same failed write the truncation exists to prevent.
+    /// </summary>
+    [Fact]
+    public async Task UpdateHealthStateAsync_WhenTheCutLandsInsideASurrogatePair_StoresEncodableText()
+    {
+        // The cut keeps 985 chars less the marker, so the pair's high surrogate lands on the boundary.
+        var message = new string('a', 984) + "😀" + new string('b', 100);
+        message.Length.Should().BeGreaterThan(ConnectorConfigurationEntity.LastErrorMessageMaxLength);
+
+        await _service.UpdateHealthStateAsync(ConnectorName, lastErrorMessage: message, isHealthy: false);
+
+        // The tracked entity, not a re-read: SQLite substitutes a replacement character on the way
+        // out, which would hide the lone surrogate the driver has to encode.
+        var stored = _dbContext.ConnectorConfigurations.Local.Single().LastErrorMessage!;
+        stored.Length.Should().BeLessThanOrEqualTo(ConnectorConfigurationEntity.LastErrorMessageMaxLength);
+        stored.Should().EndWith(TruncationMarker);
+        stored.Should().NotContainAny("\uD83D", "\uDE00");
+
+        var strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        var encode = () => strictUtf8.GetBytes(stored);
+        encode.Should().NotThrow<EncoderFallbackException>("a lone surrogate cannot be encoded for the write");
     }
 
     [Fact]

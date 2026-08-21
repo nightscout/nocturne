@@ -86,7 +86,8 @@ export const connectorPropertyMeta = {
   },
   SyncStateSpans: {
     label: 'Sync State Spans',
-    description: 'Sync device state periods like suspend, resume, and mode changes',
+    description:
+      'Sync device state periods like suspend, resume, and mode changes. Turning this off also declines the active-profile and basal-program periods, so the therapy timeline and chart bands lose them.',
     category: 'Sync',
   },
   SyncTempBasals: {
