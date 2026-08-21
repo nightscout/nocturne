@@ -115,7 +115,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     <see cref="SyncResult.Errors"/> and the summary in <see cref="SyncResult.Message"/>
     ///     because the terminal progress message reads the former and the tenant's sync card the latter.
     /// </summary>
-    private SyncResult AuthenticationFailedResult()
+    protected SyncResult AuthenticationFailedResult()
     {
         var now = DateTimeOffset.UtcNow;
         return new SyncResult

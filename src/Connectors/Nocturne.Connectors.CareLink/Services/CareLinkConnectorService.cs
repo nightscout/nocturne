@@ -98,20 +98,12 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         // Authenticate with per-tenant config
         if (!await AuthenticateWithConfigAsync(config))
-        {
-            result.Success = false;
-            result.Errors.Add("Authentication failed");
-            result.EndTime = DateTimeOffset.UtcNow;
-            return result;
-        }
+            return AuthenticationFailedResult();
 
         if (string.IsNullOrEmpty(_accessToken))
         {
             _logger.LogError("[{ConnectorSource}] No access token available — authentication must succeed before sync", ConnectorSource);
-            result.Success = false;
-            result.Errors.Add("Authentication failed");
-            result.EndTime = DateTimeOffset.UtcNow;
-            return result;
+            return AuthenticationFailedResult();
         }
 
         var userInfo = await FetchUserInfoAsync(config, cancellationToken);

@@ -154,9 +154,16 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 return result;
             }
 
+            // Debug, not Information: the shared publish log runs at Information and a glucose
+            // value is health data, so the reading stays out of the default-level sink.
+            _logger.LogDebug(
+                "[{ConnectorSource}] Publishing reading {Mgdl} mg/dL at {Timestamp:O}",
+                ConnectorSource,
+                sg.Mgdl,
+                sg.Timestamp);
+
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
-                [sg], PublishSensorGlucoseDataAsync, config, cancellationToken,
-                context: $"{sg.Mgdl} mg/dL at {sg.Timestamp:O}");
+                [sg], PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {

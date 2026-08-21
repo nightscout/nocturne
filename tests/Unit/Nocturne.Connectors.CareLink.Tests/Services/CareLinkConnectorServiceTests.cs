@@ -7,6 +7,7 @@ using Nocturne.Connectors.CareLink.Services;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
@@ -171,6 +172,27 @@ public class CareLinkConnectorServiceTests
             }
             """
     };
+
+    /// <summary>
+    /// A run that never got past authentication reports the shared failure shape: the summary in
+    /// <c>Message</c> for the tenant's sync card and the source-qualified detail in <c>Errors</c>,
+    /// which is what gets persisted as the connector's last error. CareLink authenticates inside
+    /// its own sync body, so it has to opt into that shape rather than inherit it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAuthenticationFails_ReportsTheSharedFailureShape()
+    {
+        // A token response carrying no access token leaves the connector unauthenticated.
+        var fixture = new ServiceFixture(new CareLinkFakeHandler { TokenResponseJson = "{}" });
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Authentication failed");
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be($"Authentication failed for {DataSources.CareLinkConnector}");
+    }
 
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>
     private static CareLinkConnectorConfiguration AlarmOnlyConfiguration() => new()
