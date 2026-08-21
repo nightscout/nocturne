@@ -170,6 +170,23 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
     }
 
     /// <summary>
+    /// Get a single analysis by identifier
+    /// </summary>
+    /// <param name="id">The analysis identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The matching analysis with its discrepancies, or null when none matches.</returns>
+    public async Task<DiscrepancyAnalysisEntity?> GetAnalysisByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return await _context
+            .DiscrepancyAnalyses.Where(a => a.Id == id)
+            .Include(a => a.Discrepancies)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Get compatibility metrics for dashboard
     /// </summary>
     /// <param name="fromDate">Optional start date for metrics calculation.</param>

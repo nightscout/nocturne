@@ -47,6 +47,14 @@ public interface IDiscrepancyAnalysisRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Retrieves a single discrepancy analysis by identifier, with its detailed discrepancies
+    /// loaded, or <c>null</c> when the current tenant has no analysis with that identifier
+    /// </summary>
+    Task<DiscrepancyAnalysisEntity?> GetAnalysisByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets compatibility metrics for a specified date range
     /// </summary>
     Task<CompatibilityMetrics> GetCompatibilityMetricsAsync(

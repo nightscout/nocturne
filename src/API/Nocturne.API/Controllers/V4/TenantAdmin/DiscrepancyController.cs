@@ -238,13 +238,7 @@ public class DiscrepancyController : ControllerBase
     {
         try
         {
-            var analyses = await _discrepancyRepository.GetAnalysesAsync(
-                count: 1,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
-            var analysis = analyses.FirstOrDefault(a => a.Id == id);
+            var analysis = await _discrepancyRepository.GetAnalysisByIdAsync(id, cancellationToken);
             if (analysis == null)
             {
                 return NotFound($"Discrepancy analysis with ID {id} not found");

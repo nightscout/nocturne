@@ -202,17 +202,7 @@ public class CompatibilityController : ControllerBase
     {
         try
         {
-            var analyses = await _repository.GetAnalysesAsync(
-                null,
-                null,
-                null,
-                null,
-                1,
-                0,
-                cancellationToken
-            );
-
-            var analysis = analyses.FirstOrDefault(a => a.Id == id);
+            var analysis = await _repository.GetAnalysisByIdAsync(id, cancellationToken);
 
             if (analysis == null)
             {
