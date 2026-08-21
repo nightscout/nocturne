@@ -627,8 +627,9 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
-    /// The plugin pills the demo tenant shows. <see cref="FeatureSettings.Plugins"/> has no defaults,
-    /// so there is nothing to inherit here.
+    /// Sample <see cref="FeatureSettings.Plugins"/> entries for the demo tenant, mirroring what the
+    /// demo data service serves so the fallback shows the same settings page. These name the legacy
+    /// Nightscout plugins; they do not decide which pills the demo dashboard shows.
     /// </summary>
     private static Dictionary<string, PluginSettings> GenerateDemoPlugins()
     {

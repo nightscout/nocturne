@@ -237,6 +237,13 @@ public class FeatureSettings
     [JsonPropertyName("widgets")]
     public List<WidgetConfig> Widgets { get; set; } = GetDefaultWidgets();
 
+    /// <summary>
+    /// Legacy Nightscout plugin toggles, carried for schema compatibility and empty by default.
+    /// Unlike <see cref="Widgets"/> this gates nothing: the dashboard's status pills appear when the
+    /// data behind them arrives, and the tracker pill row is gated by
+    /// <see cref="TrackerPillsSettings.Enabled"/>. Defaults here would ship every tenant a stored
+    /// list nothing reads.
+    /// </summary>
     [JsonPropertyName("plugins")]
     public Dictionary<string, PluginSettings> Plugins { get; set; } = new();
 
