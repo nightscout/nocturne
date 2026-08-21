@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -69,46 +70,62 @@ public class UISettingsControllerDemoModeTests
     [Fact]
     public async Task GetUISettings_inDemoMode_servesWhatTheDemoServiceReturns()
     {
-        var proxied = new UISettingsConfiguration
-        {
-            Devices = new DeviceSettings
-            {
-                ConnectedDevices = [new ConnectedDevice { Id = "from-demo-service" }],
-            },
-        };
-        var demoService = new StubDemoService(proxied);
-        var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
-            DemoMode(enabled: true, serviceUrl: "http://demo-service"),
-            demoService.Factory
-        );
+        var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
 
-        var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
+        var settings = await ProxiedGet(demoService);
 
         settings.Devices.ConnectedDevices.Should().ContainSingle().Which.Id.Should()
-            .Be("from-demo-service");
+            .Be(ProxiedDeviceId);
+        demoService.RequestUri.Should().Be("http://demo-service/ui-settings");
+    }
+
+    [Fact]
+    public async Task GetUISettings_inDemoMode_normalisesATrailingSlashOnTheServiceUrl()
+    {
+        var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
+
+        await ProxiedGet(demoService, "http://demo-service/");
+
         demoService.RequestUri.Should().Be("http://demo-service/ui-settings");
     }
 
     [Fact]
     public async Task GetUISettings_inDemoMode_fallsBackToItsOwnFixtures_whenTheDemoServiceFails()
     {
-        var demoService = new StubDemoService(HttpStatusCode.InternalServerError);
-        var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
-            DemoMode(enabled: true, serviceUrl: "http://demo-service"),
-            demoService.Factory
-        );
-
-        var settings = OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
+        var settings = await ProxiedGet(new StubDemoService(HttpStatusCode.InternalServerError));
 
         settings.Devices.ConnectedDevices.Should().NotBeEmpty();
     }
 
     [Fact]
+    public async Task GetUISettings_inDemoMode_fallsBackToItsOwnFixtures_whenTheDemoServiceFailsWithAReadableBody()
+    {
+        var settings = await ProxiedGet(
+            new StubDemoService(HttpStatusCode.InternalServerError, ProxiedSettings)
+        );
+
+        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        settings.Devices.ConnectedDevices.Select(d => d.Id).Should().NotContain(ProxiedDeviceId);
+    }
+
+    [Fact]
+    public async Task GetUISettings_inDemoMode_stopsWaitingOnAHungDemoService()
+    {
+        var demoService = StubDemoService.Hanging();
+        var elapsed = Stopwatch.StartNew();
+
+        var settings = await ProxiedGet(demoService);
+        elapsed.Stop();
+
+        settings.Devices.ConnectedDevices.Should().NotBeEmpty();
+        demoService.Cancelled.Should().BeTrue();
+        elapsed.Elapsed.Should().BeLessThan(UISettingsController.DemoServiceProxyTimeout * 4);
+    }
+
+    [Fact]
     public async Task GetUISettings_outsideDemoMode_neverCallsTheDemoService()
     {
-        var demoService = new StubDemoService(new UISettingsConfiguration());
+        var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
         var controller = NewController(
             new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: false, serviceUrl: "http://demo-service"),
@@ -118,6 +135,35 @@ public class UISettingsControllerDemoModeTests
         await controller.GetUISettings();
 
         demoService.RequestUri.Should().BeNull();
+    }
+
+    private const string ProxiedDeviceId = "from-demo-service";
+
+    private static UISettingsConfiguration ProxiedSettings =>
+        new()
+        {
+            Devices = new DeviceSettings
+            {
+                ConnectedDevices = [new ConnectedDevice { Id = ProxiedDeviceId }],
+            },
+        };
+
+    /// <summary>
+    /// What <c>GET ui-settings</c> answers in demo mode with <paramref name="demoService"/> standing
+    /// in for the external demo data service.
+    /// </summary>
+    private static async Task<UISettingsConfiguration> ProxiedGet(
+        StubDemoService demoService,
+        string serviceUrl = "http://demo-service"
+    )
+    {
+        var controller = NewController(
+            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            DemoMode(enabled: true, serviceUrl: serviceUrl),
+            demoService.Factory
+        );
+
+        return OkValue<UISettingsConfiguration>((await controller.GetUISettings()).Result);
     }
 
     /// <summary>
@@ -153,20 +199,31 @@ public class UISettingsControllerDemoModeTests
     {
         private readonly UISettingsConfiguration? _settings;
         private readonly HttpStatusCode _status;
+        private readonly bool _hangs;
 
-        internal StubDemoService(UISettingsConfiguration settings)
+        internal StubDemoService(HttpStatusCode status, UISettingsConfiguration? settings = null)
         {
+            _status = status;
             _settings = settings;
-            _status = HttpStatusCode.OK;
         }
 
-        internal StubDemoService(HttpStatusCode status)
+        private StubDemoService(bool hangs)
+            : this(HttpStatusCode.OK)
         {
-            _settings = null;
-            _status = status;
+            _hangs = hangs;
+        }
+
+        /// <summary>
+        /// A demo service that never answers, so only the caller's own deadline ends the call.
+        /// </summary>
+        internal static StubDemoService Hanging()
+        {
+            return new StubDemoService(hangs: true);
         }
 
         internal string? RequestUri { get; private set; }
+
+        internal bool Cancelled { get; private set; }
 
         internal IHttpClientFactory Factory
         {
@@ -183,20 +240,30 @@ public class UISettingsControllerDemoModeTests
 
         private sealed class Handler(StubDemoService owner) : HttpMessageHandler
         {
-            protected override Task<HttpResponseMessage> SendAsync(
+            protected override async Task<HttpResponseMessage> SendAsync(
                 HttpRequestMessage request,
                 CancellationToken cancellationToken
             )
             {
                 owner.RequestUri = request.RequestUri?.ToString();
 
-                return Task.FromResult(
-                    new HttpResponseMessage(owner._status)
+                if (owner._hangs)
+                {
+                    try
                     {
-                        Content =
-                            owner._settings == null ? null : JsonContent.Create(owner._settings),
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                     }
-                );
+                    catch (OperationCanceledException)
+                    {
+                        owner.Cancelled = true;
+                        throw;
+                    }
+                }
+
+                return new HttpResponseMessage(owner._status)
+                {
+                    Content = owner._settings == null ? null : JsonContent.Create(owner._settings),
+                };
             }
         }
     }

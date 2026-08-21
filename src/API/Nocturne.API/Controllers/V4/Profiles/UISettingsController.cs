@@ -37,6 +37,15 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => OAuthScopes.AlertsReadWrite;
 
+    /// <summary>
+    /// Deadline for the demo service's ui-settings read. The demo service is co-deployed and answers
+    /// this route from memory, so anything slower than a few seconds is a hang, and the demo tenant
+    /// has fixtures to fall back on. The unnamed <see cref="IHttpClientFactory"/> client carries no
+    /// resilience handler, so without a deadline a hung demo service would hold the request open for
+    /// <see cref="HttpClient"/>'s 100-second default.
+    /// </summary>
+    internal static readonly TimeSpan DemoServiceProxyTimeout = TimeSpan.FromSeconds(3);
+
     private readonly ILogger<UISettingsController> _logger;
     private readonly IDemoModeService _demoMode;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -88,10 +97,15 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 {
                     try
                     {
+                        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                            cancellationToken
+                        );
+                        deadline.CancelAfter(DemoServiceProxyTimeout);
+
                         var httpClient = _httpClientFactory.CreateClient();
                         var response = await httpClient.GetFromJsonAsync<UISettingsConfiguration>(
-                            $"{_demoMode.ServiceUrl}/ui-settings",
-                            cancellationToken
+                            $"{_demoMode.ServiceUrl?.TrimEnd('/')}/ui-settings",
+                            deadline.Token
                         );
 
                         if (response != null)

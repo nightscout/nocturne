@@ -263,9 +263,10 @@ public class UISettingsServiceTests
     }
 
     [Fact]
-    public async Task SaveSectionAsync_acceptsEveryRegisteredSectionAndTheAlarmKey()
+    public async Task SaveSectionAsync_acceptsEveryRegisteredSection()
     {
-        var service = NewService(NewContext());
+        var context = NewContext();
+        var service = NewService(context);
 
         foreach (var section in UISettingsSections.All)
         {
@@ -279,9 +280,35 @@ public class UISettingsServiceTests
             await save.Should().NotThrowAsync($"section {section.Name} should be writable");
         }
 
-        var saveAlarms = () => service.SaveSectionAsync("alarms", new UserAlarmConfiguration());
+        await service.SaveSectionAsync(
+            "DATAQUALITY",
+            new DataQualitySettings
+            {
+                SleepSchedule = new SleepScheduleSettings { BedtimeHour = 1 },
+            }
+        );
 
-        await saveAlarms.Should().NotThrowAsync();
+        (await service.GetSettingsAsync()).DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("alarms")]
+    [InlineData("alarmConfiguration")]
+    [InlineData("AlarmConfiguration")]
+    [InlineData("ALARMS")]
+    public async Task SaveSectionAsync_routesEveryAlarmAliasToTheOwningRow(string alias)
+    {
+        var context = NewContext();
+        var service = NewService(context);
+
+        await service.SaveSectionAsync(alias, AlarmConfiguration("aliased", 123));
+
+        foreach (var config in await EveryAlarmReadPath(service))
+        {
+            config.Profiles.Should().ContainSingle().Which.Threshold.Should().Be(123);
+        }
+
+        StoredRows(context).Select(r => r.Key).Should().Equal([AlarmsKey]);
     }
 
     [Fact]
