@@ -74,7 +74,7 @@
 
   // Trend metadata
   const bgDelta = $derived(realtimeStore?.bgDelta ?? 0);
-  const direction = $derived(realtimeStore?.direction ?? "Flat");
+  const direction = $derived(realtimeStore?.direction ?? "");
   const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const hasData = $derived(!isLoading && rawCurrentBG > 0);

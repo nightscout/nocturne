@@ -16,6 +16,10 @@ public record AlertRuleSnapshot(Guid Id, Guid TenantId, string Name, AlertCondit
 /// Replaces the legacy schedule/escalation-step/step-channel chain — channels live directly
 /// on the rule and are dispatched in parallel when the rule fires.
 /// </summary>
+/// <param name="Secret">
+/// Webhook signing secret as ciphertext; the dispatching provider decrypts it. Null for every
+/// other channel type and for a webhook whose receiver does not verify signatures.
+/// </param>
 public record AlertRuleChannelSnapshot(
     Guid Id,
     Guid AlertRuleId,
@@ -23,7 +27,8 @@ public record AlertRuleChannelSnapshot(
     string Destination,
     string? DestinationLabel,
     int SortOrder,
-    string? Metadata = null);
+    string? Metadata = null,
+    string? Secret = null);
 
 /// <summary>
 /// Immutable snapshot of a live alert instance.

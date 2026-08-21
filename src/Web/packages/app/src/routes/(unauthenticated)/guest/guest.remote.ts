@@ -1,6 +1,7 @@
 import { form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 import { z } from "zod";
+import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
 import {
   classifyActivationError,
   type ActivationFailure,
@@ -9,8 +10,7 @@ import {
 const FAILURE_MESSAGES: Record<ActivationFailure, string> = {
   rejected:
     "That code didn't work. It may have expired, already been used, or been entered slightly differently. Ask whoever shared it to send a new one.",
-  "rate-limited":
-    "Too many attempts. Please wait a few minutes and try again.",
+  "rate-limited": RATE_LIMITED_ERROR,
   unavailable:
     "We couldn't check that code just now. Please try again in a moment.",
 };

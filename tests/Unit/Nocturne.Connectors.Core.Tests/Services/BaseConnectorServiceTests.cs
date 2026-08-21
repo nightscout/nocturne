@@ -28,8 +28,13 @@ public class BaseConnectorServiceTests
         public override string ServiceName => "Test";
 
         public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-        public override Task<IEnumerable<Nocturne.Core.Models.Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-            => Task.FromResult(Enumerable.Empty<Nocturne.Core.Models.Entry>());
+
+        // These tests exercise the base helpers directly, never a sync run.
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request,
+            TestConfig config,
+            CancellationToken cancellationToken)
+            => throw new NotSupportedException();
 
         // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.
         public Task<string?> InvokeExecuteWithRetryAsync(

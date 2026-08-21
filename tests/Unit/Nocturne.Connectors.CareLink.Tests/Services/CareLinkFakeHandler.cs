@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Nocturne.Connectors.CareLink.Configurations;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
 
@@ -21,6 +22,9 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
 
     internal string TokenResponseJson { get; init; } =
         """{"access_token":"new-access-token","refresh_token":"rotated-refresh-token"}""";
+
+    /// <summary>Body for the monitor endpoint; when null that endpoint 404s like the others.</summary>
+    internal string? MonitorDataJson { get; init; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
@@ -57,6 +61,10 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
 
         if (url == TokenUrl)
             return Json(TokenResponseJson);
+
+        if (MonitorDataJson is not null
+            && url.EndsWith(CareLinkConstants.Endpoints.MonitorData, StringComparison.Ordinal))
+            return Json(MonitorDataJson);
 
         return new HttpResponseMessage(HttpStatusCode.NotFound);
     }

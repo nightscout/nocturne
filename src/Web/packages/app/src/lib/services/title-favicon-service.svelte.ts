@@ -7,9 +7,9 @@
 
 import { browser } from "$app/environment";
 import type { TitleFaviconSettings, ClientThresholds } from "$lib/stores/serverSettings";
-import { directions } from "$lib/stores/serverSettings";
 import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
 import { bg as formatBg, bgDelta as formatBgDelta } from "$lib/utils/formatting";
+import { directionGlyph } from "@nocturne/ui/glucose";
 import { getGlucoseStatus, renderGlucoseIcon, type GlucoseStatus } from "@nocturne/ui/glucose-icon";
 
 export type { GlucoseStatus };
@@ -267,11 +267,8 @@ export class TitleFaviconService {
       bgParts.push(String(formatBg(bg)));
     }
 
-    if (settings.showDirection && !isDisconnected) {
-      const dirInfo = directions[direction as keyof typeof directions];
-      if (dirInfo) {
-        bgParts.push(dirInfo.label);
-      }
+    if (settings.showDirection && !isDisconnected && direction) {
+      bgParts.push(directionGlyph(direction));
     }
 
     if (settings.showDelta && delta !== undefined && !isDisconnected) {

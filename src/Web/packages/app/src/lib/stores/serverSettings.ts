@@ -137,19 +137,3 @@ export interface Client {
   focusRangeMS: number;
   inRetroMode: boolean;
 }
-
-/**
- * Direction arrow mappings for glucose trend display
- */
-export const directions = {
-  "NONE": { label: "→", description: "No direction" },
-  "DoubleUp": { label: "⇈", description: "Rising quickly" },
-  "SingleUp": { label: "↑", description: "Rising" },
-  "FortyFiveUp": { label: "↗", description: "Rising slowly" },
-  "Flat": { label: "→", description: "Stable" },
-  "FortyFiveDown": { label: "↘", description: "Falling slowly" },
-  "SingleDown": { label: "↓", description: "Falling" },
-  "DoubleDown": { label: "⇊", description: "Falling quickly" },
-  "NOT COMPUTABLE": { label: "-", description: "Not computable" },
-  "RATE OUT OF RANGE": { label: "⇕", description: "Rate out of range" },
-} as const;

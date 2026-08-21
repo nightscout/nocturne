@@ -684,10 +684,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         try
         {
             _logger.LogDebug(
-                "Broadcasting sync progress for {ConnectorId}: {Phase} - {DataType}",
+                "Broadcasting sync progress for {ConnectorId}: {Phase}",
                 progress.ConnectorId,
-                progress.Phase,
-                progress.CurrentDataType
+                progress.Phase
             );
 
             await _configHubContext

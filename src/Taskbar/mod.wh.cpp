@@ -284,11 +284,16 @@ static int64_t NowMsEpoch() {
     return (int64_t)((u.QuadPart - 116444736000000000ULL) / 10000ULL);
 }
 
+// A standalone Windhawk mod can't link the shared constant, so the factor is copied here. It
+// MUST equal GlucoseConstants.MgdlPerMmol, or the taskbar and the server disagree about which
+// side of a rounding boundary a reading falls on.
+constexpr double kMgdlPerMmol = 18.0182;
+
 // Convert a canonical mg/dL value to the configured display unit. mmol/L is
 // rounded to 1 dp; mg/dL to a whole number.
 static double ToDisplayUnit(double mgdl) {
     if (g_settings.unit == L"mg/dL") return std::round(mgdl);
-    return std::round(mgdl / 18.0182 * 10.0) / 10.0;
+    return std::round(mgdl / kMgdlPerMmol * 10.0) / 10.0;
 }
 
 static std::string Narrow(const std::wstring& w) {
@@ -756,7 +761,12 @@ static std::wstring FormatDelta(double v) {
     return b;
 }
 
-// Unicode trend glyph for the Dexcom-style direction strings.
+// Shown for a trend we cannot draw: an unknown trend must not read as a stable one.
+constexpr PCWSTR kUnknownTrendGlyph = L"?";
+
+// Unicode trend glyph for the Dexcom-style direction strings. The caller suppresses the whole
+// element when the trend is absent, so anything reaching here that has no arrow ("None",
+// "NotComputable", an unrecognised vendor value) gets kUnknownTrendGlyph.
 static std::wstring TrendArrow(const std::wstring& t) {
     if (t == L"DoubleUp") return L"\x21C8";
     if (t == L"SingleUp") return L"\x2191";
@@ -765,7 +775,7 @@ static std::wstring TrendArrow(const std::wstring& t) {
     if (t == L"FortyFiveDown") return L"\x2198";
     if (t == L"SingleDown") return L"\x2193";
     if (t == L"DoubleDown") return L"\x21CA";
-    return L"";
+    return kUnknownTrendGlyph;
 }
 
 // Named elements (CurrentValue / TrendArrow / IobCob / RangeBand / SparkActual / SparkPredicted /

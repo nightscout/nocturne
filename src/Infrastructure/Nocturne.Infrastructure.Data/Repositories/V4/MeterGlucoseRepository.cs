@@ -72,7 +72,7 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.MeterGlucose
-            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
+            .FromSource(source)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 

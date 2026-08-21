@@ -28,8 +28,8 @@ export const connectorPropertyMeta = {
     category: 'General',
   },
   MaxRetryAttempts: {
-    label: 'Max Retry Attempts',
-    description: 'Maximum number of retry attempts on failure',
+    label: 'Max Attempts',
+    description: 'Total connection attempts per sync before giving up (minimum 1)',
     category: 'Advanced',
   },
   BatchSize: {
@@ -57,6 +57,11 @@ export const connectorPropertyMeta = {
   SyncBoluses: {
     label: 'Sync Boluses',
     description: 'Sync insulin bolus delivery records',
+    category: 'Sync',
+  },
+  SyncBasalInjections: {
+    label: 'Sync Basal Injections',
+    description: 'Sync long-acting basal insulin injections',
     category: 'Sync',
   },
   SyncCarbIntake: {

@@ -188,6 +188,25 @@ describe("TenantOverviewTile", () => {
       .toHaveClass(/text-muted-foreground/);
   });
 
+  it("labels a reading with no trend as unknown rather than stable", async () => {
+    render(TenantOverviewTile, {
+      props: {
+        tenant: makeTenant({
+          latest: {
+            mgdl: 120,
+            delta: 4,
+            direction: GlucoseDirection.None,
+            timestamp: new Date(),
+          },
+        }),
+        baseDomain: "example.com",
+      },
+    });
+
+    await expect.element(page.getByLabelText("unknown")).toBeVisible();
+    expect(page.getByLabelText("stable").elements()).toHaveLength(0);
+  });
+
   it("renders an em-dash when latest exists but has no mgdl value", async () => {
     render(TenantOverviewTile, {
       props: {

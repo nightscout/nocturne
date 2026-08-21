@@ -657,23 +657,21 @@ public class EntryDecomposerTests : IDisposable
 
     #endregion
 
-    #region Direction Fallback via TryParse
+    #region Direction Parsing
 
     [Theory]
     [InlineData("flat", GlucoseDirection.Flat)]
     [InlineData("FLAT", GlucoseDirection.Flat)]
     [InlineData("singleup", GlucoseDirection.SingleUp)]
     [InlineData("SINGLEDOWN", GlucoseDirection.SingleDown)]
-    public void MapDirection_CaseInsensitiveFallback_MapsCorrectly(string input, GlucoseDirection expected)
+    public void MapDirection_CaseInsensitive_MapsCorrectly(string input, GlucoseDirection expected)
     {
-        // The switch cases are exact-match; non-matching falls to Enum.TryParse with ignoreCase
         EntryDecomposer.MapDirection(input).Should().Be(expected);
     }
 
     [Fact]
     public void MapDirection_WhitespaceOnly_ReturnsNull()
     {
-        // String.IsNullOrEmpty returns false for whitespace, so it goes to switch
         EntryDecomposer.MapDirection("   ").Should().BeNull();
     }
 
@@ -804,9 +802,21 @@ public class EntryDecomposerTests : IDisposable
     [InlineData("NOT COMPUTABLE", GlucoseDirection.NotComputable)]
     [InlineData("RATE OUT OF RANGE", GlucoseDirection.RateOutOfRange)]
     [InlineData("NONE", GlucoseDirection.None)]
+    [InlineData("NotComputable", GlucoseDirection.NotComputable)]
+    [InlineData("RateOutOfRange", GlucoseDirection.RateOutOfRange)]
+    [InlineData("None", GlucoseDirection.None)]
     public void MapDirection_KnownValues_MapsCorrectly(string input, GlucoseDirection expected)
     {
         EntryDecomposer.MapDirection(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("TripleUp")]
+    [InlineData("TripleDown")]
+    [InlineData("CGM ERROR")]
+    public void MapDirection_LegacyOnlyValues_ReturnNull(string input)
+    {
+        EntryDecomposer.MapDirection(input).Should().BeNull();
     }
 
     [Fact]

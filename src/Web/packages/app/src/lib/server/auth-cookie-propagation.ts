@@ -31,6 +31,11 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
   // Its deletions matter too: the API clears it once the grant is revoked or
   // expired, which stops the browser resending a dead cookie.
   AUTH_COOKIE_NAMES.guestSession,
+  // Recovery-code sign-in is a server-side form, so the API's Set-Cookie has to be forwarded
+  // or the recovery session never reaches the browser and the passkey the visitor came to
+  // register cannot be enrolled. Its deletion matters too: the API spends the cookie once the
+  // credential exists.
+  AUTH_COOKIE_NAMES.recoverySession,
 ]);
 
 /**

@@ -9,6 +9,7 @@ import {
   HelpCircle,
   AlertTriangle,
 } from "lucide-svelte";
+import { canonicalDirection } from "@nocturne/ui/glucose";
 import {
   Direction,
 } from "$lib/api";
@@ -16,57 +17,82 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-/** Get BG trend direction information */
-export function getDirectionInfo(direction?: Direction | string) {
-  const directions: Partial<Record<
-    Direction,
-    { label: string; icon: SvelteComponent; css: string }
-  >> = {
-    [Direction.DoubleUp]: {
-      label: "rising very fast",
-      icon: ArrowUp,
-      css: "text-red-500",
-    },
-    [Direction.SingleUp]: {
-      label: "rising",
-      icon: ArrowUpRight,
-      css: "text-orange-500",
-    },
-    [Direction.FortyFiveUp]: {
-      label: "rising slowly",
-      icon: ArrowUpRight,
-      css: "text-yellow-500",
-    },
-    [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
-    [Direction.FortyFiveDown]: {
-      label: "falling slowly",
-      icon: ArrowDownRight,
-      css: "text-yellow-500",
-    },
-    [Direction.SingleDown]: {
-      label: "falling",
-      icon: ArrowDownRight,
-      css: "text-orange-500",
-    },
-    [Direction.DoubleDown]: {
-      label: "falling very fast",
-      icon: ArrowDown,
-      css: "text-red-500",
-    },
-    [Direction.NotComputable]: {
-      label: "unknown",
-      icon: HelpCircle,
-      css: "text-gray-500",
-    },
-    [Direction.RateOutOfRange]: {
-      label: "out of range",
-      icon: AlertTriangle,
-      css: "text-gray-500",
-    },
-  };
+type DirectionInfo = { label: string; icon: SvelteComponent; css: string };
 
-  const dirValue = typeof direction === 'string' ? direction as Direction : direction;
-  return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
+/**
+ * Shown for every direction no arrow can express — none reported, not computable, or a
+ * spelling this build does not know. A trend we do not have must never read as a stable one.
+ */
+const unknownDirectionInfo: DirectionInfo = {
+  label: "unknown",
+  icon: HelpCircle,
+  css: "text-gray-500",
+};
+
+/** Keyed by the canonical direction name {@link canonicalDirection} yields. */
+const directionInfo: Partial<Record<string, DirectionInfo>> = {
+  [Direction.TripleUp]: {
+    label: "rising extremely fast",
+    icon: ArrowUp,
+    css: "text-red-500",
+  },
+  [Direction.DoubleUp]: {
+    label: "rising very fast",
+    icon: ArrowUp,
+    css: "text-red-500",
+  },
+  [Direction.SingleUp]: {
+    label: "rising",
+    icon: ArrowUpRight,
+    css: "text-orange-500",
+  },
+  [Direction.FortyFiveUp]: {
+    label: "rising slowly",
+    icon: ArrowUpRight,
+    css: "text-yellow-500",
+  },
+  [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
+  [Direction.FortyFiveDown]: {
+    label: "falling slowly",
+    icon: ArrowDownRight,
+    css: "text-yellow-500",
+  },
+  [Direction.SingleDown]: {
+    label: "falling",
+    icon: ArrowDownRight,
+    css: "text-orange-500",
+  },
+  [Direction.DoubleDown]: {
+    label: "falling very fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.TripleDown]: {
+    label: "falling extremely fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
+  [Direction.RateOutOfRange]: {
+    label: "out of range",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+  [Direction.CgmError]: {
+    label: "sensor error",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+  [Direction.NONE]: unknownDirectionInfo,
+  [Direction.NotComputable]: unknownDirectionInfo,
+};
+
+/**
+ * Get BG trend direction information. v1/v3 responses carry the space-separated Nightscout
+ * spellings ("NOT COMPUTABLE"); v4 carries the enum member names. Both resolve to the same
+ * entry, via the same fold the glyph and rotation tables use.
+ */
+export function getDirectionInfo(direction?: Direction | string): DirectionInfo {
+  return directionInfo[canonicalDirection(direction)] ?? unknownDirectionInfo;
 }
 
 /** Enhanced relative time formatting with internationalization support */

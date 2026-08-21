@@ -7,7 +7,6 @@ public enum SyncMessageType
 {
     Authenticating,
     FetchingData,
-    FetchingDataType,
     ProcessingDataType,
     PublishingDataType,
     SyncComplete,

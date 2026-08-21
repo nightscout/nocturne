@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { buildProxyHeaders } from "./api-proxy-headers";
+import {
+  CLIENT_IP_HEADER,
+  CLIENT_IP_SIGNATURE_HEADER,
+} from "./client-address";
 
 const JAR: Record<string, string> = {
   [AUTH_COOKIE_NAMES.accessToken]: "access-value",
   [AUTH_COOKIE_NAMES.refreshToken]: "refresh-value",
   [AUTH_COOKIE_NAMES.guestSession]: "guest-value",
   [AUTH_COOKIE_NAMES.platformAccess]: "platform-value",
+  [AUTH_COOKIE_NAMES.recoverySession]: "recovery-value",
 };
 
 const cookies = { get: (name: string) => JAR[name] };
@@ -50,6 +55,9 @@ describe("buildProxyHeaders", () => {
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.refreshToken}=refresh-value`);
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.guestSession}=guest-value`);
     expect(cookie).toContain(`${AUTH_COOKIE_NAMES.platformAccess}=platform-value`);
+    // A recovery-code visitor's only credential: unforwarded, the passkey they came to register
+    // cannot be enrolled and the recovery code is spent for nothing.
+    expect(cookie).toContain(`${AUTH_COOKIE_NAMES.recoverySession}=recovery-value`);
   });
 
   it("leaves the incoming Cookie header alone when the jar holds no auth cookies", () => {
@@ -80,6 +88,27 @@ describe("buildProxyHeaders", () => {
 
       expect(headers.has("X-Instance-Key")).toBe(false);
       expect(headers.has("X-Instance-Service")).toBe(false);
+    }
+  });
+
+  it("strips a client-written client address on every host", () => {
+    for (const isShareHost of [true, false]) {
+      const headers = buildProxyHeaders({
+        requestHeaders: new Headers({
+          [CLIENT_IP_HEADER]: "198.51.100.9",
+          [CLIENT_IP_SIGNATURE_HEADER]: "forged",
+          "X-Forwarded-For": "203.0.113.4",
+        }),
+        effectiveHost: "acme.nocturne.run",
+        proto: "https",
+        isShareHost,
+        cookies: emptyCookies,
+      });
+
+      expect(headers.has(CLIENT_IP_HEADER)).toBe(false);
+      expect(headers.has(CLIENT_IP_SIGNATURE_HEADER)).toBe(false);
+      // The address the gateway saw still travels — it is what the API partitions on here.
+      expect(headers.get("X-Forwarded-For")).toBe("203.0.113.4");
     }
   });
 

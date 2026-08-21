@@ -109,10 +109,9 @@ internal sealed class AlertDeliveryService(
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
-            var channelMetadata = channels[i].Metadata;
             try
             {
-                await DispatchToProviderAsync(delivery, payload, channelMetadata, ct);
+                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
             }
             catch (Exception ex)
             {
@@ -230,10 +229,9 @@ internal sealed class AlertDeliveryService(
         for (var i = 0; i < deliveryRows.Count; i++)
         {
             var delivery = deliveryRows[i];
-            var channelMetadata = channels[i].Metadata;
             try
             {
-                await DispatchToProviderAsync(delivery, payload, channelMetadata, ct);
+                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
             }
             catch (Exception ex)
             {
@@ -271,7 +269,7 @@ internal sealed class AlertDeliveryService(
                     ChannelType = channel.ChannelType,
                     Destination = channel.Destination,
                 };
-                await DispatchToProviderAsync(fauxDelivery, payload, channel.Metadata, ct);
+                await DispatchToProviderAsync(fauxDelivery, channel, payload, ct);
             }
             catch (Exception ex)
             {
@@ -307,7 +305,8 @@ internal sealed class AlertDeliveryService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task DispatchToProviderAsync(AlertDeliveryEntity delivery, AlertPayload payload, string? channelMetadata, CancellationToken ct)
+    private async Task DispatchToProviderAsync(
+        AlertDeliveryEntity delivery, AlertRuleChannelSnapshot channel, AlertPayload payload, CancellationToken ct)
     {
         switch (delivery.ChannelType)
         {
@@ -333,7 +332,7 @@ internal sealed class AlertDeliveryService(
                 var webhookProvider = serviceProvider.GetService<Providers.WebhookProvider>();
                 if (webhookProvider is not null)
                 {
-                    await webhookProvider.SendAsync(delivery.Destination, payload, ct);
+                    await webhookProvider.SendAsync(delivery.Destination, channel.Secret, payload, ct);
                     await MarkDeliveredAsync(delivery.Id, null, null, ct);
                 }
                 break;
@@ -351,11 +350,11 @@ internal sealed class AlertDeliveryService(
                 if (haProvider is not null)
                 {
                     object? channelMeta = null;
-                    if (!string.IsNullOrEmpty(channelMetadata))
+                    if (!string.IsNullOrEmpty(channel.Metadata))
                     {
                         try
                         {
-                            using var doc = System.Text.Json.JsonDocument.Parse(channelMetadata);
+                            using var doc = System.Text.Json.JsonDocument.Parse(channel.Metadata);
                             var allowAck = doc.RootElement.TryGetProperty("allow_ack", out var prop)
                                            && prop.ValueKind == System.Text.Json.JsonValueKind.True;
                             channelMeta = new { allowAck };
@@ -387,7 +386,7 @@ internal sealed class AlertDeliveryService(
                     // active-intents snapshot is the source of truth for reconcile). A false result
                     // means a misconfigured channel (unknown kind) — record it as failed so History
                     // doesn't show a silent success.
-                    var handled = await deviceActionProvider.SendAsync(delivery.Destination, payload, channelMetadata, ct);
+                    var handled = await deviceActionProvider.SendAsync(delivery.Destination, payload, channel.Metadata, ct);
                     if (handled)
                         await MarkDeliveredAsync(delivery.Id, null, null, ct);
                     else

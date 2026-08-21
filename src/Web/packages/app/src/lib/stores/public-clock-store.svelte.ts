@@ -27,7 +27,7 @@ export class PublicClockStore implements ClockGlucoseSource {
   }
 
   currentBG = $derived(this.readings[0]?.mgdl ?? 0);
-  direction = $derived(this.readings[0]?.direction ?? "Flat");
+  direction = $derived(this.readings[0]?.direction ?? "");
   lastUpdated = $derived(this.readings[0]?.mills ?? Date.now());
   demoMode = $derived(this.readings.some((r) => r.dataSource === "demo-service"));
 

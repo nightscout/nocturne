@@ -1,5 +1,4 @@
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Core.Interfaces;
 
@@ -24,12 +23,6 @@ public interface IConnectorService<in TConfig> : IDisposable
     ///     Authenticate with the data source
     /// </summary>
     Task<bool> AuthenticateAsync();
-
-    /// <summary>
-    ///     Fetch glucose entries from the data source
-    /// </summary>
-    /// <param name="since">Fetch entries since this timestamp (optional)</param>
-    Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null);
 
     /// <summary>
     ///     Perform a granular sync operation

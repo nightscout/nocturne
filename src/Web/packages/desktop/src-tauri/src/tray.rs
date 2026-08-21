@@ -9,7 +9,7 @@
 //! ownership is coordinated with the glucose poll via shared state so the two don't fight over the
 //! icon and the normal tile is restored when the last flashing excursion clears.
 
-use crate::glucose_poll::CurrentBg;
+use crate::glucose_poll::{CurrentBg, MGDL_PER_MMOL};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -29,7 +29,6 @@ const FLASH_INTERVAL_MS: u64 = 600;
 
 /// Display unit. mmol/L is the default (1 dp); switch to "mg/dL" (0 dp) by changing this constant.
 const TRAY_UNIT: &str = "mmol/L";
-const MMOL_PER_MGDL: f64 = 18.0182;
 
 /// Segoe UI Bold — present on every Win11 install. Read at runtime; never bundled/committed.
 const FONT_PATH: &str = r"C:\Windows\Fonts\segoeuib.ttf";
@@ -107,11 +106,16 @@ fn to_display(sgv_mgdl: f64) -> String {
     if TRAY_UNIT == "mg/dL" {
         format!("{:.0}", sgv_mgdl.round())
     } else {
-        format!("{:.1}", sgv_mgdl / MMOL_PER_MGDL)
+        format!("{:.1}", sgv_mgdl / MGDL_PER_MMOL)
     }
 }
 
-/// Dexcom-style direction string to an arrow glyph for the tooltip.
+/// Shown for a reading whose trend we cannot draw: an unknown trend must not read as a stable one.
+const UNKNOWN_DIRECTION_GLYPH: &str = "?";
+
+/// Dexcom-style direction string to an arrow glyph for the tooltip. No direction at all stays
+/// blank; a direction we cannot draw ("None", "NotComputable", an unrecognised vendor value)
+/// gets [`UNKNOWN_DIRECTION_GLYPH`].
 fn direction_arrow(direction: Option<&str>) -> &'static str {
     match direction.unwrap_or("") {
         "DoubleUp" => "\u{2191}\u{2191}",
@@ -121,7 +125,8 @@ fn direction_arrow(direction: Option<&str>) -> &'static str {
         "FortyFiveDown" => "\u{2198}",
         "SingleDown" => "\u{2193}",
         "DoubleDown" => "\u{2193}\u{2193}",
-        _ => "",
+        "" => "",
+        _ => UNKNOWN_DIRECTION_GLYPH,
     }
 }
 
@@ -538,8 +543,14 @@ mod tests {
     fn direction_maps_to_arrow() {
         assert_eq!(direction_arrow(Some("Flat")), "\u{2192}");
         assert_eq!(direction_arrow(Some("SingleUp")), "\u{2191}");
-        assert_eq!(direction_arrow(Some("Bogus")), "");
         assert_eq!(direction_arrow(None), "");
+    }
+
+    #[test]
+    fn unknown_direction_is_not_an_arrow() {
+        for direction in ["None", "NotComputable", "Bogus"] {
+            assert_eq!(direction_arrow(Some(direction)), "?");
+        }
     }
 
     #[test]

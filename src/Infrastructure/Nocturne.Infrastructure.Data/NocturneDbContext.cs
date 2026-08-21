@@ -21,6 +21,19 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private readonly DbContextOptions<NocturneDbContext> _options;
 
     /// <summary>
+    /// Key of the global query filter restricting every <see cref="ITenantScoped"/> entity to
+    /// <see cref="TenantId"/>.
+    /// </summary>
+    public const string TenantFilterKey = "tenant_isolation";
+
+    /// <summary>
+    /// Key of the global query filter hiding soft-deleted rows of every <see cref="ISoftDeletable"/>
+    /// entity. Named separately from <see cref="TenantFilterKey"/> so a purge can lift it alone —
+    /// see <see cref="Extensions.PurgeExtensions"/>.
+    /// </summary>
+    public const string SoftDeleteFilterKey = "soft_delete";
+
+    /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
     /// </summary>
     /// <param name="options">The options for this context</param>
@@ -424,6 +437,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
+    /// The device-status snapshot tables, upserted on the <see cref="ISyncDedupable"/> key.
+    /// </summary>
+    internal static readonly Type[] V4SnapshotEntities =
+    [
+        typeof(ApsSnapshotEntity),
+        typeof(PumpSnapshotEntity),
+        typeof(UploaderSnapshotEntity),
+    ];
+
+    /// <summary>
     /// V4 record tables keyed on <see cref="IV4TimeSeriesEntity.Timestamp"/>.
     /// </summary>
     internal static readonly Type[] V4TimeSeriesRecordEntities =
@@ -443,12 +466,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(CarbRatioScheduleEntity),
         typeof(SensitivityScheduleEntity),
         typeof(TargetRangeScheduleEntity),
+        .. V4SnapshotEntities,
     ];
 
     /// <summary>
-    /// V4 record tables whose legacy id is the dedup key, adding the span-shaped
-    /// <see cref="TempBasalEntity"/>. The snapshot tables are absent: they dedup on the
-    /// <see cref="ISyncDedupable"/> key, so their legacy id carries a plain lookup index instead.
+    /// V4 record tables whose legacy id is an insert-only dedup key, adding the span-shaped
+    /// <see cref="TempBasalEntity"/>. The snapshots belong here too: their sync-identifier
+    /// uniqueness is filtered on a non-null identifier, which a legacy import never carries.
     /// </summary>
     internal static readonly Type[] V4LegacyIdRecordEntities =
         [.. V4TimeSeriesRecordEntities, typeof(TempBasalEntity)];
@@ -485,9 +509,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(BasalInjectionEntity),
         typeof(CarbIntakeEntity),
         typeof(TempBasalEntity),
-        typeof(ApsSnapshotEntity),
-        typeof(PumpSnapshotEntity),
-        typeof(UploaderSnapshotEntity),
+        .. V4SnapshotEntities,
     ];
 
     /// <summary>
@@ -513,8 +535,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
-            entity.HasIndex(nameof(SensorGlucoseEntity.CorrelationId))
+            entity.HasIndex(nameof(IV4Entity.CorrelationId))
                 .HasDatabaseName($"ix_{table}_correlation_id");
+        }
+
+        // The partial sync-id and legacy-id indexes lead with tenant_id, which makes EF drop the
+        // auto-created tenant index as redundant, but a filtered index can't serve general
+        // tenant-scoped scans (all pre-existing rows have NULL sync_identifier).
+        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(nameof(ITenantScoped.TenantId))
+                .HasDatabaseName($"IX_{entity.Metadata.GetTableName()}_tenant_id");
         }
 
         foreach (var entity in V4ProfileNamedEntities.Select(t => modelBuilder.Entity(t)))
@@ -1459,59 +1490,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.TenantId, e.EventType, e.Timestamp })
             .HasDatabaseName("ix_device_events_tenant_event_type_timestamp")
             .IsDescending(false, false, true);
-
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_aps_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_aps_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index: the partial sync-id index starts with tenant_id,
-        // which makes EF drop the auto-created one as redundant, but a filtered index can't serve
-        // general tenant-scoped scans (all pre-existing rows have NULL sync_identifier).
-        modelBuilder
-            .Entity<ApsSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_aps_snapshots_tenant_id");
-
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_pump_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_pump_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index (see ApsSnapshot note above).
-        modelBuilder
-            .Entity<PumpSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_pump_snapshots_tenant_id");
-
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.Timestamp)
-            .HasDatabaseName("ix_uploader_snapshots_timestamp")
-            .IsDescending();
-
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.LegacyId)
-            .HasDatabaseName("ix_uploader_snapshots_legacy_id");
-
-        // Keep the conventional TenantId index (see ApsSnapshot note above).
-        modelBuilder
-            .Entity<UploaderSnapshotEntity>()
-            .HasIndex(e => e.TenantId)
-            .HasDatabaseName("IX_uploader_snapshots_tenant_id");
 
         modelBuilder
             .Entity<DeviceStatusExtrasEntity>()
@@ -2574,7 +2552,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
-    /// Applies global query filters for tenant isolation on all ITenantScoped entities.
+    /// Applies the global query filters carried by every ITenantScoped entity: tenant isolation,
+    /// plus the soft-delete predicate on the ISoftDeletable ones.
     /// Filters reference this.TenantId which is set per-request.
     /// EF Core parameterizes the value, so pooled contexts work correctly.
     /// </summary>
@@ -2588,26 +2567,31 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             var parameter = Expression.Parameter(entityType.ClrType, "e");
             var tenantIdProperty = Expression.Property(parameter, nameof(ITenantScoped.TenantId));
             var currentTenantId = Expression.Property(Expression.Constant(this), nameof(TenantId));
-            Expression body = Expression.Equal(tenantIdProperty, currentTenantId);
+            var entityBuilder = modelBuilder.Entity(entityType.ClrType);
 
-            if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
-            {
-                var deletedAtProperty = Expression.Property(parameter, nameof(ISoftDeletable.DeletedAt));
-                var nullValue = Expression.Constant(null, typeof(DateTime?));
-                var isNotDeleted = Expression.Equal(deletedAtProperty, nullValue);
-                body = Expression.AndAlso(body, isNotDeleted);
+            // Keyed rather than anonymous filters: a hard purge has to lift the soft-delete
+            // predicate without lifting tenant isolation with it (PurgeExtensions).
+            entityBuilder.HasQueryFilter(
+                TenantFilterKey,
+                Expression.Lambda(Expression.Equal(tenantIdProperty, currentTenantId), parameter));
 
-                // Records whether the latest soft-delete was user-initiated. The soft-delete
-                // dedup discriminator (SoftDeleteDedupExtensions) blocks connector resync from
-                // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
-                // A shadow property so it lands on every soft-deletable table without a per-entity edit.
-                modelBuilder.Entity(entityType.ClrType)
-                    .Property<bool>("DeletedByUser")
-                    .HasColumnName("deleted_by_user")
-                    .HasDefaultValue(false);
-            }
+            if (!typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
+                continue;
 
-            modelBuilder.Entity(entityType.ClrType).HasQueryFilter(Expression.Lambda(body, parameter));
+            var deletedAtProperty = Expression.Property(parameter, nameof(ISoftDeletable.DeletedAt));
+            var nullValue = Expression.Constant(null, typeof(DateTime?));
+            entityBuilder.HasQueryFilter(
+                SoftDeleteFilterKey,
+                Expression.Lambda(Expression.Equal(deletedAtProperty, nullValue), parameter));
+
+            // Records whether the latest soft-delete was user-initiated. The soft-delete
+            // dedup discriminator (SoftDeleteDedupExtensions) blocks connector resync from
+            // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
+            // A shadow property so it lands on every soft-deletable table without a per-entity edit.
+            entityBuilder
+                .Property<bool>("DeletedByUser")
+                .HasColumnName("deleted_by_user")
+                .HasDefaultValue(false);
         }
     }
 

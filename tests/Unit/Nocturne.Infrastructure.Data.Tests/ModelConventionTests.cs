@@ -61,9 +61,23 @@ public class ModelConventionTests
         AssertFamily(
             NocturneDbContext.V4LegacyIdRecordEntities,
             "_correlation_id",
-            i => Columns(i).SequenceEqual([nameof(SensorGlucoseEntity.CorrelationId)])
+            i => Columns(i).SequenceEqual([nameof(IV4Entity.CorrelationId)])
                 && !i.IsUnique
                 && i.GetFilter() is null);
+
+    /// <summary>
+    /// EF drops this one as redundant against the tenant-leading partial indexes unless it is
+    /// declared — see <see cref="NocturneDbContext.V4SnapshotEntities"/>.
+    /// </summary>
+    [Fact]
+    public void EverySnapshotTable_KeepsTheUnfilteredTenantIndex() =>
+        AssertFamily(
+            NocturneDbContext.V4SnapshotEntities,
+            "_tenant_id",
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId)])
+                && !i.IsUnique
+                && i.GetFilter() is null,
+            prefix: "IX_");
 
     [Fact]
     public void EverySyncDedupedTable_HasThePartialUniqueUpsertKey() =>
@@ -97,7 +111,34 @@ public class ModelConventionTests
                 && i.IsDescending is not null
                 && i.IsDescending.SequenceEqual([false, false, true]));
 
-    private static void AssertFamily(IReadOnlyList<Type> entities, string suffix, Func<IIndex, bool> shape)
+    /// <summary>
+    /// <see cref="Nocturne.Infrastructure.Data.Extensions.PurgeExtensions"/> lifts the soft-delete
+    /// filter by key, and <c>IgnoreQueryFilters</c> ignores a key the entity does not declare — so
+    /// folding the two predicates back into one filter would silently restore the purge skip.
+    /// </summary>
+    [Fact]
+    public void EverySoftDeletableEntity_DeclaresTheTenantAndSoftDeleteFiltersSeparately()
+    {
+        var softDeletable = Model().GetEntityTypes()
+            .Where(e => typeof(ISoftDeletable).IsAssignableFrom(e.ClrType)
+                     && typeof(ITenantScoped).IsAssignableFrom(e.ClrType))
+            .ToList();
+
+        softDeletable.Should().HaveCountGreaterThan(20,
+            "an empty set would let every assertion below pass vacuously");
+
+        softDeletable
+            .Where(e => e.FindDeclaredQueryFilter(NocturneDbContext.SoftDeleteFilterKey) is null
+                     || e.FindDeclaredQueryFilter(NocturneDbContext.TenantFilterKey) is null)
+            .Select(e => e.ShortName())
+            .Should().BeEmpty("a purge has to lift the soft-delete filter without lifting tenant isolation");
+    }
+
+    private static void AssertFamily(
+        IReadOnlyList<Type> entities,
+        string suffix,
+        Func<IIndex, bool> shape,
+        string prefix = "ix_")
     {
         entities.Should().NotBeEmpty(
             "a loop over an empty list emits nothing, and every shape assertion would then pass vacuously");
@@ -107,9 +148,10 @@ public class ModelConventionTests
         entities.Select(model.FindEntityType)
             .Where(e => e is null
                 || !e.GetIndexes().Any(i =>
-                    i.GetDatabaseName() == $"ix_{e.GetTableName()}{suffix}" && shape(i)))
+                    i.GetDatabaseName() == $"{prefix}{e.GetTableName()}{suffix}" && shape(i)))
             .Select(e => e?.ShortName() ?? "<unmapped>")
-            .Should().BeEmpty("every listed table needs ix_<table>{0} in the conventional shape", suffix);
+            .Should().BeEmpty(
+                "every listed table needs {0}<table>{1} in the conventional shape", prefix, suffix);
     }
 
     private static IEnumerable<string> Columns(IIndex index) => index.Properties.Select(p => p.Name);

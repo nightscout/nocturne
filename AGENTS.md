@@ -86,9 +86,9 @@ public async Task<ActionResult<Entry[]>> GetCurrentEntry(...)
 
 ### Connector Pattern
 
-Data connectors extend `IConnectorService<TConfig>`:
+Data connectors derive from `BaseConnectorService<TConfig>`, which implements `IConnectorService<TConfig>`:
 
-- Implement `AuthenticateAsync()` and `FetchGlucoseDataAsync()`
+- Implement `AuthenticateAsync()` and `PerformSyncInternalAsync()`
 - Configuration via `IConnectorConfiguration` with `Validate()` method
 - Reference: `src/Connectors/Nocturne.Connectors.Dexcom/`
 

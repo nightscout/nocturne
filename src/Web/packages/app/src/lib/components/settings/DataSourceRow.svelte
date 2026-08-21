@@ -12,7 +12,7 @@
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
-  import type { SyncMessageType } from "$lib/websocket/types";
+  import type { SyncProgressEvent } from "$lib/websocket/types";
   import { lastSeen as formatAge } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
@@ -39,15 +39,10 @@
     lastSuccessfulSync?: Date;
     totalBreakdown?: Record<string, number>;
     last24hBreakdown?: Record<string, number>;
-    syncProgress?: {
-      phase: string;
-      currentDataType: string | null;
-      completedDataTypes: string[];
-      totalDataTypes: number;
-      itemsSyncedSoFar: Record<string, number>;
-      messageType: SyncMessageType | null;
-      messageParams: Record<string, string> | null;
-    } | null;
+    syncProgress?: Pick<
+      SyncProgressEvent,
+      "phase" | "messageType" | "messageParams"
+    > | null;
     badges?: Snippet;
     actions?: Snippet;
     onclick?: () => void;
@@ -179,12 +174,7 @@
               class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
             >
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
-              {#if syncProgress?.currentDataType}
-                Syncing {syncProgress.currentDataType}
-                ({syncProgress.completedDataTypes.length}/{syncProgress.totalDataTypes})
-              {:else}
-                Syncing
-              {/if}
+              Syncing
             </Badge>
           {:else if syncProgress?.phase === "Completed"}
             <Badge
@@ -342,13 +332,6 @@
           <Clock class="inline h-3 w-3" />
           {formatAge(lastSuccessfulSync ?? lastSeen)}
         </p>
-        {/if}
-        {#if syncProgress?.phase === "Syncing" && Object.keys(syncProgress.itemsSyncedSoFar).length > 0}
-          <p class="text-xs text-blue-600 dark:text-blue-400">
-            {Object.entries(syncProgress.itemsSyncedSoFar)
-              .map(([type, count]) => `${count.toLocaleString()} ${type}`)
-              .join(", ")} synced so far
-          </p>
         {/if}
 
         <!-- Error detail -->
