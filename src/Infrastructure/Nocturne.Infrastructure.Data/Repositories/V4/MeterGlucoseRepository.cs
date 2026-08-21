@@ -71,9 +71,8 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.MeterGlucose
-            .FromSource(source)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.MeterGlucose.FromSource(source), AuditContext, $"data_source={source}", ct);
     }
 
     /// <summary>
@@ -93,7 +92,7 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
 
     /// <inheritdoc />
