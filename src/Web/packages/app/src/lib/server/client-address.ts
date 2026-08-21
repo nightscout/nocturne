@@ -22,12 +22,18 @@ export interface ClientAddressSource {
 }
 
 /**
- * The address of the browser this request came from: the first X-Forwarded-For entry the gateway
- * left, else the peer of the connection this container accepted.
+ * The address of the browser this request came from: the last X-Forwarded-For entry, else the peer
+ * of the connection this container accepted.
+ *
+ * The last entry is the one the nearest hop wrote, and the edge is configured to write exactly one
+ * — so on every shipped topology this is the same value the first entry would give, minus the part
+ * a caller can choose. Reading the first entry would let anyone name themselves any address and
+ * have it signed below, which is the one thing the signature is supposed to prevent.
  */
 export function getClientAddress(event: ClientAddressSource): string | null {
   const forwarded = event.request.headers.get("x-forwarded-for");
-  const client = forwarded?.split(",")[0]?.trim();
+  const entries = forwarded?.split(",") ?? [];
+  const client = entries[entries.length - 1]?.trim();
   if (client) return client;
 
   try {

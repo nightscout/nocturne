@@ -40,10 +40,21 @@ describe("clientAddressHeaders", () => {
     );
   });
 
-  it("takes the client from the head of a proxy chain", () => {
+  it("takes the entry the nearest hop wrote, not the one a caller can choose", () => {
     expect(
-      getClientAddress(event({ "X-Forwarded-For": "203.0.113.4, 172.16.0.2" })),
+      getClientAddress(event({ "X-Forwarded-For": "6.6.6.6, 203.0.113.4" })),
     ).toBe("203.0.113.4");
+  });
+
+  it("does not sign an address a caller prepended to the edge's entry", () => {
+    const headers = clientAddressHeaders(
+      event({ "X-Forwarded-For": "6.6.6.6, 203.0.113.4" }),
+    );
+
+    expect(headers[CLIENT_IP_HEADER]).toBe("203.0.113.4");
+    expect(headers[CLIENT_IP_SIGNATURE_HEADER]).toBe(
+      createHmac("sha256", INSTANCE_KEY).update("203.0.113.4").digest("hex"),
+    );
   });
 
   it("falls back to the connection's peer", () => {
