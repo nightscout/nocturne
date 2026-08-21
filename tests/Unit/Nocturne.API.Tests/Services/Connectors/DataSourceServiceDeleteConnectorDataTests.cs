@@ -183,9 +183,6 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
 
         (await assertCtx.StateSpans.IgnoreQueryFilters().SingleAsync(s => s.Source == _deviceId))
             .DeletedAt.Should().NotBeNull();
-        (await assertCtx.MutationAuditLog.Where(a => a.EntityType == "StateSpan" && a.Action == "delete")
-            .ToListAsync())
-            .Should().ContainSingle().Which.AuthType.Should().Be(AuthType);
 
         (await assertCtx.BGChecks.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bgcheck-1"))
             .DeletedAt.Should().NotBeNull();
@@ -193,7 +190,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             .DeletedAt.Should().NotBeNull();
         (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete")
             .Select(a => a.EntityType).ToListAsync())
-            .Should().Contain(["BGCheck", "Note", "ApsSnapshot"]);
+            .Should().Contain(["BGCheck", "Note", "ApsSnapshot", "StateSpan"]);
     }
 
     [Fact]
