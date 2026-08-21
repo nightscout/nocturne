@@ -74,6 +74,24 @@ public class AuthAuditServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Log_NamesACallerWithBothASubjectAndAGrantByItsSubject()
+    {
+        var row = await LogAndReadAsync(
+            AuthAuditEventType.SubjectDeleted,
+            _subjectId,
+            caller: new AuthContext
+            {
+                IsAuthenticated = true,
+                AuthType = AuthType.ApiKey,
+                SubjectId = _adminSubjectId,
+                TokenId = Guid.NewGuid(),
+            });
+
+        Assert.Equal(_adminSubjectId, row.ActorSubjectId);
+        Assert.Null(row.ActorCredential);
+    }
+
+    [Fact]
     public async Task Log_NamesTheCredentialWhenTheCallerHasNoSubjectOfItsOwn()
     {
         var row = await LogAndReadAsync(
