@@ -5,7 +5,7 @@ namespace Nocturne.Connectors.Core.Services;
 /// <summary>
 ///     How one attempt inside <see cref="ConnectorRetryLoop"/> ended.
 /// </summary>
-internal enum RetryStepDecision
+public enum RetryStepDecision
 {
     /// <summary>The run is over; the step's result is the run's result.</summary>
     Complete,
@@ -20,13 +20,13 @@ internal enum RetryStepDecision
 /// <summary>
 ///     The outcome of one attempt inside <see cref="ConnectorRetryLoop"/>.
 /// </summary>
-internal readonly record struct RetryStep<T>(RetryStepDecision Decision, T? Result)
+public readonly record struct RetryStep<T>(RetryStepDecision Decision, T? Result)
 {
-    internal static RetryStep<T> Complete(T? result) => new(RetryStepDecision.Complete, result);
+    public static RetryStep<T> Complete(T? result) => new(RetryStepDecision.Complete, result);
 
-    internal static RetryStep<T> RetryAfterDelay { get; } = new(RetryStepDecision.RetryAfterDelay, default);
+    public static RetryStep<T> RetryAfterDelay { get; } = new(RetryStepDecision.RetryAfterDelay, default);
 
-    internal static RetryStep<T> RetryImmediately { get; } = new(RetryStepDecision.RetryImmediately, default);
+    public static RetryStep<T> RetryImmediately { get; } = new(RetryStepDecision.RetryImmediately, default);
 }
 
 /// <summary>
@@ -34,7 +34,7 @@ internal readonly record struct RetryStep<T>(RetryStepDecision Decision, T? Resu
 ///     budget, the delay between attempts and the cancellation check, while each caller's step
 ///     delegate owns what counts as success, what is retryable, and how failures are reported.
 /// </summary>
-internal static class ConnectorRetryLoop
+public static class ConnectorRetryLoop
 {
     /// <summary>
     ///     Runs <paramref name="step"/> until it completes or the attempt budget is spent.
@@ -51,12 +51,14 @@ internal static class ConnectorRetryLoop
     /// </param>
     /// <param name="onAttemptsExhausted">Produces the result once every attempt has been spent.</param>
     /// <param name="cancellationToken">Checked before each attempt.</param>
-    internal static async Task<T?> RunAsync<T>(
+    /// <param name="onBeforeRetryDelay">Invoked with the just-finished attempt's index only when a delay follows it.</param>
+    public static async Task<T?> RunAsync<T>(
         Func<int, int, Task<RetryStep<T>>> step,
         IRetryDelayStrategy retryDelayStrategy,
         int maxAttempts,
         Func<int, T?> onAttemptsExhausted,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int>? onBeforeRetryDelay = null)
     {
         maxAttempts = Math.Max(1, maxAttempts);
 
@@ -70,7 +72,10 @@ internal static class ConnectorRetryLoop
                 return outcome.Result;
 
             if (outcome.Decision == RetryStepDecision.RetryAfterDelay && attempt < maxAttempts - 1)
+            {
+                onBeforeRetryDelay?.Invoke(attempt);
                 await retryDelayStrategy.ApplyRetryDelayAsync(attempt);
+            }
         }
 
         return onAttemptsExhausted(maxAttempts);

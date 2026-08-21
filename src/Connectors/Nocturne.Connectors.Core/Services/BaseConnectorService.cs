@@ -1238,7 +1238,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <param name="operation">The async operation to execute</param>
     /// <param name="retryStrategy">Strategy for calculating retry delays</param>
     /// <param name="reAuthenticateOnUnauthorized">Optional callback to re-authenticate on 401 responses</param>
-    /// <param name="maxRetries">Maximum number of attempts (default: 3)</param>
+    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one (default: 3).</param>
     /// <param name="operationName">Name of the operation for logging</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The result of the operation, or default(T) on failure</returns>

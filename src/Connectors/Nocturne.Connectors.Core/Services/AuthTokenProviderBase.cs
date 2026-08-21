@@ -167,6 +167,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     Receives the 0-based attempt index and returns the token it acquired, or null plus whether
     ///     the failure is worth another attempt.
     /// </param>
+    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one.</param>
     protected async Task<T?> ExecuteWithRetryAsync<T>(
         Func<int, Task<(T? Result, bool ShouldRetry)>> operation,
         IRetryDelayStrategy retryDelayStrategy,

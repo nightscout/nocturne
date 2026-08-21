@@ -164,53 +164,59 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     /// <summary>
     ///     Fetches from a Glooko endpoint with retry logic and exponential backoff.
+    ///     Throws rather than returning null once the attempts are spent, so a caller cannot mistake
+    ///     an exhausted endpoint for one that legitimately had no data.
     /// </summary>
-    private async Task<JsonElement?> FetchFromGlookoEndpointWithRetry(
+    /// <param name="maxRetries">Total attempts, not retries on top of a first try; clamped to a floor of one.</param>
+    internal async Task<JsonElement?> FetchFromGlookoEndpointWithRetry(
         GlookoSyncContext context, string url, int maxRetries = 3)
     {
         HttpRequestException? lastException = null;
 
-        for (var attempt = 0; attempt < maxRetries; attempt++)
-        {
-            try
+        return await ConnectorRetryLoop.RunAsync<JsonElement?>(
+            async (attempt, _) =>
             {
-                var result = await FetchFromGlookoEndpoint(context, url);
-                if (result.HasValue) return result;
+                try
+                {
+                    var result = await FetchFromGlookoEndpoint(context, url);
+                    if (result.HasValue)
+                        return RetryStep<JsonElement?>.Complete(result);
 
-                _logger.LogWarning("Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
-            }
-            catch (GlookoDataForbiddenException)
-            {
-                // The patient code is part of the URL; retrying it unchanged will 403 again.
-                // Bubble up immediately so the caller can re-authenticate and rebuild URLs.
-                throw;
-            }
-            catch (HttpRequestException ex) when (ex.Message.Contains("422"))
-            {
-                lastException = ex;
-                _logger.LogWarning("Rate limited (422) on attempt {AttemptNumber} for {Url}", attempt + 1, url);
-            }
-            catch (HttpRequestException ex)
-            {
-                lastException = ex;
-                _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
-                lastException = new HttpRequestException($"Request failed: {ex.Message}", ex);
-            }
+                    _logger.LogWarning("Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
+                }
+                catch (GlookoDataForbiddenException)
+                {
+                    // The patient code is part of the URL; retrying it unchanged will 403 again.
+                    // Bubble up immediately so the caller can re-authenticate and rebuild URLs.
+                    throw;
+                }
+                catch (HttpRequestException ex) when (ex.Message.Contains("422"))
+                {
+                    lastException = ex;
+                    _logger.LogWarning("Rate limited (422) on attempt {AttemptNumber} for {Url}", attempt + 1, url);
+                }
+                catch (HttpRequestException ex)
+                {
+                    lastException = ex;
+                    _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
+                    lastException = new HttpRequestException($"Request failed: {ex.Message}", ex);
+                }
 
-            if (attempt < maxRetries - 1)
+                return RetryStep<JsonElement?>.RetryAfterDelay;
+            },
+            _retryDelayStrategy,
+            maxRetries,
+            attempts =>
             {
-                _logger.LogInformation("Applying retry backoff before retry {RetryNumber}", attempt + 2);
-                await _retryDelayStrategy.ApplyRetryDelayAsync(attempt);
-            }
-        }
-
-        _logger.LogError("All {MaxRetries} attempts failed for {Url}", maxRetries, url);
-        if (lastException != null) throw lastException;
-        throw new HttpRequestException($"All {maxRetries} attempts failed for {url}");
+                _logger.LogError("All {MaxRetries} attempts failed for {Url}", attempts, url);
+                throw lastException ?? new HttpRequestException($"All {attempts} attempts failed for {url}");
+            },
+            CancellationToken.None,
+            attempt => _logger.LogInformation("Applying retry backoff before retry {RetryNumber}", attempt + 2));
     }
 
     // ── URL construction ────────────────────────────────────────────────
