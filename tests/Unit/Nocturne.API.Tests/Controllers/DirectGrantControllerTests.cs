@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -69,6 +70,7 @@ public class DirectGrantControllerTests : IDisposable
         var auditService = new AuthAuditService(
             _dbContext,
             new HttpContextAccessor { HttpContext = httpContext },
+            new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
         var directGrantService = new DirectGrantService(
             auditService, new Mock<ILogger<DirectGrantService>>().Object);

@@ -1,4 +1,5 @@
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -23,6 +24,7 @@ public class AuthAuditService : IAuthAuditService
 {
     private readonly NocturneDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<AuthAuditService> _logger;
 
     /// <summary>
@@ -31,10 +33,12 @@ public class AuthAuditService : IAuthAuditService
     public AuthAuditService(
         NocturneDbContext dbContext,
         IHttpContextAccessor httpContextAccessor,
+        IAuditContext auditContext,
         ILogger<AuthAuditService> logger)
     {
         _dbContext = dbContext;
         _httpContextAccessor = httpContextAccessor;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -67,6 +71,7 @@ public class AuthAuditService : IAuthAuditService
                 ErrorMessage = errorMessage,
                 DetailsJson = detailsJson,
                 RefreshTokenId = refreshTokenId,
+                TraceId = _auditContext.TraceId,
                 CreatedAt = DateTime.UtcNow,
             });
             await _dbContext.SaveChangesAsync();

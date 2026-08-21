@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Middleware;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -14,8 +16,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
-/// Covers how <see cref="AuthAuditService"/> resolves the actor and target tenant of an event
-/// when the caller does not name them, over a real database rather than argument matchers.
+/// Covers how <see cref="AuthAuditService"/> resolves the actor, target tenant and request trace
+/// of an event when the caller does not name them, over a real database rather than argument
+/// matchers.
 /// </summary>
 public class AuthAuditServiceTests : IDisposable
 {
@@ -199,10 +202,32 @@ public class AuthAuditServiceTests : IDisposable
         Assert.Equal(_tenantId, row.TenantId);
     }
 
+    [Fact]
+    public async Task Log_JoinsTheEventToTheTraceTheAuditMiddlewareStamped()
+    {
+        var row = await LogAndReadAsync(
+            AuthAuditEventType.Login,
+            _subjectId,
+            caller: null,
+            requestTrace: "0HN7GKQ8V1J2K:00000003");
+
+        Assert.Equal("0HN7GKQ8V1J2K:00000003", row.TraceId);
+    }
+
+    [Fact]
+    public async Task Log_LeavesTheTraceNullOutsideARequest()
+    {
+        var row = await LogAndReadAsync(AuthAuditEventType.Logout, _subjectId, caller: null);
+
+        Assert.Null(row.TraceId);
+    }
+
     /// <summary>
     /// Writes one event through the real service on a context pinned to
     /// <paramref name="pinnedTenantId"/>, with <paramref name="caller"/> on the ambient request,
-    /// and reads the row back.
+    /// and reads the row back. A non-null <paramref name="requestTrace"/> makes the request one
+    /// <see cref="AuditContextMiddleware"/> has already run over, as it has for every caller of
+    /// the service.
     /// </summary>
     private async Task<AuthAuditLogEntity> LogAndReadAsync(
         string eventType,
@@ -210,12 +235,21 @@ public class AuthAuditServiceTests : IDisposable
         AuthContext? caller,
         Guid? pinnedTenantId = null,
         AuthAuditActor? actor = null,
-        Guid? tenantId = null)
+        Guid? tenantId = null,
+        string? requestTrace = null)
     {
         var httpContext = new DefaultHttpContext();
         if (caller is not null)
         {
             httpContext.Items["AuthContext"] = caller;
+        }
+
+        var auditContext = new AuditContext();
+        if (requestTrace is not null)
+        {
+            httpContext.TraceIdentifier = requestTrace;
+            await new AuditContextMiddleware(_ => Task.CompletedTask)
+                .InvokeAsync(httpContext, auditContext);
         }
 
         await using var dbContext = new NocturneDbContext(_dbOptions)
@@ -226,6 +260,7 @@ public class AuthAuditServiceTests : IDisposable
         var service = new AuthAuditService(
             dbContext,
             new HttpContextAccessor { HttpContext = httpContext },
+            auditContext,
             new Mock<ILogger<AuthAuditService>>().Object);
 
         await service.LogAsync(
