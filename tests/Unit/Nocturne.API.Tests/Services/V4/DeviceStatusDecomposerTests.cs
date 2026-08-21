@@ -35,7 +35,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var apsRepo = new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
         var pumpRepo = new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
-        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory);
+        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext());
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
