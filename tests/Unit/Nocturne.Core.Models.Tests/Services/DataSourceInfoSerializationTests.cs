@@ -16,6 +16,7 @@ public class DataSourceInfoSerializationTests
     [Theory]
     [InlineData(SourceHandle.Device, "device")]
     [InlineData(SourceHandle.DataSource, "dataSource")]
+    [InlineData(SourceHandle.Unknown, "unknown")]
     public void DeviceIdHandle_SerializesAsItsNamedHandle(SourceHandle handle, string expected)
     {
         var json = JsonSerializer.Serialize(new DataSourceInfo { DeviceId = "openaps://rig", DeviceIdHandle = handle });

@@ -100,6 +100,13 @@ public class DataSourceServiceDiscoveryTests : IDisposable
             DataSource = dataSource, Device = device, Timestamp = timestamp, Mgdl = 120,
         }));
 
+    private void SeedStateSpan(string source, DateTime startTimestamp) =>
+        Seed(db => db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, Source = source,
+            Category = "PumpMode", State = "Automatic", StartTimestamp = startTimestamp,
+        }));
+
     private void SeedBolus(string? dataSource, string? device, DateTime timestamp) =>
         Seed(db => db.Boluses.Add(new BolusEntity
         {
@@ -180,6 +187,54 @@ public class DataSourceServiceDiscoveryTests : IDisposable
             .Which.DeviceIdHandle.Should().Be(SourceHandle.DataSource);
         sources.Should().ContainSingle(s => s.DeviceId == RigB)
             .Which.DeviceIdHandle.Should().Be(SourceHandle.Device);
+    }
+
+    [Fact]
+    public async Task Discovery_DoesNotLetAStateSpanPromoteABucketsHandle()
+    {
+        // DeviceStatusDecomposer populates StateSpan.Source from the reported device string, so a
+        // span alongside a device-attributed treatment says nothing about which handle the key is.
+        Seed(db => db.DeviceEvents.Add(new DeviceEventEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId,
+            Device = RigA, Timestamp = DateTime.UtcNow, EventType = "SiteChange",
+        }));
+        SeedStateSpan(RigA, DateTime.UtcNow);
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().ContainSingle(s => s.DeviceId == RigA)
+            .Which.DeviceIdHandle.Should().Be(SourceHandle.Device);
+    }
+
+    [Fact]
+    public async Task Discovery_CallsAStateSpanOnlySourcesHandleUnknown()
+    {
+        // Nothing but a span: its Source may be either handle and no other table can break the tie.
+        SeedStateSpan(RigA, DateTime.UtcNow);
+
+        var sources = await DiscoverAsync();
+
+        var info = sources.Should().ContainSingle(s => s.DeviceId == RigA).Subject;
+        info.DeviceIdHandle.Should().Be(SourceHandle.Unknown);
+        info.TotalEntries.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Discovery_AttributesASharedBucketToTheSameSiblingEveryTime()
+    {
+        // Two rigs importing under one connector contend for its single bucket; the winner must not
+        // depend on the order the grouping returned.
+        SeedSensorGlucose(Connector, RigA, DateTime.UtcNow);
+        SeedSensorGlucose(Connector, RigB, DateTime.UtcNow);
+        SeedBolus(Connector, null, DateTime.UtcNow);
+
+        var first = await DiscoverAsync();
+        var again = await DiscoverAsync();
+
+        first.Should().ContainSingle(s => s.DeviceId == RigA).Which.TotalEntries.Should().Be(2);
+        again.Select(s => (s.DeviceId, s.TotalEntries))
+            .Should().BeEquivalentTo(first.Select(s => (s.DeviceId, s.TotalEntries)));
     }
 
     [Fact]

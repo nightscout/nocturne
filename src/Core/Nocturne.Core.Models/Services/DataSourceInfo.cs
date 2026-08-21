@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models.Services;
@@ -10,8 +11,22 @@ namespace Nocturne.Core.Models.Services;
 [JsonConverter(typeof(JsonStringEnumConverter<SourceHandle>))]
 public enum SourceHandle
 {
-    [JsonStringEnumMemberName("device")] Device,
-    [JsonStringEnumMemberName("dataSource")] DataSource,
+    /// <summary>The device string the uploader reported for itself.</summary>
+    [EnumMember(Value = "device"), JsonStringEnumMemberName("device")]
+    Device,
+
+    /// <summary>The data source stamped on the row by whatever wrote it.</summary>
+    [EnumMember(Value = "dataSource"), JsonStringEnumMemberName("dataSource")]
+    DataSource,
+
+    /// <summary>
+    /// Either handle could name it. Rows that record a single undifferentiated origin — a state
+    /// span's <c>Source</c>, which its writers populate from a device string or from a data source
+    /// depending on what produced the span — cannot say which, so a source discovered only from
+    /// those reports this rather than guessing. Match such an identifier against both handles.
+    /// </summary>
+    [EnumMember(Value = "unknown"), JsonStringEnumMemberName("unknown")]
+    Unknown,
 }
 
 /// <summary>

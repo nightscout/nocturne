@@ -54,7 +54,11 @@ public class DataSourceService : IDataSourceService
         _logger = logger;
     }
 
-    private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle Handle);
+    /// <param name="Handle">
+    /// Which handle the bucket's key names, or <see langword="null"/> when no contributing table
+    /// could tell.
+    /// </param>
+    private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
     {
@@ -140,14 +144,24 @@ public class DataSourceService : IDataSourceService
     /// Aggregates every non-glucose table a source can produce rows in, bucketed by the source
     /// identifier the row carries. The bucket key is <c>DataSource ?? Device</c>, the same key the
     /// discovery merge resolves an entry under, and each bucket records which handle produced it
-    /// (<see cref="SourceHandle"/>) so an entry surfaced from a bucket alone can say so.
+    /// (<see cref="SourceHandle"/>) so an entry surfaced from a bucket alone can say so — or records
+    /// that no contributing table could tell.
     /// </summary>
     private async Task<Dictionary<string, TableStats>> GetNonGlucoseStatsAsync(
         DateTime thirtyDaysAgo, DateTime last24HoursDate, CancellationToken ct)
     {
         var result = new Dictionary<string, TableStats>(StringComparer.OrdinalIgnoreCase);
 
-        void Merge(string? key, long count, int count24h, DateTime latest, DateTime? oldest, SourceHandle handle)
+        // A table that stores the two handles in separate columns can say which one the key came
+        // from; one that stores a single undifferentiated origin cannot, and contributes null so the
+        // bucket keeps whatever evidence the other tables carry. Only a row bearing an actual
+        // DataSource column value proves the key is a data source, so that answer wins over Device.
+        static SourceHandle? CombineHandles(SourceHandle? left, SourceHandle? right) =>
+            left == SourceHandle.DataSource || right == SourceHandle.DataSource
+                ? SourceHandle.DataSource
+                : left ?? right;
+
+        void Merge(string? key, long count, int count24h, DateTime latest, DateTime? oldest, SourceHandle? handle)
         {
             if (string.IsNullOrEmpty(key) || count == 0) return;
             if (result.TryGetValue(key, out var existing))
@@ -158,7 +172,7 @@ public class DataSourceService : IDataSourceService
                     latest > existing.Latest ? latest : existing.Latest,
                     oldest.HasValue && (!existing.Oldest.HasValue || oldest.Value < existing.Oldest.Value)
                         ? oldest : existing.Oldest,
-                    existing.Handle == SourceHandle.DataSource ? SourceHandle.DataSource : handle);
+                    CombineHandles(existing.Handle, handle));
             }
             else
             {
@@ -206,13 +220,16 @@ public class DataSourceService : IDataSourceService
             .ToListAsync(ct);
         foreach (var s in tbStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest, HandleOf(s.FromDataSource));
 
-        // StateSpan carries a single origin handle, the data source that produced the span.
+        // StateSpan records one undifferentiated origin: its writers populate Source from the
+        // reported device string (DeviceStatusDecomposer) or from the row's data source, falling back
+        // to the entering party (TreatmentDecomposer). It therefore names neither handle in
+        // particular and contributes no evidence about which one its bucket's key is.
         var ssStats = await _context.StateSpans
             .Where(s => s.StartTimestamp >= thirtyDaysAgo)
             .GroupBy(s => s.Source)
             .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
             .ToListAsync(ct);
-        foreach (var s in ssStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest, SourceHandle.DataSource);
+        foreach (var s in ssStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest, null);
 
         return result;
     }
@@ -242,6 +259,10 @@ public class DataSourceService : IDataSourceService
                 TotalCount = g.LongCount(),
                 Last24HCount = g.Count(e => e.Timestamp >= last24HoursDate),
             })
+            // Sibling devices sharing a data source both resolve to its single non-glucose bucket,
+            // and only the first of them claims it. Ordering by the group key makes which one that is
+            // the same on every refresh instead of whatever the grouping happened to return.
+            .OrderBy(d => d.Device)
             .ToListAsync(cancellationToken);
 
         // Also check APS snapshots for devices that might not have entries. Discovery keys on Device,
@@ -377,7 +398,7 @@ public class DataSourceService : IDataSourceService
         {
             if (processedNonGlucoseKeys.Contains(key)) continue;
 
-            var info = CreateDataSourceInfo(key, key, stats.Handle);
+            var info = CreateDataSourceInfo(key, key, stats.Handle ?? SourceHandle.Unknown);
             info.LastSeen = new DateTimeOffset(stats.Latest, TimeSpan.Zero);
             info.FirstSeen = stats.Oldest.HasValue ? new DateTimeOffset(stats.Oldest.Value, TimeSpan.Zero) : info.LastSeen;
             info.TotalEntries = stats.Count;
