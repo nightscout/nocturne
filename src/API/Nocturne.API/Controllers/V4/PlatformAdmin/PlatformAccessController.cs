@@ -146,9 +146,7 @@ public class PlatformAccessController(
         return Redirect(redirectUrl);
     }
 
-    private string? GetClientIp() =>
-        Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-        ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+    private string? GetClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
 
     private string? GetUserAgent() => Request.Headers.UserAgent.FirstOrDefault();
 }

@@ -728,17 +728,8 @@ public class OidcController : ControllerBase
     /// <summary>
     /// Get the client IP address
     /// </summary>
-    private string? GetClientIpAddress()
-    {
-        // Check for forwarded headers first (when behind a reverse proxy)
-        var forwarded = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString();
-    }
+    private string? GetClientIpAddress() =>
+        HttpContext.Connection.RemoteIpAddress?.ToString();
 
     /// <summary>
     /// Redirect to an error page
