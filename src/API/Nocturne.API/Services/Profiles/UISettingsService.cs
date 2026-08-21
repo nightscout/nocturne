@@ -149,6 +149,14 @@ public class UISettingsService : IUISettingsService
     )
         where T : class
     {
+        if (UISettingsSections.Find(sectionName) == null && !IsAlarmConfigurationName(sectionName))
+        {
+            throw new ArgumentException(
+                $"Unknown UI settings section: {sectionName}",
+                nameof(sectionName)
+            );
+        }
+
         try
         {
             await WriteSectionAsync(sectionName, sectionSettings, cancellationToken);
@@ -243,13 +251,21 @@ public class UISettingsService : IUISettingsService
         }
     }
 
+    /// <summary>
+    /// The row key owning <paramref name="sectionName"/>. Lowercasing here is what makes
+    /// <c>ui:settings:dataquality</c> the key of the <c>dataQuality</c> section; every read and write
+    /// derives its key from this one function, so the two never disagree.
+    /// </summary>
     private static string GetSectionKey(string sectionName)
     {
-        return sectionName.ToLowerInvariant() switch
-        {
-            "alarms" or "alarmconfiguration" => AlarmConfigurationKey,
-            var name => SettingsKeyPrefix + name,
-        };
+        return IsAlarmConfigurationName(sectionName)
+            ? AlarmConfigurationKey
+            : SettingsKeyPrefix + sectionName.ToLowerInvariant();
+    }
+
+    private static bool IsAlarmConfigurationName(string sectionName)
+    {
+        return sectionName.ToLowerInvariant() is "alarms" or "alarmconfiguration";
     }
 
     private async Task<UserAlarmConfiguration?> ReadAlarmConfigurationAsync(

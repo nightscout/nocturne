@@ -251,6 +251,40 @@ public class UISettingsServiceTests
     }
 
     [Fact]
+    public async Task SaveSectionAsync_refusesANameNoSectionOwns()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+
+        var save = () => service.SaveSectionAsync("dataQaulity", new DataQualitySettings());
+
+        await save.Should().ThrowAsync<ArgumentException>();
+        StoredRows(context).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SaveSectionAsync_acceptsEveryRegisteredSectionAndTheAlarmKey()
+    {
+        var service = NewService(NewContext());
+
+        foreach (var section in UISettingsSections.All)
+        {
+            var save = () =>
+                service.SaveSectionAsync(
+                    section.Name,
+                    Activator.CreateInstance(section.Type)!,
+                    CancellationToken.None
+                );
+
+            await save.Should().NotThrowAsync($"section {section.Name} should be writable");
+        }
+
+        var saveAlarms = () => service.SaveSectionAsync("alarms", new UserAlarmConfiguration());
+
+        await saveAlarms.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task SaveAlarmConfigurationAsync_revivesADeactivatedRow()
     {
         var context = NewContext();
