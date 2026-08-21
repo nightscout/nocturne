@@ -9,8 +9,6 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Admin;
 
@@ -177,10 +175,7 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.SensorGlucose.PurgeAsync(SourceFilter.For<SensorGlucoseEntity>(DataSources.DemoService), ct);
-        deleted += await db.MeterGlucose.PurgeAsync(SourceFilter.For<MeterGlucoseEntity>(DataSources.DemoService), ct);
-        deleted += await db.Calibrations.PurgeAsync(SourceFilter.For<CalibrationEntity>(DataSources.DemoService), ct);
+        var deleted = await DemoDataPurge.PurgeEntriesAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
@@ -201,16 +196,8 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.Boluses.PurgeAsync(SourceFilter.For<BolusEntity>(DataSources.DemoService), ct);
-        deleted += await db.CarbIntakes.PurgeAsync(SourceFilter.For<CarbIntakeEntity>(DataSources.DemoService), ct);
-        deleted += await db.BGChecks.PurgeAsync(SourceFilter.For<BGCheckEntity>(DataSources.DemoService), ct);
-        deleted += await db.Notes.PurgeAsync(SourceFilter.For<NoteEntity>(DataSources.DemoService), ct);
-        deleted += await db.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), ct);
-        deleted += await db.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), ct);
-        deleted += await db.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), ct);
-        deleted += await db.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, ct);
-        deleted += await db.ApsSnapshots.PurgeAsync(SourceFilter.For<ApsSnapshotEntity>(DataSources.DemoService), ct);
+        var deleted = await DemoDataPurge.PurgeTreatmentsAsync(db, ct)
+            + await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }

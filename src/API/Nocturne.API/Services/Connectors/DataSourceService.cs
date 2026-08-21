@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Demo;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
@@ -989,19 +990,6 @@ public class DataSourceService : IDataSourceService
         return deletedCounts;
     }
 
-    /// <inheritdoc />
-    public async Task<long> DeleteGlucoseDataBySourceAsync(
-        string dataSource,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var sgDeleted = await _sensorGlucose.DeleteBySourceAsync(dataSource, cancellationToken);
-        var mgDeleted = await _meterGlucose.DeleteBySourceAsync(dataSource, cancellationToken);
-        var calDeleted = await _calibrations.DeleteBySourceAsync(dataSource, cancellationToken);
-
-        return sgDeleted + mgDeleted + calDeleted;
-    }
-
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
 
     internal static string CleanDeviceName(string deviceId)
@@ -1085,21 +1073,9 @@ public class DataSourceService : IDataSourceService
 
         try
         {
-            var glucoseDeleted = await DeleteGlucoseDataBySourceAsync(
-                DataSources.DemoService,
-                cancellationToken
-            );
-
-            var treatmentsDeleted = await _context.Boluses.PurgeAsync(SourceFilter.For<BolusEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.CarbIntakes.PurgeAsync(SourceFilter.For<CarbIntakeEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.BGChecks.PurgeAsync(SourceFilter.For<BGCheckEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.Notes.PurgeAsync(SourceFilter.For<NoteEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.DeviceEvents.PurgeAsync(SourceFilter.For<DeviceEventEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.BolusCalculations.PurgeAsync(SourceFilter.For<BolusCalculationEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.TempBasals.PurgeAsync(SourceFilter.For<TempBasalEntity>(DataSources.DemoService), cancellationToken);
-            treatmentsDeleted += await _context.StateSpans.PurgeAsync(s => s.Source == DataSources.DemoService, cancellationToken);
-
-            var deviceStatusDeleted = await _context.ApsSnapshots.PurgeAsync(SourceFilter.For<ApsSnapshotEntity>(DataSources.DemoService), cancellationToken);
+            var glucoseDeleted = await DemoDataPurge.PurgeEntriesAsync(_context, cancellationToken);
+            var treatmentsDeleted = await DemoDataPurge.PurgeTreatmentsAsync(_context, cancellationToken);
+            var deviceStatusDeleted = await DemoDataPurge.PurgeDeviceStatusAsync(_context, cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
             if (glucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = glucoseDeleted;
