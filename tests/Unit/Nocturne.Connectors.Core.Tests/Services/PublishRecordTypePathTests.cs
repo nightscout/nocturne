@@ -89,14 +89,39 @@ public class PublishRecordTypePathTests
     }
 
     [Fact]
-    public async Task EmptyBatch_RecordsNothing()
+    public async Task EmptyBatch_RecordsAnExplicitZero()
     {
+        // Arrange: the tenant's sync card renders a badge per key, so an active type that came back
+        // empty has to say zero — a missing key reads as "never checked".
         var active = new HashSet<SyncDataType> { SyncDataType.Glucose };
 
+        // Act
         var result = await RunAsync((service, syncResult) =>
             service.PublishAsync(syncResult, SyncDataType.Glucose, active, []));
 
-        result.ItemsSynced.Should().BeEmpty();
+        // Assert
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 0,
+        });
+    }
+
+    [Fact]
+    public async Task EmptyBatchAfterAPublishedOne_LeavesTheCountAlone()
+    {
+        // Arrange: a paginated crawl ends on an empty page, which must not erase what it landed
+        var active = new HashSet<SyncDataType> { SyncDataType.Glucose };
+
+        // Act
+        var result = await RunAsync(async (service, syncResult) =>
+        {
+            await service.PublishAsync(syncResult, SyncDataType.Glucose, active,
+                [new PublishedRecord(), new PublishedRecord()]);
+            await service.PublishAsync(syncResult, SyncDataType.Glucose, active, []);
+        });
+
+        // Assert
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(2);
     }
 
     [Fact]

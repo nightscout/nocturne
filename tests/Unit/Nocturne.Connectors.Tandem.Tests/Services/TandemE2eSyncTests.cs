@@ -157,7 +157,9 @@ public class TandemE2eSyncTests
             [SyncDataType.TempBasals] = 2,
             [SyncDataType.DeviceEvents] = 3,
         });
-        result.ItemsSynced.Should().NotContainKey(SyncDataType.StateSpans);
+        // Active but empty: an explicit zero says "checked, found nothing" where a missing key
+        // would read as "never checked".
+        result.ItemsSynced[SyncDataType.StateSpans].Should().Be(0);
     }
 
     [Fact]

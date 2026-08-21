@@ -702,7 +702,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken,
         string? context = null) where T : class
     {
-        if (!activeTypes.Contains(dataType) || records.Count == 0) return false;
+        if (!activeTypes.Contains(dataType)) return false;
+
+        if (records.Count == 0)
+        {
+            // An active type the sync did look at reports an explicit zero: the tenant's sync card
+            // renders a badge per key, so a missing key reads as "never checked" rather than
+            // "checked, found nothing". TryAdd so a later empty page cannot erase an earlier count.
+            result.ItemsSynced.TryAdd(dataType, 0);
+            return false;
+        }
 
         await ReportSyncMessageAsync(SyncMessageType.PublishingDataType,
             new() { ["count"] = records.Count.ToString(), ["dataType"] = dataType.ToString() },
