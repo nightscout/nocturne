@@ -179,7 +179,7 @@ public class AuditController : ControllerBase
                 SubjectName = e.SubjectName,
                 AuthType = e.AuthType,
                 IpAddress = e.IpAddress,
-                ApiSecretHashPrefix = e.ApiSecretHashPrefix,
+                CredentialFingerprint = e.CredentialFingerprint,
             })
             .ToListAsync(ct);
 

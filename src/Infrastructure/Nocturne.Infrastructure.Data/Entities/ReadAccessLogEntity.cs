@@ -37,10 +37,14 @@ public class ReadAccessLogEntity : ITenantScoped
     [Column("token_id")]
     public Guid? TokenId { get; set; }
 
-    /// <summary>First 8 characters of the API secret SHA1 hash.</summary>
-    [Column("api_secret_hash_prefix")]
-    [MaxLength(8)]
-    public string? ApiSecretHashPrefix { get; set; }
+    /// <summary>
+    /// Identifies the credential behind the read when it has one of its own — an API secret or the
+    /// instance key. Never holds key material or any part of a stored digest.
+    /// </summary>
+    /// <seealso cref="Nocturne.Core.Models.Authorization.AuthContext.CredentialFingerprint"/>
+    [Column("credential_fingerprint")]
+    [MaxLength(16)]
+    public string? CredentialFingerprint { get; set; }
 
     /// <summary>Client IP address of the request.</summary>
     [Column("ip_address")]

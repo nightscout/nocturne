@@ -135,9 +135,10 @@ public class AuthContext
     public string? RawToken { get; set; }
 
     /// <summary>
-    /// Distinguishes one credential from another for callers that have no subject of their own
-    /// (currently the instance key), so the audit trail can name which credential acted.
-    /// Non-reversible: it can neither be presented as a credential nor reduced back to one.
+    /// Distinguishes one credential from another, so the audit trail can name which credential
+    /// acted — the only identity available for a caller with no subject of its own, such as the
+    /// instance key. Non-reversible: it can neither be presented as a credential nor reduced back
+    /// to one.
     /// </summary>
     public string? CredentialFingerprint { get; set; }
 

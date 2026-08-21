@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.Data.Sqlite;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -140,6 +141,58 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.Equal(AuthType.ApiKey, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
         Assert.Contains("glucose.read", result.AuthContext.Scopes);
+    }
+
+    /// <summary>
+    /// The read-access trail records which API secret read PHI. The stored hash is what the lookup
+    /// above matches on, so neither it nor a prefix of it may be what gets recorded.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_IdentifiesTheCredentialWithoutExposingItsStoredHash()
+    {
+        var firstToken = "noc_firstapikey12345";
+        var secondToken = "noc_secondapikey12345";
+        var firstHash = DirectGrantTokenHandler.ComputeSha256Hex(firstToken);
+        var secondHash = DirectGrantTokenHandler.ComputeSha256Hex(secondToken);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            foreach (var hash in new[] { firstHash, secondHash })
+            {
+                ctx.OAuthGrants.Add(new OAuthGrantEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = _subjectId,
+                    TenantId = _testTenantId,
+                    GrantType = OAuthGrantTypes.Direct,
+                    TokenHash = hash,
+                    Scopes = ["glucose.read"],
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+            await ctx.SaveChangesAsync();
+        }
+
+        var first = await AuthenticateWithSecretAsync(firstToken);
+        var second = await AuthenticateWithSecretAsync(secondToken);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotEqual(first, second);
+        Assert.DoesNotContain(first!, firstHash);
+        Assert.NotEqual(firstHash[..first!.Length], first);
+        Assert.Equal(AuditFingerprint.Of(AuditFingerprint.ApiSecretDomain, firstHash), first);
+    }
+
+    private async Task<string?> AuthenticateWithSecretAsync(string secret)
+    {
+        var context = CreateHttpContext();
+        context.Request.Headers["api-secret"] = secret;
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        return result.AuthContext!.CredentialFingerprint;
     }
 
     [Fact]

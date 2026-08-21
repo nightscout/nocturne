@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Filters;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -37,7 +38,8 @@ public class ReadAccessAuditFilterTests
         IActionResult? result = null,
         int statusCode = 200,
         string? queryString = null,
-        TenantContext? tenantContext = null)
+        TenantContext? tenantContext = null,
+        AuthContext? authContext = null)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Path = path;
@@ -48,6 +50,9 @@ public class ReadAccessAuditFilterTests
 
         if (tenantContext != null)
             httpContext.Items["TenantContext"] = tenantContext;
+
+        if (authContext != null)
+            httpContext.Items["AuthContext"] = authContext;
 
         var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
         var executingContext = new ResultExecutingContext(
@@ -206,6 +211,53 @@ public class ReadAccessAuditFilterTests
         _contextFactory.Verify(
             f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    /// <summary>
+    /// The credential behind a read is identified by the fingerprint its handler resolved, which is
+    /// the only such value in the request; deriving one here from the auth type string would tie the
+    /// column to a name the auth context never uses.
+    /// </summary>
+    [Fact]
+    public async Task OnResultExecutionAsync_RecordsTheCallersCredentialFingerprint()
+    {
+        _configCache
+            .Setup(c => c.GetConfigAsync(TestTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantAuditConfig(ReadAuditEnabled: true, null, null));
+        _auditContext.Setup(a => a.AuthType).Returns(AuthType.ApiKey.ToString());
+
+        var saveCompleted = new SemaphoreSlim(0, 1);
+        var mockDbContext = CreateMockDbContext();
+        ReadAccessLogEntity? written = null;
+        mockDbContext
+            .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                written = mockDbContext.Object.ChangeTracker
+                    .Entries<ReadAccessLogEntity>().Single().Entity;
+                saveCompleted.Release();
+            })
+            .ReturnsAsync(1);
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockDbContext.Object);
+
+        var filter = CreateFilter();
+        var (ctx, next) = CreateContexts("/api/v4/entries", "GET",
+            tenantContext: TestTenantContext,
+            authContext: new AuthContext
+            {
+                IsAuthenticated = true,
+                AuthType = AuthType.ApiKey,
+                CredentialFingerprint = "0123456789abcdef",
+            });
+
+        await filter.OnResultExecutionAsync(ctx, next);
+
+        (await saveCompleted.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeTrue();
+
+        written.Should().NotBeNull();
+        written!.CredentialFingerprint.Should().Be("0123456789abcdef");
     }
 
     [Fact]

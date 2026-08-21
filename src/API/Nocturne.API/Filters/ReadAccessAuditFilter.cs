@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
@@ -78,11 +79,6 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
             // Sanitize query parameters
             var queryParams = SanitizeQueryParameters(httpContext.Request.Query);
 
-            // Get API secret hash prefix if auth type is ApiSecret
-            string? apiSecretHashPrefix = null;
-            if (string.Equals(_auditContext.AuthType, "ApiSecret", StringComparison.OrdinalIgnoreCase))
-                apiSecretHashPrefix = httpContext.Items["ApiSecretHashPrefix"] as string;
-
             var userAgent = httpContext.Request.Headers.UserAgent.ToString();
 
             var entry = new ReadAccessLogEntity
@@ -93,7 +89,7 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 SubjectName = _auditContext.SubjectName,
                 AuthType = _auditContext.AuthType,
                 TokenId = _auditContext.TokenId,
-                ApiSecretHashPrefix = apiSecretHashPrefix,
+                CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,
                 IpAddress = _auditContext.IpAddress,
                 UserAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
                 Endpoint = $"{method} {path}",

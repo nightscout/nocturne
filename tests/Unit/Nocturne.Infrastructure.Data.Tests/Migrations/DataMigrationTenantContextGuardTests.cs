@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
@@ -41,10 +39,10 @@ public class DataMigrationTenantContextGuardTests
     [Fact]
     public void NoDataMigrationDrivesItsTenantLoopOffATenantScopedTable()
     {
-        var scoped = TenantScopedTableNames();
+        var scoped = MigrationSourceFiles.TenantScopedTableNames();
         var offenders = new List<string>();
 
-        foreach (var file in MigrationSources())
+        foreach (var file in MigrationSourceFiles.All())
         {
             var migration = Path.GetFileNameWithoutExtension(file);
 
@@ -67,16 +65,16 @@ public class DataMigrationTenantContextGuardTests
     {
         // A path or reflection regression would empty both sets and make the guard above pass
         // vacuously.
-        MigrationSources().Should().NotBeEmpty();
-        TenantScopedTableNames().Should().NotBeEmpty();
+        MigrationSourceFiles.All().Should().NotBeEmpty();
+        MigrationSourceFiles.TenantScopedTableNames().Should().NotBeEmpty();
     }
 
     [Fact]
     public void EveryAllowlistedMigrationStillExistsAndStillOffends()
     {
-        var scoped = TenantScopedTableNames();
+        var scoped = MigrationSourceFiles.TenantScopedTableNames();
 
-        var stillOffending = MigrationSources()
+        var stillOffending = MigrationSourceFiles.All()
             .Where(f => KnownNoOpMigrations.Contains(Path.GetFileNameWithoutExtension(f)))
             .Where(f => LoopHeader.Matches(File.ReadAllText(f))
                 .Any(m => scoped.Contains(LoopSourceTable(m.Groups[1].Value))))
@@ -94,37 +92,4 @@ public class DataMigrationTenantContextGuardTests
     /// </summary>
     private static string LoopSourceTable(string captured) =>
         Regex.Split(captured, @"[(;,\s]")[0].Trim('"').ToLowerInvariant();
-
-    private static IReadOnlyList<string> MigrationSources() =>
-        Directory.GetFiles(MigrationsDirectory(), "*.cs")
-            .Where(f => !f.EndsWith(".Designer.cs", StringComparison.Ordinal))
-            .Where(f => !Path.GetFileName(f).Contains("ModelSnapshot", StringComparison.Ordinal))
-            .OrderBy(f => f, StringComparer.Ordinal)
-            .ToList();
-
-    private static IReadOnlySet<string> TenantScopedTableNames() =>
-        typeof(ITenantScoped).Assembly.GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
-            .Select(t => t.GetCustomAttribute<TableAttribute>()?.Name)
-            .Where(n => n is not null)
-            .Select(n => n!.ToLowerInvariant())
-            .ToHashSet(StringComparer.Ordinal);
-
-    private static string MigrationsDirectory()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(
-                directory.FullName, "src", "Infrastructure", "Nocturne.Infrastructure.Data", "Migrations");
-
-            if (Directory.Exists(candidate))
-                return candidate;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No migrations directory above {AppContext.BaseDirectory}.");
-    }
 }
