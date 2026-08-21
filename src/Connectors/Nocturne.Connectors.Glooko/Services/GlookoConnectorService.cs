@@ -413,13 +413,10 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 var deviceSettings = await FetchV3DeviceSettingsAsync(context);
                 if (deviceSettings != null)
                 {
-                    var profiles = context.ProfileMapper.TransformDeviceSettingsToProfiles(deviceSettings);
-                    if (profiles.Any() && await PublishProfileDataAsync(profiles, context.Config, cancellationToken))
-                    {
-                        result.ItemsSynced[SyncDataType.Profiles] = profiles.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} profiles from device settings",
-                            ConnectorSource, profiles.Count);
-                    }
+                    await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
+                        context.ProfileMapper.TransformDeviceSettingsToProfiles(deviceSettings),
+                        PublishProfileDataAsync, context.Config, cancellationToken,
+                        "device settings");
 
                     var profileStateSpans = context.ProfileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
                     if (profileStateSpans.Count > 0)
