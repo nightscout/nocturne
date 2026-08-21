@@ -33,6 +33,20 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # A project outside nocturne.sln is built by nothing that says "build everything", so it
+      # can rot uncompilable indefinitely. scripts/Shared is the one deliberate exclusion: it is
+      # consumed by the file-based apps in scripts/ through `#:project`, never by the product build.
+      - name: Every project is in the solution
+        run: |
+          orphans=$(comm -23 \
+            <(git ls-files '*.csproj' | grep -v '^scripts/' | sort) \
+            <(dotnet sln nocturne.sln list | grep '\.csproj$' | sed 's|\\|/|g' | sort))
+          if [ -n "$orphans" ]; then
+            echo "These projects are missing from nocturne.sln:"
+            echo "$orphans"
+            exit 1
+          fi
+
       - name: Test
         run: |
           # Build per-project to avoid Windows-only projects (Desktop, Widgets)
