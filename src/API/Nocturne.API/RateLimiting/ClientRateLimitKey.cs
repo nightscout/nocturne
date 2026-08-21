@@ -21,11 +21,11 @@ namespace Nocturne.API.RateLimiting;
 /// address rather than presenting the key's digest keeps a reusable credential off user-originated
 /// requests — a captured signature buckets its own address and nothing else.
 /// <para>
-/// This settles who shares a partition, not what a partition may spend: an unsigned request still
-/// partitions on <c>Connection.RemoteIpAddress</c>, which <c>UseForwardedHeaders</c> takes from
-/// <c>X-Forwarded-For</c> with no trusted-proxy list, so a caller rotating that header still gets
-/// a fresh window. The ceilings that do bound abuse are named on the policies themselves in
-/// <see cref="Extensions.ServiceRegistrationExtensions"/>.
+/// An unsigned request partitions on <c>Connection.RemoteIpAddress</c>, which is only as good as
+/// the edge that wrote <c>X-Forwarded-For</c> — see
+/// <see cref="Extensions.NocturneForwardedHeadersExtensions"/> for what the API consumes and what the edge
+/// must present for it to name a caller. The ceilings that bound abuse are on the policies
+/// themselves in <see cref="Extensions.ServiceRegistrationExtensions"/>.
 /// </para>
 /// </remarks>
 public sealed class ClientRateLimitKey

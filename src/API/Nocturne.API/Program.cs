@@ -3,7 +3,6 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
@@ -276,16 +275,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
-                             | ForwardedHeaders.XForwardedProto
-                             | ForwardedHeaders.XForwardedHost;
-    // Trust any proxy — the API is only reachable through the gateway.
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-
 var app = builder.Build();
 
 // Surface the effective credentialed-CORS base domain so operators can see what's active.
@@ -322,7 +311,7 @@ app.UseStatusCodePages();
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
 app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
 app.UseStaticFiles();
-app.UseForwardedHeaders();
+app.UseNocturneForwardedHeaders(builder.Configuration);
 
 // Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
 // Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
