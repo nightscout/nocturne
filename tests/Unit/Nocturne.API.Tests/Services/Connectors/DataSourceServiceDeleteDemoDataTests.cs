@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Services.Demo.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -19,7 +20,8 @@ namespace Nocturne.API.Tests.Services.Connectors;
 /// <summary>
 /// A demo reset has to leave the tables empty. The purge used to run under the soft-delete query
 /// filter, so any record a visitor had deleted survived the reset and could then be neither read nor
-/// purged.
+/// purged. It also matched device status on <c>Device</c>, which the demo feed sets to the Trio rig
+/// name — so the seeded shape here is the one both demo writers actually produce.
 /// </summary>
 [Trait("Category", "Unit")]
 public class DataSourceServiceDeleteDemoDataTests : IDisposable
@@ -109,10 +111,13 @@ public class DataSourceServiceDeleteDemoDataTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
             StartTimestamp = timestamp, Rate = 0.5, Origin = "pump", DeletedAt = deletedAt,
         });
+        // Both demo writers stamp DataSource = demo-service and leave Device as the Trio rig name:
+        // the seeder through DeviceStatusDecomposer, the realtime tick through the V4 endpoints.
         db.ApsSnapshots.Add(new ApsSnapshotEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, Device = DataSources.DemoService,
-            Timestamp = timestamp, AidAlgorithm = "Loop", DeletedAt = deletedAt,
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
+            Device = DemoDeviceStatusGenerator.DeviceName,
+            Timestamp = timestamp, AidAlgorithm = "Trio", DeletedAt = deletedAt,
         });
         db.StateSpans.Add(new StateSpanEntity
         {

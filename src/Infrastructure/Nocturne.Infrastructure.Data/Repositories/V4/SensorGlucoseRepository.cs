@@ -452,7 +452,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.SensorGlucose
             .AsNoTracking()
-            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
+            .FromSource(source)
             .CountAsync(ct);
     }
 
@@ -466,8 +466,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source)),
-            AuditContext, $"data_source={source}", ct);
+            ctx.SensorGlucose.FromSource(source), AuditContext, $"data_source={source}", ct);
     }
 
     /// <inheritdoc />

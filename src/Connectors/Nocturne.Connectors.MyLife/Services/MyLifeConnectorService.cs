@@ -46,15 +46,6 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Legacy method required by IConnectorService interface.
-    /// Returns empty - use PerformSyncInternalAsync for glucose data.
-    /// </summary>
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
-
-    /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
     /// is established.
     /// </summary>
@@ -182,8 +173,7 @@ public class MyLifeConnectorService(
                         .ToList();
 
                     await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month,
-                        timestampOf: s => s.Timestamp);
+                        sgList, PublishSensorGlucoseDataAsync, config, cancellationToken, batch.Month);
                 }
 
                 // Shared treatment filtering and context for records + state spans
@@ -206,23 +196,17 @@ public class MyLifeConnectorService(
 
                         var monthCtx = batch.Month;
                         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                            records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx,
-                            b => b.Timestamp);
+                            records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx);
                         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                            records.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken, monthCtx,
-                            c => c.Timestamp);
+                            records.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken, monthCtx);
                         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-                            records.BGChecks, PublishBGCheckDataAsync, config, cancellationToken, monthCtx,
-                            b => b.Timestamp);
+                            records.BGChecks, PublishBGCheckDataAsync, config, cancellationToken, monthCtx);
                         await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
-                            records.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken, monthCtx,
-                            b => b.Timestamp);
+                            records.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken, monthCtx);
                         await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
-                            records.Notes, PublishNoteDataAsync, config, cancellationToken, monthCtx,
-                            n => n.Timestamp);
+                            records.Notes, PublishNoteDataAsync, config, cancellationToken, monthCtx);
                         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-                            records.DeviceEvents, PublishDeviceEventDataAsync, config, cancellationToken, monthCtx,
-                            d => d.Timestamp);
+                            records.DeviceEvents, PublishDeviceEventDataAsync, config, cancellationToken, monthCtx);
                     }
 
                     // TempBasal state spans
@@ -231,8 +215,7 @@ public class MyLifeConnectorService(
                         var tempBasals = MyLifeStateSpanMapper.MapTempBasals(treatmentEvents, treatmentContext).ToList();
 
                         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                            tempBasals, PublishTempBasalDataAsync, config, cancellationToken, batch.Month,
-                            t => t.StartTimestamp);
+                            tempBasals, PublishTempBasalDataAsync, config, cancellationToken, batch.Month);
                     }
                 }
 
@@ -248,13 +231,11 @@ public class MyLifeConnectorService(
 
                 var profiles = MyLifePumpSettingsMapper.MapToProfiles(readouts);
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles, PublishProfileDataAsync, config, cancellationToken,
-                    timestampOf: p => TimestampFromMills(p.Mills));
+                    profiles, PublishProfileDataAsync, config, cancellationToken);
 
                 var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
                 await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings",
-                    s => s.StartTimestamp);
+                    profileStateSpans, PublishStateSpanDataAsync, config, cancellationToken, "pump settings");
             }
         }
         catch (Exception ex)

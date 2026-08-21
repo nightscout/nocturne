@@ -1,9 +1,9 @@
 /**
  * Remote functions for the tenant's UI settings blob.
  *
- * The API persists the whole UISettingsConfiguration document under one key, so
- * a section update is a read-modify-write: fetch the stored document, replace
- * one section, save it back. Callers get the persisted value from getUiSettings()
+ * The API takes and returns the whole UISettingsConfiguration document, so a
+ * section update is a read-modify-write: fetch the stored document, replace one
+ * section, save it back. Callers get the persisted value from getUiSettings()
  * rather than an in-memory copy, so nothing is lost on reload.
  */
 import { getRequestEvent, query, command } from "$app/server";

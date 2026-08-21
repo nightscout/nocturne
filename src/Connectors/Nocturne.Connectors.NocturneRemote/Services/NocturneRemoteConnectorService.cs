@@ -168,8 +168,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.SensorGlucose, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishSensorGlucoseDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishSensorGlucoseDataAsync, config, ct);
     }
 
     private async Task SyncBGChecksAsync(
@@ -180,8 +179,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.BGChecks, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishBGCheckDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishBGCheckDataAsync, config, ct);
     }
 
     private async Task SyncBolusesAsync(
@@ -192,8 +190,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.Boluses, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishBolusDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishBolusDataAsync, config, ct);
     }
 
     private async Task SyncCarbIntakeAsync(
@@ -204,8 +201,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.CarbIntake, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishCarbIntakeDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishCarbIntakeDataAsync, config, ct);
     }
 
     private async Task SyncBolusCalculationsAsync(
@@ -216,8 +212,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.BolusCalculations, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishBolusCalculationDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishBolusCalculationDataAsync, config, ct);
     }
 
     private async Task SyncNotesAsync(
@@ -228,8 +223,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.Notes, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishNoteDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishNoteDataAsync, config, ct);
     }
 
     private async Task SyncDeviceEventsAsync(
@@ -240,8 +234,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.DeviceEvents, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            ImportHelper.PrepareForImport(records), PublishDeviceEventDataAsync, config, ct,
-            timestampOf: r => r.Timestamp);
+            ImportHelper.PrepareForImport(records), PublishDeviceEventDataAsync, config, ct);
     }
 
     #endregion
@@ -256,8 +249,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.StateSpans, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-            records, PublishStateSpanDataAsync, config, ct,
-            timestampOf: s => s.StartTimestamp == default ? null : s.StartTimestamp);
+            records, PublishStateSpanDataAsync, config, ct);
     }
 
     private async Task SyncProfilesAsync(
@@ -268,8 +260,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.ProfileRecords, null, null, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-            records, PublishProfileDataAsync, config, ct,
-            timestampOf: p => TimestampFromMills(p.Mills));
+            records, PublishProfileDataAsync, config, ct);
     }
 
     private async Task SyncDeviceStatusAsync(
@@ -281,8 +272,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         var records = await FetchV1DeviceStatusAsync(request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
-            records, PublishDeviceStatusAsync, config, ct,
-            timestampOf: d => ParseCreatedAt(d.CreatedAt));
+            records, PublishDeviceStatusAsync, config, ct);
     }
 
     private async Task SyncActivityAsync(
@@ -293,13 +283,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             NocturneRemoteConstants.Activity, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Activity, activeTypes,
-            records, PublishActivityDataAsync, config, ct,
-            timestampOf: a => ParseCreatedAt(a.CreatedAt));
+            records, PublishActivityDataAsync, config, ct);
     }
-
-    /// <summary>Parses a legacy ISO createdAt string, treating an unparseable value as absent.</summary>
-    private static DateTime? ParseCreatedAt(string? createdAt) =>
-        DateTimeOffset.TryParse(createdAt, out var dto) ? dto.UtcDateTime : null;
 
     private async Task SyncFoodAsync(
         NocturneRemoteConnectorConfiguration config, SyncResult result,

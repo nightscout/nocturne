@@ -9,6 +9,7 @@ import {
   HelpCircle,
   AlertTriangle,
 } from "lucide-svelte";
+import { canonicalDirection } from "@nocturne/ui/glucose";
 import {
   Direction,
 } from "$lib/api";
@@ -28,7 +29,13 @@ const unknownDirectionInfo: DirectionInfo = {
   css: "text-gray-500",
 };
 
-const directionInfo: Partial<Record<Direction, DirectionInfo>> = {
+/** Keyed by the canonical direction name {@link canonicalDirection} yields. */
+const directionInfo: Partial<Record<string, DirectionInfo>> = {
+  [Direction.TripleUp]: {
+    label: "rising extremely fast",
+    icon: ArrowUp,
+    css: "text-red-500",
+  },
   [Direction.DoubleUp]: {
     label: "rising very fast",
     icon: ArrowUp,
@@ -60,8 +67,18 @@ const directionInfo: Partial<Record<Direction, DirectionInfo>> = {
     icon: ArrowDown,
     css: "text-red-500",
   },
+  [Direction.TripleDown]: {
+    label: "falling extremely fast",
+    icon: ArrowDown,
+    css: "text-red-500",
+  },
   [Direction.RateOutOfRange]: {
     label: "out of range",
+    icon: AlertTriangle,
+    css: "text-gray-500",
+  },
+  [Direction.CgmError]: {
+    label: "sensor error",
     icon: AlertTriangle,
     css: "text-gray-500",
   },
@@ -70,21 +87,12 @@ const directionInfo: Partial<Record<Direction, DirectionInfo>> = {
 };
 
 /**
- * v1/v3 responses carry the space-separated Nightscout spellings ("NOT COMPUTABLE"); v4 carries the
- * enum member names. Both resolve to the same entry.
+ * Get BG trend direction information. v1/v3 responses carry the space-separated Nightscout
+ * spellings ("NOT COMPUTABLE"); v4 carries the enum member names. Both resolve to the same
+ * entry, via the same fold the glyph and rotation tables use.
  */
-const normaliseDirection = (direction: string) => direction.replace(/\s/g, "").toUpperCase();
-
-const directionsByName = new Map(
-  Object.keys(directionInfo).map((name) => [normaliseDirection(name), name as Direction])
-);
-
-/** Get BG trend direction information */
 export function getDirectionInfo(direction?: Direction | string): DirectionInfo {
-  const name = direction
-    ? directionsByName.get(normaliseDirection(direction))
-    : undefined;
-  return directionInfo[name ?? Direction.NONE] ?? unknownDirectionInfo;
+  return directionInfo[canonicalDirection(direction)] ?? unknownDirectionInfo;
 }
 
 /** Enhanced relative time formatting with internationalization support */

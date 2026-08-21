@@ -11,6 +11,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -243,6 +244,9 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         var result = await CreateService(ctx).DeleteConnectorDataAsync("not-a-connector");
 
         result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(
+            DataSourceDeleteError.NotFound,
+            "the controller maps the 404 off the error code, not the message text");
         _connectorConfig.Verify(c => c.SetActiveAsync(
             It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);

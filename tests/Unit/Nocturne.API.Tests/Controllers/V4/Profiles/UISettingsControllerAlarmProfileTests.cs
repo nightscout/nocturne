@@ -1,16 +1,13 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
-using Nocturne.API.Services.Profiles;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 
 namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
@@ -22,8 +19,6 @@ namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 [Trait("Category", "Unit")]
 public class UISettingsControllerAlarmProfileTests
 {
-    private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-
     [Fact]
     public async Task AddOrUpdateAlarmProfile_isVisibleToGetAlarmConfiguration()
     {
@@ -37,7 +32,7 @@ public class UISettingsControllerAlarmProfileTests
             Threshold = 220,
         });
 
-        var profiles = AlarmConfigOf(await controller.GetAlarmConfiguration()).Profiles;
+        var profiles = await StoredProfiles(controller);
         profiles.Should().ContainSingle(p => p.Id == "night-high")
             .Which.Threshold.Should().Be(220);
     }
@@ -60,7 +55,7 @@ public class UISettingsControllerAlarmProfileTests
             Threshold = 190,
         });
 
-        var profiles = AlarmConfigOf(await controller.GetAlarmConfiguration()).Profiles;
+        var profiles = await StoredProfiles(controller);
         profiles.Should().ContainSingle().Which.Threshold.Should().Be(190);
     }
 
@@ -80,7 +75,7 @@ public class UISettingsControllerAlarmProfileTests
             Name = "Second",
         });
 
-        var profiles = AlarmConfigOf(await controller.GetAlarmConfiguration()).Profiles;
+        var profiles = await StoredProfiles(controller);
         profiles.Should().HaveCount(2);
         profiles.Select(p => p.Id).Should().OnlyHaveUniqueItems().And.NotContain(string.Empty);
     }
@@ -95,8 +90,7 @@ public class UISettingsControllerAlarmProfileTests
 
         await controller.DeleteAlarmProfile("drop");
 
-        AlarmConfigOf(await controller.GetAlarmConfiguration()).Profiles
-            .Select(p => p.Id).Should().Equal("keep");
+        (await StoredProfiles(controller)).Select(p => p.Id).Should().Equal("keep");
     }
 
     [Fact]
@@ -110,43 +104,104 @@ public class UISettingsControllerAlarmProfileTests
             .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
-    // ----- helpers -----
-
-    private static UserAlarmConfiguration AlarmConfigOf(
-        ActionResult<UserAlarmConfiguration> result)
+    /// <summary>
+    /// An explicit JSON null binds over the property initialiser, so these rows deserialize to a
+    /// <see cref="NotificationSettings"/> with no alarm configuration at all. Earlier versions could
+    /// write them; the read has to cope rather than treat it as a failed read.
+    /// </summary>
+    [Theory]
+    [InlineData("ui:settings:complete", """{"notifications":{"alarmConfiguration":null}}""")]
+    [InlineData("ui:settings:notifications", """{"alarmConfiguration":null}""")]
+    public async Task GetAlarmConfiguration_servesAnEmptyConfiguration_forALegacyNullAlarmRow(
+        string key,
+        string value
+    )
     {
-        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        return ok.Value.Should().BeAssignableTo<UserAlarmConfiguration>().Subject;
+        var database = NewDatabase();
+        database.Settings.Add(
+            new SettingsEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Key = key,
+                Value = value,
+                IsActive = true,
+            }
+        );
+        await database.SaveChangesAsync();
+
+        var result = await NewController(database).GetAlarmConfiguration();
+
+        OkValue<UserAlarmConfiguration>(result.Result).Profiles.Should().BeEmpty();
     }
 
-    private static UISettingsController NewController()
+    [Fact]
+    public async Task GetAlarmConfiguration_reports500_whenTheStoredConfigurationCannotBeRead()
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
+        var controller = NewController(UnreadableAlarmConfiguration().Object);
 
-        var dbContext = new NocturneDbContext(options) { TenantId = TenantId };
-        var configuration = new ConfigurationBuilder().Build();
+        var result = await controller.GetAlarmConfiguration();
 
-        var services = new ServiceCollection();
-        services.AddControllers();
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+    }
 
-        return new UISettingsController(
-            NullLogger<UISettingsController>.Instance,
-            configuration,
-            Mock.Of<IHttpClientFactory>(),
-            new UISettingsService(
-                dbContext,
-                NullLogger<UISettingsService>.Instance,
-                configuration))
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext
-                {
-                    RequestServices = services.BuildServiceProvider(),
-                },
-            },
-        };
+    [Fact]
+    public async Task AddOrUpdateAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    {
+        var settingsService = UnreadableAlarmConfiguration();
+        var controller = NewController(settingsService.Object);
+
+        var result = await controller.AddOrUpdateAlarmProfile(
+            new AlarmProfileConfiguration { Id = "night-high" });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        settingsService.Verify(
+            s => s.SaveAlarmConfigurationAsync(
+                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAlarmProfile_writesNothing_whenTheStoredConfigurationCannotBeRead()
+    {
+        var settingsService = UnreadableAlarmConfiguration();
+        var controller = NewController(settingsService.Object);
+
+        var result = await controller.DeleteAlarmProfile("night-high");
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        settingsService.Verify(
+            s => s.SaveAlarmConfigurationAsync(
+                It.IsAny<UserAlarmConfiguration>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // ----- helpers -----
+
+    private static async Task<List<AlarmProfileConfiguration>> StoredProfiles(
+        UISettingsController controller
+    )
+    {
+        var config = OkValue<UserAlarmConfiguration>(
+            (await controller.GetAlarmConfiguration()).Result
+        );
+
+        return config.Profiles;
+    }
+
+    /// <summary>
+    /// A service whose alarm configuration read fails, which is the only way
+    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> yields null.
+    /// </summary>
+    private static Mock<IUISettingsService> UnreadableAlarmConfiguration()
+    {
+        var settingsService = new Mock<IUISettingsService>();
+        settingsService
+            .Setup(s => s.GetAlarmConfigurationAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((UserAlarmConfiguration?)null);
+
+        return settingsService;
     }
 }

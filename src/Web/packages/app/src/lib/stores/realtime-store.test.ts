@@ -29,16 +29,22 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { RealtimeStore } from "./realtime-store.svelte";
-import type { StorageEvent } from "$lib/websocket/types";
+import type { StorageEvent, SyncProgressEvent } from "$lib/websocket/types";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
   handleCreate(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
+  websocketClient: {
+    eventHandlers: { syncProgress?: (event: SyncProgressEvent) => void };
+  };
 }
 
 type TestStore = StoreInternals &
-  Pick<RealtimeStore, "currentReservoir" | "entries" | "direction" | "destroy">;
+  Pick<
+    RealtimeStore,
+    "currentReservoir" | "entries" | "direction" | "syncProgressByConnector" | "destroy"
+  >;
 
 /** Store instance with an empty socket URL, so nothing connects. */
 function makeStore(): TestStore {
@@ -162,6 +168,92 @@ describe("RealtimeStore direction", () => {
     store.entries = entries;
 
     expect(store.direction).toBe("");
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore sync progress", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function syncEvent(
+    connectorId: string,
+    phase: SyncProgressEvent["phase"],
+    messageType: SyncProgressEvent["messageType"]
+  ): SyncProgressEvent {
+    return {
+      connectorId,
+      connectorName: connectorId,
+      phase,
+      errorMessage: null,
+      timestamp: new Date().toISOString(),
+      messageType,
+      messageParams: null,
+    };
+  }
+
+  function emit(store: TestStore, event: SyncProgressEvent): void {
+    store.websocketClient.eventHandlers.syncProgress?.(event);
+  }
+
+  it("holds an in-progress sync on screen indefinitely", () => {
+    const store = makeStore();
+
+    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+    vi.advanceTimersByTime(60_000);
+
+    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+
+    store.destroy();
+  });
+
+  it.each(["Completed", "Failed"] as const)(
+    "clears a %s sync after the linger window",
+    (phase) => {
+      const store = makeStore();
+
+      emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+      emit(store, syncEvent("glooko", phase, phase === "Completed" ? "SyncComplete" : "SyncFailed"));
+
+      // Still visible while the outcome lingers.
+      vi.advanceTimersByTime(1_999);
+      expect(store.syncProgressByConnector.glooko?.phase).toBe(phase);
+
+      vi.advanceTimersByTime(1);
+      expect(store.syncProgressByConnector.glooko).toBeUndefined();
+
+      store.destroy();
+    }
+  );
+
+  it("keeps a new run that started inside the previous run's linger window", () => {
+    const store = makeStore();
+
+    emit(store, syncEvent("glooko", "Completed", "SyncComplete"));
+    vi.advanceTimersByTime(1_000);
+    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+    vi.advanceTimersByTime(1_000);
+
+    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+
+    store.destroy();
+  });
+
+  it("clears only the connector that finished", () => {
+    const store = makeStore();
+
+    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+    emit(store, syncEvent("dexcom", "Completed", "SyncComplete"));
+    vi.advanceTimersByTime(2_000);
+
+    expect(store.syncProgressByConnector.dexcom).toBeUndefined();
+    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
 
     store.destroy();
   });

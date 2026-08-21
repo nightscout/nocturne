@@ -28,8 +28,6 @@ public class BaseConnectorServiceTests
         public override string ServiceName => "Test";
 
         public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-        public override Task<IEnumerable<Nocturne.Core.Models.Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-            => Task.FromResult(Enumerable.Empty<Nocturne.Core.Models.Entry>());
 
         // These tests exercise the base helpers directly, never a sync run.
         protected override Task<SyncResult> PerformSyncInternalAsync(

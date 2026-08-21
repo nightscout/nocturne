@@ -5,7 +5,9 @@ using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Widget.Contracts;
+using DirectionHelper = Nocturne.Widget.Contracts.Helpers.DirectionHelper;
 using GlucoseUnit = Nocturne.Widget.Contracts.GlucoseUnit;
+using TimeAgoHelper = Nocturne.Widget.Contracts.Helpers.TimeAgoHelper;
 using Windows.UI;
 
 namespace Nocturne.Desktop.Tray.Views;
@@ -44,10 +46,10 @@ public sealed partial class GlucoseCard : UserControl
         BgValueText.Foreground = brush;
 
         var direction = reading.Direction.ToString();
-        var rotation = TrendHelper.GetArrowRotation(direction);
+        var rotation = DirectionHelper.GetFluentRotation(direction);
         TrendArrowText.Text = rotation is null
-            ? TrendHelper.GetArrowGlyph(direction)
-            : TrendHelper.ArrowUpGlyph;
+            ? DirectionHelper.GetFluentGlyph(direction)
+            : DirectionHelper.FluentArrowUpGlyph;
         TrendArrowText.Foreground = brush;
         TrendArrowRotation.Angle = rotation ?? 0;
 

@@ -66,6 +66,9 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.SyncBoluses, DefaultValue = "true")]
     public bool SyncBoluses { get; set; } = true;
 
+    [ConnectorProperty(ConnectorPropertyKey.SyncBasalInjections, DefaultValue = "true")]
+    public bool SyncBasalInjections { get; set; } = true;
+
     [ConnectorProperty(ConnectorPropertyKey.SyncCarbIntake, DefaultValue = "true")]
     public bool SyncCarbIntake { get; set; } = true;
 
@@ -110,8 +113,8 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
 
     /// <summary>
     ///     Whether this configuration has <paramref name="type"/> switched on. A data type with no
-    ///     sync toggle property — Calibrations, BasalInjections and BGChecks — has nothing to switch
-    ///     it off, so it syncs whenever the connector declares it supported.
+    ///     sync toggle property — Calibrations and BGChecks — has nothing to switch it off, so it
+    ///     syncs whenever the connector declares it supported.
     /// </summary>
     public bool IsDataTypeEnabled(SyncDataType type)
         => !SyncToggleProperties(GetType()).TryGetValue(type, out var toggle)

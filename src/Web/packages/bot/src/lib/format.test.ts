@@ -17,6 +17,8 @@ describe("trendArrow", () => {
     expect(trendArrow("DoubleDown")).toBe("vv");
     expect(trendArrow("FortyFiveUp")).toBe("/");
     expect(trendArrow("FortyFiveDown")).toBe("\\");
+    expect(trendArrow("TripleUp")).toBe("^^^");
+    expect(trendArrow("TripleDown")).toBe("vvv");
   });
 
   it("marks an unknown trend rather than claiming it is stable", () => {

@@ -185,7 +185,7 @@ public class LibreConnectorService(
 
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
                 sensorGlucose.ToList(), PublishSensorGlucoseDataAsync, config, cancellationToken,
-                "LibreLinkUp", s => s.Timestamp);
+                "LibreLinkUp");
         }
         catch (Exception ex)
         {

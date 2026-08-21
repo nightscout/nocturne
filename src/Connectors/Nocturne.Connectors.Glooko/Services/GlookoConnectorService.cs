@@ -333,7 +333,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     // Drop partial results from the aborted pass; the retry re-syncs from scratch
                     // with the refreshed patient code.
                     result.ItemsSynced.Clear();
-                    result.LastEntryTimes.Clear();
                     result.Errors.Clear();
                     result.Success = true;
                     result.Message = "Sync completed successfully";
@@ -344,10 +343,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 }
             }
 
-            await ReportSyncMessageAsync(
-                result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
-                null, cancellationToken);
-
             result.EndTime = DateTime.UtcNow;
             return result;
         }
@@ -357,7 +352,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             result.Success = false;
             result.Message = "Sync failed with exception";
             result.Errors.Add(ex.Message);
-            await ReportSyncMessageAsync(SyncMessageType.SyncFailed, null, cancellationToken);
             result.EndTime = DateTime.UtcNow;
             return result;
         }
@@ -464,23 +458,19 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
         var sensorGlucose = context.SensorGlucoseMapper.TransformBatchDataToSensorGlucose(batchData).ToList();
         await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-            sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken,
-            timestampOf: s => s.Timestamp);
+            sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
 
         var bgChecks = context.SensorGlucoseMapper.TransformBatchDataToBGChecks(batchData).ToList();
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-            bgChecks, PublishBGCheckDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
 
         var (boluses, carbs, _) = context.V4TreatmentMapper.MapBatchData(batchData);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            boluses, PublishBolusDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            boluses, PublishBolusDataAsync, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-            carbs, PublishCarbIntakeDataAsync, config, cancellationToken,
-            timestampOf: c => c.Timestamp);
+            carbs, PublishCarbIntakeDataAsync, config, cancellationToken);
 
         // Food attribution resolves against the carbs published above.
         var foodEntryImports = batchData.Foods is { Length: > 0 }
@@ -537,14 +527,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         {
             var sensorGlucose = context.SensorGlucoseMapper.TransformV3ToSensorGlucose(v3Data, context.MeterUnits).ToList();
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
-                sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken,
-                timestampOf: s => s.Timestamp);
+                sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
 
         var bgChecks = context.SensorGlucoseMapper.TransformV3ToBGChecks(v3Data, context.MeterUnits).ToList();
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
-            bgChecks, PublishBGCheckDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
 
         var (v3Boluses, v3BolusCarbIntakes, _) = context.V4TreatmentMapper.MapV3Boluses(v3Data);
 
@@ -559,23 +547,19 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             allCarbs.AddRange(context.V4TreatmentMapper.MapV3CarbAll(v3Data));
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            v3Boluses, PublishBolusDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            v3Boluses, PublishBolusDataAsync, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-            allCarbs, PublishCarbIntakeDataAsync, config, cancellationToken,
-            timestampOf: c => c.Timestamp);
+            allCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
 
         // Pen injections: gkInsulinBasal → BasalInjection, gkInsulinBolus → Bolus.
         var (manualBasalInjections, manualBoluses) = context.V4TreatmentMapper.MapV3ManualInsulin(v3Data);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-            manualBoluses, PublishBolusDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            manualBoluses, PublishBolusDataAsync, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.BasalInjections, activeTypes,
-            manualBasalInjections, PublishBasalInjectionDataAsync, config, cancellationToken,
-            timestampOf: b => b.Timestamp);
+            manualBasalInjections, PublishBasalInjectionDataAsync, config, cancellationToken);
 
         // Food attribution resolves against the carbs published above.
         GlookoFood[]? v2Foods = null;

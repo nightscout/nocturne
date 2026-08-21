@@ -156,7 +156,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
                 [sg], PublishSensorGlucoseDataAsync, config, cancellationToken,
-                "Eversense", s => s.Timestamp);
+                "Eversense");
         }
         catch (Exception ex)
         {

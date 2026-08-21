@@ -197,7 +197,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Glucose", request.From, request.To,
                     FetchGlucosePagesAsync,
-                    newestOf: p => p.Max(e => e.Date),
                     oldestOf: OldestEntryTime,
                     publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken));
 
@@ -207,8 +206,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.Glucose] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Glucose] = outcome.NewestTime.Value;
                 if (!outcome.Success)
                 {
                     result.Success = false;
@@ -242,7 +239,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Treatments", treatmentFrom, request.To,
                     FetchTreatmentPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, t => t.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
                     publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
 
@@ -255,10 +251,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 {
                     // Report count under each enabled treatment sub-type
                     foreach (var tt in treatmentTypes.Where(t => activeTypes.Contains(t)))
-                    {
                         result.ItemsSynced[tt] = outcome.Count;
-                        result.LastEntryTimes[tt] = outcome.NewestTime;
-                    }
                 }
 
                 if (!outcome.Success)
@@ -282,8 +275,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             {
                 var profiles = await FetchProfilesAsync();
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
-                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken,
-                    timestampOf: p => TimestampFromMills(p.Mills));
+                    profiles.ToList(), PublishProfileDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -308,7 +300,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "DeviceStatus", deviceStatusFrom, request.To,
                     FetchDeviceStatusPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, d => d.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, d => d.CreatedAt),
                     publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken));
 
@@ -318,8 +309,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.DeviceStatus] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.DeviceStatus] = outcome.NewestTime;
                 if (!outcome.Success)
                 {
                     result.Success = false;
@@ -375,7 +364,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var outcome = await CrawlAndPublishAsync(
                     "Activity", activityFrom, request.To,
                     FetchActivityPagesAsync,
-                    newestOf: p => NewestCreatedAt(p, a => a.CreatedAt),
                     oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
                     publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
 
@@ -385,8 +373,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     outcome.Count);
 
                 result.ItemsSynced[SyncDataType.Activity] = outcome.Count;
-                if (outcome.NewestTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Activity] = outcome.NewestTime;
                 if (!outcome.Success)
                 {
                     result.Success = false;
@@ -405,11 +391,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return result;
     }
 
-    public override async Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        return await FetchGlucoseDataRangeAsync(since, null);
-    }
-
     /// <summary>
     ///     Upper bound for the first page of a paginated fetch. Nightscout applies an
     ///     implicit recency window (roughly the last four days) to any query carrying no
@@ -421,12 +402,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
         from is null && to is null ? DateTime.UtcNow : to;
 
-    /// <summary>
-    ///     Outcome of one crawled collection. <paramref name="NewestTime"/> spans every page of the
-    ///     crawl, including the resume pass below the low-water mark, so it cannot come from the
-    ///     shared publish path: that sees one page at a time and never the crawl as a whole.
-    /// </summary>
-    private sealed record PagedCrawlOutcome(int Count, DateTime? NewestTime, bool Success);
+    /// <summary>Outcome of one crawled collection, spanning every page of the crawl.</summary>
+    private sealed record PagedCrawlOutcome(int Count, bool Success);
 
     private Task<DateTime?> GetBackfillLowWaterMarkAsync(string collection) =>
         Publisher is { IsAvailable: true } p
@@ -461,14 +438,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from,
         DateTime? to,
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
-        Func<T[], DateTime?> newestOf,
         Func<T[], DateTime?> oldestOf,
         Func<T[], Task<bool>> publishAsync)
     {
         var mark = await GetBackfillLowWaterMarkAsync(collection);
 
         var primary = await CrawlRangeAsync(
-            collection, from, to, pages, newestOf, oldestOf, publishAsync, fullCrawl: from is null);
+            collection, from, to, pages, oldestOf, publishAsync, fullCrawl: from is null);
 
         // Resume the incomplete backfill only when this cycle's primary crawl stored cleanly —
         // a store that is failing right now shouldn't be hammered with the deep history too.
@@ -478,12 +454,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         var resume = await CrawlRangeAsync(
             collection, null, mark.Value.AddMilliseconds(-1),
-            pages, newestOf, oldestOf, publishAsync, fullCrawl: true);
+            pages, oldestOf, publishAsync, fullCrawl: true);
 
-        var newest = primary.NewestTime is null || (resume.NewestTime is not null && resume.NewestTime > primary.NewestTime)
-            ? resume.NewestTime
-            : primary.NewestTime;
-        return new PagedCrawlOutcome(primary.Count + resume.Count, newest, resume.Success);
+        return new PagedCrawlOutcome(primary.Count + resume.Count, resume.Success);
     }
 
     /// <summary>
@@ -498,13 +471,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from,
         DateTime? to,
         Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
-        Func<T[], DateTime?> newestOf,
         Func<T[], DateTime?> oldestOf,
         Func<T[], Task<bool>> publishAsync,
         bool fullCrawl)
     {
         var count = 0;
-        DateTime? newestSeen = null;
         DateTime? lowestPublished = null;
         var success = true;
 
@@ -513,9 +484,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             await foreach (var page in pages(from, to))
             {
                 count += page.Length;
-                var pageNewest = newestOf(page);
-                if (pageNewest.HasValue && (newestSeen is null || pageNewest > newestSeen))
-                    newestSeen = pageNewest;
 
                 if (!await publishAsync(page))
                 {
@@ -549,7 +517,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
         }
 
-        return new PagedCrawlOutcome(count, newestSeen, success);
+        return new PagedCrawlOutcome(count, success);
     }
 
     /// <summary>
@@ -650,10 +618,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
         page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Min();
 
-    /// <summary>Newest created_at on a page; the counterpart of <see cref="OldestCreatedAt{T}"/>.</summary>
-    private static DateTime? NewestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf) =>
-        page.Select(item => ParseCreatedAt(createdAtOf(item))?.UtcDateTime).Max();
-
     /// <summary>
     ///     Oldest created_at on a page as the source wrote it — the key the source orders and
     ///     filters by. Labelled UTC so formatting it back into a bound reproduces that wall clock
@@ -713,7 +677,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)
     {
         await foreach (var page in FetchPagesAsync<Entry>(
-            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucoseData"))
+            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucosePages"))
         {
             foreach (var entry in page)
                 entry.DataSource = ConnectorSource;
@@ -730,21 +694,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 treatment.DataSource = ConnectorSource;
             yield return page;
         }
-    }
-
-    protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from, DateTime? to)
-    {
-        var allEntries = new List<Entry>();
-        await foreach (var page in FetchGlucosePagesAsync(from, to))
-            allEntries.AddRange(page);
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
-            ConnectorSource,
-            allEntries.Count);
-
-        return allEntries;
     }
 
     protected override async Task<IEnumerable<Profile>> FetchProfilesAsync()

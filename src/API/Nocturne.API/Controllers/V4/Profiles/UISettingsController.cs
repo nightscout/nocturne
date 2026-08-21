@@ -114,8 +114,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                     }
                 }
 
-                // Fallback: Generate default demo settings locally
-                return Ok(GenerateDefaultDemoSettings());
+                return Ok(GenerateDemoSettings());
             }
 
             // Read what was persisted by SaveUISettings; the service falls back to
@@ -140,7 +139,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// <summary>
     /// Get settings for a specific section.
     /// </summary>
-    /// <param name="section">Section name: devices, therapy, algorithm, features, notifications, or services</param>
+    /// <param name="section">Name of any <see cref="UISettingsSections"/> entry</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Settings for the specified section</returns>
     [HttpGet("{section}")]
@@ -159,15 +158,13 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             && okResult.Value is UISettingsConfiguration config
         )
         {
-            return section.ToLowerInvariant() switch
-            {
-                "devices" => Ok(config.Devices),
-                "algorithm" => Ok(config.Algorithm),
-                "features" => Ok(config.Features),
-                "notifications" => Ok(config.Notifications),
-                "services" => Ok(config.Services),
-                _ => Problem(detail: $"Unknown settings section: {section}", statusCode: 404, title: "Not Found"),
-            };
+            return UISettingsSections.Find(section) is { } known
+                ? Ok(known.Get(config))
+                : Problem(
+                    detail: $"Unknown settings section: {section}",
+                    statusCode: 404,
+                    title: "Not Found"
+                );
         }
 
         return settings.Result ?? StatusCode(500);
@@ -277,14 +274,12 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             var demoEnabled = _configuration.GetValue<bool>("DemoMode:Enabled");
             if (demoEnabled)
             {
-                return Ok(GenerateDefaultAlarmConfiguration());
+                return Ok(GenerateDemoAlarmConfiguration());
             }
 
-            var config =
-                await _settingsService.GetAlarmConfigurationAsync(cancellationToken)
-                ?? GenerateDefaultAlarmConfiguration();
+            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
 
-            return Ok(config);
+            return config == null ? AlarmConfigurationUnavailable() : Ok(config);
         }
         catch (Exception ex)
         {
@@ -367,9 +362,12 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            var config =
-                await _settingsService.GetAlarmConfigurationAsync(cancellationToken)
-                ?? GenerateDefaultAlarmConfiguration();
+            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
+            if (config == null)
+            {
+                return AlarmConfigurationUnavailable();
+            }
+
             config.Profiles ??= [];
 
             // A blank id would match every other blank-id profile on the next upsert, so the
@@ -428,9 +426,12 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                 );
             }
 
-            var config =
-                await _settingsService.GetAlarmConfigurationAsync(cancellationToken)
-                ?? GenerateDefaultAlarmConfiguration();
+            var config = await _settingsService.GetAlarmConfigurationAsync(cancellationToken);
+            if (config == null)
+            {
+                return AlarmConfigurationUnavailable();
+            }
+
             config.Profiles ??= [];
 
             if (config.Profiles.RemoveAll(p => p.Id == profileId) == 0)
@@ -453,15 +454,28 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         }
     }
 
-    private static UserAlarmConfiguration GenerateDefaultAlarmConfiguration()
+    /// <summary>
+    /// <see cref="IUISettingsService.GetAlarmConfigurationAsync"/> normalizes every successful read
+    /// to a configuration, so null means the read failed. Substituting a value here would let the
+    /// following write replace the tenant's profiles.
+    /// </summary>
+    private ObjectResult AlarmConfigurationUnavailable()
+    {
+        return Problem(
+            detail: "Failed to retrieve alarm configuration",
+            statusCode: 500,
+            title: "Internal Server Error"
+        );
+    }
+
+    /// <summary>
+    /// Sample alarm profiles for the demo tenant. Real tenants are deliberately not seeded with
+    /// these: profiles nobody configured would fire alarms nobody asked for.
+    /// </summary>
+    private static UserAlarmConfiguration GenerateDemoAlarmConfiguration()
     {
         return new UserAlarmConfiguration
         {
-            Version = 1,
-            Enabled = true,
-            SoundEnabled = true,
-            VibrationEnabled = true,
-            GlobalVolume = 80,
             Profiles = new List<AlarmProfileConfiguration>
             {
                 new()
@@ -555,7 +569,11 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         };
     }
 
-    private UISettingsConfiguration GenerateDefaultDemoSettings()
+    /// <summary>
+    /// The demo tenant's sample devices and services. Every other section is left at the
+    /// <see cref="UISettingsConfiguration"/> defaults.
+    /// </summary>
+    private UISettingsConfiguration GenerateDemoSettings()
     {
         return new UISettingsConfiguration
         {
@@ -584,203 +602,117 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                         SerialNumber = "POD98765432",
                     },
                 },
-                AutoConnect = true,
-                ShowRawData = false,
-                UploadEnabled = true,
-                CgmConfiguration = new CgmConfiguration
-                {
-                    DataSourcePriority = "cgm",
-                    SensorWarmupHours = 2,
-                },
             },
-            Algorithm = new AlgorithmSettings
+            Features = new FeatureSettings { Plugins = GenerateDemoPlugins() },
+            Services = new ServicesSettings
             {
-                Prediction = new PredictionSettings
+                ConnectedServices = new List<ConnectedService>
                 {
-                    Enabled = true,
-                    Minutes = 30,
-                    Model = "ar2",
+                    new()
+                    {
+                        Id = "dexcom-share-1",
+                        Name = "Dexcom Share",
+                        Type = "cgm",
+                        Description = "Dexcom G7 - Share account",
+                        Status = "connected",
+                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
+                        Icon = "dexcom",
+                        Configured = true,
+                        Enabled = true,
+                    },
+                    new()
+                    {
+                        Id = "nightscout-backup-1",
+                        Name = "Nightscout Backup",
+                        Type = "data",
+                        Description = "yoursite.herokuapp.com",
+                        Status = "connected",
+                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-15),
+                        Icon = "nightscout",
+                        Configured = true,
+                        Enabled = true,
+                    },
                 },
-                Autosens = new AutosensSettings
-                {
-                    Enabled = true,
-                    Min = 0.7,
-                    Max = 1.2,
-                },
-                CarbAbsorption = new CarbAbsorptionSettings
-                {
-                    DefaultMinutes = 30,
-                    MinRateGramsPerHour = 4,
-                },
-                Loop = new LoopSettings
-                {
-                    Enabled = false,
-                    Mode = "open",
-                    MaxBasalRate = 4.0,
-                    MaxBolus = 10.0,
-                    SmbEnabled = false,
-                    UamEnabled = false,
-                },
-                SafetyLimits = new SafetyLimits { MaxIOB = 10.0, MaxDailyBasalMultiplier = 3.0 },
-            },
-            Features = GenerateDefaultFeatureSettings(),
-            Notifications = GenerateDefaultNotificationSettings(),
-            Services = GenerateDefaultServicesSettings(),
-            Security = new SecuritySettings(),
-        };
-    }
-
-    private FeatureSettings GenerateDefaultFeatureSettings()
-    {
-        return new FeatureSettings
-        {
-            Display = new DisplaySettings
-            {
-                NightMode = false,
-                Theme = "system",
-                TimeFormat = "12",
-                Units = "mg/dl",
-                ShowRawBG = false,
-                FocusHours = 3,
-            },
-            Widgets = new List<WidgetConfig>
-            {
-                new() { Id = WidgetId.BgDelta, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.LastUpdated, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.ConnectionStatus, Enabled = true, Placement = WidgetPlacement.Top },
-                new() { Id = WidgetId.GlucoseChart, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Statistics, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Predictions, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.DailyStats, Enabled = true, Placement = WidgetPlacement.Main },
-                new() { Id = WidgetId.Treatments, Enabled = true, Placement = WidgetPlacement.Main },
-            },
-            Plugins = new Dictionary<string, PluginSettings>
-            {
-                {
-                    "delta",
-                    new PluginSettings { Enabled = true, Description = "Show glucose change" }
-                },
-                {
-                    "direction",
-                    new PluginSettings { Enabled = true, Description = "Trend arrow indicator" }
-                },
-                {
-                    "timeago",
-                    new PluginSettings { Enabled = true, Description = "Time since last reading" }
-                },
-                {
-                    "iob",
-                    new PluginSettings { Enabled = true, Description = "Insulin on board" }
-                },
-                {
-                    "cob",
-                    new PluginSettings { Enabled = true, Description = "Carbs on board" }
-                },
-                {
-                    "basal",
-                    new PluginSettings { Enabled = true, Description = "Current basal rate" }
-                },
-                {
-                    "cage",
-                    new PluginSettings { Enabled = false, Description = "Cannula/site age" }
-                },
-                {
-                    "sage",
-                    new PluginSettings { Enabled = true, Description = "Sensor age" }
-                },
-                {
-                    "iage",
-                    new PluginSettings { Enabled = false, Description = "Insulin reservoir age" }
-                },
-                {
-                    "bage",
-                    new PluginSettings { Enabled = false, Description = "Pump battery age" }
-                },
-                {
-                    "pump",
-                    new PluginSettings { Enabled = true, Description = "Pump status" }
-                },
-                {
-                    "loop",
-                    new PluginSettings { Enabled = true, Description = "Loop/OpenAPS status" }
-                },
-                {
-                    "upbat",
-                    new PluginSettings { Enabled = false, Description = "Uploader battery" }
-                },
-                {
-                    "devicestatus",
-                    new PluginSettings { Enabled = false, Description = "Device status details" }
-                },
-                {
-                    "bwp",
-                    new PluginSettings { Enabled = false, Description = "Bolus wizard preview" }
-                },
-                {
-                    "treatmentnotify",
-                    new PluginSettings { Enabled = true, Description = "Treatment notifications" }
-                },
-                {
-                    "openaps",
-                    new PluginSettings { Enabled = false, Description = "OpenAPS pill display" }
-                },
+                AvailableServices = GenerateAvailableServices(),
             },
         };
     }
 
-    private NotificationSettings GenerateDefaultNotificationSettings()
+    /// <summary>
+    /// The plugin pills the demo tenant shows. <see cref="FeatureSettings.Plugins"/> has no defaults,
+    /// so there is nothing to inherit here.
+    /// </summary>
+    private static Dictionary<string, PluginSettings> GenerateDemoPlugins()
     {
-        return new NotificationSettings
+        return new Dictionary<string, PluginSettings>
         {
-            AlarmConfiguration = new UserAlarmConfiguration
             {
-                Enabled = true,
-                SoundEnabled = true,
-                VibrationEnabled = true,
-                GlobalVolume = 80,
-                Profiles = new List<AlarmProfileConfiguration>(),
+                "delta",
+                new PluginSettings { Enabled = true, Description = "Show glucose change" }
             },
-        };
-    }
-
-
-    private ServicesSettings GenerateDefaultServicesSettings()
-    {
-        return new ServicesSettings
-        {
-            ConnectedServices = new List<ConnectedService>
             {
-                new()
-                {
-                    Id = "dexcom-share-1",
-                    Name = "Dexcom Share",
-                    Type = "cgm",
-                    Description = "Dexcom G7 - Share account",
-                    Status = "connected",
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
-                    Icon = "dexcom",
-                    Configured = true,
-                    Enabled = true,
-                },
-                new()
-                {
-                    Id = "nightscout-backup-1",
-                    Name = "Nightscout Backup",
-                    Type = "data",
-                    Description = "yoursite.herokuapp.com",
-                    Status = "connected",
-                    LastSync = DateTimeOffset.UtcNow.AddMinutes(-15),
-                    Icon = "nightscout",
-                    Configured = true,
-                    Enabled = true,
-                },
+                "direction",
+                new PluginSettings { Enabled = true, Description = "Trend arrow indicator" }
             },
-            AvailableServices = GenerateAvailableServices(),
-            SyncSettings = new SyncSettings
             {
-                AutoSync = true,
-                SyncOnAppOpen = true,
-                BackgroundRefresh = true,
+                "timeago",
+                new PluginSettings { Enabled = true, Description = "Time since last reading" }
+            },
+            {
+                "iob",
+                new PluginSettings { Enabled = true, Description = "Insulin on board" }
+            },
+            {
+                "cob",
+                new PluginSettings { Enabled = true, Description = "Carbs on board" }
+            },
+            {
+                "basal",
+                new PluginSettings { Enabled = true, Description = "Current basal rate" }
+            },
+            {
+                "cage",
+                new PluginSettings { Enabled = false, Description = "Cannula/site age" }
+            },
+            {
+                "sage",
+                new PluginSettings { Enabled = true, Description = "Sensor age" }
+            },
+            {
+                "iage",
+                new PluginSettings { Enabled = false, Description = "Insulin reservoir age" }
+            },
+            {
+                "bage",
+                new PluginSettings { Enabled = false, Description = "Pump battery age" }
+            },
+            {
+                "pump",
+                new PluginSettings { Enabled = true, Description = "Pump status" }
+            },
+            {
+                "loop",
+                new PluginSettings { Enabled = true, Description = "Loop/OpenAPS status" }
+            },
+            {
+                "upbat",
+                new PluginSettings { Enabled = false, Description = "Uploader battery" }
+            },
+            {
+                "devicestatus",
+                new PluginSettings { Enabled = false, Description = "Device status details" }
+            },
+            {
+                "bwp",
+                new PluginSettings { Enabled = false, Description = "Bolus wizard preview" }
+            },
+            {
+                "treatmentnotify",
+                new PluginSettings { Enabled = true, Description = "Treatment notifications" }
+            },
+            {
+                "openaps",
+                new PluginSettings { Enabled = false, Description = "OpenAPS pill display" }
             },
         };
     }
