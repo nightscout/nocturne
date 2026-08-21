@@ -238,6 +238,15 @@ class Program
                 "Base domain",
                 "Root domain only, e.g. example.com (not app.example.com — subdomains are generated per tenant)");
 
+        // CDN/proxy ranges the bundled Caddy will believe a client-address header from. Empty
+        // means only the socket peer counts, which is right whenever Caddy is the outermost hop.
+        // Loopback is never the peer of a proxied request, so the default trusts nothing.
+        var trustedProxies = builder.AddParameter("trusted-proxies", "127.0.0.1/32")
+            .WithPublishMetadata(
+                "Trusted proxy ranges",
+                "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare's published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty.",
+                defaultValue: "127.0.0.1/32");
+
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
         // values. Empty-string defaults let AppHost start cleanly; the
@@ -633,6 +642,14 @@ class Program
         // default rewrite stays.
         var preserveOriginalHost = !builder.ExecutionContext.IsRunMode;
 
+        // X-Forwarded-For is the one the API resolves an address from, and it follows the same
+        // rule for a different reason: in run mode the gateway is the only hop, so it Sets the
+        // peer it saw; in publish mode the edge in front (bundled Caddy, or the operator's proxy
+        // in the byo bundle) has already overwritten the header with the client it resolved, and
+        // appending the gateway's own peer here would bury that entry under a container address.
+        // The API consumes one entry from the right, so whatever the edge writes must be the
+        // client — an edge that appends to the caller's chain instead needs the API's
+        // ForwardedHeaders:ForwardLimit raised to match its hop count.
         void ApplyEdgeTransforms(YarpRoute route)
         {
             route.WithTransformXForwarded("X-Forwarded-", xForwardedAction);
@@ -705,6 +722,7 @@ class Program
                 .WithVolume("caddy-data", "/data")
                 .WithVolume("caddy-config", "/config")
                 .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WithEnvironment("TRUSTED_PROXIES", trustedProxies)
                 .WaitFor(gateway)
                 .PublishAsDockerComposeService((_, service) =>
                 {

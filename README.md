@@ -131,6 +131,15 @@ cp .env.example .env
 docker compose up -d
 ```
 
+### Behind a CDN
+
+The bundled Caddy is the hop that decides which address Nocturne records in audit rows and counts
+rate limits against, and by default that is whoever connected to it. Behind a CDN that is the CDN's
+edge, so every visitor sharing a point of presence shares one bucket. Set `TRUSTED_PROXIES` to the
+CDN's published ranges (Cloudflare's are at <https://www.cloudflare.com/ips/>) and Caddy will take
+the visitor's address from `CF-Connecting-IP` instead — but only from those ranges, so nobody else
+can claim to be someone they aren't. Leave it alone if no CDN is in front, and never set it empty.
+
 The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed. It runs in label-only mode and every service in the bundle carries `com.centurylinklabs.watchtower.enable=true`, so it only ever updates Nocturne's own containers — anything else on the same Docker host is left alone.
 
 ### First-run setup
