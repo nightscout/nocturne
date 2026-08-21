@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { describeSubmitError, GENERIC_SUBMIT_ERROR } from "./submit-error";
+import {
+  describeSubmitError,
+  GENERIC_SUBMIT_ERROR,
+  RATE_LIMITED_ERROR,
+} from "./submit-error";
 
 describe("describeSubmitError", () => {
   it("uses the handler's message for a 4xx", () => {
@@ -25,6 +29,12 @@ describe("describeSubmitError", () => {
     expect(describeSubmitError({ status: 409, body: { message: "  " } })).toBe(
       GENERIC_SUBMIT_ERROR
     );
+  });
+
+  it("reports a throttled attempt as throttled, not as the caller's fallback", () => {
+    expect(
+      describeSubmitError({ status: 429 }, "This invite link is invalid.")
+    ).toBe(RATE_LIMITED_ERROR);
   });
 
   it("uses the caller's fallback", () => {

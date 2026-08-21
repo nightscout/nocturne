@@ -39,12 +39,19 @@ export function errorMessage(err: unknown): string | undefined {
  * message. Those messages are written for the user, so a 4xx message is shown
  * verbatim; anything else (5xx, network failure, thrown `Error`) falls back to
  * {@link GENERIC_SUBMIT_ERROR} so internals aren't rendered.
+ *
+ * A 429 answers with {@link RATE_LIMITED_ERROR} ahead of either, because the
+ * rate limiter's body carries no `message` and a caller's fallback describes
+ * what it asked for — "this invite link is invalid" for a request the limiter
+ * never let reach the invite.
  */
 export function describeSubmitError(
   err: unknown,
   fallback = GENERIC_SUBMIT_ERROR
 ): string {
   const status = errorStatus(err);
+  if (status === 429) return RATE_LIMITED_ERROR;
+
   if (status !== undefined && status >= 400 && status < 500) {
     return errorMessage(err) ?? fallback;
   }
