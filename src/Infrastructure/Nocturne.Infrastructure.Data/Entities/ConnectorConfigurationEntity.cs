@@ -91,10 +91,16 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     public DateTime? LastSuccessfulSync { get; set; }
 
     /// <summary>
+    /// Maximum stored length of <see cref="LastErrorMessage"/>. Writers must fit the message to it:
+    /// an over-length assignment fails the very write that records the failure.
+    /// </summary>
+    public const int LastErrorMessageMaxLength = 1000;
+
+    /// <summary>
     /// The error message from the most recent failure
     /// </summary>
     [Column("last_error_message")]
-    [MaxLength(1000)]
+    [MaxLength(LastErrorMessageMaxLength)]
     public string? LastErrorMessage { get; set; }
 
     /// <summary>

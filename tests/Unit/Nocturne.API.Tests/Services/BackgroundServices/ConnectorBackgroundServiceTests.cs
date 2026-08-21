@@ -302,6 +302,49 @@ public class ConnectorBackgroundServiceTests
             "Expected the specific error messages from SyncResult.Errors to be passed to UpdateHealthStateAsync");
     }
 
+    /// <summary>
+    /// Connectors report one error per failing type per chunk, so a backfill window against a
+    /// persistently failing publisher repeats the same message once per chunk. The joined health
+    /// message must carry it once: an unbounded join overflows last_error_message and fails the very
+    /// write that records the failure.
+    /// </summary>
+    [Fact]
+    public async Task FailedSync_WithRepeatedErrors_JoinsEachDistinctMessageOnce()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var syncResult = new SyncResult
+        {
+            Success = false,
+            Message = "Fallback message",
+            Errors = [.. Enumerable.Repeat("StateSpans publish failed", 20)]
+        };
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                "StateSpans publish failed",
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "twenty identical chunk errors must collapse to one entry in the health message");
+    }
+
     [Fact]
     public async Task FailedSync_WithNoErrors_FallsBackToMessage()
     {

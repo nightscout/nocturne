@@ -427,8 +427,12 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
         else
         {
+            // A connector reports one error per failing type per chunk, so a long backfill window
+            // against a persistently failing publisher repeats the same message hundreds of times.
+            // Distinct keeps the joined string informative and bounded; the write site truncates
+            // whatever still exceeds the column.
             var errorMessage = result.Errors.Count > 0
-                ? string.Join("; ", result.Errors)
+                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
                 : !string.IsNullOrWhiteSpace(result.Message)
                     ? result.Message
                     : "Sync failed";

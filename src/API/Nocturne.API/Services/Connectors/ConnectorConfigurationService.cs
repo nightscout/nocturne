@@ -951,7 +951,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             if (lastErrorMessage == string.Empty)
                 config.LastErrorMessage = null; // Explicit clear
             else
-                config.LastErrorMessage = lastErrorMessage;
+                config.LastErrorMessage = FitErrorMessageToColumn(lastErrorMessage);
         }
 
         if (lastErrorAt.HasValue)
@@ -974,5 +974,21 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             connectorName,
             config.IsHealthy
         );
+    }
+
+    /// <summary>
+    ///     Fits a health error message inside
+    ///     <see cref="ConnectorConfigurationEntity.LastErrorMessageMaxLength"/>, marking the cut so a
+    ///     reader can tell the message is incomplete. Callers join every error of a run, which a long
+    ///     backfill against a failing publisher can grow past the column.
+    /// </summary>
+    private static string FitErrorMessageToColumn(string message)
+    {
+        const string marker = "... (truncated)";
+        const int max = ConnectorConfigurationEntity.LastErrorMessageMaxLength;
+
+        return message.Length <= max
+            ? message
+            : string.Concat(message.AsSpan(0, max - marker.Length), marker);
     }
 }
