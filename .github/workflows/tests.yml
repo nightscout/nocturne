@@ -33,6 +33,31 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # A project outside nocturne.sln is built by nothing that says "build everything", so it
+      # can rot uncompilable indefinitely. scripts/Shared is the one deliberate exclusion: it is
+      # consumed by the file-based apps in scripts/ through `#:project`, never by the product build.
+      - name: Every project is in the solution
+        run: |
+          orphans=$(comm -23 \
+            <(git ls-files '*.csproj' | grep -vx 'scripts/Shared/Shared.csproj' | sort) \
+            <(dotnet sln nocturne.sln list | grep '\.csproj$' | sed 's|\\|/|g' | sort))
+          if [ -n "$orphans" ]; then
+            echo "These projects are missing from nocturne.sln:"
+            echo "$orphans"
+            exit 1
+          fi
+
+      # Entering Nocturne.E2E.Tests starts the whole Aspire stack, so it must stay uncollected
+      # unless RunE2E is set; a csproj edit that re-arms it would wedge every unfiltered run.
+      - name: E2E suite stays opt-in
+        run: |
+          collected=$(dotnet msbuild tests/E2E/Nocturne.E2E.Tests/Nocturne.E2E.Tests.csproj \
+            -getProperty:IsTestProject -p:GenerateNSwagClient=false)
+          if [ "$collected" != "false" ]; then
+            echo "IsTestProject is '$collected', expected 'false' without -p:RunE2E=true"
+            exit 1
+          fi
+
       - name: Test
         run: |
           # Build per-project to avoid Windows-only projects (Desktop, Widgets)

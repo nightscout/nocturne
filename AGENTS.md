@@ -21,12 +21,15 @@ aspire run
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance)
-dotnet test --filter "Category!=Integration&Category!=Performance"
+# Run unit tests (excludes integration/performance/E2E)
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run integration tests (requires Docker containers)
 cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
 dotnet test --filter "Category=Integration"
+
+# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Type checking for frontend
 cd src/Web/packages/app && pnpm run check
@@ -59,6 +62,7 @@ src/
 tests/
 ├── Unit/                      # Unit tests
 ├── Integration/               # Integration tests (use Testcontainers)
+├── E2E/                       # Aspire-hosted end-to-end tests (opt-in, see Testing)
 └── Performance/               # Performance benchmarks
 ```
 
@@ -114,6 +118,21 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - Use `[Trait("Category", "Integration")]` for integration tests
 - Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+
+### End-to-end tests
+
+`tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack from `AppHostFixture`, so it is
+excluded from test collection by default (`IsTestProject` is `$(RunE2E)`, which defaults to
+`false`) — a mistyped `--filter` cannot drag the stack into a unit run. It still compiles as
+part of `dotnet build nocturne.sln`. Opt in explicitly:
+
+```bash
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
+```
+
+No workflow runs it: Aspire.Hosting.Testing's DCP orchestration never completes on
+GitHub-hosted runners (see the trailing note in `.github/workflows/tests.yml`). A workflow
+that revives it needs `-p:RunE2E=true` on the `dotnet test` invocation.
 
 ## Web Frontend
 

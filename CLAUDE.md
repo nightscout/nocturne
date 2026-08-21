@@ -15,8 +15,8 @@ aspire start
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance)
-dotnet test --filter "Category!=Integration&Category!=Performance"
+# Run unit tests (excludes integration/performance/E2E)
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run a single test class
 dotnet test --filter "FullyQualifiedName~EntryServiceTests"
@@ -24,6 +24,9 @@ dotnet test --filter "FullyQualifiedName~EntryServiceTests"
 # Run integration tests (requires Docker)
 cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
 dotnet test --filter "Category=Integration"
+
+# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
@@ -229,6 +232,8 @@ Design notes:
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - `[Trait("Category", "Integration")]` for integration tests
 - Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+- `tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack and is opt-in via
+  `-p:RunE2E=true`; see the "End-to-end tests" section of `AGENTS.md`
 
 ## Web Frontend
 

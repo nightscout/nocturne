@@ -68,10 +68,10 @@ public class MutationAuditLogEntity : ITenantScoped
     [Column("token_id")]
     public Guid? TokenId { get; set; }
 
-    /// <summary>Request correlation ID for cross-service tracing.</summary>
+    /// <summary>Request trace identifier for cross-service tracing.</summary>
     [Column("correlation_id")]
     [MaxLength(50)]
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
 
     /// <summary>API route that handled the mutation (e.g. "PUT /api/v1/entries").</summary>
     [Column("endpoint")]

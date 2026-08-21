@@ -57,13 +57,35 @@ public class ModelConventionTests
                 && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_at IS NULL");
 
     [Fact]
-    public void EveryV4RecordTable_HasACorrelationIdIndex() =>
+    public void EveryCorrelatedTable_HasACorrelationIdIndex() =>
         AssertFamily(
-            NocturneDbContext.V4LegacyIdRecordEntities,
+            NocturneDbContext.V4CorrelationIndexedEntities,
             "_correlation_id",
             i => Columns(i).SequenceEqual([nameof(IV4Entity.CorrelationId)])
                 && !i.IsUnique
                 && i.GetFilter() is null);
+
+    /// <summary>
+    /// A list, not the model, drives the loop above, so a new correlated table would ship without
+    /// the lookup index. Discovery is by property name, which only the decomposition correlation
+    /// bears — the request-trace identifier the audit and compatibility-proxy tables carry in
+    /// their own <c>correlation_id</c> columns is <c>TraceId</c> in the model.
+    /// </summary>
+    [Fact]
+    public void EveryTableCarryingTheDecompositionCorrelation_IsInTheCorrelationIndexFamily()
+    {
+        var declared = Model().GetEntityTypes()
+            .Where(e => e.FindProperty(nameof(IV4Entity.CorrelationId)) is not null)
+            .Select(e => e.ClrType)
+            .ToList();
+
+        declared.Should().HaveCountGreaterThan(15,
+            "an empty set would let the assertion below pass vacuously");
+
+        declared.Except(NocturneDbContext.V4CorrelationIndexedEntities)
+            .Select(t => t.Name)
+            .Should().BeEmpty("every table carrying the decomposition correlation needs its lookup index");
+    }
 
     /// <summary>
     /// EF drops this one as redundant against the tenant-leading partial indexes unless it is

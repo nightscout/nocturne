@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models;
 
 /// <summary>
@@ -11,8 +13,14 @@ public class DiscrepancyAnalysisDto
     /// <summary>Unique identifier for this analysis record</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Correlation ID linking the Nightscout and Nocturne requests being compared</summary>
-    public string CorrelationId { get; set; } = string.Empty;
+    /// <summary>
+    /// Trace identifier linking the Nightscout and Nocturne requests being compared.
+    /// The wire name stays <c>correlationId</c>: this DTO is both a read response of
+    /// <c>GET /api/v4/discrepancy/analyses</c> and the payload one Nocturne posts to another's
+    /// <c>POST /api/v4/discrepancy/ingest</c>, so a mixed-version pair has to agree on it.
+    /// </summary>
+    [JsonPropertyName("correlationId")]
+    public string TraceId { get; set; } = string.Empty;
 
     /// <summary>When the analysis was performed</summary>
     public DateTimeOffset AnalysisTimestamp { get; set; }

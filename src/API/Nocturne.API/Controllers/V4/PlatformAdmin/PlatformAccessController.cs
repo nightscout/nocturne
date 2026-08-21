@@ -8,6 +8,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -53,8 +54,6 @@ public class PlatformAccessController(
     /// <summary>Lifetime of a platform-access grant. A time-boxed "visit", not a standing credential.</summary>
     private static readonly TimeSpan GrantLifetime = TimeSpan.FromMinutes(30);
 
-    private const string AuditEventType = "platform_admin_tenant_access";
-
     /// <summary>
     /// Mint a platform-access grant for the given tenant slug and redirect the operator into the
     /// tenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a
@@ -79,7 +78,7 @@ public class PlatformAccessController(
 
         if (!auth.IsPlatformAdmin)
         {
-            await authAudit.LogAsync(AuditEventType, auth.SubjectId, success: false,
+            await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: false,
                 ipAddress: GetClientIp(), userAgent: GetUserAgent(),
                 errorMessage: "not_platform_admin",
                 detailsJson: JsonSerializer.Serialize(new { slug = tenant }));
@@ -130,9 +129,10 @@ public class PlatformAccessController(
             Expires = DateTimeOffset.UtcNow.Add(GrantLifetime),
         });
 
-        await authAudit.LogAsync(AuditEventType, auth.SubjectId, success: true,
+        await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: true,
             ipAddress: GetClientIp(), userAgent: GetUserAgent(),
-            detailsJson: JsonSerializer.Serialize(new { tenantId = target.Id, slug = target.Slug }));
+            detailsJson: JsonSerializer.Serialize(new { slug = target.Slug }),
+            tenantId: target.Id);
 
         logger.LogInformation(
             "Platform-admin {SubjectId} was granted access to tenant {TenantId} ({Slug})",

@@ -49,6 +49,7 @@ public class InstanceKeyHandler : IAuthHandler
                     IsAuthenticated = true,
                     AuthType = AuthType.InstanceKey,
                     SubjectName = "instance-service",
+                    CredentialFingerprint = _validator.KeyFingerprint,
                     Permissions = ["*"],
                     Roles = ["admin"],
                     // The instance key is the highest-trust service credential in

@@ -91,7 +91,7 @@ public class AuditedBulkDeleteExtensionsTests : IDisposable
         public string? AuthType => "SessionCookie";
         public string? IpAddress => "127.0.0.1";
         public Guid? TokenId => null;
-        public string? CorrelationId => null;
+        public string? TraceId => null;
         public string? Endpoint => "DELETE /api/v4/treatments";
         public bool IsSystem => false;
     }

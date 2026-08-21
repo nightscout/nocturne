@@ -178,7 +178,7 @@ public class DiscrepancyController : ControllerBase
             var analysisResults = analyses.Select(a => new DiscrepancyAnalysisDto
             {
                 Id = a.Id,
-                CorrelationId = a.CorrelationId,
+                TraceId = a.TraceId,
                 AnalysisTimestamp = a.AnalysisTimestamp,
                 RequestMethod = a.RequestMethod,
                 RequestPath = a.RequestPath,
@@ -253,7 +253,7 @@ public class DiscrepancyController : ControllerBase
             var result = new DiscrepancyAnalysisDto
             {
                 Id = analysis.Id,
-                CorrelationId = analysis.CorrelationId,
+                TraceId = analysis.TraceId,
                 AnalysisTimestamp = analysis.AnalysisTimestamp,
                 RequestMethod = analysis.RequestMethod,
                 RequestPath = analysis.RequestPath,
@@ -399,12 +399,12 @@ public class DiscrepancyController : ControllerBase
             }
 
             var sourceId = request.SourceId;
-            var correlationId = request.Analysis.CorrelationId;
+            var traceId = request.Analysis.TraceId;
 
             _logger.LogInformation(
                 "Received forwarded discrepancy from {SourceId}: {CorrelationId}",
                 sourceId,
-                correlationId
+                traceId
             );
 
             // Store the forwarded discrepancy in the database
@@ -422,7 +422,7 @@ public class DiscrepancyController : ControllerBase
                 .ToList();
 
             await _discrepancyRepository.StoreAnalysisAsync(
-                correlationId,
+                traceId,
                 request.Analysis.AnalysisTimestamp,
                 request.Analysis.RequestMethod,
                 request.Analysis.RequestPath,
@@ -447,14 +447,14 @@ public class DiscrepancyController : ControllerBase
             _logger.LogDebug(
                 "Stored forwarded discrepancy from {SourceId}: {CorrelationId}",
                 sourceId,
-                correlationId
+                traceId
             );
 
             return Ok(new
             {
                 status = 200,
                 message = "Discrepancy received and stored",
-                correlationId,
+                correlationId = traceId,
                 sourceId,
             });
         }

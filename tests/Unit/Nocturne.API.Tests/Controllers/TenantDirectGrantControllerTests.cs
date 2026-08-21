@@ -14,6 +14,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -25,11 +26,12 @@ public class TenantDirectGrantControllerTests : IDisposable
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<NocturneDbContext> _dbOptions;
     private readonly NocturneDbContext _dbContext;
+    private readonly NocturneDbContext _auditDbContext;
     private readonly TenantDirectGrantController _controller;
-    private readonly Mock<IAuthAuditService> _auditService;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _memberSubjectId = Guid.CreateVersion7();
     private readonly Guid _nonMemberSubjectId = Guid.CreateVersion7();
+    private readonly Guid _adminSubjectId = Guid.CreateVersion7();
 
     public TenantDirectGrantControllerTests()
     {
@@ -64,6 +66,13 @@ public class TenantDirectGrantControllerTests : IDisposable
             Name = "Outsider",
             IsActive = true,
         });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = _adminSubjectId,
+            Name = "Platform Admin",
+            IsActive = true,
+            IsPlatformAdmin = true,
+        });
         _dbContext.TenantMembers.Add(new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
@@ -76,23 +85,28 @@ public class TenantDirectGrantControllerTests : IDisposable
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
 
-        _auditService = new Mock<IAuthAuditService>();
+        // The audit service runs on the request-scoped context, which on this path carries no
+        // tenant — so a recorded tenant can only have come from the grant's own pinned context.
+        _auditDbContext = new NocturneDbContext(_dbOptions);
+        var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
-            _auditService.Object, new Mock<ILogger<DirectGrantService>>().Object);
+            new AuthAuditService(
+                _auditDbContext,
+                new HttpContextAccessor { HttpContext = httpContext },
+                new Mock<ILogger<AuthAuditService>>().Object),
+            new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object);
 
         _controller = new TenantDirectGrantController(
             factory.Object, tenantMemberService, directGrantService)
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext(),
-            },
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
     public void Dispose()
     {
+        _auditDbContext.Dispose();
         _dbContext.Dispose();
         _connection.Dispose();
     }
@@ -327,37 +341,90 @@ public class TenantDirectGrantControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task AdminActions_RecordTheActorInAuditDetails()
+    public async Task Create_ByPlatformAdmin_FilesRowWhoseActorIsTheAdminAndSubjectIsTheGrantee()
     {
-        _controller.HttpContext.Items["AuthContext"] = new Nocturne.Core.Models.Authorization.AuthContext
+        AuthenticateAs(new AuthContext
         {
             IsAuthenticated = true,
-            AuthType = Nocturne.Core.Models.Authorization.AuthType.InstanceKey,
-            SubjectId = null,
-        };
+            AuthType = AuthType.SessionCookie,
+            SubjectId = _adminSubjectId,
+            IsPlatformAdmin = true,
+        });
 
-        var request = new AdminCreateDirectGrantRequest
-        {
-            SubjectId = _memberSubjectId,
-            Label = "Provisioner Token",
-            Scopes = ["glucose.read"],
-        };
-        var createResult = await _controller.Create(_tenantId, request, CancellationToken.None);
-        var okResult = Assert.IsType<OkObjectResult>(createResult.Result);
-        var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
+        await CreateGrantAsync("Admin Minted");
 
-        _auditService.Verify(a => a.LogAsync(
-            AuthAuditEventType.TokenIssued, _memberSubjectId, true,
-            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.Is<string?>(d => d != null && d.Contains("\"issued_by\":\"InstanceKey\"")),
-            It.IsAny<Guid?>()));
-
-        await _controller.Revoke(_tenantId, response.Id, CancellationToken.None);
-
-        _auditService.Verify(a => a.LogAsync(
-            AuthAuditEventType.TokenRevoked, _memberSubjectId, true,
-            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.Is<string?>(d => d != null && d.Contains("\"revoked_by\":\"InstanceKey\"")),
-            It.IsAny<Guid?>()));
+        var row = await SingleAuditRowAsync();
+        Assert.Equal(AuthAuditEventType.PlatformAdminGrantIssued, row.EventType);
+        Assert.Equal(_memberSubjectId, row.SubjectId);
+        Assert.Equal(_adminSubjectId, row.ActorSubjectId);
+        Assert.NotEqual(row.SubjectId, row.ActorSubjectId);
+        Assert.Equal(_tenantId, row.TenantId);
     }
+
+    [Fact]
+    public async Task Revoke_ByPlatformAdmin_FilesRowWhoseActorIsTheAdminAndSubjectIsTheGrantee()
+    {
+        AuthenticateAs(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = _adminSubjectId,
+            IsPlatformAdmin = true,
+        });
+
+        var grantId = await CreateGrantAsync("Admin Revoked");
+        await _controller.Revoke(_tenantId, grantId, CancellationToken.None);
+
+        var row = await _auditDbContext.AuthAuditLog.AsNoTracking()
+            .SingleAsync(a => a.EventType == AuthAuditEventType.PlatformAdminGrantRevoked);
+        Assert.Equal(_memberSubjectId, row.SubjectId);
+        Assert.Equal(_adminSubjectId, row.ActorSubjectId);
+        Assert.NotEqual(row.SubjectId, row.ActorSubjectId);
+        Assert.Equal(_tenantId, row.TenantId);
+    }
+
+    [Fact]
+    public async Task Create_ByInstanceKeyCaller_FilesRowIdentifyingTheKeyWithoutASubject()
+    {
+        const string fingerprint = "0123456789abcdef";
+        AuthenticateAs(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.InstanceKey,
+            SubjectId = null,
+            IsPlatformAdmin = true,
+            CredentialFingerprint = fingerprint,
+        });
+
+        await CreateGrantAsync("Provisioner Token");
+
+        var row = await SingleAuditRowAsync();
+        Assert.Equal(AuthAuditEventType.PlatformAdminGrantIssued, row.EventType);
+        Assert.Equal(_memberSubjectId, row.SubjectId);
+        Assert.Null(row.ActorSubjectId);
+        Assert.Equal($"{AuthType.InstanceKey}:{fingerprint}", row.ActorCredential);
+        Assert.Equal(_tenantId, row.TenantId);
+    }
+
+    private void AuthenticateAs(AuthContext auth) =>
+        _controller.HttpContext.Items["AuthContext"] = auth;
+
+    private async Task<Guid> CreateGrantAsync(string label)
+    {
+        var result = await _controller.Create(
+            _tenantId,
+            new AdminCreateDirectGrantRequest
+            {
+                SubjectId = _memberSubjectId,
+                Label = label,
+                Scopes = ["glucose.read"],
+            },
+            CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        return Assert.IsType<CreateDirectGrantResponse>(okResult.Value).Id;
+    }
+
+    private async Task<AuthAuditLogEntity> SingleAuditRowAsync() =>
+        await _auditDbContext.AuthAuditLog.AsNoTracking().SingleAsync();
 }

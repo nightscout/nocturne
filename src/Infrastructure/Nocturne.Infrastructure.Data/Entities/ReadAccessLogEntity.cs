@@ -70,10 +70,10 @@ public class ReadAccessLogEntity : ITenantScoped
     [Column("query_parameters", TypeName = "jsonb")]
     public string? QueryParametersJson { get; set; }
 
-    /// <summary>Request correlation ID for cross-service tracing.</summary>
+    /// <summary>Request trace identifier for cross-service tracing.</summary>
     [Column("correlation_id")]
     [MaxLength(50)]
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
 
     /// <summary>HTTP status code of the response.</summary>
     [Column("status_code")]

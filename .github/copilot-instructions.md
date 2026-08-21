@@ -67,8 +67,8 @@ dotnet run --project src/Aspire/Nocturne.Aspire.Host
 # Run just the API
 dotnet run --project src/API/Nocturne.API
 
-# Run tests (exclude integration/performance)
-dotnet test --filter "Category!=Integration&Category!=Performance"
+# Run tests (exclude integration/performance/E2E)
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run integration tests (requires Docker)
 cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
@@ -89,6 +89,8 @@ cd src/Web/packages/app && pnpm run generate-api-client
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - Use `[Trait("Category", "Integration")]` for integration tests
 - Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+- `tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack and is opt-in via
+  `-p:RunE2E=true`; see the "End-to-end tests" section of `AGENTS.md`
 
 ## Database & Entities
 

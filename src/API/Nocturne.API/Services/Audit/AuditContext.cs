@@ -14,7 +14,7 @@ public class AuditContext : IAuditContext
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public Guid? TokenId { get; set; }
-    public string? CorrelationId { get; set; }
+    public string? TraceId { get; set; }
     public string? Endpoint { get; set; }
     public bool IsSystem { get; set; }
 }

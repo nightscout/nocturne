@@ -113,9 +113,9 @@ public class CompatibilityProxyResponse
     public long TotalProcessingTimeMs { get; set; }
 
     /// <summary>
-    /// Request correlation ID for tracking
+    /// Request trace identifier for tracking
     /// </summary>
-    public string CorrelationId { get; set; } = string.Empty;
+    public string TraceId { get; set; } = string.Empty;
 
     /// <summary>
     /// Detailed comparison result if comparison was performed
@@ -129,9 +129,9 @@ public class CompatibilityProxyResponse
 public class ResponseComparisonResult
 {
     /// <summary>
-    /// Request correlation ID
+    /// Request trace identifier
     /// </summary>
-    public string CorrelationId { get; set; } = string.Empty;
+    public string TraceId { get; set; } = string.Empty;
 
     /// <summary>
     /// Timestamp when comparison was performed

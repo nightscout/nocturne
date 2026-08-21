@@ -33,7 +33,7 @@ internal sealed class TestAuditContext : IAuditContext
     public string? AuthType { get; private set; }
     public string? IpAddress => null;
     public Guid? TokenId => null;
-    public string? CorrelationId => null;
+    public string? TraceId => null;
     public string? Endpoint { get; private set; }
     public bool IsSystem { get; private set; } = true;
 
