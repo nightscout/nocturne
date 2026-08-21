@@ -442,7 +442,11 @@ public class AnalysisListItemDto
 {
     public Guid Id { get; set; }
 
-    /// <inheritdoc cref="DiscrepancyAnalysisDto.TraceId"/>
+    /// <summary>
+    /// Trace identifier linking the Nightscout and Nocturne requests being compared.
+    /// The wire name stays <c>correlationId</c>: it predates the TraceId rename and the
+    /// compatibility page reads it by that name.
+    /// </summary>
     [JsonPropertyName("correlationId")]
     public string TraceId { get; set; } = string.Empty;
     public DateTimeOffset AnalysisTimestamp { get; set; }
@@ -480,7 +484,7 @@ public class AnalysisDetailDto
 {
     public Guid Id { get; set; }
 
-    /// <inheritdoc cref="DiscrepancyAnalysisDto.TraceId"/>
+    /// <inheritdoc cref="AnalysisListItemDto.TraceId"/>
     [JsonPropertyName("correlationId")]
     public string TraceId { get; set; } = string.Empty;
     public DateTimeOffset AnalysisTimestamp { get; set; }
