@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using Match = System.Text.RegularExpressions.Match;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -26,6 +28,47 @@ internal static class MigrationSourceFiles
         File.ReadAllText(All().Single(f =>
             Path.GetFileNameWithoutExtension(f).EndsWith("_" + name, StringComparison.Ordinal)));
 
+    /// <summary>Migration name — the file name a guard reports and an allowlist keys on.</summary>
+    public static string Name(string file) => Path.GetFileNameWithoutExtension(file);
+
+    /// <summary>
+    /// Text of the migration's <c>Up</c> method. Only <c>Up</c> runs on the startup migration
+    /// chain, and <c>Down</c> routinely recreates the very indexes <c>Up</c> replaced. Sliced at
+    /// the <c>Down</c> signature rather than by brace matching: migration SQL lives in
+    /// interpolated raw string literals whose <c>{table}</c> holes are not C# braces. A shape
+    /// this fails to recognise yields an empty body, which reports as a discovery regression
+    /// rather than as a pass.
+    /// </summary>
+    public static string UpBody(string source)
+    {
+        var start = source.IndexOf("void Up(", StringComparison.Ordinal);
+
+        if (start < 0)
+            return string.Empty;
+
+        var end = source.IndexOf("void Down(", start, StringComparison.Ordinal);
+
+        return end < 0 ? source[start..] : source[start..end];
+    }
+
+    /// <summary>
+    /// The same text with every C# and SQL comment overwritten by spaces, so a commented-out
+    /// statement cannot satisfy a guard while offsets stay comparable to the original. A comment
+    /// marker inside a string literal is blanked too, which can only withhold evidence from a
+    /// guard, never manufacture it.
+    /// </summary>
+    public static string WithCommentsBlanked(string source)
+    {
+        var blanked = source.ToCharArray();
+
+        foreach (Match match in Comment.Matches(source))
+            for (var i = match.Index; i < match.Index + match.Length; i++)
+                if (blanked[i] is not ('\r' or '\n'))
+                    blanked[i] = ' ';
+
+        return new string(blanked);
+    }
+
     /// <summary>Table names of every <see cref="ITenantScoped"/> entity, lowercased.</summary>
     public static IReadOnlySet<string> TenantScopedTableNames() =>
         typeof(ITenantScoped).Assembly.GetTypes()
@@ -34,6 +77,10 @@ internal static class MigrationSourceFiles
             .Where(n => n is not null)
             .Select(n => n!.ToLowerInvariant())
             .ToHashSet(StringComparer.Ordinal);
+
+    private static readonly Regex Comment = new(
+        @"/\*.*?\*/|//[^\r\n]*|--[^\r\n]*",
+        RegexOptions.Singleline | RegexOptions.Compiled);
 
     private static string Location()
     {

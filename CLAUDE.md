@@ -133,6 +133,27 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
 
+### Unique indexes over existing data
+
+Migrations run on API startup, so a `CREATE UNIQUE INDEX` (or `unique: true`
+`CreateIndex`, or an added unique constraint) that trips over rows the database
+already holds fails the whole chain and crash-loops the API — with no
+self-service way out for a self-hosted instance. The instances most likely to
+carry pre-index duplicates are the ones upgrading across several versions.
+
+**Every unique index over a table the migration did not create in that same
+migration ships with a loser-cleanup step earlier in the same `Up`.** Soft-delete
+(or delete) all but the winner of each duplicate key first;
+`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` is the worked example,
+including the per-tenant `set_config` loop that FORCE ROW LEVEL SECURITY requires.
+A table created in the same migration is exempt — it holds no rows yet, and a
+cleanup there would be dead code.
+
+`UniqueIndexDeduplicationGuardTests` enforces this over migration sources. Older
+migrations that predate the rule are listed there by name; an instance whose chain
+fails on one of them never reaches a later migration, so nothing can repair them
+and nothing may be added to that list.
+
 ### Row Level Security
 
 Tenant-scoped tables enforce isolation via PostgreSQL Row Level Security.
