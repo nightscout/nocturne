@@ -2935,9 +2935,9 @@ public class StatisticsService : IStatisticsService
 
             // Calculate time in range
             var tirBefore =
-                (double)beforeValues.Count(v => v >= 70 && v <= 180) / beforeValues.Count * 100;
+                (double)beforeValues.Count(v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl) / beforeValues.Count * 100;
             var tirAfter =
-                (double)afterValues.Count(v => v >= 70 && v <= 180) / afterValues.Count * 100;
+                (double)afterValues.Count(v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl) / afterValues.Count * 100;
 
             // Calculate CV (coefficient of variation)
             var stdDevBefore = Math.Sqrt(
