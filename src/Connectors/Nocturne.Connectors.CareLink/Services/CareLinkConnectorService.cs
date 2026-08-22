@@ -242,8 +242,11 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         if (isStale)
         {
+            // The payload arrived and held nothing recent enough to publish, which is a checked
+            // result rather than an unchecked one, so it still owes the tenant a count.
             _logger.LogDebug("[{ConnectorSource}] Skipping SGVs — data is stale (>{Threshold} min)",
                 ConnectorSource, CareLinkConstants.StaleDataThresholdMinutes);
+            RecordPublishOutcome(result, SyncDataType.Glucose, 0, success: true);
             return;
         }
 

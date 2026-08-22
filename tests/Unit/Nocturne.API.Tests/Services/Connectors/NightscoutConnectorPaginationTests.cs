@@ -354,6 +354,67 @@ public class NightscoutConnectorPaginationTests
     #region Treatment pagination tests
 
     [Fact]
+    public async Task FetchTreatments_WhenThePublishIsRejected_FailsAndReportsEveryActiveSubType()
+    {
+        // The whole batch is one publish, so its rejection belongs to every sub-type the batch was
+        // carrying — a tenant told only that "treatments" failed cannot tell which of their toggles
+        // is affected, and the counts still report what the sync handed over.
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateTreatments(5, BaseTime)));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+
+        var treatmentMock = new Mock<ITreatmentPublisher>();
+        treatmentMock.Setup(p => p.PublishTreatmentsAsync(
+                It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        publisherMock.Setup(p => p.Treatments).Returns(treatmentMock.Object);
+        publisherMock.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisherMock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+
+        var service = new NightscoutConnectorService(
+            new HttpClient(handler) { BaseAddress = new Uri(config.Url) },
+            new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
+            Mock.Of<ILogger<NightscoutConnectorService>>(),
+            Mock.Of<IRetryDelayStrategy>(),
+            Mock.Of<IRateLimitingStrategy>(),
+            new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            publisherMock.Object);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-2).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeFalse("a batch that never reached the tenant is not a successful sync");
+        result.Errors.Should().BeEquivalentTo(["Boluses publish failed", "CarbIntake publish failed"]);
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = 5,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = 5,
+            });
+    }
+
+    [Fact]
     public async Task FetchTreatments_SinglePage_ReturnsAll()
     {
         var treatments = CreateTreatments(5, BaseTime);
@@ -387,9 +448,10 @@ public class NightscoutConnectorPaginationTests
     [Fact]
     public async Task FetchTreatments_MultiplePagesFeedingSeveralTypes_RecordTheWholeTotalUnderEach()
     {
-        // The treatments crawl is one paginated fetch feeding every active sub-type, so each of
-        // them has to carry the total across all pages — a count taken from the last page alone,
-        // or recorded for only the first sub-type, silently under-reports what the sync stored.
+        // The treatments crawl is one paginated fetch feeding every active sub-type. What is pinned
+        // is that the recorded count spans every page rather than just the last, and that it
+        // reaches every active sub-type rather than the first — not the per-type repetition itself,
+        // which is this connector's existing reporting shape for a batch it cannot split.
         var page1 = CreateTreatments(MaxCount, BaseTime);
         var page2Start = page1
             .Select(t => DateTimeOffset.Parse(t.CreatedAt!, CultureInfo.InvariantCulture))

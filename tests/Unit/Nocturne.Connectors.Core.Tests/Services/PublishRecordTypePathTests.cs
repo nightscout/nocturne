@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -21,14 +22,34 @@ public class PublishRecordTypePathTests
         protected override void ValidateSourceSpecificConfiguration() { }
     }
 
+    /// <summary>Captures the messages the shared publish path logs, which no fixture otherwise sees.</summary>
+    private sealed class RecordingLogger : ILogger<TestConnectorService>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
+    }
+
     private sealed class TestConnectorService : BaseConnectorService<TestConfig>
     {
         private readonly Func<SyncResult, CancellationToken, Task> _syncBody;
 
-        public TestConnectorService(Func<SyncResult, CancellationToken, Task> syncBody)
+        public TestConnectorService(
+            Func<SyncResult, CancellationToken, Task> syncBody,
+            ILogger<TestConnectorService>? logger = null)
             : base(new HttpClient(),
                 new ConnectorServerResolver<TestConfig>(null, null, null),
-                NullLogger<TestConnectorService>.Instance)
+                logger ?? NullLogger<TestConnectorService>.Instance)
         {
             _syncBody = syncBody;
         }
@@ -148,6 +169,26 @@ public class PublishRecordTypePathTests
         // Assert
         result.Success.Should().BeFalse();
         result.ItemsSynced[SyncDataType.Glucose].Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SuccessLog_CoversThePublishedBatchAndNotTheEmptyOne()
+    {
+        // Arrange: the empty path records its zero without logging, so a run over quiet types does
+        // not fill the log with "Synced 0" lines it has nothing to say about.
+        var logger = new RecordingLogger();
+        var active = new HashSet<SyncDataType> { SyncDataType.Glucose, SyncDataType.Boluses };
+        var service = new TestConnectorService((_, _) => Task.CompletedTask, logger);
+        var result = new SyncResult { Success = true };
+
+        // Act
+        await service.PublishAsync(result, SyncDataType.Glucose, active,
+            [new PublishedRecord(), new PublishedRecord()]);
+        await service.PublishAsync(result, SyncDataType.Boluses, active, []);
+
+        // Assert
+        logger.Messages.Should().ContainSingle(m => m.Contains("Synced"))
+            .Which.Should().Contain("Synced 2 Glucose records");
     }
 
     [Fact]

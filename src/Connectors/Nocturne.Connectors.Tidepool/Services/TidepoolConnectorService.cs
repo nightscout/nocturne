@@ -81,7 +81,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             }
         }
 
-        // Handle Glucose (CBG + SMBG → SensorGlucose)
+        // CBG and SMBG both map to SensorGlucose.
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
             try
@@ -91,10 +91,17 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                     $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
                     request.From, request.To);
 
-                if (bgValues != null)
+                if (bgValues is null)
+                {
+                    result.Success = false;
+                    result.Errors.Add("Failed to fetch Glucose");
+                }
+                else
+                {
                     await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                         _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), PublishSensorGlucoseDataAsync,
                         config, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -104,7 +111,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             }
         }
 
-        // Handle Boluses and CarbIntake
         SyncDataType[] treatmentTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake];
         if (activeTypes.Any(t => treatmentTypes.Contains(t)))
         {
@@ -119,11 +125,21 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                 var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
-                await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                    mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+                if (boluses is null || foods is null)
+                {
+                    result.Success = false;
+                    result.Errors.Add("Failed to fetch Treatments");
+                }
 
-                await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                    mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+                // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
+                // type is reported only when its own fetch came back.
+                if (boluses is not null)
+                    await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+                        mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+
+                if (foods is not null)
+                    await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                        mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -140,6 +156,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     /// <summary>
     ///     Fetches typed data from the Tidepool API data endpoint.
     /// </summary>
+    /// <returns>
+    ///     The deserialized collection, or <c>null</c> when the fetch failed — no token, an error
+    ///     response, or exhausted retries. A caller must not read that as an empty window: a type
+    ///     the sync could not check has to go unreported, because the count the tenant's sync card
+    ///     renders as "checked, found nothing" is a claim the source was reached.
+    /// </returns>
     private async Task<T?> FetchDataAsync<T>(
         TidepoolConnectorConfiguration config,
         string dataType, DateTime? startDate = null, DateTime? endDate = null) where T : class

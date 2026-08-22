@@ -10,6 +10,8 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
@@ -180,6 +182,120 @@ public class CareLinkConnectorServiceTests
         });
     }
 
+    /// <summary>
+    /// Every reading in the payload is counted, not merely the batch existing at all: a count that
+    /// silently drops records is how a tenant comes to believe a gap in their glucose history was
+    /// never uploaded.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CountsEverySensorGlucoseRecordPublished()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" },
+                  "sgs": [
+                    { "sg": 100, "datetime": "2026-01-01T09:50:00", "kind": "SG" },
+                    { "sg": 110, "datetime": "2026-01-01T09:55:00", "kind": "SG" },
+                    { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" }
+                  ]
+                }
+                """
+        };
+        var fixture = new ServiceFixture(handler, GlucoseOnlyConfiguration(), withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 3,
+        });
+        fixture.PublishedGlucose.Should().HaveCount(3);
+    }
+
+    /// <summary>
+    /// Device status is mapped from the same payload every cycle, so an active toggle always
+    /// reports exactly the one record it published.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_CountsTheDeviceStatusItPublishes()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": {}
+                }
+                """
+        };
+        var config = GlucoseOnlyConfiguration();
+        config.SyncDeviceStatus = true;
+        var fixture = new ServiceFixture(handler, config, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.DeviceStatus] },
+            fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 0,
+            [SyncDataType.DeviceStatus] = 1,
+        });
+        fixture.PublishedDeviceStatuses.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// A payload too old to publish has still been checked, so glucose reports a zero rather than
+    /// leaving the tenant a missing badge that reads as "never checked".
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheDataIsStale_RecordsAnExplicitZero()
+    {
+        // A medical-device update an hour behind the server clock is past the staleness threshold,
+        // so the readings in the payload are deliberately not published.
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastMedicalDeviceDataUpdateServerTime": 1767258000000,
+                  "lastSG": { "sg": 120, "datetime": "2026-01-01T09:00:00", "kind": "SG" },
+                  "sgs": [
+                    { "sg": 120, "datetime": "2026-01-01T09:00:00", "kind": "SG" }
+                  ]
+                }
+                """
+        };
+        var fixture = new ServiceFixture(handler, GlucoseOnlyConfiguration(), withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 0,
+        });
+        fixture.PublishedGlucose.Should().BeEmpty("stale readings are deliberately not published");
+    }
+
+    /// <summary>Leaves only the glucose step able to publish.</summary>
+    private static CareLinkConnectorConfiguration GlucoseOnlyConfiguration() => new()
+    {
+        Username = "user@example.com",
+        Server = "EU",
+        SyncDeviceStatus = false,
+        SyncBoluses = false,
+        SyncCarbIntake = false,
+        SyncTempBasals = false,
+        SyncDeviceEvents = false,
+    };
+
     private const string AlarmDateTime = "2026-01-01T10:00:00";
     private const string NotificationBeforeAlarm = "2026-01-01T09:55:00";
 
@@ -250,8 +366,13 @@ public class CareLinkConnectorServiceTests
     {
         internal CareLinkConnectorService Service { get; }
         internal CareLinkConnectorConfiguration Config { get; }
+        internal List<SensorGlucose> PublishedGlucose { get; } = [];
+        internal List<Nocturne.Core.Models.DeviceStatus> PublishedDeviceStatuses { get; } = [];
 
-        internal ServiceFixture(CareLinkFakeHandler handler, CareLinkConnectorConfiguration? config = null)
+        internal ServiceFixture(
+            CareLinkFakeHandler handler,
+            CareLinkConnectorConfiguration? config = null,
+            bool withPublisher = false)
         {
             Config = config ?? new CareLinkConnectorConfiguration
             {
@@ -280,12 +401,43 @@ public class CareLinkConnectorServiceTests
                 Mock.Of<IRetryDelayStrategy>(),
                 handler);
 
+            IConnectorPublisher? publisher = null;
+            if (withPublisher)
+            {
+                var glucose = new Mock<IGlucosePublisher>();
+                glucose
+                    .Setup(p => p.PublishSensorGlucoseAsync(
+                        It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<string>(),
+                        It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                    .Callback<IEnumerable<SensorGlucose>, string, WriteOrigin, CancellationToken>(
+                        (batch, _, _, _) => PublishedGlucose.AddRange(batch))
+                    .ReturnsAsync(true);
+
+                var device = new Mock<IDevicePublisher>();
+                device
+                    .Setup(p => p.PublishDeviceStatusAsync(
+                        It.IsAny<IEnumerable<Nocturne.Core.Models.DeviceStatus>>(), It.IsAny<string>(),
+                        It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                    .Callback<IEnumerable<Nocturne.Core.Models.DeviceStatus>, string, WriteOrigin, CancellationToken>(
+                        (batch, _, _, _) => PublishedDeviceStatuses.AddRange(batch))
+                    .ReturnsAsync(true);
+
+                var mock = new Mock<IConnectorPublisher>();
+                mock.Setup(p => p.IsAvailable).Returns(true);
+                mock.Setup(p => p.Glucose).Returns(glucose.Object);
+                mock.Setup(p => p.Device).Returns(device.Object);
+                mock.Setup(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
+                mock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+                publisher = mock.Object;
+            }
+
             Service = new CareLinkConnectorService(
                 new HttpClient(handler),
                 serverResolver,
                 tokenProvider,
                 configService.Object,
-                NullLogger<CareLinkConnectorService>.Instance);
+                NullLogger<CareLinkConnectorService>.Instance,
+                publisher);
         }
     }
 
