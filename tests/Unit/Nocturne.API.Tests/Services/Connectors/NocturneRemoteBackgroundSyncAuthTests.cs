@@ -23,6 +23,7 @@ public class NocturneRemoteBackgroundSyncAuthTests
             new ConnectorServerResolver<NocturneRemoteConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NocturneRemoteConnectorService>>(),
             new ConnectorRegistration<NocturneRemoteConnectorConfiguration>(startupDefaults, "NocturneRemote"),
+            Mock.Of<IRetryDelayStrategy>(),
             publisher: null);
     }
 
