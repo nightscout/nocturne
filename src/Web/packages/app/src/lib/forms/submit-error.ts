@@ -6,6 +6,10 @@ export const GENERIC_SUBMIT_ERROR =
 export const RATE_LIMITED_ERROR =
   "Too many attempts. Please wait a few minutes and try again.";
 
+/** Shown when the thing an action referred to is no longer on the server. */
+export const MISSING_ITEM_ERROR =
+  "That item no longer exists. Refresh the page to see what's there now.";
+
 /** The HTTP status carried by a thrown value, if it has one. */
 export function errorStatus(err: unknown): number | undefined {
   if (err && typeof err === "object" && "status" in err) {

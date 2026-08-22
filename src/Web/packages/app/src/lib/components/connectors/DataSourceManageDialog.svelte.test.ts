@@ -61,9 +61,10 @@ describe("DataSourceManageDialog", () => {
 
     await attemptDelete();
 
-    await expect
-      .element(page.getByText("Failed to delete data").first())
-      .toBeInTheDocument();
+    const failureWording = page.getByText("Failed to delete data");
+    await expect.element(failureWording.first()).toBeInTheDocument();
+    // the headline and the message below it each carry the wording
+    expect(failureWording.elements()).toHaveLength(2);
     await expect
       .element(page.getByText("Nothing left to delete"))
       .not.toBeInTheDocument();

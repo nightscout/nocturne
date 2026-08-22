@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error, isHttpError } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { describeSubmitError, RATE_LIMITED_ERROR } from "../forms/submit-error";
+import {
+  describeSubmitError,
+  MISSING_ITEM_ERROR,
+  RATE_LIMITED_ERROR,
+} from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
 
 /**
@@ -41,17 +45,28 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
 }
 
 /**
- * NSwag's ApiException, which is what it throws for a status the operation
- * declares no response type for — the rate limiter's 429 among them. The body
- * arrives as unparsed text on `response`, and the message is NSwag's own.
+ * The two messages the generated client puts on an `ApiException`: the first
+ * for a status the operation declares no response type for — the rate limiter's
+ * 429 among them — and the second for one it declares but whose body came back
+ * empty or unparsed, as a bare `NotFound()` does.
  */
-function nswagApiException(status: number, body: string) {
-  return Object.assign(
-    new Error(
-      `The HTTP status code of the response was not expected (${status}).`
-    ),
-    { status, response: body, result: null }
-  );
+const UNDECLARED_STATUS_MESSAGE = "An unexpected server error occurred.";
+const DECLARED_STATUS_MESSAGE = "A server side error occurred.";
+
+/**
+ * NSwag's ApiException. The body arrives as unparsed text on `response`, and
+ * the message is NSwag's own rather than anything the server wrote.
+ */
+function nswagApiException(
+  status: number,
+  body: string,
+  message = UNDECLARED_STATUS_MESSAGE
+) {
+  return Object.assign(new Error(message), {
+    status,
+    response: body,
+    result: null,
+  });
 }
 
 /**
@@ -84,7 +99,7 @@ describe("the status a generated remote function lets through", () => {
   it("keeps NSwag's boilerplate out of the message it carries", async () => {
     const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
 
-    expect(JSON.stringify(crossed)).not.toContain("not expected");
+    expect(JSON.stringify(crossed)).not.toContain("error occurred");
   });
 
   it("reads as throttled on the invite page, not as a dead invite", async () => {
@@ -115,21 +130,32 @@ describe("the status a generated remote function lets through", () => {
   });
 
   it("forwards a 404 whose body is empty, as `NotFound()` sends it", async () => {
-    const crossed = await crossTheBoundary(nswagApiException(404, ""));
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
 
     expect(isHttpError(crossed) && crossed.status).toBe(404);
-    expect(JSON.stringify(crossed)).not.toContain("not expected");
+    expect(JSON.stringify(crossed)).not.toContain("error occurred");
   });
 
   it("leaves a dialog its own wording for a resource that is already gone", async () => {
-    const crossed = await crossTheBoundary(nswagApiException(404, ""));
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
 
     expect(
       describeSubmitError(crossed, "This data source is already gone.")
     ).toBe("This data source is already gone.");
+  });
+
+  it("does not read as a missing permission when an id is stale", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(404, "", DECLARED_STATUS_MESSAGE)
+    );
+
     expect(
-      remoteErrorMessage(crossed, "This data source is already gone.")
-    ).toBe("This data source is already gone.");
+      remoteErrorMessage(crossed, "Changing alerts requires alerts.readwrite.")
+    ).toBe(MISSING_ITEM_ERROR);
   });
 
   it("still flattens a status it does not forward", async () => {
