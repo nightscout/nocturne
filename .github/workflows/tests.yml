@@ -33,19 +33,31 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
-      # A project outside nocturne.sln is built by nothing that says "build everything", so it
-      # can rot uncompilable indefinitely. scripts/Shared is the one deliberate exclusion: it is
-      # consumed by the file-based apps in scripts/ through `#:project`, never by the product build.
-      - name: Every project is in the solution
+      # No job here builds nocturne.sln: every .NET job runs named projects only (see the
+      # per-project loop in Test), so nothing in CI gates solution membership except this check.
+      # The solution is still the only thing that claims to build everything, so it has to track
+      # the tree both ways — a project it omits can rot uncompilable, and an entry whose file is
+      # gone breaks every solution-wide command. scripts/Shared is the one deliberate omission:
+      # the file-based apps in scripts/ consume it through `#:project`, never the product build.
+      - name: Solution and project tree agree
         run: |
-          orphans=$(comm -23 \
-            <(git ls-files '*.csproj' | grep -vx 'scripts/Shared/Shared.csproj' | sort) \
-            <(dotnet sln nocturne.sln list | grep '\.csproj$' | sed 's|\\|/|g' | sort))
-          if [ -n "$orphans" ]; then
-            echo "These projects are missing from nocturne.sln:"
-            echo "$orphans"
+          tracked=$(git ls-files '*.csproj' | sort)
+          listed=$(dotnet sln nocturne.sln list | { grep '\.csproj$' || true; } | sed 's|\\|/|g' | sort)
+          if [ -z "$tracked" ] || [ -z "$listed" ]; then
+            echo "Nothing to compare: git found $(printf '%s' "$tracked" | grep -c .) csproj, nocturne.sln listed $(printf '%s' "$listed" | grep -c .)"
             exit 1
           fi
+          absent=$(comm -23 <(echo "$tracked") <(echo "$listed") | { grep -vx 'scripts/Shared/Shared.csproj' || true; })
+          dangling=$(comm -13 <(echo "$tracked") <(echo "$listed"))
+          if [ -n "$absent" ]; then
+            echo "Missing from nocturne.sln:"
+            echo "$absent"
+          fi
+          if [ -n "$dangling" ]; then
+            echo "Listed in nocturne.sln but not a tracked file:"
+            echo "$dangling"
+          fi
+          [ -z "$absent$dangling" ]
 
       # Entering Nocturne.E2E.Tests starts the whole Aspire stack, so it must stay uncollected
       # unless RunE2E is set; a csproj edit that re-arms it would wedge every unfiltered run.
