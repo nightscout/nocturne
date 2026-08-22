@@ -10,6 +10,7 @@ WORKDIR /app
 
 # Install dependencies (layer cached when lockfile unchanged)
 COPY src/Web/pnpm-workspace.yaml src/Web/package.json src/Web/pnpm-lock.yaml ./
+COPY src/Web/patches/ patches/
 COPY src/Web/packages/app/package.json packages/app/
 COPY src/Web/packages/bridge/package.json packages/bridge/
 COPY src/Web/packages/bot/package.json packages/bot/
@@ -40,6 +41,7 @@ ENV BODY_SIZE_LIMIT=44M
 COPY --from=build /app/pnpm-workspace.yaml ./
 COPY --from=build /app/package.json ./
 COPY --from=build /app/pnpm-lock.yaml ./
+COPY --from=build /app/patches patches
 COPY --from=build /app/packages/app/build packages/app/build
 COPY --from=build /app/packages/app/server.js packages/app/
 COPY --from=build /app/packages/app/package.json packages/app/

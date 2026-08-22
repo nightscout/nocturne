@@ -38,3 +38,9 @@ packageExtensions:
   "@microsoft/signalr":
     dependencies:
       tough-cookie: "*"
+
+# Applied by `pnpm install`, so the codegen has to run the workspace binary:
+# `npx openapi-remote-codegen` resolves from the registry instead and silently
+# runs the unpatched published package, ignoring the version pin as well.
+patchedDependencies:
+  openapi-remote-codegen@0.2.0: patches/openapi-remote-codegen@0.2.0.patch

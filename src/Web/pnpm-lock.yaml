@@ -11,6 +11,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-vJ0zYsojxAc/+KH1CJAifmsRxfze2q511/6WQBYHep0=
 
+patchedDependencies:
+  openapi-remote-codegen@0.2.0: ab44497d62a475dbe64cb2d521685708d83e34a4f8ac409ed0cf7132ef0d1a92
+
 importers:
 
   .:
@@ -34,6 +37,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260513.1
         version: 7.0.0-dev.20260513.1
+      openapi-remote-codegen:
+        specifier: 0.2.0
+        version: 0.2.0(patch_hash=ab44497d62a475dbe64cb2d521685708d83e34a4f8ac409ed0cf7132ef0d1a92)
       prettier:
         specifier: ^3.7.2
         version: 3.7.2
@@ -227,9 +233,6 @@ importers:
       mode-watcher:
         specifier: ^1.1.0
         version: 1.1.0(svelte@5.55.5(@typescript-eslint/types@8.59.3))
-      openapi-remote-codegen:
-        specifier: 0.2.0
-        version: 0.2.0
       paneforge:
         specifier: ^1.0.2
         version: 1.0.2(svelte@5.55.5(@typescript-eslint/types@8.59.3))
@@ -11770,7 +11773,7 @@ snapshots:
     dependencies:
       fn.name: 1.1.0
 
-  openapi-remote-codegen@0.2.0:
+  openapi-remote-codegen@0.2.0(patch_hash=ab44497d62a475dbe64cb2d521685708d83e34a4f8ac409ed0cf7132ef0d1a92):
     dependencies:
       openapi-types: 12.1.3
 
