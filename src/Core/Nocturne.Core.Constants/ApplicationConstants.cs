@@ -299,8 +299,11 @@ public static class ApplicationConstants
         }
 
         /// <summary>
-        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL, supplied
-        /// wherever a <c>Thresholds:Bg*</c> configuration key is absent. They are client alarm
+        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL. They are
+        /// what ships when nothing else supplies a value: the status and tenant-overview services
+        /// fall back to them when the matching <c>Thresholds:Bg*</c> configuration key is absent, and
+        /// the properties and AR2 services use them for the <c>bgTarget*</c> entries of the settings
+        /// map they build and read, which never consults configuration at all. They are client alarm
         /// settings, not a clinical range — <see cref="GlucoseConstants.TargetBottomMgdl"/> and
         /// <see cref="GlucoseConstants.TargetTopMgdl"/> are the consensus in-range boundaries, and
         /// <see cref="BgTargetBottom"/> deliberately differs from the former. Collapsing the two

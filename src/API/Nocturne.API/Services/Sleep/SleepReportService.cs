@@ -74,8 +74,8 @@ public class SleepReportService : ISleepReportService
     /// <summary>
     /// Resolves glycemic thresholds at <paramref name="timeMills"/> the same way
     /// <c>ProfileLoadStage</c> does: very-low/very-high are fixed; low and high come
-    /// from the active profile's target range, falling back to 70/180 when no therapy
-    /// settings exist for the tenant.
+    /// from the active profile's target range, falling back to the consensus in-range
+    /// band when no therapy settings exist for the tenant.
     /// </summary>
     private async Task<GlycemicThresholds> ResolveThresholdsAsync(long timeMills, CancellationToken ct)
     {
