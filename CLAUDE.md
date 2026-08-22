@@ -149,10 +149,35 @@ including the per-tenant `set_config` loop that FORCE ROW LEVEL SECURITY require
 A table created in the same migration is exempt — it holds no rows yet, and a
 cleanup there would be dead code.
 
-`UniqueIndexDeduplicationGuardTests` enforces this over migration sources. Older
-migrations that predate the rule are listed there by name; an instance whose chain
-fails on one of them never reaches a later migration, so nothing can repair them
-and nothing may be added to that list.
+`UniqueIndexDeduplicationGuardTests` is a backstop for this rule, not the rule.
+Know what it actually checks before trusting it:
+
+- **Presence and ordering per migration, not per index.** It wants one live
+  duplicate-ranking statement somewhere in `Up` ahead of the *first* unique index
+  over a table the migration did not create. A single cleanup — even one for an
+  unrelated table — clears every index in that migration. It runs no SQL and
+  proves nothing about correctness.
+- **Only the house idiom is recognised**: `row_number() OVER (PARTITION BY …)`
+  plus a soft delete or a delete. A correct cleanup written another way is a false
+  red. Widen the migration to the idiom, not the guard to the migration.
+- **Shapes it cannot see**, which review has to catch: `CREATE TABLE IF NOT
+  EXISTS` naming a table that already exists, which spoofs the new-table
+  exemption; an unnamed `CREATE UNIQUE INDEX ON …`; a primary key added by raw SQL
+  `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
+  matched — the rule above is deliberately broader than the guard; and a cleanup
+  that cannot run, e.g. wrapped in `IF false`.
+- **Three of its detection paths have no live example in the tree** — raw-SQL
+  `CREATE UNIQUE INDEX`, `AddUniqueConstraint`/`AddPrimaryKey`, and
+  `ALTER TABLE … ADD CONSTRAINT … UNIQUE`. A regression in those regexes reddens
+  nothing, so treat them as unexercised.
+
+An index whose table it cannot read off the call — an interpolated `{table}`, a
+loop variable, a schema qualifier — is reported rather than skipped, so the
+multi-table loop the worked example is written in stays visible.
+
+Older migrations that predate the rule are listed in the guard by name; an
+instance whose chain fails on one never reaches a later migration, so nothing can
+repair them and nothing may be added to that list.
 
 ### Row Level Security
 

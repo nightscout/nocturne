@@ -73,11 +73,16 @@ public class DataMigrationTenantContextGuardTests
             "an allowlist entry that no longer matches is stale and hides a regression");
     }
 
-    /// <summary>Tenant-scoped tables the migration's live <c>Up</c> drives a tenant loop off.</summary>
+    /// <summary>
+    /// Tenant-scoped tables the migration's <c>Up</c> drives a tenant loop off. Scanned as raw
+    /// text: this detects offenders, and
+    /// <see cref="MigrationSourceFiles.WithCommentsBlanked"/> withholds evidence, so a stray
+    /// <c>/*</c> inside a SQL literal would blank a live loop out of view. A commented-out loop
+    /// is therefore reported — the cheap direction to be wrong in.
+    /// </summary>
     private static IReadOnlyList<string> ScopedLoopSources(string file)
     {
-        var up = MigrationSourceFiles.WithCommentsBlanked(
-            MigrationSourceFiles.UpBody(File.ReadAllText(file)));
+        var up = MigrationSourceFiles.UpBody(file);
 
         return LoopHeader.Matches(up)
             .Select(m => LoopSourceTable(m.Groups[1].Value))

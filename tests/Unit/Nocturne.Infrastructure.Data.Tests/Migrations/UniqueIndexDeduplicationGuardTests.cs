@@ -14,7 +14,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// pair each index with its own cleanup — reviewers do that. It matches only the house idiom
 /// (<c>row_number() OVER (PARTITION BY …)</c> feeding a soft delete or a delete), so a cleanup
 /// written some other way reports as an offender; widen the migration to the idiom rather than
-/// the guard to the migration.
+/// the guard to the migration. The shapes it cannot see are listed under "Unique indexes over
+/// existing data" in CLAUDE.md, where the authors it is a backstop for will read them.
 /// </para>
 /// </summary>
 [Trait("Category", "Unit")]
@@ -65,7 +66,9 @@ public class UniqueIndexDeduplicationGuardTests
             "migrations run on API startup, so a unique index that fails on data an upgrading "
             + "instance already holds crash-loops the API with no self-service recovery; soft-delete "
             + "the duplicate losers earlier in the same Up, as "
-            + "20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots does");
+            + "20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots does. A table reported as "
+            + $"'{UnresolvedTable}' is one the guard could not read off the call; name it as a "
+            + "literal so the exemption for a table created in this migration can apply to it");
     }
 
     [Fact]
@@ -88,8 +91,9 @@ public class UniqueIndexDeduplicationGuardTests
     /// </summary>
     private static IReadOnlyList<string> UndeduplicatedTables(string file)
     {
-        var up = MigrationSourceFiles.UpBody(File.ReadAllText(file));
-        var created = TablesCreatedIn(up);
+        var up = MigrationSourceFiles.UpBody(file);
+        var live = MigrationSourceFiles.WithCommentsBlanked(up);
+        var created = TablesCreatedIn(live);
 
         var indexed = UniqueIndexCreations(up)
             .Where(x => !created.Contains(x.Table))
@@ -98,7 +102,6 @@ public class UniqueIndexDeduplicationGuardTests
         if (indexed.Count == 0)
             return [];
 
-        var live = MigrationSourceFiles.WithCommentsBlanked(up);
         var firstIndex = indexed.Min(x => x.Position);
 
         var deduplicates =
@@ -110,16 +113,32 @@ public class UniqueIndexDeduplicationGuardTests
             : indexed.Select(x => x.Table).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
     }
 
+    /// <summary>
+    /// Every unique index the migration's <c>Up</c> creates, paired with its target table. A
+    /// target that is not a bare literal — a <c>{table}</c> hole in interpolated SQL, a loop
+    /// variable, a schema qualifier — resolves to <see cref="UnresolvedTable"/>, which no
+    /// <c>CreateTable</c> can match, so it can only ever be exempted by an actual cleanup.
+    /// Dropping it instead would blind the guard to the multi-table loop the rule's own worked
+    /// example is written in.
+    /// </summary>
     private static IEnumerable<(int Position, string Table)> UniqueIndexCreations(string up)
     {
         foreach (var regex in new[] { FluentUniqueIndex, FluentUniqueConstraint })
             foreach (Match match in regex.Matches(up))
-                if (TableArgument.Match(match.Groups[1].Value) is { Success: true } table)
-                    yield return (match.Index, table.Groups[1].Value.ToLowerInvariant());
+                yield return (match.Index, TableArgument.Match(match.Groups[1].Value) is { Success: true } table
+                    ? ResolveTable(table.Groups[1].Value)
+                    : UnresolvedTable);
 
         foreach (var regex in new[] { SqlUniqueIndex, SqlUniqueConstraint })
             foreach (Match match in regex.Matches(up))
-                yield return (match.Index, match.Groups[1].Value.ToLowerInvariant());
+                yield return (match.Index, ResolveTable(match.Groups[1].Value));
+    }
+
+    private static string ResolveTable(string captured)
+    {
+        var bare = captured.Trim('"', ';', ',', '(', ')').ToLowerInvariant();
+
+        return PlainTableName.IsMatch(bare) ? bare : UnresolvedTable;
     }
 
     private static IReadOnlySet<string> TablesCreatedIn(string up) =>
@@ -127,7 +146,11 @@ public class UniqueIndexDeduplicationGuardTests
             .SelectMany(r => r.Matches(up).Select(m => m.Groups[1].Value.ToLowerInvariant()))
             .ToHashSet(StringComparer.Ordinal);
 
+    private const string UnresolvedTable = "<table not resolvable to a literal name>";
+
     private const RegexOptions Sql = RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled;
+
+    private static readonly Regex PlainTableName = new(@"^\w+$", RegexOptions.Compiled);
 
     private static readonly Regex FluentUniqueIndex = new(
         @"\.CreateIndex\s*\(([^;]*?\bunique\s*:\s*true[^;]*?)\)\s*;", RegexOptions.Compiled);
@@ -141,11 +164,11 @@ public class UniqueIndexDeduplicationGuardTests
     private static readonly Regex TableArgument = new(@"table\s*:\s*""([^""]+)""", RegexOptions.Compiled);
 
     private static readonly Regex SqlUniqueIndex = new(
-        @"CREATE\s+UNIQUE\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON\s+(?:ONLY\s+)?""?(\w+)""?",
+        @"CREATE\s+UNIQUE\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON\s+(?:ONLY\s+)?(\S+)",
         Sql);
 
     private static readonly Regex SqlUniqueConstraint = new(
-        @"ALTER\s+TABLE\s+(?:ONLY\s+)?""?(\w+)""?[^;]*?\bADD\s+CONSTRAINT\b[^;]*?\bUNIQUE\b", Sql);
+        @"ALTER\s+TABLE\s+(?:ONLY\s+)?(\S+)[^;]*?\bADD\s+CONSTRAINT\b[^;]*?\bUNIQUE\b", Sql);
 
     private static readonly Regex SqlCreateTable = new(
         @"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?""?(\w+)""?", Sql);

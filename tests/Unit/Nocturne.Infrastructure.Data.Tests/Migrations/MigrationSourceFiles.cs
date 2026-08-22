@@ -35,16 +35,20 @@ internal static class MigrationSourceFiles
     /// Text of the migration's <c>Up</c> method. Only <c>Up</c> runs on the startup migration
     /// chain, and <c>Down</c> routinely recreates the very indexes <c>Up</c> replaced. Sliced at
     /// the <c>Down</c> signature rather than by brace matching: migration SQL lives in
-    /// interpolated raw string literals whose <c>{table}</c> holes are not C# braces. A shape
-    /// this fails to recognise yields an empty body, which reports as a discovery regression
-    /// rather than as a pass.
+    /// interpolated raw string literals whose <c>{table}</c> holes are not C# braces.
     /// </summary>
-    public static string UpBody(string source)
+    /// <exception cref="InvalidOperationException">
+    /// The signature was not found. Returning an empty body instead would silently clear every
+    /// guard that scans it, so a shape this cannot parse has to stop the run.
+    /// </exception>
+    public static string UpBody(string file)
     {
+        var source = File.ReadAllText(file);
         var start = source.IndexOf("void Up(", StringComparison.Ordinal);
 
         if (start < 0)
-            return string.Empty;
+            throw new InvalidOperationException(
+                $"No 'void Up(' in {Name(file)}; a guard cannot scan a method it cannot find.");
 
         var end = source.IndexOf("void Down(", start, StringComparison.Ordinal);
 
@@ -53,9 +57,13 @@ internal static class MigrationSourceFiles
 
     /// <summary>
     /// The same text with every C# and SQL comment overwritten by spaces, so a commented-out
-    /// statement cannot satisfy a guard while offsets stay comparable to the original. A comment
-    /// marker inside a string literal is blanked too, which can only withhold evidence from a
-    /// guard, never manufacture it.
+    /// statement cannot satisfy a guard while offsets stay comparable to the original.
+    /// <para>
+    /// A comment marker inside a string literal is blanked too, so this withholds evidence rather
+    /// than manufacturing it. That direction is only safe on a path where missing evidence means
+    /// FAIL — recognising a cleanup, or recognising the new-table exemption. On a path that
+    /// detects offenders, withheld evidence is a false green, so scan raw text there instead.
+    /// </para>
     /// </summary>
     public static string WithCommentsBlanked(string source)
     {
