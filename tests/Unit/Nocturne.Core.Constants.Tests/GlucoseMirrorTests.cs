@@ -14,17 +14,20 @@ namespace Nocturne.Core.Constants.Tests;
 /// mmol reading, and a range or colour off by any amount means two surfaces describe the same
 /// reading differently.
 /// <para>
-/// Caught: a value edited on one surface and not the others; a declaration renamed, removed, or
-/// duplicated; and a superseded copy left behind in a comment or an <c>#if 0</c> block, which is
-/// blanked before matching so it cannot answer for the live line. Each search is confined to the
-/// region that owns the declaration, so the mod's README can document a default without colliding
-/// with the settings block that sets it.
+/// Caught, for the declarations the rows below name: a value edited on one surface and not the
+/// others; a declaration renamed, deleted, or duplicated, each of which fails rather than passing on
+/// nothing; and a superseded copy left behind in a comment, which is blanked before matching so it
+/// cannot answer for the live line.
 /// </para>
 /// <para>
-/// Not caught: this reads text, not programs. A declaration reachable only through an inactive
-/// <c>#else</c> branch still reads as live; a value assembled at runtime from somewhere else is
-/// invisible; and declarations that agree are not proof that each surface uses the one it declares.
-/// A surface whose copy lives somewhere no row names is not covered at all.
+/// Not caught: the mod's compiled-in C++ fallbacks — the <c>Settings</c> struct initialisers and the
+/// defaults passed at the <c>LoadSettings</c> read sites — are not guarded. Those apply only when a
+/// Windhawk setting is absent, and enforcing them means parsing C++ rather than reading it; three
+/// attempts to bound them by region left paths where this passed while the value had moved, which is
+/// worse than an unguarded copy. What the mod ships to a user who has not overridden anything is the
+/// settings block, and that is guarded. Beyond that: this reads text, not programs, so a value
+/// assembled at runtime is invisible, and declarations that agree are not proof a surface uses the
+/// one it declares.
 /// </para>
 /// </summary>
 public class GlucoseMirrorTests
@@ -32,10 +35,7 @@ public class GlucoseMirrorTests
     private const string UiGlucose = "@nocturne/ui glucose.ts";
     private const string TrayIcon = "desktop tray.rs";
     private const string GlucosePoll = "desktop glucose_poll.rs";
-    private const string ModFile = "mod.wh.cpp";
     private const string ModSettings = "mod.wh.cpp settings block";
-    private const string ModStruct = "mod.wh.cpp Settings struct";
-    private const string ModLoadSettings = "mod.wh.cpp LoadSettings";
 
     private enum Syntax
     {
@@ -45,8 +45,6 @@ public class GlucoseMirrorTests
 
     private sealed record Source(string RelativePath, Syntax Syntax, string? Open = null, string? Close = null);
 
-    private static readonly string ModPath = Path.Combine("src", "Taskbar", "mod.wh.cpp");
-
     private static readonly Dictionary<string, Source> Sources = new()
     {
         [UiGlucose] = new(
@@ -55,18 +53,17 @@ public class GlucoseMirrorTests
             Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "tray.rs"), Syntax.Code),
         [GlucosePoll] = new(
             Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "glucose_poll.rs"), Syntax.Code),
-        [ModFile] = new(ModPath, Syntax.Code),
         [ModSettings] = new(
-            ModPath, Syntax.Yaml, "// ==WindhawkModSettings==", "// ==/WindhawkModSettings=="),
-        [ModStruct] = new(ModPath, Syntax.Code, "struct Settings {", "\n};"),
-        [ModLoadSettings] = new(ModPath, Syntax.Code, "void LoadSettings() {", "\n}"),
+            Path.Combine("src", "Taskbar", "mod.wh.cpp"),
+            Syntax.Yaml,
+            "// ==WindhawkModSettings==",
+            "// ==/WindhawkModSettings=="),
     };
 
     public static TheoryData<string, string> FactorDeclarations() => new()
     {
         { UiGlucose, @"export const MGDL_PER_MMOL = ([0-9.]+);" },
         { GlucosePoll, @"pub const MGDL_PER_MMOL: f64 = ([0-9.]+);" },
-        { ModFile, @"constexpr double kMgdlPerMmol = ([0-9.]+);" },
     };
 
     [Theory]
@@ -87,26 +84,6 @@ public class GlucoseMirrorTests
         { TrayIcon, @"const HIGH_THRESHOLD_MGDL: f64 = ([0-9.]+);", GlucoseConstants.TargetTopMgdl },
         { ModSettings, @"- rangeLow: ([0-9.]+)", ToMmolSetting(GlucoseConstants.TargetBottomMgdl) },
         { ModSettings, @"- rangeHigh: ([0-9.]+)", ToMmolSetting(GlucoseConstants.TargetTopMgdl) },
-        {
-            ModStruct,
-            @"double rangeLow = ([0-9.]+), rangeHigh",
-            ToMmolSetting(GlucoseConstants.TargetBottomMgdl)
-        },
-        {
-            ModStruct,
-            @"rangeLow = [0-9.]+, rangeHigh = ([0-9.]+);",
-            ToMmolSetting(GlucoseConstants.TargetTopMgdl)
-        },
-        {
-            ModLoadSettings,
-            @"rangeLow = getDouble\(L""rangeLow"", ([0-9.]+)\);",
-            ToMmolSetting(GlucoseConstants.TargetBottomMgdl)
-        },
-        {
-            ModLoadSettings,
-            @"rangeHigh = getDouble\(L""rangeHigh"", ([0-9.]+)\);",
-            ToMmolSetting(GlucoseConstants.TargetTopMgdl)
-        },
     };
 
     [Theory]
@@ -118,14 +95,12 @@ public class GlucoseMirrorTests
 
     /// <summary>
     /// <see cref="ToMmolSetting"/> describes the mod's range defaults only while the mod itself
-    /// defaults to mmol/L. Switching that default to mg/dL leaves every range row above green while
+    /// defaults to mmol/L. Switching that default to mg/dL leaves both range rows above green while
     /// the mod reads 3.9 as a low bound in mg/dL, so the premise is pinned rather than assumed.
     /// </summary>
     public static TheoryData<string, string, string> DisplayUnitDefaults() => new()
     {
         { ModSettings, @"- unit: (\w+)", "mmol" },
-        { ModStruct, @"std::wstring unit = L""([\w/]+)"";", "mmol/L" },
-        { ModLoadSettings, @"wcscmp\(unit, L""mgdl""\) == 0\) \? L""mg/dL"" : L""([\w/]+)"";", "mmol/L" },
     };
 
     [Theory]
@@ -140,9 +115,6 @@ public class GlucoseMirrorTests
         { TrayIcon, RustColor("COLOR_IN_RANGE"), GlucoseConstants.StatusPalette.InRange },
         { TrayIcon, RustColor("COLOR_HIGH"), GlucoseConstants.StatusPalette.High },
         { TrayIcon, RustColor("COLOR_LOW"), GlucoseConstants.StatusPalette.Low },
-        { ModLoadSettings, ModColorFallback("colorInRange"), GlucoseConstants.StatusPalette.InRange },
-        { ModLoadSettings, ModColorFallback("colorHigh"), GlucoseConstants.StatusPalette.High },
-        { ModLoadSettings, ModColorFallback("colorLow"), GlucoseConstants.StatusPalette.Low },
         { ModSettings, ModColorSetting("colorInRange"), GlucoseConstants.StatusPalette.InRange },
         { ModSettings, ModColorSetting("colorHigh"), GlucoseConstants.StatusPalette.High },
         { ModSettings, ModColorSetting("colorLow"), GlucoseConstants.StatusPalette.Low },
@@ -158,10 +130,12 @@ public class GlucoseMirrorTests
     private static string RustColor(string name) =>
         $@"const {name}: \(u8, u8, u8\) = \(0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}})\);";
 
-    private static string ModColorSetting(string key) => $@"- {key}: ""([0-9A-Fa-f]{{6}})""";
-
-    private static string ModColorFallback(string key) =>
-        $@"{key} = color\(L""style\.{key}"", RGB\(0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}})\)\);";
+    /// <summary>
+    /// A leading <c>#</c> is admitted so that writing one is reported as the wrong value it is: the
+    /// mod parses these with <c>swscanf(L"%2x%2x%2x")</c>, which rejects <c>#RRGGBB</c> outright and
+    /// silently keeps its own default.
+    /// </summary>
+    private static string ModColorSetting(string key) => $@"- {key}: ""(#?[0-9A-Fa-f]{{6}})""";
 
     private static double ToMmolSetting(double mgdl) => Math.Round(mgdl / GlucoseConstants.MgdlPerMmol, 1);
 
@@ -188,45 +162,61 @@ public class GlucoseMirrorTests
         return matches[0].Groups.Cast<Group>().Skip(1).Select(group => group.Value).ToArray();
     }
 
-    /// <summary>
-    /// The region that owns the declaration, with everything that does not compile — comments, and
-    /// <c>#if 0</c> blocks in code — replaced by blanks. Narrowing to the region is what lets code
-    /// regions treat a block comment as dead: the mod's settings block is itself one long block
-    /// comment, and it is only ever searched as YAML.
-    /// </summary>
-    private static string LiveText(string text, Source source)
+    private static string LiveText(string text, Source source) => source.Syntax switch
     {
-        var region = text;
+        Syntax.Yaml => BlankYamlComments(SettingsBlock(text, source)),
+        _ => BlankCodeComments(text),
+    };
 
-        if (source.Open is not null)
-        {
-            var start = region.IndexOf(source.Open, StringComparison.Ordinal);
+    /// <summary>
+    /// The mod's settings block, located by its delimiter lines rather than by the first mention of
+    /// one: the README above it is prose that may quote a delimiter, and a region that quietly starts
+    /// somewhere else would guard the wrong text.
+    /// </summary>
+    private static string SettingsBlock(string text, Source source)
+    {
+        var open = SoleDelimiterLine(text, source.Open!);
+        var close = SoleDelimiterLine(text, source.Close!);
 
-            if (start < 0)
-                throw new InvalidOperationException($"No region opening with '{source.Open}'.");
+        if (close <= open)
+            throw new InvalidOperationException($"'{source.Close}' precedes '{source.Open}'.");
 
-            start += source.Open.Length;
-            var end = region.IndexOf(source.Close!, start, StringComparison.Ordinal);
-
-            if (end < 0)
-                throw new InvalidOperationException($"No region closing with '{source.Close}'.");
-
-            region = region[start..end];
-        }
-
-        return source.Syntax == Syntax.Yaml ? BlankYamlComments(region) : BlankInactiveCode(region);
+        return text[(open + source.Open!.Length)..close];
     }
 
+    private static int SoleDelimiterLine(string text, string delimiter)
+    {
+        var matches = Regex.Matches(text, $@"(?m)^{Regex.Escape(delimiter)}[ \t]*\r?$");
+
+        if (matches.Count != 1)
+            throw new InvalidOperationException(
+                $"Expected one line reading '{delimiter}', found {matches.Count}.");
+
+        return matches[0].Index;
+    }
+
+    /// <summary>
+    /// The same text with YAML comments blanked. A <c>#</c> inside a quoted value is part of the
+    /// value, so the row is still read and reported as malformed rather than missing.
+    /// </summary>
     private static string BlankYamlComments(string text)
     {
         var characters = text.ToCharArray();
+        var quoted = false;
         var commented = false;
 
         for (var index = 0; index < characters.Length; index++)
         {
             if (characters[index] == '\n')
+            {
+                quoted = false;
                 commented = false;
-            else if (characters[index] == '#')
+                continue;
+            }
+
+            if (!commented && characters[index] == '"')
+                quoted = !quoted;
+            else if (!quoted && characters[index] == '#')
                 commented = true;
 
             if (commented)
@@ -235,8 +225,6 @@ public class GlucoseMirrorTests
 
         return new string(characters);
     }
-
-    private static string BlankInactiveCode(string text) => BlankDisabledBlocks(BlankCodeComments(text));
 
     private static string BlankCodeComments(string text)
     {
@@ -272,37 +260,6 @@ public class GlucoseMirrorTests
         return new string(characters);
     }
 
-    private static string BlankDisabledBlocks(string text)
-    {
-        var lines = text.Split('\n');
-        var depth = 0;
-
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var directive = lines[index].TrimStart();
-
-            if (depth == 0)
-            {
-                if (!directive.StartsWith("#if 0", StringComparison.Ordinal))
-                    continue;
-
-                depth = 1;
-            }
-            else if (directive.StartsWith("#if", StringComparison.Ordinal))
-            {
-                depth++;
-            }
-            else if (directive.StartsWith("#endif", StringComparison.Ordinal))
-            {
-                depth--;
-            }
-
-            lines[index] = new string(' ', lines[index].Length);
-        }
-
-        return string.Join('\n', lines);
-    }
-
     private static bool Starts(char[] characters, int index, string token) =>
         index + token.Length <= characters.Length
         && new ReadOnlySpan<char>(characters, index, token.Length).SequenceEqual(token);
@@ -328,16 +285,29 @@ public class GlucoseMirrorTests
 
     private static string SourceTreeAbove(string start)
     {
-        var directory = new DirectoryInfo(start);
+        var directory = new DirectoryInfo(FinalTarget(start));
 
         while (directory is not null)
         {
             if (Directory.Exists(Path.Combine(directory.FullName, "src", "Web")))
-                return directory.FullName;
+                return FinalTarget(directory.FullName);
 
             directory = directory.Parent;
         }
 
         throw new DirectoryNotFoundException($"No src/Web directory above {start}.");
+    }
+
+    /// <summary>
+    /// Where a junction or symlink ultimately points, so two anchors that reach the same tree by
+    /// different routes compare equal instead of reading as a stale build.
+    /// </summary>
+    private static string FinalTarget(string path)
+    {
+        var resolved = Directory.Exists(path)
+            ? Directory.ResolveLinkTarget(path, returnFinalTarget: true)?.FullName ?? path
+            : path;
+
+        return resolved.TrimEnd(Path.DirectorySeparatorChar);
     }
 }
