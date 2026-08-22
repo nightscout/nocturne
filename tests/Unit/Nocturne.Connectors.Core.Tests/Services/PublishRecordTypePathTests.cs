@@ -130,6 +130,9 @@ public class PublishRecordTypePathTests
             service.PublishAsync(syncResult, SyncDataType.Glucose, active, []));
 
         // Assert
+        result.Success.Should().BeTrue(
+            "finding nothing is not a failure: reporting one would turn every quiet but enabled "
+            + "type red and freeze the connector's last successful sync");
         result.ItemsSynced.Should().Equal(new Dictionary<SyncDataType, int>
         {
             [SyncDataType.Glucose] = 0,
