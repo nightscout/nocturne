@@ -21,8 +21,7 @@ dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 # Run a single test class
 dotnet test --filter "FullyQualifiedName~EntryServiceTests"
 
-# Run integration tests (requires Docker)
-cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
+# Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
 # Run the end-to-end suite (opt-in; stands up the whole Aspire stack)

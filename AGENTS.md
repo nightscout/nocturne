@@ -24,8 +24,7 @@ dotnet build
 # Run unit tests (excludes integration/performance/E2E)
 dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
-# Run integration tests (requires Docker containers)
-cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
+# Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
 # Run the end-to-end suite (opt-in; stands up the whole Aspire stack)

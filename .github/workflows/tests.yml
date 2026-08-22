@@ -33,16 +33,13 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
-      # No job here builds nocturne.sln: every .NET job runs named projects only (see the
-      # per-project loop in Test), so nothing in CI gates solution membership except this check.
-      # The solution is still the only thing that claims to build everything, so it has to track
-      # the tree both ways — a project it omits can rot uncompilable, and an entry whose file is
-      # gone breaks every solution-wide command. scripts/Shared is the one deliberate omission:
-      # the file-based apps in scripts/ consume it through `#:project`, never the product build.
+      # No job here builds nocturne.sln — CI runs named projects only (see Test below) — so this
+      # is the only thing gating solution membership, and it has to hold in both directions.
+      # scripts/Shared is the deliberate omission: scripts/ consumes it through `#:project`.
       - name: Solution and project tree agree
         run: |
-          tracked=$(git ls-files '*.csproj' | sort)
-          listed=$(dotnet sln nocturne.sln list | { grep '\.csproj$' || true; } | sed 's|\\|/|g' | sort)
+          tracked=$(git -c core.quotePath=false ls-files '*.csproj' | sort)
+          listed=$(dotnet sln nocturne.sln list | { grep -E '\.csproj[[:space:]]*$' || true; } | sed 's|\\|/|g; s|[[:space:]]*$||' | sort)
           if [ -z "$tracked" ] || [ -z "$listed" ]; then
             echo "Nothing to compare: git found $(printf '%s' "$tracked" | grep -c .) csproj, nocturne.sln listed $(printf '%s' "$listed" | grep -c .)"
             exit 1

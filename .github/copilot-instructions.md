@@ -70,8 +70,7 @@ dotnet run --project src/API/Nocturne.API
 # Run tests (exclude integration/performance/E2E)
 dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
-# Run integration tests (requires Docker)
-cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
+# Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
 # Generate TypeScript API client (uses NSwag with .NET 10)

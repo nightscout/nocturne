@@ -9,7 +9,7 @@ This directory contains the test suites for the Nocturne project.
 - **Parity Tests**: Golden corpora that pin behaviour — legacy Nightscout responses and the alert engine
 - **Performance Tests**: BenchmarkDotNet benchmarks
 - **E2E Tests**: The whole Aspire stack, opt-in (see below)
-- **Test Infrastructure**: Docker containers and fixtures shared across suites
+- **Shared fixtures**: Helpers, fakes and seed data reused across suites
 
 ## Directory Structure
 
@@ -29,18 +29,18 @@ tests/
 
 ## Quick Start
 
-```bash
-# Start test infrastructure
-cd tests/Infrastructure/Docker
-docker-compose -f docker-compose.test.yml up -d
+`dotnet test` accepts a directory only when it holds exactly one project or solution file, so a project directory works and `tests/Unit/` does not (MSB1003). Given no path — as in every bare `dotnet test` in this file — it resolves `nocturne.sln` from the repo root, and the solution carries the Windows-only Desktop and Widget projects; on Linux, name a project.
 
-# Run every collected test (the E2E suite is opt-in and stays out)
+```bash
+# Everything collected, E2E excluded (solution-scoped, so Windows only)
 dotnet test
 
-# Narrow by category, or name one project — `dotnet test` takes a project or
-# solution, never a directory
+# One category (also solution-scoped)
 dotnet test --filter "Category=Integration"
-dotnet test tests/Unit/Nocturne.API.Tests
+
+# One project, on any OS. Unit projects carry a few Category=Performance tests with
+# machine-dependent thresholds, so the default filter belongs here too
+dotnet test tests/Unit/Nocturne.API.Tests --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run the end-to-end suite (stands up the whole Aspire stack)
 dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
@@ -80,10 +80,11 @@ docker run hello-world
 
 `Nocturne.API.Performance.Tests` benchmarks entry projection, treatment mapping and the statistics service. `Nocturne.Infrastructure.Data.Performance.Tests` benchmarks pagination, insulin-delivery and sensor-glucose queries and the linked-records filter against a Testcontainers PostgreSQL.
 
-Both are BenchmarkDotNet hosts, so they take a benchmark filter as an argument:
+Both are BenchmarkDotNet hosts: list what they carry, then filter down to what you want (`--filter '*'` runs everything).
 
 ```bash
-dotnet run --project tests/Performance/Nocturne.API.Performance.Tests -c Release -- --filter '*'
+dotnet run --project tests/Performance/Nocturne.API.Performance.Tests -c Release -- --list flat
+dotnet run --project tests/Performance/Nocturne.API.Performance.Tests -c Release -- --filter '*EntityToDomain_100'
 ```
 
 ## Fast Tests (Excludes slow tests by default)
