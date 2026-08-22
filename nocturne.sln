@@ -190,6 +190,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Tools.DiagramGen", "tools\Nocturne.Tools.DiagramGen\Nocturne.Tools.DiagramGen.csproj", "{3AA294CD-171F-4F5D-8103-8399CAC253B9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.NocturneRemote.Tests", "tests\Unit\Nocturne.Connectors.NocturneRemote.Tests\Nocturne.Connectors.NocturneRemote.Tests.csproj", "{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -992,6 +994,18 @@ Global
 		{3AA294CD-171F-4F5D-8103-8399CAC253B9}.Release|x64.Build.0 = Release|Any CPU
 		{3AA294CD-171F-4F5D-8103-8399CAC253B9}.Release|x86.ActiveCfg = Release|Any CPU
 		{3AA294CD-171F-4F5D-8103-8399CAC253B9}.Release|x86.Build.0 = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|x64.Build.0 = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Debug|x86.Build.0 = Debug|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x64.ActiveCfg = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x64.Build.0 = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x86.ActiveCfg = Release|Any CPU
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1075,5 +1089,6 @@ Global
 		{7209E189-D47B-4351-B82F-527F9B502E72} = {52BF7FB6-37FF-5100-EFD1-124EFF302675}
 		{5507B435-56A8-48A7-A917-B8EFB65F8196} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{3AA294CD-171F-4F5D-8103-8399CAC253B9} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal

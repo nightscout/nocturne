@@ -150,7 +150,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<SensorGlucose>(
+        var records = await FetchPaginatedAsync<SensorGlucose>(
             NocturneRemoteConstants.SensorGlucose, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
@@ -161,7 +161,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<BGCheck>(
+        var records = await FetchPaginatedAsync<BGCheck>(
             NocturneRemoteConstants.BGChecks, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
@@ -172,7 +172,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<Bolus>(
+        var records = await FetchPaginatedAsync<Bolus>(
             NocturneRemoteConstants.Boluses, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
@@ -183,7 +183,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<CarbIntake>(
+        var records = await FetchPaginatedAsync<CarbIntake>(
             NocturneRemoteConstants.CarbIntake, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
@@ -194,7 +194,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<BolusCalculation>(
+        var records = await FetchPaginatedAsync<BolusCalculation>(
             NocturneRemoteConstants.BolusCalculations, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
@@ -205,7 +205,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<Note>(
+        var records = await FetchPaginatedAsync<Note>(
             NocturneRemoteConstants.Notes, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Notes, activeTypes,
@@ -216,7 +216,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedV4Async<DeviceEvent>(
+        var records = await FetchPaginatedAsync<DeviceEvent>(
             NocturneRemoteConstants.DeviceEvents, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
@@ -231,7 +231,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedLegacyAsync<StateSpan>(
+        var records = await FetchPaginatedAsync<StateSpan>(
             NocturneRemoteConstants.StateSpans, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
@@ -242,7 +242,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedLegacyAsync<Profile>(
+        var records = await FetchPaginatedAsync<Profile>(
             NocturneRemoteConstants.ProfileRecords, null, null, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
@@ -265,7 +265,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         SyncRequest request, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
     {
-        var records = await FetchPaginatedLegacyAsync<Activity>(
+        var records = await FetchPaginatedAsync<Activity>(
             NocturneRemoteConstants.Activity, request.From, request.To, ct);
 
         await PublishRecordTypeAsync(result, SyncDataType.Activity, activeTypes,
@@ -286,14 +286,21 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                 "[{ConnectorSource}] Failed to fetch foods: HTTP {StatusCode}",
                 ConnectorSource,
                 (int)response.StatusCode);
-            return;
+            throw FetchFailed(NocturneRemoteConstants.Foods);
         }
 
         var foods = await DeserializeResponseAsync<Food[]>(response, ct);
+        if (foods == null)
+        {
+            _logger.LogWarning(
+                "[{ConnectorSource}] Failed to fetch foods: response carried no records",
+                ConnectorSource);
+            throw FetchFailed(NocturneRemoteConstants.Foods);
+        }
 
         // Food carries no per-record time, so no timestamp selector is supplied.
         await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
-            foods?.ToList() ?? [], PublishFoodDataAsync, config, ct);
+            foods.ToList(), PublishFoodDataAsync, config, ct);
     }
 
     #endregion
@@ -301,61 +308,17 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     #region Pagination Helpers
 
     /// <summary>
-    ///     Fetches all pages of V4 records from a paginated endpoint.
+    ///     Fetches every page of a V4 paginated endpoint. <typeparamref name="T"/> spans both the V4
+    ///     records and the legacy models the publishers still take, which page identically.
     /// </summary>
-    private async Task<List<T>> FetchPaginatedV4Async<T>(
-        string endpoint, DateTime? from, DateTime? to, CancellationToken ct) where T : IV4Record
-    {
-        var all = new List<T>();
-        var offset = 0;
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var url = BuildAbsoluteUrl(BuildPaginatedUrl(endpoint, from, to, _config.MaxCount, offset));
-            var response = await GetWithHeadersAsync(url, _authHeaders, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "[{ConnectorSource}] Failed to fetch {Endpoint}: HTTP {StatusCode}",
-                    ConnectorSource,
-                    endpoint,
-                    (int)response.StatusCode);
-                break;
-            }
-
-            var page = await DeserializeResponseAsync<PaginatedResponse<T>>(response, ct);
-            if (page?.Data == null)
-                break;
-
-            var items = page.Data.ToList();
-            if (items.Count == 0)
-                break;
-
-            all.AddRange(items);
-
-            // Stop if we've fetched all records or got a partial page
-            if (all.Count >= page.Pagination.Total || items.Count < _config.MaxCount)
-                break;
-
-            offset += items.Count;
-        }
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Fetched {Count} {Type} records from remote",
-            ConnectorSource,
-            all.Count,
-            typeof(T).Name);
-
-        return all;
-    }
-
-    /// <summary>
-    ///     Fetches all pages of legacy model records from a V4 paginated endpoint.
-    /// </summary>
-    private async Task<List<T>> FetchPaginatedLegacyAsync<T>(
+    /// <remarks>
+    ///     The crawl accumulates the whole range before its caller publishes any of it, so a page
+    ///     that never arrives costs the range rather than truncating it: pages arrive newest-first
+    ///     and the next sync's lower bound is derived from the newest record stored locally, so
+    ///     publishing the pages either side of a failure would put the ones in between permanently
+    ///     out of reach. See <see cref="BaseConnectorService{TConfig}.FetchFailed"/>.
+    /// </remarks>
+    private async Task<List<T>> FetchPaginatedAsync<T>(
         string endpoint, DateTime? from, DateTime? to, CancellationToken ct) where T : class
     {
         var all = new List<T>();
@@ -371,16 +334,24 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "[{ConnectorSource}] Failed to fetch {Endpoint}: HTTP {StatusCode}",
+                    "[{ConnectorSource}] Failed to fetch {Endpoint} at offset {Offset}: HTTP {StatusCode}",
                     ConnectorSource,
                     endpoint,
+                    offset,
                     (int)response.StatusCode);
-                break;
+                throw FetchFailed(endpoint);
             }
 
             var page = await DeserializeResponseAsync<PaginatedResponse<T>>(response, ct);
             if (page?.Data == null)
-                break;
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Failed to fetch {Endpoint} at offset {Offset}: response carried no page",
+                    ConnectorSource,
+                    endpoint,
+                    offset);
+                throw FetchFailed(endpoint);
+            }
 
             var items = page.Data.ToList();
             if (items.Count == 0)
@@ -406,6 +377,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     /// <summary>
     ///     Fetches legacy DeviceStatus records from the v1 API of the remote instance.
     /// </summary>
+    /// <remarks>A page that never arrives costs the range, for the reason given on
+    /// <see cref="FetchPaginatedAsync{T}"/>.</remarks>
     private async Task<List<DeviceStatus>> FetchV1DeviceStatusAsync(
         DateTime? from, DateTime? to, CancellationToken ct)
     {
@@ -425,11 +398,19 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     "[{ConnectorSource}] Failed to fetch device statuses: HTTP {StatusCode}",
                     ConnectorSource,
                     (int)response.StatusCode);
-                break;
+                throw FetchFailed(V1DeviceStatusEndpoint);
             }
 
             var statuses = await DeserializeResponseAsync<DeviceStatus[]>(response, ct);
-            if (statuses == null || statuses.Length == 0)
+            if (statuses == null)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Failed to fetch device statuses: response carried no records",
+                    ConnectorSource);
+                throw FetchFailed(V1DeviceStatusEndpoint);
+            }
+
+            if (statuses.Length == 0)
                 break;
 
             allStatuses.AddRange(statuses);
@@ -480,9 +461,11 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         return url;
     }
 
+    private const string V1DeviceStatusEndpoint = "/api/v1/devicestatus.json";
+
     private string BuildV1DeviceStatusUrl(DateTime? from, DateTime? to)
     {
-        var url = $"/api/v1/devicestatus.json?count={_config.MaxCount}";
+        var url = $"{V1DeviceStatusEndpoint}?count={_config.MaxCount}";
 
         if (from.HasValue)
             url += $"&find[created_at][$gte]={from.Value.ToUniversalTime():o}";

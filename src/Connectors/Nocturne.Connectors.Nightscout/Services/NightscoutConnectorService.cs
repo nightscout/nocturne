@@ -487,12 +487,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             var page = await FetchDataAsync<T[]>(buildUrl(from, currentTo), operationName);
 
-            // FetchDataAsync reports failure (retries exhausted, non-retryable HTTP, bad JSON)
-            // as null. That is not the end of the range — treating it as one silently truncated
-            // crawls into "successful" partial syncs, and would wrongly clear a backfill
-            // low-water mark. A genuinely exhausted range answers an empty array.
+            // FetchDataAsync reports failure (retries exhausted, non-retryable HTTP, bad JSON) as
+            // null rather than throwing; <see cref="BaseConnectorService{TConfig}.FetchFailed"/> is
+            // why that is not the end of the range.
             if (page == null)
-                throw new HttpRequestException($"{operationName} fetch failed; see preceding connector logs");
+                throw FetchFailed(operationName);
 
             if (page.Length == 0)
                 yield break;
