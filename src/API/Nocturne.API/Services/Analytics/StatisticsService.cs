@@ -1179,8 +1179,8 @@ public class StatisticsService : IStatisticsService
             return 0;
         }
 
-        const double targetLow = 70;
-        const double targetHigh = 180;
+        const double targetLow = GlucoseConstants.TargetBottomMgdl;
+        const double targetHigh = GlucoseConstants.TargetTopMgdl;
 
         var inRangeCount = valuesList.Count(val => val >= targetLow && val <= targetHigh);
         var percentTimeInRange = (double)inRangeCount / valuesList.Count;

@@ -439,10 +439,10 @@ public class StatusService : IStatusService
         // Threshold values
         settings["thresholds"] = new Dictionary<string, object>
         {
-            ["bgHigh"] = _configuration.GetValue<int>("Thresholds:BgHigh", 260),
-            ["bgTargetTop"] = _configuration.GetValue<int>("Thresholds:BgTargetTop", 180),
-            ["bgTargetBottom"] = _configuration.GetValue<int>("Thresholds:BgTargetBottom", 80),
-            ["bgLow"] = _configuration.GetValue<int>("Thresholds:BgLow", 55),
+            ["bgHigh"] = _configuration.GetValue("Thresholds:BgHigh", ApplicationConstants.Web.Thresholds.BgHigh),
+            ["bgTargetTop"] = _configuration.GetValue("Thresholds:BgTargetTop", ApplicationConstants.Web.Thresholds.BgTargetTop),
+            ["bgTargetBottom"] = _configuration.GetValue("Thresholds:BgTargetBottom", ApplicationConstants.Web.Thresholds.BgTargetBottom),
+            ["bgLow"] = _configuration.GetValue("Thresholds:BgLow", ApplicationConstants.Web.Thresholds.BgLow),
         };
 
         // Security settings

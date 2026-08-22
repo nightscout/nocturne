@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -16,14 +17,14 @@ namespace Nocturne.API.Services.Sleep;
 /// <remarks>
 /// Glycemic thresholds mirror <c>ProfileLoadStage</c>: very-low (54 mg/dL) and
 /// very-high (250 mg/dL) are fixed; low/target-bottom and high/target-top come from
-/// the active profile's target range, with 70/180 fallbacks when no therapy
-/// settings exist.
+/// the active profile's target range, falling back to the consensus in-range band
+/// when no therapy settings exist.
 /// </remarks>
 public class SleepReportService : ISleepReportService
 {
     private const double DefaultVeryLow  = 54;
-    private const double DefaultLow      = 70;
-    private const double DefaultHigh     = 180;
+    private const double DefaultLow      = GlucoseConstants.TargetBottomMgdl;
+    private const double DefaultHigh     = GlucoseConstants.TargetTopMgdl;
     private const double DefaultVeryHigh = 250;
 
     private readonly ISleepSessionRepository _sessions;

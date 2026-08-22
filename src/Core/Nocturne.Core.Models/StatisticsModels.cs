@@ -179,9 +179,9 @@ public class GlycemicThresholds
     public double VeryLow { get; set; } = 54;
 
     /// <summary>
-    /// Threshold for low glucose (default: 70 mg/dL)
+    /// Threshold for low glucose (defaults to <see cref="GlucoseConstants.TargetBottomMgdl"/>)
     /// </summary>
-    public double Low { get; set; } = 70;
+    public double Low { get; set; } = GlucoseConstants.TargetBottomMgdl;
 
     /// <summary>
     /// Target range bottom threshold (defaults to <see cref="GlucoseConstants.TargetBottomMgdl"/>)
@@ -194,9 +194,10 @@ public class GlycemicThresholds
     public double TargetTop { get; set; } = GlucoseConstants.TargetTopMgdl;
 
     /// <summary>
-    /// Tight target range bottom threshold (default: 70 mg/dL)
+    /// Tight target range bottom threshold. The tight band narrows the top only; its bottom is the
+    /// same hypoglycaemia boundary as <see cref="GlucoseConstants.TargetBottomMgdl"/>.
     /// </summary>
-    public double TightTargetBottom { get; set; } = 70;
+    public double TightTargetBottom { get; set; } = GlucoseConstants.TargetBottomMgdl;
 
     /// <summary>
     /// Tight target range top threshold (default: 140 mg/dL)
@@ -204,9 +205,9 @@ public class GlycemicThresholds
     public double TightTargetTop { get; set; } = 140;
 
     /// <summary>
-    /// Threshold for high glucose (default: 180 mg/dL)
+    /// Threshold for high glucose (defaults to <see cref="GlucoseConstants.TargetTopMgdl"/>)
     /// </summary>
-    public double High { get; set; } = 180;
+    public double High { get; set; } = GlucoseConstants.TargetTopMgdl;
 
     /// <summary>
     /// Threshold for very high glucose (default: 250 mg/dL)
@@ -974,8 +975,8 @@ public class ClinicalTargets
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
                 TargetCV = 36,
-                TargetLow = 70,
-                TargetHigh = 180,
+                TargetLow = GlucoseConstants.TargetBottomMgdl,
+                TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
             DiabetesPopulation.Type1Pediatric => new ClinicalTargets
             {
@@ -985,8 +986,8 @@ public class ClinicalTargets
                 MaxTAR = 25,
                 MaxTARVeryHigh = 5,
                 TargetCV = 36,
-                TargetLow = 70,
-                TargetHigh = 180,
+                TargetLow = GlucoseConstants.TargetBottomMgdl,
+                TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
             DiabetesPopulation.Elderly => new ClinicalTargets
             {
@@ -996,8 +997,8 @@ public class ClinicalTargets
                 MaxTAR = 50,
                 MaxTARVeryHigh = 10,
                 TargetCV = 36,
-                TargetLow = 70,
-                TargetHigh = 180,
+                TargetLow = GlucoseConstants.TargetBottomMgdl,
+                TargetHigh = GlucoseConstants.TargetTopMgdl,
             },
             DiabetesPopulation.Pregnancy => new ClinicalTargets
             {
