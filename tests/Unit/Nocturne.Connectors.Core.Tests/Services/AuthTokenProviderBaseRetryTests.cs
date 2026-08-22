@@ -19,6 +19,7 @@ public class AuthTokenProviderBaseRetryTests
     public async Task ExecuteWithRetryAsync_ZeroMaxRetries_AttemptsExactlyOnce()
     {
         using var provider = BuildProvider();
+        var delays = new RecordingRetryDelayStrategy();
         var attempts = 0;
 
         var token = await provider.InvokeExecuteWithRetryAsync(
@@ -27,16 +28,19 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 return Task.FromResult<(string? Result, bool ShouldRetry)>((null, true));
             },
+            delays,
             maxRetries: 0);
 
         token.Should().BeNull();
         attempts.Should().Be(1, "0 is clamped to a single attempt");
+        delays.DelayedAttempts.Should().BeEmpty("a single attempt has nothing to wait between");
     }
 
     [Fact]
     public async Task ExecuteWithRetryAsync_RetryableFailure_AttemptsUpToMaxRetries()
     {
         using var provider = BuildProvider();
+        var delays = new RecordingRetryDelayStrategy();
         var attempts = 0;
 
         var token = await provider.InvokeExecuteWithRetryAsync(
@@ -45,10 +49,12 @@ public class AuthTokenProviderBaseRetryTests
                 attempts++;
                 return Task.FromResult<(string? Result, bool ShouldRetry)>((null, true));
             },
+            delays,
             maxRetries: 3);
 
         token.Should().BeNull();
         attempts.Should().Be(3, "maxRetries counts attempts, not retries on top of a first try");
+        delays.DelayedAttempts.Should().Equal([0, 1], "three attempts leave two gaps to delay in");
     }
 
     private static RetryTokenProvider BuildProvider() => new(
@@ -71,10 +77,11 @@ public class AuthTokenProviderBaseRetryTests
         // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.
         public Task<string?> InvokeExecuteWithRetryAsync(
             Func<int, Task<(string? Result, bool ShouldRetry)>> operation,
+            IRetryDelayStrategy retryDelayStrategy,
             int maxRetries)
             => ExecuteWithRetryAsync(
                 operation,
-                Mock.Of<IRetryDelayStrategy>(),
+                retryDelayStrategy,
                 maxRetries,
                 "test token acquisition",
                 CancellationToken.None);

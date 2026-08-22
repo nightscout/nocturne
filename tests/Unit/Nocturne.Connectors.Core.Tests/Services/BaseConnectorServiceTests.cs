@@ -40,8 +40,10 @@ public class BaseConnectorServiceTests
         public Task<string?> InvokeExecuteWithRetryAsync(
             Func<Task<string?>> operation,
             IRetryDelayStrategy retryDelayStrategy,
-            int maxRetries)
-            => ExecuteWithRetryAsync(operation, retryDelayStrategy, maxRetries: maxRetries);
+            int maxRetries,
+            Func<Task<bool>>? reAuthenticateOnUnauthorized = null)
+            => ExecuteWithRetryAsync(
+                operation, retryDelayStrategy, reAuthenticateOnUnauthorized, maxRetries);
 
         // Expose the protected per-run publish-origin resolvers so the watermark→origin mapping
         // and the per-run memoization (anti-flood guard) can be asserted directly.
@@ -106,13 +108,16 @@ public class BaseConnectorServiceTests
             throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
         };
 
+        var delays = new RecordingRetryDelayStrategy();
+
         // Act: the helper exhausts every attempt then surfaces the last error
         var act = async () =>
-            await service.InvokeExecuteWithRetryAsync(alwaysFails, Mock.Of<IRetryDelayStrategy>(), maxRetries: 5);
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, delays, maxRetries: 5);
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
         attempts.Should().Be(5, "maxRetries should drive the number of attempts");
+        delays.DelayedAttempts.Should().Equal([0, 1, 2, 3], "five attempts leave four gaps to delay in");
     }
 
     [Fact]
@@ -128,13 +133,77 @@ public class BaseConnectorServiceTests
             throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
         };
 
+        var delays = new RecordingRetryDelayStrategy();
+
         // Act
         var act = async () =>
-            await service.InvokeExecuteWithRetryAsync(alwaysFails, Mock.Of<IRetryDelayStrategy>(), maxRetries: 0);
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, delays, maxRetries: 0);
 
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
         attempts.Should().Be(1, "0 is clamped to a single attempt");
+        delays.DelayedAttempts.Should().BeEmpty("a single attempt has nothing to wait between");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_UnauthorizedWithSuccessfulReauth_RetriesImmediatelyWithoutDelay()
+    {
+        // Arrange: every attempt 401s and every re-authentication succeeds, so the run only ends
+        // when the attempt budget does
+        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var delays = new RecordingRetryDelayStrategy();
+        var attempts = 0;
+        var reAuthentications = 0;
+
+        Func<Task<string?>> alwaysUnauthorized = () =>
+        {
+            attempts++;
+            throw new HttpRequestException("unauthorized", null, HttpStatusCode.Unauthorized);
+        };
+
+        // Act
+        var result = await service.InvokeExecuteWithRetryAsync(
+            alwaysUnauthorized,
+            delays,
+            maxRetries: 3,
+            () =>
+            {
+                reAuthentications++;
+                return Task.FromResult(true);
+            });
+
+        // Assert
+        result.Should().BeNull();
+        attempts.Should().Be(3, "a re-authenticated retry spends an attempt, so the run terminates");
+        reAuthentications.Should().Be(3);
+        delays.DelayedAttempts.Should().BeEmpty(
+            "fresh credentials replace the backoff rather than waiting one out");
+        service.FailedRequestCount.Should().Be(1, "the exhausted run tracks exactly one failure");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_UnauthorizedWithFailedReauth_StopsWithoutSpendingAnotherAttempt()
+    {
+        // Arrange: re-authentication fails, so retrying the same rejected credentials is pointless
+        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var delays = new RecordingRetryDelayStrategy();
+        var attempts = 0;
+
+        Func<Task<string?>> alwaysUnauthorized = () =>
+        {
+            attempts++;
+            throw new HttpRequestException("unauthorized", null, HttpStatusCode.Unauthorized);
+        };
+
+        // Act
+        var result = await service.InvokeExecuteWithRetryAsync(
+            alwaysUnauthorized, delays, maxRetries: 3, () => Task.FromResult(false));
+
+        // Assert
+        result.Should().BeNull();
+        attempts.Should().Be(1, "there is nothing to retry with once re-authentication fails");
+        delays.DelayedAttempts.Should().BeEmpty();
+        service.FailedRequestCount.Should().Be(1);
     }
 
     private static (TestConnectorService service, Mock<IConnectorPublisher> publisher,
