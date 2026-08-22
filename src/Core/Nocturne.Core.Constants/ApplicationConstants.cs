@@ -299,10 +299,11 @@ public static class ApplicationConstants
         }
 
         /// <summary>
-        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL, as
-        /// reported by the v1 status and properties endpoints and read from the
-        /// <c>Thresholds:Bg*</c> configuration keys. These are client alarm settings, not a
-        /// clinical range: <see cref="GlucoseConstants.TargetBottomMgdl"/> and
+        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL. Nothing
+        /// reads these: the values that ship are literals against the <c>Thresholds:Bg*</c>
+        /// configuration keys in the status and tenant-overview services, and this class records
+        /// what they are rather than supplying them. They are client alarm settings, not a clinical
+        /// range — <see cref="GlucoseConstants.TargetBottomMgdl"/> and
         /// <see cref="GlucoseConstants.TargetTopMgdl"/> are the consensus in-range boundaries, and
         /// <see cref="BgTargetBottom"/> deliberately differs from the former.
         /// </summary>
