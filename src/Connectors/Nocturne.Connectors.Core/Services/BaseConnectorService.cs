@@ -766,6 +766,36 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     The counterpart of <see cref="RecordPublishOutcome"/> one level up: a fetch that came back
+    ///     with nothing because it failed, reported as a failure of the run but only for a type the
+    ///     tenant enabled. Records no count — the source was never reached, and a count is a claim it
+    ///     was (see the remarks on <see cref="RecordPublishOutcome"/>).
+    /// </summary>
+    /// <remarks>
+    ///     A failed run withholds the connector's last-successful-sync stamp and shows the tenant a
+    ///     red connector, so a fetch issued only to support another type — a bolus fetch feeding a
+    ///     carb correlation — must not be able to fail the sync. Losing it costs that correlation and
+    ///     nothing else. The failure is sticky rather than fatal: whatever the run already fetched
+    ///     still publishes.
+    /// </remarks>
+    protected void RecordFetchFailure(
+        SyncResult result,
+        SyncDataType dataType,
+        HashSet<SyncDataType> activeTypes)
+    {
+        if (!activeTypes.Contains(dataType))
+        {
+            _logger.LogDebug(
+                "[{ConnectorSource}] {DataType} fetch failed for a type that is switched off",
+                ConnectorSource, dataType);
+            return;
+        }
+
+        result.Success = false;
+        result.Errors.Add($"Failed to fetch {dataType}");
+    }
+
+    /// <summary>
     ///     Reports a sync-progress message to the reporter supplied for this run, if any. The
     ///     message type carries the phase, so a terminal message cannot be emitted as in-progress.
     /// </summary>

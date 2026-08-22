@@ -425,7 +425,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             try
             {
                 var deviceSettings = await FetchV3DeviceSettingsAsync(context);
-                if (deviceSettings != null)
+                if (deviceSettings is null)
+                {
+                    RecordFetchFailure(result, SyncDataType.Profiles, activeTypes);
+                }
+                else
                 {
                     await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                         context.ProfileMapper.TransformDeviceSettingsToProfiles(deviceSettings),
@@ -444,6 +448,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             catch (Exception profileEx)
             {
                 _logger.LogWarning(profileEx, "[{ConnectorSource}] Failed to fetch/publish profile data", ConnectorSource);
+                RecordFetchFailure(result, SyncDataType.Profiles, activeTypes);
             }
         }
     }
@@ -487,7 +492,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             ? context.V4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
         Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
         await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, carbs, foodResolver, result, config, cancellationToken);
+            foodEntryImports, carbs, foodResolver, result, activeTypes, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
             context.StateSpanMapper.TransformV2ToStateSpans(batchData),
@@ -520,12 +525,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var v3Data = await FetchV3GraphDataAsync(context, fromDate, toDate);
         if (v3Data == null) return false;
 
-        GlookoV3HistoriesResponse? v3Histories = null;
-        try { v3Histories = await FetchV3HistoriesAsync(context, fromDate, toDate); }
-        catch (Exception histEx)
-        {
-            _logger.LogWarning(histEx, "[{ConnectorSource}] V3 histories fetch failed, meal data will be unavailable", ConnectorSource);
-        }
+        // Histories carry the meals: without them carbs fall back to the coarser carbAll series and
+        // food entries have no source at all, so the run reports both types as unfetched.
+        var v3Histories = await FetchV3HistoriesAsync(context, fromDate, toDate);
+        if (v3Histories is null)
+            RecordFetchFailure(result, SyncDataType.CarbIntake, activeTypes);
 
         if (config.V3IncludeCgmBackfill)
         {
@@ -566,41 +570,47 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             manualBasalInjections, PublishBasalInjectionDataAsync, config, cancellationToken);
 
         // Food attribution resolves against the carbs published above.
-        GlookoFood[]? v2Foods = null;
-        if (historyMealCarbs.Count > 0)
+        if (v3Histories is null)
         {
-            try { v2Foods = await FetchV2FoodsAsync(context, fromDate, toDate); }
-            catch (Exception v2Ex)
-            {
-                _logger.LogWarning(v2Ex, "[{ConnectorSource}] V2 foods fetch failed, food entries will lack externalId/brand metadata", ConnectorSource);
-            }
+            RecordFetchFailure(result, SyncDataType.Food, activeTypes);
         }
-
-        var foodEntryImports = historyMealCarbs.Count > 0 && v3Histories?.Histories != null
-            ? context.V4TreatmentMapper.MapV3HistoryMealsToConnectorEntries(v3Histories, v2Foods) : [];
-
-        // Build food resolver
-        Func<string, string?>? foodResolver = null;
-        if (historyMealCarbs.Count > 0 && v3Histories?.Histories != null)
+        else
         {
-            var foodGuidToMealGuid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var meal in GlookoV4TreatmentMapper.ExtractMeals(v3Histories))
+            GlookoFood[]? v2Foods = null;
+            if (historyMealCarbs.Count > 0 && activeTypes.Contains(SyncDataType.Food))
             {
-                if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
-                foreach (var food in meal.Foods)
+                // V2 foods only enrich the entries with externalId/brand, so a failure here is
+                // sticky rather than fatal: the entries below still publish without that metadata.
+                v2Foods = await FetchV2FoodsAsync(context, fromDate, toDate);
+                if (v2Foods is null)
+                    RecordFetchFailure(result, SyncDataType.Food, activeTypes);
+            }
+
+            var foodEntryImports = historyMealCarbs.Count > 0 && v3Histories.Histories != null
+                ? context.V4TreatmentMapper.MapV3HistoryMealsToConnectorEntries(v3Histories, v2Foods) : [];
+
+            Func<string, string?>? foodResolver = null;
+            if (historyMealCarbs.Count > 0 && v3Histories.Histories != null)
+            {
+                var foodGuidToMealGuid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var meal in GlookoV4TreatmentMapper.ExtractMeals(v3Histories))
                 {
-                    if (food.SoftDeleted != true && !string.IsNullOrEmpty(food.Guid))
-                        foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
+                    if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
+                    foreach (var food in meal.Foods)
+                    {
+                        if (food.SoftDeleted != true && !string.IsNullOrEmpty(food.Guid))
+                            foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
+                    }
                 }
+
+                foodResolver = externalEntryId =>
+                    foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
+                        ? $"glooko_v3meal_{mealGuid}" : null;
             }
 
-            foodResolver = externalEntryId =>
-                foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
-                    ? $"glooko_v3meal_{mealGuid}" : null;
+            await PublishFoodEntriesAndAttributeAsync(
+                foodEntryImports, allCarbs, foodResolver, result, activeTypes, cancellationToken);
         }
-
-        await PublishFoodEntriesAndAttributeAsync(
-            foodEntryImports, allCarbs, foodResolver, result, config, cancellationToken);
 
         var stateSpans = context.StateSpanMapper.TransformV3ToStateSpans(v3Data);
         stateSpans.AddRange(context.StateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
@@ -634,30 +644,34 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         List<CarbIntake> carbIntakes,
         Func<string, string?>? foodEntryToCarbLegacyId,
         SyncResult result,
-        GlookoConnectorConfiguration config,
+        HashSet<SyncDataType> activeTypes,
         CancellationToken cancellationToken)
     {
-        if (foodEntryImports.Count == 0 || _connectorPublisher is not { IsAvailable: true })
+        if (!activeTypes.Contains(SyncDataType.Food))
             return;
+
+        if (foodEntryImports.Count == 0)
+        {
+            RecordPublishOutcome(result, SyncDataType.Food, 0, success: true);
+            return;
+        }
+
+        if (_connectorPublisher is not { IsAvailable: true })
+        {
+            _logger.LogWarning("Publisher not available for food entry submission");
+            RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, success: false);
+            return;
+        }
 
         var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
             foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
 
         // The publisher returns null only from its own catch; an import that reached the catalog
-        // returns a list, empty when nothing was accepted. Food has no SyncDataType toggle on this
-        // connector, so the failure is reported rather than routed through PublishRecordTypeAsync.
-        if (importedEntries is null)
-        {
-            result.Success = false;
-            result.Errors.Add("Food entries publish failed");
-            return;
-        }
+        // returns a list, empty when nothing was accepted.
+        RecordPublishOutcome(result, SyncDataType.Food, foodEntryImports.Count, importedEntries is not null);
 
-        if (importedEntries.Count == 0)
+        if (importedEntries is null || importedEntries.Count == 0)
             return;
-
-        _logger.LogInformation("[{ConnectorSource}] Published {Count} food entries to connector food catalog",
-            ConnectorSource, importedEntries.Count);
 
         if (_mealMatchingService == null || carbIntakes.Count == 0 || foodEntryToCarbLegacyId == null)
             return;

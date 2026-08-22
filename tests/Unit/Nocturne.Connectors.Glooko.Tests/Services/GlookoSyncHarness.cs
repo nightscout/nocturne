@@ -158,7 +158,18 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     How many of each record type a request window carries, by the order in which the sync first
 ///     asks for that window. Defaults to one per window.
 /// </param>
-internal sealed class GlookoEndpointHandler(Func<int, int>? recordsPerWindow = null) : HttpMessageHandler
+/// <param name="failingPaths">
+///     Endpoint paths that answer 500 however often they are asked, standing in for a Glooko
+///     endpoint that is down while the rest of the account still serves.
+/// </param>
+/// <param name="withHistoryMeals">
+///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
+///     switches on the V3 path's meal carbs and food entries.
+/// </param>
+internal sealed class GlookoEndpointHandler(
+    Func<int, int>? recordsPerWindow = null,
+    IReadOnlyCollection<string>? failingPaths = null,
+    bool withHistoryMeals = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<string> _windows = [];
@@ -177,6 +188,9 @@ internal sealed class GlookoEndpointHandler(Func<int, int>? recordsPerWindow = n
     {
         var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
+        if (failingPaths?.Any(failing => Matches(path, failing)) == true)
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
         if (Matches(path, GlookoConstants.V3UsersPath))
             return Json("{\"currentUser\":{\"meterUnits\":\"mgdl\",\"timezone\":\"Australia/Sydney\"}}");
 
@@ -184,7 +198,7 @@ internal sealed class GlookoEndpointHandler(Func<int, int>? recordsPerWindow = n
             return Json(DeviceSettingsPayload());
 
         if (Matches(path, GlookoConstants.V3HistoriesPath))
-            return Json("{\"histories\":[]}");
+            return Json(withHistoryMeals ? HistoryMealsPayload : "{\"histories\":[]}");
 
         var window = ResolveWindow(request.RequestUri?.Query ?? string.Empty);
 
@@ -257,6 +271,16 @@ internal sealed class GlookoEndpointHandler(Func<int, int>? recordsPerWindow = n
 
         return $"{{\"series\":{{{series}}}}}";
     }
+
+    /// <summary>
+    /// One meal of one food, which the V3 path maps to a single carb intake and a single food entry.
+    /// </summary>
+    private const string HistoryMealsPayload =
+        """
+        {"histories":[{"type":"meals","guid":"meal-1","item":{
+          "guid":"meal-1","timestamp":"2026-01-10T08:00:00Z","type":"breakfast","carbs":30.0,
+          "foods":[{"guid":"food-1","name":"Toast","carbs":30.0}]}}]}
+        """;
 
     /// <summary>
     /// One settings snapshot carrying a basal segment (which maps to a single profile) and an active
