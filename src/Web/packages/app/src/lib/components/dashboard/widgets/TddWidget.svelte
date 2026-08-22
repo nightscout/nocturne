@@ -5,6 +5,7 @@
   import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
@@ -151,7 +152,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{err?.message ?? JSON.stringify(err)}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
       </div>
     {/await}
   {/if}

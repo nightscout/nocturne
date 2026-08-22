@@ -4,14 +4,17 @@ import { describe, it, expect, vi } from "vitest";
 import { Direction } from "$lib/api/generated/nocturne-api-client";
 
 let reportedDirection: string | undefined;
+let reportedError: unknown;
 
 vi.mock("$api/generated/retrospectives.generated.remote", () => ({
   getRetrospectiveData: () => ({
-    current: {
-      time: 0,
-      glucose: { value: 120, direction: reportedDirection, delta: 4 },
-    },
-    error: undefined,
+    current: reportedError
+      ? undefined
+      : {
+          time: 0,
+          glucose: { value: 120, direction: reportedDirection, delta: 4 },
+        },
+    error: reportedError,
     refresh: () => {},
   }),
 }));
@@ -20,10 +23,28 @@ import RetrospectiveStats from "./RetrospectiveStats.svelte";
 
 function renderWithDirection(direction: string | undefined) {
   reportedDirection = direction;
+  reportedError = undefined;
   render(RetrospectiveStats, { props: { time: 0 } });
 }
 
 describe("RetrospectiveStats", () => {
+  it("shows the reason a rejected query gave", async () => {
+    // A rejected remote function is SvelteKit's `HttpError`: a plain
+    // `{ status, body }` with no `Error` in its prototype chain.
+    reportedError = {
+      status: 400,
+      body: { message: "That timestamp is before this tenant had data." },
+    };
+
+    render(RetrospectiveStats, { props: { time: 0 } });
+
+    await expect
+      .element(
+        page.getByText("That timestamp is before this tenant had data.")
+      )
+      .toBeVisible();
+  });
+
   it("labels a reported trend", async () => {
     renderWithDirection(Direction.Flat);
 

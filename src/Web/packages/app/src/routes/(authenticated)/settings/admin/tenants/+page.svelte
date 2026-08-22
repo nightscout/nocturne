@@ -33,7 +33,7 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
-  import { errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorMessage } from "$lib/forms/submit-error";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -228,8 +228,10 @@
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
     } catch (err) {
-      createError =
-        (err as Error)?.message ?? "Failed to create tenant. Please try again.";
+      createError = describeSubmitError(
+        err,
+        "Failed to create tenant. Please try again."
+      );
     } finally {
       creating = false;
     }

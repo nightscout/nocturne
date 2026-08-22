@@ -14,6 +14,7 @@
   import { getDirectionInfo } from "$lib/utils";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import { getRetrospectiveData } from "$api/generated/retrospectives.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   interface Props {
     /** Unix timestamp in milliseconds to fetch data for */
@@ -84,9 +85,7 @@
     <Card.Content>
       <div class="text-center space-y-3">
         <p class="text-sm text-muted-foreground">
-          {error instanceof Error
-            ? error.message
-            : "Failed to load retrospective data"}
+          {remoteErrorMessage(error, "Failed to load retrospective data")}
         </p>
         <Button
           variant="outline"
