@@ -50,6 +50,9 @@ two coexist. Windows 11 only.
 */
 // ==/WindhawkModReadme==
 
+// The range and palette defaults in this block must equal GlucoseConstants.TargetBottomMgdl /
+// TargetTopMgdl, converted to the display unit selected here, and GlucoseConstants.StatusPalette;
+// GlucoseMirrorTests fails if any of them drift.
 // ==WindhawkModSettings==
 /*
 - dataPath: ""
@@ -1232,9 +1235,8 @@ void LoadSettings() {
         Wh_FreeStringSetting(s);
         return v;
     };
-    // The range defaults are the settings block's mmol/L rendering of
-    // GlucoseConstants.TargetBottomMgdl/TargetTopMgdl, and the colour defaults must equal
-    // GlucoseConstants.StatusPalette; GlucoseMirrorTests fails if either drifts.
+    // Applied only when a setting is absent. Each duplicates a default from the settings block, and
+    // nothing enforces that the two still agree.
     g_settings.rangeLow = getDouble(L"rangeLow", 3.9);
     g_settings.rangeHigh = getDouble(L"rangeHigh", 10.0);
 
