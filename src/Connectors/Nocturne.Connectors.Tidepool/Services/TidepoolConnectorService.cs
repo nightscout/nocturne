@@ -93,8 +93,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                 if (bgValues is null)
                 {
-                    result.Success = false;
-                    result.Errors.Add("Failed to fetch Glucose");
+                    ReportFailedFetch(result, SyncDataType.Glucose, activeTypes);
                 }
                 else
                 {
@@ -125,11 +124,13 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                 var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
-                if (boluses is null || foods is null)
-                {
-                    result.Success = false;
-                    result.Errors.Add("Failed to fetch Treatments");
-                }
+                // Both fetches are issued whenever either type is active, because the correlation
+                // that pairs a carb intake with a bolus needs the boluses even when boluses
+                // themselves are not being synced.
+                if (boluses is null)
+                    ReportFailedFetch(result, SyncDataType.Boluses, activeTypes);
+                if (foods is null)
+                    ReportFailedFetch(result, SyncDataType.CarbIntake, activeTypes);
 
                 // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
                 // type is reported only when its own fetch came back.
@@ -151,6 +152,31 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
         result.EndTime = DateTimeOffset.UtcNow;
         return result;
+    }
+
+    /// <summary>
+    ///     Reports a fetch that came back null (see <see cref="FetchDataAsync{T}"/>) as a failure of
+    ///     the run, but only for a type the tenant enabled.
+    /// </summary>
+    /// <remarks>
+    ///     A failed run withholds the connector's last-successful-sync stamp and shows the tenant a
+    ///     red connector, so a fetch issued only to support another type — the bolus fetch feeding
+    ///     the carb correlation — must not be able to fail the sync. Losing it costs that
+    ///     correlation and nothing else.
+    /// </remarks>
+    private void ReportFailedFetch(
+        SyncResult result, SyncDataType dataType, HashSet<SyncDataType> activeTypes)
+    {
+        if (!activeTypes.Contains(dataType))
+        {
+            _logger.LogDebug(
+                "[{ConnectorSource}] {DataType} fetch failed for a type that is switched off",
+                ConnectorSource, dataType);
+            return;
+        }
+
+        result.Success = false;
+        result.Errors.Add($"Failed to fetch {dataType}");
     }
 
     /// <summary>

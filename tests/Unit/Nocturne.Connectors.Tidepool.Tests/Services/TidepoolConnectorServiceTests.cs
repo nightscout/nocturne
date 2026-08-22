@@ -127,9 +127,113 @@ public class TidepoolConnectorServiceTests
             CancellationToken.None);
 
         result.Success.Should().BeFalse("a sync whose every request was rejected has not succeeded");
-        result.Errors.Should().BeEquivalentTo(["Failed to fetch Glucose", "Failed to fetch Treatments"]);
+        result.Errors.Should().BeEquivalentTo(
+            ["Failed to fetch Glucose", "Failed to fetch Boluses", "Failed to fetch CarbIntake"]);
         result.ItemsSynced.Should().BeEmpty(
             "a type the sync could not check must stay unreported rather than claim a zero");
+    }
+
+    /// <summary>
+    /// The two collections are fetched concurrently with independent retry budgets, so one coming
+    /// back while the other is rejected is ordinary. The type whose fetch failed goes unreported;
+    /// the one that answered is still counted, because a single combined guard would throw away a
+    /// batch the sync did retrieve.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenOnlyTheBolusFetchIsRejected_LeavesBolusesUnreported()
+    {
+        var handler = new TidepoolFakeHandler
+        {
+            BolusStatus = HttpStatusCode.Forbidden,
+            FoodJson = """
+                [
+                  { "id": "f1", "time": "2026-01-01T12:00:00Z",
+                    "nutrition": { "carbohydrate": { "net": 40 } } }
+                ]
+                """,
+        };
+        var fixture = new ServiceFixture(handler, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().BeEquivalentTo(["Failed to fetch Boluses"]);
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.CarbIntake] = 1,
+        }, "a rejected bolus fetch must not report a bolus count, and must not cost the carbs");
+    }
+
+    /// <summary>The mirror of the bolus case, so neither type can be guarded on the other fetch.</summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenOnlyTheFoodFetchIsRejected_LeavesCarbIntakeUnreported()
+    {
+        var handler = new TidepoolFakeHandler
+        {
+            FoodStatus = HttpStatusCode.Forbidden,
+            BolusJson = """
+                [
+                  { "id": "b1", "time": "2026-01-01T08:00:00Z", "normal": 1.5 },
+                  { "id": "b2", "time": "2026-01-01T09:00:00Z", "normal": 2.5 },
+                  { "id": "b3", "time": "2026-01-01T10:00:00Z", "normal": 3.5 }
+                ]
+                """,
+        };
+        var fixture = new ServiceFixture(handler, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().BeEquivalentTo(["Failed to fetch CarbIntake"]);
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Boluses] = 3,
+        });
+    }
+
+    /// <summary>
+    /// The bolus fetch is issued even with boluses switched off, because the carb correlation needs
+    /// it. Its failure must not fail the run: a failed run withholds the last-successful-sync stamp
+    /// and shows a red connector, so a tenant whose enabled types all synced would be told — stickily
+    /// — that their connector is broken.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAnInactiveTypesFetchIsRejected_StillReportsSuccess()
+    {
+        var handler = new TidepoolFakeHandler
+        {
+            BolusStatus = HttpStatusCode.Forbidden,
+            FoodJson = """
+                [
+                  { "id": "f1", "time": "2026-01-01T12:00:00Z",
+                    "nutrition": { "carbohydrate": { "net": 40 } } }
+                ]
+                """,
+        };
+        var fixture = new ServiceFixture(handler, withPublisher: true, config: new TidepoolConnectorConfiguration
+        {
+            Username = "user@example.com",
+            Password = "secret",
+            SyncBoluses = false,
+        });
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue("no type the tenant enabled failed to sync");
+        result.Errors.Should().BeEmpty();
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.CarbIntake] = 1,
+        });
     }
 
     /// <summary>Wires the connector service and a real token provider onto one fake handler.</summary>
@@ -140,9 +244,12 @@ public class TidepoolConnectorServiceTests
         internal List<Bolus> PublishedBoluses { get; } = [];
         internal List<CarbIntake> PublishedCarbIntakes { get; } = [];
 
-        internal ServiceFixture(TidepoolFakeHandler handler, bool withPublisher = false)
+        internal ServiceFixture(
+            TidepoolFakeHandler handler,
+            bool withPublisher = false,
+            TidepoolConnectorConfiguration? config = null)
         {
-            Config = new TidepoolConnectorConfiguration
+            Config = config ?? new TidepoolConnectorConfiguration
             {
                 Username = "user@example.com",
                 Password = "secret",
@@ -215,6 +322,11 @@ public class TidepoolConnectorServiceTests
         /// <summary>Status for the data endpoint; anything but OK is how a 403 or 404 arrives.</summary>
         internal HttpStatusCode DataStatus { get; init; } = HttpStatusCode.OK;
 
+        /// <summary>Per-type overrides, so one collection can be rejected while the other answers.</summary>
+        internal HttpStatusCode? BolusStatus { get; init; }
+
+        internal HttpStatusCode? FoodStatus { get; init; }
+
         internal string BolusJson { get; init; } = "[]";
         internal string FoodJson { get; init; } = "[]";
 
@@ -239,13 +351,17 @@ public class TidepoolConnectorServiceTests
 
             if (path == $"/data/{UserId}")
             {
-                if (DataStatus != HttpStatusCode.OK)
-                    return Task.FromResult(new HttpResponseMessage(DataStatus));
-
                 var query = Uri.UnescapeDataString(request.RequestUri.Query);
-                if (query.Contains($"type={TidepoolConstants.DataTypes.Bolus}", StringComparison.Ordinal))
+                var isBolus = query.Contains($"type={TidepoolConstants.DataTypes.Bolus}", StringComparison.Ordinal);
+                var isFood = query.Contains($"type={TidepoolConstants.DataTypes.Food}", StringComparison.Ordinal);
+
+                var status = (isBolus ? BolusStatus : isFood ? FoodStatus : null) ?? DataStatus;
+                if (status != HttpStatusCode.OK)
+                    return Task.FromResult(new HttpResponseMessage(status));
+
+                if (isBolus)
                     return Task.FromResult(Json(BolusJson));
-                if (query.Contains($"type={TidepoolConstants.DataTypes.Food}", StringComparison.Ordinal))
+                if (isFood)
                     return Task.FromResult(Json(FoodJson));
 
                 return Task.FromResult(Json("[]"));

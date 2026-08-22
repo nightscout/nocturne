@@ -192,6 +192,25 @@ public class PublishRecordTypePathTests
     }
 
     [Fact]
+    public async Task SuccessLog_IsSuppressedForARejectedPublish()
+    {
+        // Arrange: the log says "Synced", so it must not appear for a batch the publisher refused —
+        // a triage reading it would take the records for stored.
+        var logger = new RecordingLogger();
+        var active = new HashSet<SyncDataType> { SyncDataType.Boluses };
+        var service = new TestConnectorService((_, _) => Task.CompletedTask, logger);
+        var result = new SyncResult { Success = true };
+
+        // Act
+        await service.PublishAsync(result, SyncDataType.Boluses, active,
+            [new PublishedRecord(), new PublishedRecord()], publishSucceeds: false);
+
+        // Assert
+        result.ItemsSynced[SyncDataType.Boluses].Should().Be(2, "the batch still reached the publisher");
+        logger.Messages.Should().NotContain(m => m.Contains("Synced"));
+    }
+
+    [Fact]
     public async Task ThrowingPublish_RecordsNoCount()
     {
         // Arrange: the count is recorded once the publish has returned, so a batch whose publish

@@ -284,6 +284,35 @@ public class CareLinkConnectorServiceTests
         fixture.PublishedGlucose.Should().BeEmpty("stale readings are deliberately not published");
     }
 
+    /// <summary>
+    /// The zero the stale path records goes through <c>RecordPublishOutcome</c>, which deliberately
+    /// has no active-type check of its own — so the step's own toggle gate is the only thing keeping
+    /// a switched-off type from being badged, and it has to stay.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenGlucoseIsDisabledAndTheDataIsStale_RecordsNothing()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastMedicalDeviceDataUpdateServerTime": 1767258000000,
+                  "lastSG": { "sg": 120, "datetime": "2026-01-01T09:00:00", "kind": "SG" }
+                }
+                """
+        };
+        var config = GlucoseOnlyConfiguration();
+        config.SyncGlucose = false;
+        var fixture = new ServiceFixture(handler, config, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.ItemsSynced.Should().BeEmpty(
+            "a type the tenant switched off is never reported, stale payload or not");
+    }
+
     /// <summary>Leaves only the glucose step able to publish.</summary>
     private static CareLinkConnectorConfiguration GlucoseOnlyConfiguration() => new()
     {
