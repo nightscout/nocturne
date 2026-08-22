@@ -138,7 +138,7 @@ public class TotpServiceTests : IDisposable
         var act = () => service.CompleteSetupAsync("123456", "Label", "tampered-token");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Invalid or tampered*");
+            .WithMessage("*no longer valid*");
     }
 
     #endregion
