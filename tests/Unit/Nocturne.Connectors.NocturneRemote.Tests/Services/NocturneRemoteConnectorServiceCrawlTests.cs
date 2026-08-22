@@ -283,7 +283,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle()
-            .Which.Should().StartWith($"Failed to sync {SyncDataType.Food}");
+            .Which.Should().StartWith($"Failed to sync {SyncDataType.Food}")
+            .And.Contain("HTTP 403 Forbidden",
+                "a refused scope is the failure a tenant can act on, and they cannot read the logs");
         result.ItemsSynced.Should().BeEmpty(
             "a rejected fetch never reached the remote, so it cannot report that there were no foods");
     }
@@ -355,12 +357,13 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
-    /// On an open-ended catch-up each family asks for its own range. Sharing the glucose-derived
-    /// bound strands every other family: this run's glucose publish moves that bound past the range
-    /// a failed treatment crawl still owes, so the gap it left cannot be repaired next cycle.
+    /// On an open-ended catch-up a family that has fallen behind widens the bound back to its own
+    /// resume point. Leaving it on the glucose-derived bound strands it: this run's glucose publish
+    /// moves that bound past the range a failed treatment crawl still owes, so the gap cannot be
+    /// repaired next cycle.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenOpenEnded_AsksEachFamilyForItsOwnRange()
+    public async Task SyncDataAsync_WhenAFamilyHasFallenBehind_WidensToItsOwnResumePoint()
     {
         var latestTreatment = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var glucoseFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -382,6 +385,78 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.CrawlOf(NocturneRemoteConstants.Boluses).Should()
             .Contain($"from={latestTreatment.AddMinutes(-5):o}",
                 "the treatment family resumes from its own newest stored record, not glucose's");
+    }
+
+    /// <summary>
+    /// A caller's lower bound is never narrowed by a family's resume point. An explicit <c>from</c>
+    /// with no <c>to</c> is a legitimate request shape and the one an admin repairing a months-old
+    /// gap sends; answering it from the watermark fetches nothing and reports the run as a success
+    /// with a zero count, which is the failure this branch exists to stop.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenGivenALowerBoundBelowTheResumePoint_HonoursTheCallersBound()
+    {
+        var askedFrom = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler, latestTreatment: new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest
+            {
+                From = askedFrom,
+                To = null,
+                DataTypes = [SyncDataType.Boluses],
+            },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should()
+            .Contain($"from={askedFrom:o}", "the caller asked for this lower bound");
+    }
+
+    /// <summary>
+    /// The tenant's configured attempt budget governs, not the frozen startup defaults. Only the
+    /// background entry point primes the field the defaults live in, so a manual sync or a cursor
+    /// reset — the long full-history re-pull where the budget matters most — would otherwise run on
+    /// whatever the deployment shipped. A budget of three would reach the third scripted response
+    /// and complete the crawl.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_SpendsTheTenantsRetryBudget_NotTheStartupDefaults()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.GlucosePage(total: 6, "2026-01-03T08:00:00Z", "2026-01-03T08:05:00Z"),
+                RemoteFakeHandler.Status(HttpStatusCode.BadGateway),
+                RemoteFakeHandler.GlucosePage(total: 6, "2026-01-03T08:10:00Z"));
+        var fixture = new ServiceFixture(handler, config: NewConfig(maxRetryAttempts: 1));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse(
+            $"the tenant allowed one attempt, not the {StartupDefaultRetryAttempts} the defaults carry");
+        result.ItemsSynced.Should().BeEmpty();
+    }
+
+    /// <summary>The tenant's page size governs for the same reason, and on the same paths.</summary>
+    [Fact]
+    public async Task SyncDataAsync_UsesTheTenantsPageSize_NotTheStartupDefaults()
+    {
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler);
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should()
+            .Contain($"limit={RemoteFakeHandler.PageSize}")
+            .And.NotContain($"limit={StartupDefaultPageSize}");
     }
 
     /// <summary>
@@ -410,6 +485,68 @@ public class NocturneRemoteConnectorServiceCrawlTests
         handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().Contain($"from={from:o}");
     }
 
+    /// <summary>
+    /// A watermark the publisher cannot answer fails only the families it would have bounded. It is
+    /// resolved inside the per-type error boundary for that reason: resolving it up front would take
+    /// down glucose, profiles and food as well, none of which needed it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAFamilysWatermarkCannotBeRead_FailsOnlyThatFamily()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.GlucosePage(total: 1, "2026-01-03T08:00:00Z"));
+        var fixture = new ServiceFixture(handler, treatmentWatermarkFails: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().StartWith($"Failed to sync {SyncDataType.Boluses}");
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Glucose] = 1,
+        }, "glucose never needed the treatment watermark");
+    }
+
+    /// <summary>
+    /// The remote is the tenant's own instance behind their own proxy, and the failed response's
+    /// body is quoted into the connector's last-error message and its logs. A proxy error page that
+    /// echoes the request would otherwise put the tenant's bearer token in both.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAFailedResponseEchoesTheRequest_KeepsTheTokenOutOfTheError()
+    {
+        var config = NewConfig();
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.GlucosePage(total: 6, "2026-01-03T08:00:00Z", "2026-01-03T08:05:00Z"),
+                new HttpResponseMessage(HttpStatusCode.BadGateway)
+                {
+                    Content = new StringContent(
+                        $"upstream refused; sent authorization: Bearer {config.Token}"),
+                });
+        var fixture = new ServiceFixture(handler, config: config);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().NotContain(config.Token).And.Contain("HTTP 502 BadGateway");
+    }
+
+    /// <summary>Page size and budget carried by the frozen startup defaults, never by a tenant.</summary>
+    private const int StartupDefaultPageSize = 500;
+
+    /// <inheritdoc cref="StartupDefaultPageSize"/>
+    private const int StartupDefaultRetryAttempts = 3;
+
     private static NocturneRemoteConnectorConfiguration NewConfig(
         bool syncGlucose = true,
         bool syncActivity = true,
@@ -436,7 +573,8 @@ public class NocturneRemoteConnectorServiceCrawlTests
         internal ServiceFixture(
             RemoteFakeHandler handler,
             NocturneRemoteConnectorConfiguration? config = null,
-            DateTime? latestTreatment = null)
+            DateTime? latestTreatment = null,
+            bool treatmentWatermarkFails = false)
         {
             Config = config ?? NewConfig();
 
@@ -450,10 +588,12 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 .ReturnsAsync(true);
 
             var treatments = new Mock<ITreatmentPublisher>();
-            treatments
-                .Setup(p => p.GetLatestTreatmentTimestampAsync(
-                    It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(latestTreatment);
+            var watermark = treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(
+                It.IsAny<string>(), It.IsAny<CancellationToken>()));
+            if (treatmentWatermarkFails)
+                watermark.ThrowsAsync(new HttpRequestException("the API did not answer"));
+            else
+                watermark.ReturnsAsync(latestTreatment);
             treatments
                 .Setup(p => p.PublishBolusesAsync(
                     It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(),
@@ -469,8 +609,17 @@ public class NocturneRemoteConnectorServiceCrawlTests
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
             publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
 
+            // Deliberately NOT the tenant's config. Production conflates the two — the frozen
+            // startup defaults are what the field holds on the manual path — so aliasing them here
+            // would hide every place the tenant's own value is meant to be read.
             var registration = new Mock<IConnectorRegistration<NocturneRemoteConnectorConfiguration>>();
-            registration.Setup(r => r.Defaults).Returns(Config);
+            registration.Setup(r => r.Defaults).Returns(new NocturneRemoteConnectorConfiguration
+            {
+                Url = RemoteFakeHandler.BaseUrl,
+                Token = "startup-defaults-token",
+                MaxCount = StartupDefaultPageSize,
+                MaxRetryAttempts = StartupDefaultRetryAttempts,
+            });
 
             Service = new NocturneRemoteConnectorService(
                 new HttpClient(handler),
