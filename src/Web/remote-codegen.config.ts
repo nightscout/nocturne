@@ -33,10 +33,14 @@ export default {
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state
-    // references) and 409 (resource conflict, e.g. referencing rules on
-    // delete) with the server's response body so the FE can show a useful
+    // references) and 409 (resource conflict, e.g. revoking an already-redeemed
+    // alert invite) with the server's response body so the FE can show a useful
     // message to the user. Falls through to a 500 with the extracted message
     // so the real error is still visible in dev.
+    //
+    // The status is read off the thrown value, so an error body that declares no
+    // `status` field of its own — `ReferencingRulesResponse`,
+    // `PredictionErrorResponse` — never reaches those arms.
     //
     // 429 and 404 are forwarded too, and with a fixed reason rather than the
     // extracted message: the rate limiter's body declares no typed schema, so

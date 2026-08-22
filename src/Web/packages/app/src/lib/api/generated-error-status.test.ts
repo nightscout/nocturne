@@ -83,6 +83,19 @@ function problemDetails(status: number, detail: string, title = "Not Found") {
   };
 }
 
+/**
+ * A SvelteKit `HttpError`, which is what the refresh of an invalidated query
+ * throws from inside the same `try` as the client call. Its reason lives on
+ * `body.message` and nowhere else.
+ */
+function refusal(status: number, message: string): unknown {
+  try {
+    error(status, message);
+  } catch (thrown) {
+    return thrown;
+  }
+}
+
 const RATE_LIMIT_BODY = JSON.stringify({
   error: "rate_limit_exceeded",
   error_description: "Too many requests. Please try again later.",
@@ -189,6 +202,16 @@ describe("the status a generated remote function lets through", () => {
 
     expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
       "The ids field is required."
+    );
+  });
+
+  it("forwards the message when an invalidated query's refresh is what failed", async () => {
+    const crossed = await crossTheBoundary(
+      refusal(409, "Another device changed this entry.")
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Another device changed this entry."
     );
   });
 

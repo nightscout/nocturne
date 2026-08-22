@@ -12,7 +12,9 @@ overrides:
 packageExtensionsChecksum: sha256-vJ0zYsojxAc/+KH1CJAifmsRxfze2q511/6WQBYHep0=
 
 patchedDependencies:
-  openapi-remote-codegen@0.2.0: ab44497d62a475dbe64cb2d521685708d83e34a4f8ac409ed0cf7132ef0d1a92
+  openapi-remote-codegen@0.2.0:
+    hash: ab44497d62a475dbe64cb2d521685708d83e34a4f8ac409ed0cf7132ef0d1a92
+    path: patches/openapi-remote-codegen@0.2.0.patch
 
 importers:
 
