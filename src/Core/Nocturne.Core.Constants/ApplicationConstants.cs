@@ -299,29 +299,35 @@ public static class ApplicationConstants
         }
 
         /// <summary>
-        /// Default glucose threshold values in mg/dL used for range categorization and alarms.
+        /// Defaults for the four legacy Nightscout <c>bg*</c> threshold settings, in mg/dL, as
+        /// reported by the v1 status and properties endpoints and read from the
+        /// <c>Thresholds:Bg*</c> configuration keys. These are client alarm settings, not a
+        /// clinical range: <see cref="GlucoseConstants.TargetBottomMgdl"/> and
+        /// <see cref="GlucoseConstants.TargetTopMgdl"/> are the consensus in-range boundaries, and
+        /// <see cref="BgTargetBottom"/> deliberately differs from the former.
         /// </summary>
         public static class Thresholds
         {
             /// <summary>
-            /// Glucose level (mg/dL) at or above which readings are categorized as high.
+            /// Glucose level (mg/dL) at or above which readings are categorized as urgent-high.
             /// </summary>
-            public const int High = 260;
+            public const int BgHigh = 260;
 
             /// <summary>
-            /// Upper bound (mg/dL) of the target glucose range.
+            /// Upper bound (mg/dL) of the legacy target band.
             /// </summary>
-            public const int TargetTop = 180;
+            public const int BgTargetTop = 180;
 
             /// <summary>
-            /// Lower bound (mg/dL) of the target glucose range.
+            /// Lower bound (mg/dL) of the legacy target band. Nightscout has always shipped 80 here,
+            /// which is not the 70 that time-in-range is measured against.
             /// </summary>
-            public const int TargetBottom = 80;
+            public const int BgTargetBottom = 80;
 
             /// <summary>
-            /// Glucose level (mg/dL) at or below which readings are categorized as low.
+            /// Glucose level (mg/dL) at or below which readings are categorized as urgent-low.
             /// </summary>
-            public const int Low = 55;
+            public const int BgLow = 55;
         }
 
         /// <summary>

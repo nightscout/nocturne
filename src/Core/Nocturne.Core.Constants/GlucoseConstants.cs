@@ -12,13 +12,15 @@ public static class GlucoseConstants
     public const double MgdlPerMmol = 18.0182;
 
     /// <summary>
-    /// Bottom of the consensus target range in mg/dL — the boundary below which a reading reads as
-    /// low, before any tenant threshold overrides it.
+    /// Bottom of the consensus in-range band in mg/dL — the boundary time-in-range is measured
+    /// against and below which a reading is drawn as low, before any tenant threshold overrides it.
+    /// Not the legacy Nightscout <c>bgTargetBottom</c> alarm setting, which ships 80; that one is
+    /// <see cref="ApplicationConstants.Web.Thresholds.BgTargetBottom"/>.
     /// </summary>
     public const double TargetBottomMgdl = 70;
 
     /// <summary>
-    /// Top of the consensus target range in mg/dL. See <see cref="TargetBottomMgdl"/>.
+    /// Top of the consensus in-range band in mg/dL. See <see cref="TargetBottomMgdl"/>.
     /// </summary>
     public const double TargetTopMgdl = 180;
 
