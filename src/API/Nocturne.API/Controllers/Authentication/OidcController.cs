@@ -316,6 +316,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LinkCallback(

@@ -21,17 +21,12 @@ namespace Nocturne.API.Tests.Authorization;
 /// <remarks>
 /// <para>
 /// The surface is the paths <see cref="TenantResolutionMiddleware.IsTenantlessAllowed"/> admits
-/// with no resolved tenant, in two buckets.
+/// with no resolved tenant, in three buckets.
 /// </para>
 /// <para>
 /// <see cref="AuthenticationOnly"/> is the endpoints whose only gate is <em>bare</em>
-/// <c>[Authorize]</c> — not "endpoints with no attribute". An attribute-less endpoint falls to the
-/// fallback policy (<see cref="HasPermissionsRequirement"/>), which the demo subject fails off a
-/// tenant: its permissions come from a tenant membership while the fallback reads only global
-/// <c>subject_roles</c>, which is empty for it. A bare <c>[Authorize]</c> drops that to the
-/// framework's "is authenticated", which every demo session is. Widening the predicate would
-/// pull in endpoints the demo subject cannot reach anyway: one gated by roles, a policy, or a
-/// Nocturne <c>[Require*]</c> filter asks for more than authentication.
+/// <c>[Authorize]</c>, which drops authorization to the framework's "is authenticated" — and every
+/// demo session is.
 /// </para>
 /// <para>
 /// <see cref="Anonymous"/> is the endpoints carrying <c>[AllowAnonymous]</c>. That attribute says
@@ -41,7 +36,22 @@ namespace Nocturne.API.Tests.Authorization;
 /// heuristic that missed one would read as protection while providing none.
 /// </para>
 /// <para>
-/// This discovers, so an endpoint joining either bucket later must be classified before it ships —
+/// <see cref="FallbackPolicy"/> is the endpoints carrying no authorization attribute at all. They
+/// fall to <see cref="HasPermissionsRequirement"/>, which the demo subject fails off a tenant
+/// because its permissions come from a tenant membership while the fallback reads only global
+/// <c>subject_roles</c>, empty for it. That refusal is real but it lives two layers away and holds
+/// for a reason about the demo subject's provenance rather than about the endpoint, so these are
+/// classified here too — most already carry the gate, and the sign-in-factor endpoints among them
+/// are the ones that would matter if the fallback ever loosened.
+/// </para>
+/// <para>
+/// What this cannot see is an endpoint gated by roles, a policy, or a Nocturne <c>[Require*]</c>
+/// filter: those ask for more than authentication, and the demo subject holds no global role or
+/// scope off a tenant, so it fails them on the endpoint's own terms. That is the one deliberate
+/// exclusion.
+/// </para>
+/// <para>
+/// This discovers, so an endpoint joining any bucket later must be classified before it ships —
 /// <see cref="DemoSubjectGatedEndpointsTests"/> pins what is already decided and cannot see a new
 /// endpoint.
 /// </para>
@@ -116,6 +126,16 @@ public class TenantlessDemoSubjectCoverageTests
             ["TotpController.Login"] = "mints the session; the subject comes from the passkey step-up token, and it additionally requires membership of the resolved tenant, which a tenantless host has none of",
         };
 
+    /// <summary>
+    /// Endpoints on the fallback-policy surface deliberately left reachable by a demo visitor,
+    /// keyed by <c>Controller.Action</c> with the reason.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> FallbackPolicyExempt =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["OidcController.Logout"] = "revokes the refresh token the caller presented and clears the caller's own cookies; it reads the subject only to attribute the audit row, so a demo visitor signing themselves out reaches nothing another visitor holds",
+        };
+
     [Fact]
     public void EveryTenantlessAuthenticationOnlyEndpoint_RefusesTheDemoSubjectOrIsExempt() =>
         AssertEveryEndpointIsGatedOrExempt(AuthenticationOnly);
@@ -139,6 +159,18 @@ public class TenantlessDemoSubjectCoverageTests
     [Fact]
     public void EveryAnonymousExemptionNamesADiscoveredUngatedEndpoint() =>
         AssertEveryExemptionIsLive(Anonymous);
+
+    [Fact]
+    public void EveryTenantlessFallbackPolicyEndpoint_RefusesTheDemoSubjectOrIsExempt() =>
+        AssertEveryEndpointIsGatedOrExempt(FallbackPolicy);
+
+    [Fact]
+    public void TheFallbackPolicyDiscoveryFindsItsSurface() =>
+        AssertTheDiscoveryFindsTheSurface(FallbackPolicy);
+
+    [Fact]
+    public void EveryFallbackPolicyExemptionNamesADiscoveredUngatedEndpoint() =>
+        AssertEveryExemptionIsLive(FallbackPolicy);
 
     private static void AssertEveryEndpointIsGatedOrExempt(Surface surface)
     {
@@ -252,6 +284,18 @@ public class TenantlessDemoSubjectCoverageTests
         "passkey enrolment is [AllowAnonymous] for the recovery flow yet binds an authenticator to "
         + "whichever subject the caller's session resolves to, which is the shape this bucket "
         + "exists to catch");
+
+    private static readonly Surface FallbackPolicy = new(
+        "fallback-policy",
+        (action, controller) => !ControllerActionReflection.HasAnonymous(action, controller)
+                                && !ControllerActionReflection.HasAuthorizationGate(action, controller),
+        FallbackPolicyExempt,
+        "nothing on the endpoint itself stands in front of these — they are held off the demo "
+        + "subject by the fallback policy alone, which refuses it only because its permissions "
+        + "come from a tenant membership and no tenant is resolved here",
+        $"{nameof(PasskeyController)}.{nameof(PasskeyController.ListCredentials)}",
+        "the caller's own sign-in factors are served off the apex with no authorization attribute "
+        + "at all, and are the largest part of this surface");
 
     private static bool AuthenticationIsTheOnlyGate(MethodInfo action, Type controller)
     {
