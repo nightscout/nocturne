@@ -6,18 +6,21 @@ using Xunit;
 namespace Nocturne.API.Tests.TestSuite;
 
 /// <summary>
-/// CI runs its suites under <c>Category!=Integration</c>, <c>Category!=Performance</c> and
-/// <c>Category!=E2E</c>, so any of those traits removes a test from a run. A test that wears one
-/// without needing it runs nowhere on CI and can rot to red locally while CI stays green.
-/// (E2E needs no sweep here: <c>Nocturne.E2E.Tests</c> is the only project that carries the trait
-/// and it is excluded from collection outright — see the "End-to-end tests" section of AGENTS.md.)
+/// CI runs its suites under <c>Category!=Integration</c> and <c>Category!=E2E</c>, and the
+/// whole-solution commands add <c>Category!=Performance</c> to keep the BenchmarkDotNet runners in
+/// <c>tests/Performance</c> out of an ordinary run. Any of those traits removes a test from a run,
+/// so a test that wears one without needing it runs nowhere on CI and can rot to red locally while
+/// CI stays green. (E2E needs no sweep here: <c>Nocturne.E2E.Tests</c> is the only project that
+/// carries the trait and it is excluded from collection outright — see the "End-to-end tests"
+/// section of AGENTS.md.)
 /// </summary>
 /// <remarks>
 /// The Integration trait is earned by binding to an xUnit fixture — <c>[Collection]</c>,
 /// <c>IClassFixture&lt;&gt;</c> or <c>ICollectionFixture&lt;&gt;</c>, on the class or on a base
 /// class — which is what makes the container, host or database it needs a real reason to sit out a
-/// CI run. The Performance trait is earned by measuring a resource the runner cannot promise: a
-/// wall-clock duration, allocated bytes, or a BenchmarkDotNet run.
+/// CI run. The Performance trait is earned by measuring a resource the runner cannot promise — a
+/// wall-clock duration, allocated bytes, or a BenchmarkDotNet run — and only in
+/// <c>tests/Performance</c>, the tree the whole-solution filter exists to skip.
 /// <para>
 /// A source scan rather than a reflection one: each test project builds its own assembly and no test
 /// process loads the others, so reflection can only ever see the project it runs in.
@@ -63,10 +66,32 @@ public class TestCategoryTraitTests
             .ToList();
 
         offenders.Should().BeEmpty(
-            "every CI suite filters on Category!=Performance, so the trait drops a test from every " +
-            "run; it is earned by asserting a budget on a measured resource — elapsed wall-clock, " +
-            "allocated bytes, or a BenchmarkDotNet run — which is what a shared runner cannot " +
-            "promise, and a test that measures nothing is an ordinary test that CI should run");
+            "the whole-solution test commands filter on Category!=Performance, so the trait drops a " +
+            "test from those runs; it is earned by asserting a budget on a measured resource — " +
+            "elapsed wall-clock, allocated bytes, or a BenchmarkDotNet run — which is what a shared " +
+            "runner cannot promise, and a test that measures nothing is an ordinary test that CI " +
+            "should run");
+    }
+
+    [Fact]
+    public void ThePerformanceTraitLivesOnlyUnderTestsPerformance()
+    {
+        var offenders = Files
+            .Where(file => file.Tree != "Performance")
+            .SelectMany(file => file.Types)
+            .Where(type =>
+                type.Traits.Contains(PerformanceTrait)
+                || type.Methods.Any(method => method.Traits.Contains(PerformanceTrait)))
+            .Select(type => $"{type.Name} ({type.Path})")
+            .ToList();
+
+        offenders.Should().BeEmpty(
+            "the filter that skips this trait is only on the whole-solution commands, and it is " +
+            "there to skip the BenchmarkDotNet runners under tests/Performance; wearing it anywhere " +
+            "else hides a test from those commands while the per-project and CI runs still execute " +
+            "it, which is how a host-measuring assertion ends up red on a contributor's machine and " +
+            "green on CI — a suite that needs a benchmark's variance handling belongs in " +
+            "tests/Performance, and one that does not belongs untagged");
     }
 
     [Fact]

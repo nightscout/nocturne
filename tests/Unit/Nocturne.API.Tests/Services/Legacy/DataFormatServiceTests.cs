@@ -746,12 +746,11 @@ public class DataFormatServiceTests
 
     #endregion
 
-    #region Large Dataset Performance Tests
+    #region Large Dataset Tests
 
     [Fact]
     [Trait("Category", "Unit")]
-    [Trait("Category", "Performance")]
-    public void FormatEntries_WithLargeDataset_ShouldPerformReasonably()
+    public void FormatEntries_WithLargeDataset_ShouldEmitEveryRow()
     {
         // Arrange
         var entries = new Entry[1000];
@@ -771,21 +770,17 @@ public class DataFormatServiceTests
         var format = "csv";
 
         // Act
-        var startTime = DateTime.UtcNow;
         var result = DataFormatService.FormatEntries(entries, format);
-        var endTime = DateTime.UtcNow;
 
         // Assert
         result.Should().NotBeNullOrEmpty();
         var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         lines.Length.Should().Be(1001); // Header + 1000 data rows
-        (endTime - startTime).Should().BeLessThan(TimeSpan.FromSeconds(5)); // Should complete within 5 seconds
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    [Trait("Category", "Performance")]
-    public void FormatTreatments_WithLargeDataset_ShouldPerformReasonably()
+    public void FormatTreatments_WithLargeDataset_ShouldEmitEveryRow()
     {
         // Arrange
         var treatments = new Treatment[1000];
@@ -803,15 +798,12 @@ public class DataFormatServiceTests
         var format = "csv";
 
         // Act
-        var startTime = DateTime.UtcNow;
         var result = DataFormatService.FormatTreatments(treatments, format);
-        var endTime = DateTime.UtcNow;
 
         // Assert
         result.Should().NotBeNullOrEmpty();
         var lines = result.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         lines.Length.Should().Be(1001); // Header + 1000 data rows
-        (endTime - startTime).Should().BeLessThan(TimeSpan.FromSeconds(5)); // Should complete within 5 seconds
     }
 
     #endregion

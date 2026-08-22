@@ -6,9 +6,8 @@ live in `tests/Integration/Nocturne.API.Tests`.
 ## Running Tests
 
 ```bash
-# The whole project. Five tests here are Category=Performance — memory and throughput thresholds
-# that depend on the machine — and the standard filter is what keeps them out
-dotnet test tests/Unit/Nocturne.API.Tests --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+# The whole project
+dotnet test tests/Unit/Nocturne.API.Tests --filter "Category!=Integration&Category!=E2E"
 
 # One class
 dotnet test tests/Unit/Nocturne.API.Tests --filter "FullyQualifiedName~EntryServiceTests"

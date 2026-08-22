@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Legacy;
@@ -562,10 +561,10 @@ public class DocumentProcessingServiceTests
 
     #endregion
 
-    #region Memory Management and Large Documents
+    #region Large Documents
 
     [Fact]
-    public void ProcessDocuments_WithLargeDocumentBatch_HandlesMemoryEfficiently()
+    public void ProcessDocuments_WithLargeDocumentBatch_SanitizesEveryDocument()
     {
         // Arrange - Create a large batch of documents
         const int batchSize = 1000;
@@ -587,21 +586,12 @@ public class DocumentProcessingServiceTests
             );
         }
 
-        var stopwatch = Stopwatch.StartNew();
-
         // Act
         var result = _service.ProcessDocuments(largeBatch).ToArray();
 
-        stopwatch.Stop();
-
         // Assert
         Assert.Equal(batchSize, result.Length);
-
-        // Verify processing completed in reasonable time (should be under 5 seconds for 1000 documents)
-        Assert.True(
-            stopwatch.ElapsedMilliseconds < 5000,
-            $"Large batch processing took {stopwatch.ElapsedMilliseconds}ms, expected < 5000ms"
-        );
+        Assert.All(result, doc => Assert.DoesNotContain("<script>", doc.Notes));
 
         // Spot check some processed documents
         var firstDoc = result[0];
@@ -616,7 +606,7 @@ public class DocumentProcessingServiceTests
     }
 
     [Fact]
-    public void ProcessDocuments_WithLargeTextFields_SanitizesEfficiently()
+    public void ProcessDocuments_WithLargeTextFields_SanitizesTheWholeField()
     {
         // Arrange - Create documents with very large text fields
         var largeTextBuilder = new System.Text.StringBuilder();
@@ -639,27 +629,17 @@ public class DocumentProcessingServiceTests
             },
         };
 
-        var stopwatch = Stopwatch.StartNew();
-
         // Act
         var result = _service.ProcessDocuments(documentsWithLargeText).ToArray();
-
-        stopwatch.Stop();
 
         // Assert
         Assert.Single(result);
         var processed = result[0];
 
-        // Should complete in reasonable time (under 1 second for large text sanitization)
-        Assert.True(
-            stopwatch.ElapsedMilliseconds < 1000,
-            $"Large text sanitization took {stopwatch.ElapsedMilliseconds}ms, expected < 1000ms"
-        );
-
-        // All script tags should be removed but paragraphs and bold text should remain
+        // Sanitization covers the whole field, not just its opening paragraphs
         Assert.DoesNotContain("<script>", processed.Notes!);
-        Assert.Contains("<p>", processed.Notes!);
-        Assert.Contains("<b>bold text", processed.Notes!);
+        Assert.Equal(1000, processed.Notes!.Split("<p>").Length - 1);
+        Assert.Contains("<b>bold text 999</b>", processed.Notes!);
 
         // Content should be significantly shorter due to script removal
         Assert.True(processed.Notes!.Length < largeText.Length);
@@ -687,21 +667,11 @@ public class DocumentProcessingServiceTests
             );
         }
 
-        var stopwatch = Stopwatch.StartNew();
-
         // Act
         var result = _service.ProcessDocuments(veryLargeBatch).ToArray();
 
-        stopwatch.Stop();
-
         // Assert
         Assert.Equal(largeBatchSize, result.Length);
-
-        // Should handle large batches efficiently (under 15 seconds)
-        Assert.True(
-            stopwatch.ElapsedMilliseconds < 15000,
-            $"Very large batch processing took {stopwatch.ElapsedMilliseconds}ms, expected < 15000ms"
-        );
 
         // Verify random sampling of processed documents
         var sampleIndices = new[] { 0, largeBatchSize / 4, largeBatchSize / 2, largeBatchSize - 1 };
@@ -1036,186 +1006,53 @@ public class DocumentProcessingServiceTests
 
     #endregion
 
-    #region Performance Benchmark Tests
+    #region Scaling
 
     [Fact]
-    [Trait("Category", "Performance")]
-    public void ProcessDocuments_PerformanceBenchmark_LargeDocumentStressTesting()
+    public void ProcessDocuments_AllocatesInProportionToBatchSize()
     {
-        // Arrange - Create a very large batch for stress testing
-        const int stressTestSize = 10000;
-        var stressTestBatch = new List<Treatment>(stressTestSize);
+        const int smallBatch = 100;
+        const int largeBatch = 2000;
 
-        for (int i = 0; i < stressTestSize; i++)
+        // A first pass pays for JIT and the sanitizer's one-off setup; charging that to the
+        // small batch would flatter the ratio.
+        MeasureAllocations(smallBatch);
+
+        var smallBatchBytes = MeasureAllocations(smallBatch);
+        var largeBatchBytes = MeasureAllocations(largeBatch);
+
+        var ratio = (double)largeBatchBytes / smallBatchBytes;
+        Assert.InRange(ratio, 10.0, 40.0);
+    }
+
+    /// <summary>
+    /// Bytes allocated on this thread by processing <paramref name="batchSize"/> entries. Thread-local
+    /// and exact, so it reads the same on a loaded machine as on an idle one — unlike a wall clock.
+    /// </summary>
+    private long MeasureAllocations(int batchSize)
+    {
+        var batch = new List<Entry>(batchSize);
+        for (int i = 0; i < batchSize; i++)
         {
-            stressTestBatch.Add(
-                new Treatment
+            batch.Add(
+                new Entry
                 {
-                    Id = $"stress_test_{i}",
-                    Mills = DateTimeOffset.UtcNow.AddMinutes(-i).ToUnixTimeMilliseconds(),
-                    EventType = i % 5 == 0 ? "Meal Bolus" : "Correction Bolus",
-                    Insulin = (i % 20) * 0.5 + 1.0,
-                    Carbs = i % 3 == 0 ? (i % 100) + 5.0 : null,
-                    Notes =
-                        $"<p>Stress test treatment {i}</p><script>alert('stress{i}')</script><b>Performance test</b>",
-                    BolusCalc =
-                        i % 10 == 0
-                            ? new Dictionary<string, object>
-                            {
-                                ["estimate"] = (i % 20) * 0.25,
-                                ["foodEstimate"] = (i % 15) * 0.33,
-                                ["correction"] = (i % 8) * 0.125,
-                            }
-                            : null,
+                    Id = $"perf_entry_{i}",
+                    Mills = DateTimeOffset.UtcNow.AddSeconds(-i).ToUnixTimeMilliseconds(),
+                    Type = "sgv",
+                    Sgv = 80 + (i % 200),
+                    Device = $"<span>PerfDevice_{i % 5}</span>",
+                    Notes = i % 50 == 0 ? $"<b>Performance note {i}</b>" : null,
                 }
             );
         }
 
-        var stopwatch = Stopwatch.StartNew();
-        var memoryBefore = GC.GetTotalMemory(false);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var processed = _service.ProcessDocuments(batch).ToArray();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        // Act
-        var result = _service.ProcessDocuments(stressTestBatch).ToArray();
-
-        stopwatch.Stop();
-        var memoryAfter = GC.GetTotalMemory(true); // Force GC to get accurate measurement
-
-        // Assert
-        Assert.Equal(stressTestSize, result.Length);
-
-        // Performance assertions - should handle 10k documents in reasonable time
-        Assert.True(
-            stopwatch.ElapsedMilliseconds < 30000,
-            $"Stress test took {stopwatch.ElapsedMilliseconds}ms, expected < 30000ms"
-        );
-
-        // Memory usage should be reasonable (allow for 100MB increase)
-        var memoryIncrease = memoryAfter - memoryBefore;
-        Assert.True(
-            memoryIncrease < 100_000_000,
-            $"Memory increase was {memoryIncrease} bytes, expected < 100MB"
-        );
-
-        // Spot check results
-        var firstResult = result[0];
-        Assert.DoesNotContain("<script>", firstResult.Notes!);
-        Assert.Contains("<p>Stress test treatment 0</p>", firstResult.Notes!);
-        Assert.Contains("<b>Performance test</b>", firstResult.Notes!);
-
-        var lastResult = result[stressTestSize - 1];
-        Assert.Equal($"stress_test_{stressTestSize - 1}", lastResult.Id);
-        Assert.NotNull(lastResult.CreatedAt);
-    }
-
-    [Fact]
-    [Trait("Category", "Performance")]
-    public void ProcessDocuments_BatchProcessingPerformance_ScalesLinearly()
-    {
-        // Arrange - Test different batch sizes to verify linear scaling
-        var batchSizes = new[] { 100, 500, 1000, 2000 };
-        var results = new List<(int Size, long ElapsedMs)>();
-
-        foreach (var batchSize in batchSizes)
-        {
-            var batch = new List<Entry>(batchSize);
-            for (int i = 0; i < batchSize; i++)
-            {
-                batch.Add(
-                    new Entry
-                    {
-                        Id = $"perf_entry_{i}",
-                        Mills = DateTimeOffset.UtcNow.AddSeconds(-i).ToUnixTimeMilliseconds(),
-                        Type = "sgv",
-                        Sgv = 80 + (i % 200),
-                        Device = $"<span>PerfDevice_{i % 5}</span>",
-                        Notes = i % 50 == 0 ? $"<b>Performance note {i}</b>" : null,
-                    }
-                );
-            }
-
-            var stopwatch = Stopwatch.StartNew();
-
-            // Act
-            var processed = _service.ProcessDocuments(batch).ToArray();
-
-            stopwatch.Stop();
-            results.Add((batchSize, stopwatch.ElapsedMilliseconds));
-
-            // Verify processing completed correctly
-            Assert.Equal(batchSize, processed.Length);
-        }
-
-        // Assert - Processing time should scale roughly linearly
-        // Allow for some variance due to system factors
-        var smallBatchTime = results[0].ElapsedMs;
-        var largeBatchTime = results[3].ElapsedMs; // 2000 vs 100 items = 20x
-        var scalingRatio = (double)largeBatchTime / smallBatchTime;
-
-        // Should scale between 5x and 50x (allowing for overhead)
-        Assert.True(
-            scalingRatio >= 5 && scalingRatio <= 50,
-            $"Scaling ratio was {scalingRatio:F2}, expected between 5 and 50"
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Performance")]
-    public void ProcessDocuments_MemoryUsageBenchmarks_EfficientMemoryManagement()
-    {
-        // Arrange - Test memory efficiency with document reuse patterns
-        const int iterations = 100;
-        const int documentsPerIteration = 50;
-
-        var memoryMeasurements = new List<long>();
-
-        for (int iteration = 0; iteration < iterations; iteration++)
-        {
-            var batch = new List<DeviceStatus>(documentsPerIteration);
-            for (int i = 0; i < documentsPerIteration; i++)
-            {
-                batch.Add(
-                    new DeviceStatus
-                    {
-                        Id = $"memory_test_{iteration}_{i}",
-                        Mills = DateTimeOffset
-                            .UtcNow.AddSeconds(-(iteration * documentsPerIteration + i))
-                            .ToUnixTimeMilliseconds(),
-                        Device = $"<div>MemoryTestDevice_{i % 3}</div>",
-                        IsCharging = (i % 2) == 0,
-                    }
-                );
-            }
-
-            var memoryBefore = GC.GetTotalMemory(false);
-
-            // Act
-            var result = _service.ProcessDocuments(batch).ToArray();
-
-            // Force garbage collection to measure actual retention
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            var memoryAfter = GC.GetTotalMemory(false);
-            memoryMeasurements.Add(memoryAfter - memoryBefore);
-
-            // Verify processing worked
-            Assert.Equal(documentsPerIteration, result.Length);
-        }
-
-        // Assert - Memory usage should be consistent and not grow significantly
-        var averageMemoryIncrease = memoryMeasurements.Average();
-        var maxMemoryIncrease = memoryMeasurements.Max();
-
-        // Memory increase per iteration should be reasonable (under 5MB per iteration)
-        Assert.True(
-            averageMemoryIncrease < 5_000_000,
-            $"Average memory increase was {averageMemoryIncrease} bytes, expected < 5MB"
-        );
-        Assert.True(
-            maxMemoryIncrease < 10_000_000,
-            $"Max memory increase was {maxMemoryIncrease} bytes, expected < 10MB"
-        );
+        Assert.Equal(batchSize, processed.Length);
+        return allocated;
     }
 
     #endregion

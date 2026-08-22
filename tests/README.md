@@ -38,9 +38,8 @@ dotnet test
 # One category (also solution-scoped)
 dotnet test --filter "Category=Integration"
 
-# One project, on any OS. Unit projects carry a few Category=Performance tests with
-# machine-dependent thresholds, so the default filter belongs here too
-dotnet test tests/Unit/Nocturne.API.Tests --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+# One project, on any OS
+dotnet test tests/Unit/Nocturne.API.Tests --filter "Category!=Integration&Category!=E2E"
 
 # Run the end-to-end suite (stands up the whole Aspire stack)
 dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
@@ -101,12 +100,13 @@ dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 ### Performance Tests
 
-```bash
-# Run only performance/benchmark tests
-dotnet test --filter "Category=Performance"
+`Category=Performance` marks the BenchmarkDotNet runners under `tests/Performance` and nothing else;
+the whole-solution filters above exist to skip them. Nothing under `tests/Unit` carries the trait, so
+a per-project unit run needs no `Category!=Performance` (`TestCategoryTraitTests` enforces both).
 
-# Run cache performance tests specifically
-dotnet test --filter "FullyQualifiedName~CachePerformanceBenchmarks"
+```bash
+# Run only the benchmark runners
+dotnet test --filter "Category=Performance"
 ```
 
 ### Integration Tests

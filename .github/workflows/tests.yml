@@ -74,7 +74,7 @@ jobs:
             csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
             [ -z "$csproj" ] && continue
             dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=Performance&Category!=E2E" \
+              --filter "Category!=Integration&Category!=E2E" \
               --logger "trx;LogFileName=unit.trx" \
               -p:GenerateNSwagClient=false \
               || exit 1
@@ -232,7 +232,7 @@ jobs:
       - name: Integration tests (Infrastructure.Data — RLS + DataProtection)
         run: |
           dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
-            --filter "Category!=Performance&Category!=E2E" \
+            --filter "Category!=E2E" \
             --logger "trx;LogFileName=integration-db.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1
