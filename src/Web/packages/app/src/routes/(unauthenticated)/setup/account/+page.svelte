@@ -1,7 +1,10 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { AlertTriangle, Loader2, UserPlus } from "lucide-svelte";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import { goto } from "$app/navigation";
   import {
     setupOwnerOptions,
@@ -15,6 +18,10 @@
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
 
   // ── Remote data ───────────────────────────────────────────────────
   const authStateQuery = getAuthState();
@@ -67,7 +74,10 @@
         username,
         displayName,
       });
-      const options = JSON.parse(response.options ?? "");
+      const options =
+        parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+          response.options
+        );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -88,8 +98,8 @@
       registrationComplete = true;
       recoveryCodes = result.recoveryCodes ?? [];
     } catch (err) {
-      passkeyError =
-        err instanceof Error ? err.message : "Failed to create account.";
+      console.error("Owner passkey registration failed:", err);
+      passkeyError = describePasskeyError(err, "register", "Failed to create account.");
     } finally {
       isRegistering = false;
     }

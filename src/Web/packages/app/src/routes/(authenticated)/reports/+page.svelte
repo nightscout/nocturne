@@ -77,6 +77,7 @@
   } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { coachmark } from "@nocturne/coach";
   import { fly, fade, scale } from "svelte/transition";
   import { cubicOut, elasticOut } from "svelte/easing";
@@ -158,9 +159,7 @@
       </div>
       <h2 class="text-xl font-semibold">Unable to load reports</h2>
       <p class="text-muted-foreground">
-        {reportsResource.error instanceof Error
-          ? reportsResource.error.message
-          : "Something went wrong"}
+        {remoteErrorMessage(reportsResource.error, "Something went wrong")}
       </p>
       <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again

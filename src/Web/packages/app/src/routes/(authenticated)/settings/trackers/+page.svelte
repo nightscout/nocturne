@@ -36,6 +36,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -489,7 +490,7 @@
         <CardContent class="py-6 text-center">
           <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
           <p class="text-destructive">
-            {error instanceof Error ? error.message : "Failed to load tracker data"}
+            {remoteErrorMessage(error, "Failed to load tracker data")}
           </p>
           <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
         </CardContent>

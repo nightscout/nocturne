@@ -6,6 +6,7 @@
     get as getDnd,
     update as updateDnd,
   } from "$api/generated/tenantAlertSettings.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { TenantAlertSettingsResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
@@ -93,7 +94,7 @@
       });
       applyResponse(r);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to save DND settings";
+      error = remoteErrorMessage(e, "Failed to save DND settings");
     } finally {
       saving = false;
     }

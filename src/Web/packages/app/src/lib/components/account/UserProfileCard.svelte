@@ -18,6 +18,7 @@
   import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
   import { formatDate } from "$lib/utils/formatting";
   import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   interface User {
     name: string;
@@ -80,7 +81,7 @@
       localAvatarUrl = result.avatarUrl;
       authStore.updateAvatarUrl(result.avatarUrl);
     } catch (err) {
-      avatarError = err instanceof Error ? err.message : "Failed to upload avatar";
+      avatarError = describeSubmitError(err, "Failed to upload avatar");
     } finally {
       isUploading = false;
       if (fileInput) fileInput.value = "";
@@ -97,7 +98,7 @@
       localAvatarUrl = undefined;
       authStore.updateAvatarUrl(undefined);
     } catch (err) {
-      avatarError = err instanceof Error ? err.message : "Failed to delete avatar";
+      avatarError = describeSubmitError(err, "Failed to delete avatar");
     } finally {
       isDeleting = false;
     }

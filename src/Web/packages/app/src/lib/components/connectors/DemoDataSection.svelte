@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Sparkles, CheckCircle, AlertCircle, Loader2, Trash2 } from "lucide-svelte";
   import { deleteDemoData as deleteDemoDataRemote } from "$api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   let { open = $bindable(false), onDeleteComplete } = $props<{
     open: boolean;
@@ -40,7 +41,7 @@
     } catch (e) {
       demoDeleteResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete demo data",
+        error: describeSubmitError(e, "Failed to delete demo data"),
       };
     } finally {
       isDeletingDemo = false;

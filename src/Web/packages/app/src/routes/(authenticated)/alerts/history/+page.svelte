@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { HistoryExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -56,7 +57,7 @@
 
     {#snippet failed(error)}
       <div class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-        {error instanceof Error ? error.message : "Failed to load history"}
+        {remoteErrorMessage(error, "Failed to load history")}
       </div>
     {/snippet}
 

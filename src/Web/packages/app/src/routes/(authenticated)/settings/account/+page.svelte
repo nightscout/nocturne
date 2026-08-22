@@ -21,7 +21,10 @@
   } from "lucide-svelte";
   import QRCode from "qrcode";
   import type { PageData } from "./$types";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import {
     registerOptions,
     registerComplete,
@@ -40,6 +43,11 @@
   import UserProfileCard from "$lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { page } from "$app/state";
   import { copyToClipboard } from "$lib/utils";
 
@@ -135,7 +143,10 @@
     try {
       // The account the passkey is added to comes from the session, not this call.
       const response = await registerOptions({ username: user.name });
-      const options = JSON.parse(response.options ?? "");
+      const options =
+        parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+          response.options
+        );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -150,7 +161,8 @@
       newPasskeyLabel = "";
       showLabelDialog = true;
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to register passkey.";
+      console.error("Passkey registration failed:", err);
+      errorMessage = describePasskeyError(err, "register", "Failed to register passkey.");
     } finally {
       isRegistering = false;
     }
@@ -175,7 +187,8 @@
       successMessage = "Passkey added successfully.";
       clearMessages();
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to register passkey.";
+      console.error("Passkey registration failed:", err);
+      errorMessage = describePasskeyError(err, "register", "Failed to register passkey.");
     } finally {
       isSavingPasskey = false;
     }
@@ -206,8 +219,7 @@
       successMessage = "Passkey removed.";
       clearMessages();
     } catch (err) {
-      errorMessage =
-        err instanceof Error ? err.message : "Failed to remove passkey.";
+      errorMessage = describeSubmitError(err, "Failed to remove passkey.");
     } finally {
       isRemoving = null;
       removeTarget = null;
@@ -273,7 +285,7 @@
 
       showTotpSetup = true;
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to start authenticator setup.";
+      errorMessage = describeSubmitError(err, "Failed to start authenticator setup.");
     } finally {
       totpSetupLoading = false;
     }
@@ -300,7 +312,7 @@
       successMessage = "Authenticator app added successfully.";
       clearMessages();
     } catch (err) {
-      totpSetupError = err instanceof Error ? err.message : "Verification failed. Check the code and try again.";
+      totpSetupError = describeSubmitError(err, "Verification failed. Check the code and try again.");
     } finally {
       totpSetupLoading = false;
     }
@@ -322,7 +334,7 @@
       successMessage = "Authenticator removed.";
       clearMessages();
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Failed to remove authenticator.";
+      errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
     } finally {
       totpRemovingId = null;
       totpRemoveTarget = null;

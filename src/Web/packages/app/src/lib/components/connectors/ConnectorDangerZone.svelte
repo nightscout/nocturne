@@ -8,6 +8,7 @@
   import {
     deleteConnectorData,
   } from "$lib/api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -88,7 +89,7 @@
     } catch (e) {
       deleteConfigResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete configuration",
+        error: describeSubmitError(e, "Failed to delete configuration"),
       };
     }
   }
@@ -104,7 +105,7 @@
     } catch (e) {
       deleteDataResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete data",
+        error: describeSubmitError(e, "Failed to delete data"),
       };
     }
   }

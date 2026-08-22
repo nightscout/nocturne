@@ -22,6 +22,7 @@
   import * as Alert from "$lib/components/ui/alert";
   import { bgLabel } from "$lib/utils/formatting";
   import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { coachmark } from "@nocturne/coach";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
   import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
@@ -131,7 +132,7 @@
         <div class="text-center space-y-2">
           <p class="text-destructive font-medium">Failed to load profiles</p>
           <p class="text-sm text-muted-foreground">
-            {loadError instanceof Error ? loadError.message : "An error occurred"}
+            {remoteErrorMessage(loadError, "An error occurred")}
           </p>
           <Button variant="outline" onclick={() => window.location.reload()}>
             Try again

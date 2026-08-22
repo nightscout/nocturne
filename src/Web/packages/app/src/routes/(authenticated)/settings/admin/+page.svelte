@@ -20,6 +20,7 @@
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
   import { errorMessage } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
@@ -72,11 +73,7 @@
       }
     } catch (err) {
       console.error("Failed to load OIDC providers:", err);
-      const body = (err as { body?: { message?: string; detail?: string } })?.body;
-      oidcError =
-        body?.message ??
-        body?.detail ??
-        (err instanceof Error ? err.message : "Failed to load identity providers");
+      oidcError = remoteErrorMessage(err, "Failed to load identity providers");
     } finally {
       oidcLoading = false;
     }

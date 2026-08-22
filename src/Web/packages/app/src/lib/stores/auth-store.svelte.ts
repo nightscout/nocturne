@@ -17,6 +17,7 @@ import {
   refreshSession as refreshSessionRemote,
   logoutSession as logoutSessionRemote,
 } from "../../routes/(unauthenticated)/auth/auth.remote";
+import { remoteErrorMessage } from "$lib/api/remote-error";
 
 const AUTH_STORE_KEY = Symbol("auth-store");
 
@@ -190,7 +191,7 @@ export class AuthStore {
       }
     } catch (e) {
       console.error("Failed to load session:", e);
-      this._error = e instanceof Error ? e.message : "Failed to load session";
+      this._error = remoteErrorMessage(e, "Failed to load session");
       this._state = "unauthenticated";
       this._user = null;
       this._expiresAt = null;
