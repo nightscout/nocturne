@@ -43,12 +43,28 @@ class ValidationError extends Error {
   }
 }
 
+class ActionFailure {
+  constructor(
+    public status: number,
+    public data?: any
+  ) {}
+}
+
 export function error(status: number, body?: App.Error | string): never {
   throw new HttpError(status, body);
 }
 
+export function isHttpError(e: unknown, status?: number): boolean {
+  if (!(e instanceof HttpError)) return false;
+  return !status || e.status === status;
+}
+
 export function redirect(status: number, location: string | URL): never {
   throw new Redirect(status, location.toString());
+}
+
+export function isRedirect(e: unknown): boolean {
+  return e instanceof Redirect;
 }
 
 export function json(data: any, init?: ResponseInit) {
@@ -56,7 +72,11 @@ export function json(data: any, init?: ResponseInit) {
 }
 
 export function fail(status: number, data?: any) {
-  return { status, data };
+  return new ActionFailure(status, data);
+}
+
+export function isActionFailure(e: unknown): boolean {
+  return e instanceof ActionFailure;
 }
 
 // Returns never in @sveltejs/kit: callers invoke it bare and rely on it aborting,
@@ -67,4 +87,8 @@ export function invalid(...issues: ({ message: string } | string)[]): never {
       typeof issue === "string" ? { message: issue } : issue
     )
   );
+}
+
+export function isValidationError(e: unknown): boolean {
+  return e instanceof ValidationError;
 }

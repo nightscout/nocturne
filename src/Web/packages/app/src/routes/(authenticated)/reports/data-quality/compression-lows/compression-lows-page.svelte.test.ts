@@ -89,6 +89,10 @@ describe("compression-lows page", () => {
     await expect.element(acceptButton()).toBeVisible();
     await acceptButton().click();
 
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Reviewing compression lows requires the glucose.readwrite permission."
+      )
+    );
   });
 });

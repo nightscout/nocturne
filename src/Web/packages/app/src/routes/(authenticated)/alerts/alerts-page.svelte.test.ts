@@ -104,6 +104,26 @@ describe("alerts page", () => {
     await expect.element(enableSwitch()).toBeVisible();
     await enableSwitch().click();
 
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Changing alerts requires the alerts.readwrite permission."
+      )
+    );
+  });
+
+  it("surfaces a stale rule as gone rather than as a permission problem", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    toggleImpl = async () => error(404, "Not Found");
+
+    render(AlertsPage, {});
+
+    await expect.element(enableSwitch()).toBeVisible();
+    await enableSwitch().click();
+
+    await vi.waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "That item no longer exists. Refresh the page to see what's there now."
+      )
+    );
   });
 });

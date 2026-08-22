@@ -55,9 +55,9 @@ describe("DndPanel", () => {
     await expect.element(dndToggle()).toBeVisible();
   });
 
-  it("surfaces an error when the update is rejected", async () => {
+  it("surfaces the server's reason when the update is rejected", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
-    updateImpl = async () => error(403, "Forbidden");
+    updateImpl = async () => error(409, "A scheduled quiet period is running.");
 
     render(DndPanel, {});
 
@@ -65,7 +65,7 @@ describe("DndPanel", () => {
     await page.getByRole("button", { name: "30 minutes" }).click();
 
     await expect
-      .element(page.getByText(/Couldn't change Do Not Disturb/i))
+      .element(page.getByText("A scheduled quiet period is running."))
       .toBeVisible();
   });
 });

@@ -48,8 +48,8 @@ describe("DataSourceManageDialog", () => {
       .toBeInTheDocument();
   });
 
-  it("still reports a delete that failed as a failure", async () => {
-    deleteImpl = async () => error(500, "Failed to delete data");
+  it("keeps a server fault behind the dialog's own wording", async () => {
+    deleteImpl = async () => error(500, "db connection reset");
 
     await attemptDelete();
 
@@ -57,6 +57,9 @@ describe("DataSourceManageDialog", () => {
     await expect.element(failureWording.first()).toBeInTheDocument();
     // the headline and the message below it each carry the wording
     expect(failureWording.elements()).toHaveLength(2);
+    await expect
+      .element(page.getByText("db connection reset"))
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByText("Nothing left to delete"))
       .not.toBeInTheDocument();
