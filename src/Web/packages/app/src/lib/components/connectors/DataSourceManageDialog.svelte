@@ -14,6 +14,7 @@
     Pencil,
     Trash2,
   } from "lucide-svelte";
+  import { describeSubmitError, errorStatus } from "$lib/forms";
   import { getCategoryIcon } from "$lib/utils/connector-display";
   import { lastSeen } from "$lib/utils/formatting";
 
@@ -34,6 +35,7 @@
     success?: boolean;
     totalDeleted?: number;
     error?: string;
+    alreadyGone?: boolean;
   } | null>(null);
 
   $effect(() => {
@@ -97,9 +99,19 @@
         }
       }
     } catch (e) {
+      // A rejected remote function throws SvelteKit's `HttpError` — a plain
+      // `{ status, body }` object, not an `Error` — so the status is what
+      // separates data that was already gone from a delete that failed.
+      const alreadyGone = errorStatus(e) === 404;
       deleteResult = {
         success: false,
-        error: e instanceof Error ? e.message : "Failed to delete data",
+        alreadyGone,
+        error: describeSubmitError(
+          e,
+          alreadyGone
+            ? "This data source has no data left to delete."
+            : "Failed to delete data"
+        ),
       };
     } finally {
       isDeletingDataSource = false;
@@ -254,7 +266,11 @@
                   class="flex items-center gap-2 text-red-800 dark:text-red-200"
                 >
                   <AlertCircle class="h-5 w-5" />
-                  <span class="font-medium">Failed to delete data</span>
+                  <span class="font-medium">
+                    {deleteResult.alreadyGone
+                      ? "Nothing left to delete"
+                      : "Failed to delete data"}
+                  </span>
                 </div>
                 <p class="text-sm text-red-700 dark:text-red-300 mt-1">
                   {deleteResult.error}
