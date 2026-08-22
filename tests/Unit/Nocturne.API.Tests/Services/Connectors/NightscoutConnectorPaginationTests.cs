@@ -385,6 +385,58 @@ public class NightscoutConnectorPaginationTests
     }
 
     [Fact]
+    public async Task FetchTreatments_MultiplePagesFeedingSeveralTypes_RecordTheWholeTotalUnderEach()
+    {
+        // The treatments crawl is one paginated fetch feeding every active sub-type, so each of
+        // them has to carry the total across all pages — a count taken from the last page alone,
+        // or recorded for only the first sub-type, silently under-reports what the sync stored.
+        var page1 = CreateTreatments(MaxCount, BaseTime);
+        var page2Start = page1
+            .Select(t => DateTimeOffset.Parse(t.CreatedAt!, CultureInfo.InvariantCulture))
+            .Min()
+            .AddMilliseconds(-1);
+        var page2 = CreateTreatments(4, page2Start);
+
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(page1));
+        handler.Enqueue(JsonResponse(page2));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+        var service = CreateService(handler, config, withPublisher: true);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-6).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+                Nocturne.Connectors.Core.Models.SyncDataType.DeviceEvents,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = MaxCount + 4,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = MaxCount + 4,
+                [Nocturne.Connectors.Core.Models.SyncDataType.DeviceEvents] = MaxCount + 4,
+            });
+        handler.RequestUrls.Count(u => u.Contains("treatments.json")).Should().Be(2,
+            "the total must span more than one page for this to prove anything");
+    }
+
+    [Fact]
     public async Task FetchTreatments_ActiveTypesWithNoTreatments_RecordExplicitZeros()
     {
         // One fetch covers every treatment sub-type, and each active one has to say zero when it

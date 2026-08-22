@@ -164,7 +164,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // ranged syncs (request.To set, e.g. a manual re-import) honour request.From/To as-is.
         var openEnded = request.To is null;
 
-        // Handle Glucose
         // Glucose keeps request.From — for background syncs the framework already derived
         // it from the latest glucose entry, so it is glucose's own independent cursor.
         //
@@ -196,7 +195,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        // Handle Treatments — Nightscout fetches all treatment types as one batch
+        // Nightscout fetches every treatment type as one batch, so each active sub-type
+        // carries the whole batch's outcome.
         SyncDataType[] treatmentTypes =
         [
             SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.ManualBG,
@@ -218,8 +218,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
                     publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
 
-                // One fetch covers every treatment sub-type, so each active one carries the whole
-                // batch's outcome.
                 foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
             }
@@ -231,7 +229,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        // Handle Profiles
         if (activeTypes.Contains(SyncDataType.Profiles))
         {
             try
@@ -248,7 +245,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        // Handle DeviceStatus
         if (activeTypes.Contains(SyncDataType.DeviceStatus))
         {
             try
@@ -276,7 +272,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        // Handle Food
         if (activeTypes.Contains(SyncDataType.Food))
         {
             try
@@ -293,7 +288,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        // Handle Activity
         if (activeTypes.Contains(SyncDataType.Activity))
         {
             try
