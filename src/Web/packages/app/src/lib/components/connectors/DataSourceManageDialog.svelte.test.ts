@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { error } from "@sveltejs/kit";
 import type { DataSourceInfo } from "$api-clients";
 
 let deleteImpl: () => Promise<unknown>;
@@ -10,15 +11,6 @@ vi.mock("$api/generated/services.generated.remote", () => ({
 }));
 
 import DataSourceManageDialog from "./DataSourceManageDialog.svelte";
-
-/**
- * What a rejected remote function hands the dialog: SvelteKit's `HttpError` is
- * a plain `{ status, body }` object and not an `Error`, so the status is the
- * only part of it a caller can read.
- */
-function httpError(status: number, message: string) {
-  return { status, body: { message } };
-}
 
 const dataSource: DataSourceInfo = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -44,7 +36,7 @@ describe("DataSourceManageDialog", () => {
   });
 
   it("reports data that was already gone as nothing left to delete", async () => {
-    deleteImpl = () => Promise.reject(httpError(404, "Not found"));
+    deleteImpl = async () => error(404, "Not found");
 
     await attemptDelete();
 
@@ -57,7 +49,7 @@ describe("DataSourceManageDialog", () => {
   });
 
   it("still reports a delete that failed as a failure", async () => {
-    deleteImpl = () => Promise.reject(httpError(500, "Failed to delete data"));
+    deleteImpl = async () => error(500, "Failed to delete data");
 
     await attemptDelete();
 

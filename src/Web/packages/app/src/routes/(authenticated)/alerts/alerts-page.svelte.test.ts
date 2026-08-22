@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
 import type { AlertRuleResponse } from "$api-clients";
 
@@ -96,7 +97,7 @@ describe("alerts page", () => {
 
   it("surfaces a refused toggle instead of discarding it", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
-    toggleImpl = () => Promise.reject({ status: 403, body: { message: "Forbidden" } });
+    toggleImpl = async () => error(403, "Forbidden");
 
     render(AlertsPage, {});
 

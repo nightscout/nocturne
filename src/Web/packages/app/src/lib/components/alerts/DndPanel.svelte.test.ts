@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
 import type { TenantAlertSettingsResponse } from "$api-clients";
 
@@ -56,7 +57,7 @@ describe("DndPanel", () => {
 
   it("surfaces an error when the update is rejected", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
-    updateImpl = () => Promise.reject(new Error("Forbidden"));
+    updateImpl = async () => error(403, "Forbidden");
 
     render(DndPanel, {});
 
