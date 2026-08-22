@@ -10,6 +10,7 @@ import {
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
 import { getChartData } from "$api/chart-data.remote";
+import { remoteErrorMessage } from "$lib/api/remote-error";
 import {
   getPredictions,
   getPredictionStatus,
@@ -432,7 +433,7 @@ export function createChartDataEngine(
       .catch((err) => {
         if (!cancelled) {
           console.error("Failed to fetch predictions:", err);
-          predictionError = err.message;
+          predictionError = remoteErrorMessage(err, "Predictions are unavailable right now.");
           predictionData = null;
         }
       });

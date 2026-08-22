@@ -67,4 +67,23 @@ describe("alerts/dnd page", () => {
       .element(page.getByText("The schedule must end after it starts."))
       .toBeVisible();
   });
+
+  it("keeps a server fault behind the page's own wording", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    updateImpl = () =>
+      Promise.reject({
+        status: 500,
+        body: { message: "npgsql: connection reset" },
+      });
+
+    render(DndPage, {});
+    await saveButton().click();
+
+    await expect
+      .element(page.getByText("Failed to save DND settings"))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("npgsql: connection reset"))
+      .not.toBeInTheDocument();
+  });
 });

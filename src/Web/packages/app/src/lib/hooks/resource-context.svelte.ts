@@ -36,7 +36,8 @@ const RESOURCE_CONTEXT_KEY = Symbol("resource-context");
 /** One panel's fetch state, as reported to the layout's ResourceGuard. */
 export interface ResourceRegistration {
   loading: boolean;
-  error: Error | string | null | undefined;
+  /** Whatever the query rejected with — an `HttpError`, an `Error`, or a string. */
+  error: unknown;
   hasData: boolean;
   /** Loading a new value while a previous one is still on screen. */
   refreshing: boolean;
@@ -78,7 +79,7 @@ export class ResourceContext {
   }
 
   /** First error across registered resources. */
-  get error(): Error | string | null | undefined {
+  get error(): unknown {
     return this.#failed?.error ?? null;
   }
 
@@ -161,7 +162,7 @@ function registerWith(
  */
 export function useResourceContext(config: {
   loading: () => boolean;
-  error: () => Error | string | null | undefined;
+  error: () => unknown;
   hasData: () => boolean;
   errorTitle?: string;
   refetch: () => void;
@@ -242,7 +243,7 @@ export function contextResource<T>(
     getResourceContext(),
     () => ({
       loading: query.loading,
-      error: query.error as Error | string | null | undefined,
+      error: query.error,
       hasData: current !== undefined && current !== null,
       refreshing: query.loading && current !== undefined && current !== null,
       errorTitle,

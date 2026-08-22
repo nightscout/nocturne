@@ -1,5 +1,6 @@
 <script lang="ts">
   import { runCompatibilityTest } from "./data.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { createPatch } from "diff";
 
   // UI Components
@@ -375,7 +376,7 @@
         requestBody: requestBody || undefined,
       });
     } catch (err) {
-      error = err instanceof Error ? err.message : "An error occurred";
+      error = remoteErrorMessage(err, "An error occurred");
     } finally {
       isLoading = false;
     }

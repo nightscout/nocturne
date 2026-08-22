@@ -187,8 +187,7 @@
       successMessage = "Passkey added successfully.";
       clearMessages();
     } catch (err) {
-      console.error("Passkey registration failed:", err);
-      errorMessage = describePasskeyError(err, "register", "Failed to register passkey.");
+      errorMessage = describeSubmitError(err, "Failed to register passkey.");
     } finally {
       isSavingPasskey = false;
     }
