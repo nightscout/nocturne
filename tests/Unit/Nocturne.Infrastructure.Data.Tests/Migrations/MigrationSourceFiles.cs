@@ -12,11 +12,15 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// </summary>
 internal static class MigrationSourceFiles
 {
-    /// <summary>Every migration source file, excluding Designer files and the model snapshot.</summary>
+    /// <summary>
+    /// Every migration source file. A migration is timestamp-prefixed, so anything else sharing
+    /// the folder — the model snapshot, a shared SQL-constants helper — is not one, and is skipped
+    /// rather than handed to a parser that would reject it.
+    /// </summary>
     public static IReadOnlyList<string> All() =>
         Directory.GetFiles(Location(), "*.cs")
             .Where(f => !f.EndsWith(".Designer.cs", StringComparison.Ordinal))
-            .Where(f => !Path.GetFileName(f).Contains("ModelSnapshot", StringComparison.Ordinal))
+            .Where(f => TimestampPrefixed.IsMatch(Path.GetFileNameWithoutExtension(f)))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
 
@@ -27,6 +31,15 @@ internal static class MigrationSourceFiles
     public static string Text(string name) =>
         File.ReadAllText(All().Single(f =>
             Path.GetFileNameWithoutExtension(f).EndsWith("_" + name, StringComparison.Ordinal)));
+
+    /// <summary>
+    /// The bare table name in a captured SQL or builder reference: the leading segment, before any
+    /// argument list, alias or trailing punctuation, unquoted and lowercased. <c>tbl(col)</c>,
+    /// <c>"tbl"(col)</c> and <c>tbl (col)</c> all yield <c>tbl</c>. A derived table
+    /// (<c>(VALUES …)</c>) yields an empty string, which matches no table.
+    /// </summary>
+    public static string BareTableName(string captured) =>
+        Regex.Split(captured, @"[(;,\s]")[0].Trim('"').ToLowerInvariant();
 
     /// <summary>Migration name — the file name a guard reports and an allowlist keys on.</summary>
     public static string Name(string file) => Path.GetFileNameWithoutExtension(file);
@@ -85,6 +98,8 @@ internal static class MigrationSourceFiles
             .Where(n => n is not null)
             .Select(n => n!.ToLowerInvariant())
             .ToHashSet(StringComparer.Ordinal);
+
+    private static readonly Regex TimestampPrefixed = new(@"^\d{14}_", RegexOptions.Compiled);
 
     private static readonly Regex Comment = new(
         @"/\*.*?\*/|//[^\r\n]*|--[^\r\n]*",

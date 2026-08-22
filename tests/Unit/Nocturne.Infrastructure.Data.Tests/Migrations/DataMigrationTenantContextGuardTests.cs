@@ -85,16 +85,8 @@ public class DataMigrationTenantContextGuardTests
         var up = MigrationSourceFiles.UpBody(file);
 
         return LoopHeader.Matches(up)
-            .Select(m => LoopSourceTable(m.Groups[1].Value))
+            .Select(m => MigrationSourceFiles.BareTableName(m.Groups[1].Value))
             .Where(ScopedTables.Contains)
             .ToList();
     }
-
-    /// <summary>
-    /// Trims the captured FROM source to its bare table name, dropping an argument list,
-    /// alias, or trailing punctuation. A derived table yields an empty string, which matches
-    /// no table.
-    /// </summary>
-    private static string LoopSourceTable(string captured) =>
-        Regex.Split(captured, @"[(;,\s]")[0].Trim('"').ToLowerInvariant();
 }

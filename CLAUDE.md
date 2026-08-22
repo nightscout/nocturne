@@ -166,14 +166,21 @@ Know what it actually checks before trusting it:
   `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
   matched — the rule above is deliberately broader than the guard; and a cleanup
   that cannot run, e.g. wrapped in `IF false`.
-- **Three of its detection paths have no live example in the tree** — raw-SQL
-  `CREATE UNIQUE INDEX`, `AddUniqueConstraint`/`AddPrimaryKey`, and
-  `ALTER TABLE … ADD CONSTRAINT … UNIQUE`. A regression in those regexes reddens
-  nothing, so treat them as unexercised.
+- **Three of its detection paths redden nothing if they break.** Raw-SQL
+  `CREATE UNIQUE INDEX` does fire on a shipped migration —
+  `20260424051736_AddReadAccessAudit` — but that migration is *exempt*, because it
+  creates the table in the same `Up`, so breaking the regex still leaves the suite
+  green. That migration's exact spacing is load-bearing for a regex nothing tests.
+  `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT … UNIQUE`
+  have no live example at all. Treat all three as unexercised.
 
-An index whose table it cannot read off the call — an interpolated `{table}`, a
-loop variable, a schema qualifier — is reported rather than skipped, so the
-multi-table loop the worked example is written in stays visible.
+An index whose table it cannot read off the call — an interpolated `{table}` hole,
+or a loop variable — is reported rather than skipped, so the multi-table loop the
+worked example is written in stays visible. Clearing that report means unrolling
+the loop so both the `CREATE TABLE` and the index name the table literally; naming
+only the index still reports, because the exemption cannot match a create it also
+cannot read. A schema qualifier is not a cause — `public.x` resolves to `x` on
+both sides, so a schema-qualified new table is exempted like any other.
 
 Older migrations that predate the rule are listed in the guard by name; an
 instance whose chain fails on one never reaches a later migration, so nothing can
