@@ -156,6 +156,27 @@ public class GlookoConnectorServicePublishFailureTests
         result.ItemsSynced[SyncDataType.Food].Should().Be(1);
     }
 
+    /// <summary>
+    /// The scheduled sync names no data types and is expanded to every supported one, so that — not
+    /// the hand-listed request the cases above use — is what a tenant's connector actually runs. A
+    /// window that held no food still owes the card the zero that reads as "checked, found nothing".
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRequestNamesNoTypes_CountsFoodAsChecked()
+    {
+        var service = BuildService(rejected: null);
+        var request = new SyncRequest { From = DateTime.UtcNow.AddDays(-3) };
+
+        var result = await service.SyncDataAsync(
+            request, BuildConfig(useV3Api: true), CancellationToken.None);
+
+        request.DataTypes.Should().Contain(SyncDataType.Food,
+            "the expansion must actually reach food, or the assertions below prove nothing");
+        result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+        result.ItemsSynced[SyncDataType.Food].Should().Be(0);
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private static SyncRequest BuildRequest() => new()

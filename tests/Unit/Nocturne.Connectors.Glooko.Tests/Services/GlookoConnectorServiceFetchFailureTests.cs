@@ -42,10 +42,11 @@ public class GlookoConnectorServiceFetchFailureTests
 
     /// <summary>
     /// Histories carry the meals the V3 path draws carbs from; without them carbs silently fall back
-    /// to the coarser carbAll series.
+    /// to the coarser carbAll series. <see cref="SyncResult.Message"/> is what a reader with no
+    /// <see cref="SyncResult.Errors"/> is shown, so it must name the fetch and not a publish.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenTheHistoriesFetchFails_ReportsFailure()
+    public async Task SyncDataAsync_WhenTheHistoriesFetchFails_ReportsFailureAsAFetch()
     {
         var service = BuildService(GlookoConstants.V3HistoriesPath);
 
@@ -55,6 +56,7 @@ public class GlookoConnectorServiceFetchFailureTests
 
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch CarbIntake");
+        result.Message.Should().Be("Sync failed while fetching data");
     }
 
     /// <summary>

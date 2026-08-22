@@ -80,6 +80,30 @@ public class GlookoConnectorServiceMultiChunkTests
     }
 
     /// <summary>
+    /// An endpoint that is down is down for every chunk, and the terminal progress message joins the
+    /// whole error list, so a six-month window would otherwise hand the tenant the same two sentences
+    /// thirteen times over.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_AcrossChunks_ReportsOneEntryPerDistinctFetchFailure()
+    {
+        var handler = new GlookoEndpointHandler(
+            RecordsInChunk, failingPaths: [GlookoConstants.V3HistoriesPath]);
+        var service = GlookoSyncHarness.Service(handler);
+        var request = BuildRequest();
+        request.DataTypes = [SyncDataType.CarbIntake, SyncDataType.Food];
+
+        var result = await service.SyncDataAsync(
+            request, GlookoSyncHarness.Config(useV3Api: true), CancellationToken.None);
+
+        handler.WindowCount.Should().Be(2,
+            "the window must actually span more than one chunk, or the assertions below prove nothing");
+        result.Success.Should().BeFalse();
+        result.Errors.Should().BeEquivalentTo(
+            ["Failed to fetch CarbIntake", "Failed to fetch Food"]);
+    }
+
+    /// <summary>
     /// A window one day wider than a chunk, padded a day each side by the sync itself, spans exactly
     /// two chunks.
     /// </summary>

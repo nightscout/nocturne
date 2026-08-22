@@ -59,7 +59,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     protected override string ConnectorSource => DataSources.GlookoConnector;
 
     private const string SyncSucceededMessage = "Sync completed successfully";
-    private const string PublishFailedMessage = "Sync failed while publishing data";
 
 
     // ── Authentication ──────────────────────────────────────────────────
@@ -352,11 +351,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 }
             }
 
-            // Fetch and authentication failures name themselves; a publish rejection only flips
-            // Success, and Message is the documented fallback for consumers that have no Errors.
-            if (!result.Success && result.Message == SyncSucceededMessage)
-                result.Message = PublishFailedMessage;
-
             result.EndTime = DateTime.UtcNow;
             return result;
         }
@@ -406,7 +400,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     "[{ConnectorSource}] Chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd}) failed, stopping sync",
                     ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
                 result.Success = false;
-                result.Message = "Sync failed during data fetch";
+                result.Message = FetchFailedMessage;
                 result.Errors.Add($"Chunk {i + 1}/{chunks.Count} failed ({chunkFrom:yyyy-MM-dd} to {chunkTo:yyyy-MM-dd})");
                 return;
             }

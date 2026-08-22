@@ -755,8 +755,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         if (!success)
         {
-            result.Success = false;
-            result.Errors.Add($"{dataType} publish failed");
+            RecordFailure(result, $"{dataType} publish failed", PublishFailedMessage);
         }
         else if (count > 0)
         {
@@ -791,8 +790,30 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return;
         }
 
+        RecordFailure(result, $"Failed to fetch {dataType}", FetchFailedMessage);
+    }
+
+    /// <summary>
+    ///     What a run says for itself when it failed and the reader has no <see cref="SyncResult.Errors"/>
+    ///     to go on. The first recorded failure names the run, so a fetch that fell over followed by a
+    ///     publish rejection still reads as the fetch failure that started it.
+    /// </summary>
+    protected const string FetchFailedMessage = "Sync failed while fetching data";
+
+    /// <inheritdoc cref="FetchFailedMessage"/>
+    protected const string PublishFailedMessage = "Sync failed while publishing data";
+
+    private static void RecordFailure(SyncResult result, string error, string message)
+    {
+        if (result.Errors.Count == 0)
+            result.Message = message;
+
         result.Success = false;
-        result.Errors.Add($"Failed to fetch {dataType}");
+
+        // A windowed sync meets the same failure once per chunk, and the terminal progress message
+        // joins every entry, so the tenant reads one line per distinct failure rather than per chunk.
+        if (!result.Errors.Contains(error))
+            result.Errors.Add(error);
     }
 
     /// <summary>
