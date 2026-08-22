@@ -54,6 +54,20 @@ function nswagApiException(status: number, body: string) {
   );
 }
 
+/**
+ * An RFC-7807 body, which NSwag throws as the parsed object itself when the
+ * operation declares a typed error response. `title` is the status phrase, so
+ * the only thing here a caller can act on is the status.
+ */
+function problemDetails(status: number, detail: string) {
+  return {
+    type: `https://tools.ietf.org/html/rfc9110#status.${status}`,
+    title: "Not Found",
+    status,
+    detail,
+  };
+}
+
 const RATE_LIMIT_BODY = JSON.stringify({
   error: "rate_limit_exceeded",
   error_description: "Too many requests. Please try again later.",
@@ -90,6 +104,32 @@ describe("the status a generated remote function lets through", () => {
     expect(remoteErrorMessage(crossed, "You need alerts.readwrite.")).toBe(
       RATE_LIMITED_ERROR
     );
+  });
+
+  it("forwards a 404 rather than flattening it to a 500", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(404, "Data source not found: dexcom")
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(404);
+  });
+
+  it("forwards a 404 whose body is empty, as `NotFound()` sends it", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(404, ""));
+
+    expect(isHttpError(crossed) && crossed.status).toBe(404);
+    expect(JSON.stringify(crossed)).not.toContain("not expected");
+  });
+
+  it("leaves a dialog its own wording for a resource that is already gone", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(404, ""));
+
+    expect(
+      describeSubmitError(crossed, "This data source is already gone.")
+    ).toBe("This data source is already gone.");
+    expect(
+      remoteErrorMessage(crossed, "This data source is already gone.")
+    ).toBe("This data source is already gone.");
   });
 
   it("still flattens a status it does not forward", async () => {

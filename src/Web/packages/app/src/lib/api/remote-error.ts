@@ -9,12 +9,14 @@ import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
  * message is the HTTP client's own boilerplate; the caller's fallback names the
  * permission instead. A 429 is answered from the status for the same reason the
  * codegen forwards it with a fixed reason, and because a fallback naming the
- * permission the caller lacks describes the wrong refusal.
+ * permission the caller lacks describes the wrong refusal. A 404 is forwarded
+ * with a fixed reason too, so its message names the status rather than what was
+ * missing; see `describeSubmitError`.
  */
 export function remoteErrorMessage(err: unknown, fallback: string): string {
   const e = err as { status?: number; body?: { message?: unknown } } | null;
   if (e?.status === 429) return RATE_LIMITED_ERROR;
-  if (e?.status === 403) return fallback;
+  if (e?.status === 403 || e?.status === 404) return fallback;
 
   const message = e?.body?.message;
   return typeof message === "string" && message.trim() ? message : fallback;
