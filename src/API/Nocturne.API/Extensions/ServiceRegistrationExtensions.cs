@@ -342,6 +342,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
+        services.AddScoped<IInstanceSetupState, InstanceSetupState>();
         services.AddScoped<DemoTenantService>();
         services.AddScoped<ScalarAuthProvider>();
 

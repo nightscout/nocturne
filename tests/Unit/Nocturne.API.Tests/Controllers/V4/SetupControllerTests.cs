@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +13,8 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Services.Connectors;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -40,6 +44,9 @@ public class SetupControllerTests : IDisposable
     private readonly Mock<ISubjectService> _subjectService;
     private readonly Mock<IOidcAuthService> _oidcAuthService;
     private readonly PlatformOptions _platformOptions;
+    private readonly Mock<IDbContextFactory<NocturneDbContext>> _dbFactory;
+    private readonly IOptions<OidcOptions> _oidcOptions;
+    private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
     private readonly SetupController _controller;
 
     public SetupControllerTests()
@@ -62,7 +69,7 @@ public class SetupControllerTests : IDisposable
         _subjectService = new Mock<ISubjectService>();
         _oidcAuthService = new Mock<IOidcAuthService>();
 
-        var oidcOptions = Options.Create(new OidcOptions
+        _oidcOptions = Options.Create(new OidcOptions
         {
             Cookie = new CookieSettings
             {
@@ -72,8 +79,8 @@ public class SetupControllerTests : IDisposable
             },
         });
 
-        var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+        _dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        _dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 var ctx = new NocturneDbContext(_dbOptions);
@@ -83,30 +90,38 @@ public class SetupControllerTests : IDisposable
         // A real instance, not a mock: the platform-admin grant is part of the
         // behaviour under test, and BootstrapAsync is not virtual.
         _platformOptions = new PlatformOptions();
-        var platformAdminBootstrap = new PlatformAdminBootstrapService(
-            dbFactory.Object,
+        _platformAdminBootstrap = new PlatformAdminBootstrapService(
+            _dbFactory.Object,
             Options.Create(_platformOptions),
             NullLogger<PlatformAdminBootstrapService>.Instance);
 
-        _controller = new SetupController(
+        _controller = BuildController(
+            new OperatorConfiguration(),
+            new Mock<IHttpClientFactory>().Object,
+            new Mock<ILogger<SetupController>>().Object);
+    }
+
+    private SetupController BuildController(
+        OperatorConfiguration operatorConfig,
+        IHttpClientFactory httpClientFactory,
+        ILogger<SetupController> logger) =>
+        new(
             _tenantService.Object,
             _passkeyService.Object,
             _recoveryCodeService.Object,
             _sessionService.Object,
             _subjectService.Object,
-            dbFactory.Object,
-            oidcOptions,
+            _dbFactory.Object,
+            _oidcOptions,
             _oidcAuthService.Object,
-            Options.Create(new OperatorConfiguration()),
-            new Mock<IHttpClientFactory>().Object,
-            platformAdminBootstrap,
-            new Mock<ILogger<SetupController>>().Object);
-
-        _controller.ControllerContext = new ControllerContext
+            Options.Create(operatorConfig),
+            httpClientFactory,
+            _platformAdminBootstrap,
+            new InstanceSetupState(_dbFactory.Object),
+            logger)
         {
-            HttpContext = new DefaultHttpContext(),
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
-    }
 
     public void Dispose()
     {
@@ -519,6 +534,75 @@ public class SetupControllerTests : IDisposable
         var validation = ok.Value.Should().BeOfType<SlugValidationResult>().Subject;
         validation.IsValid.Should().BeFalse();
     }
+
+    /// <summary>
+    /// A configured webhook that cannot answer must not become a wall across the one screen the
+    /// operator has no way past, so the name is admitted. And the endpoint is anonymous, so the
+    /// caller chooses the request count — the log volume must not follow it.
+    /// </summary>
+    [Fact]
+    public async Task ValidateUsername_WhenTheWebhookIsDown_AdmitsTheNameAndReportsTheOutageOnce()
+    {
+        var logger = new Mock<ILogger<SetupController>>();
+        var controller = BuildWebhookController(
+            logger,
+            // An answering webhook first, so the report is owed whatever an earlier test in this
+            // process left latched.
+            HttpStatusCode.OK,
+            HttpStatusCode.ServiceUnavailable,
+            HttpStatusCode.ServiceUnavailable);
+        await SeedConfiguredTenantAsync("test", "Test");
+
+        await controller.ValidateUsername("primed", CancellationToken.None);
+        var first = await controller.ValidateUsername("owner-one", CancellationToken.None);
+        var second = await controller.ValidateUsername("owner-two", CancellationToken.None);
+
+        foreach (var result in new[] { first, second })
+        {
+            result.Should().BeOfType<OkObjectResult>()
+                .Which.Value.Should().BeOfType<SlugValidationResult>()
+                .Which.IsValid.Should().BeTrue();
+        }
+
+        VerifyOutageReported(logger, Times.Once());
+    }
+
+    private SetupController BuildWebhookController(
+        Mock<ILogger<SetupController>> logger, params HttpStatusCode[] responses)
+    {
+        var handler = new SequentialMockHandler();
+        foreach (var status in responses)
+        {
+            handler.Enqueue(new HttpResponseMessage(status)
+            {
+                Content = new StringContent(
+                    """{"isValid":true}""", Encoding.UTF8, "application/json"),
+            });
+        }
+
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(f => f.CreateClient(It.IsAny<string>()))
+            .Returns(() => new HttpClient(handler));
+
+        return BuildController(
+            new OperatorConfiguration
+            {
+                UsernameValidationWebhookUrl = "https://webhook.invalid/validate",
+            },
+            httpClientFactory.Object,
+            logger.Object);
+    }
+
+    private static void VerifyOutageReported(
+        Mock<ILogger<SetupController>> logger, Times times) =>
+        logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
 
     // ── OwnerComplete binds the enrolment to a server-resolved subject ────
 

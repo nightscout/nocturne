@@ -2,7 +2,12 @@
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import { Check, Loader2, ArrowRight } from "lucide-svelte";
-  import { FormError, FormField, useAvailability } from "$lib/forms";
+  import {
+    describeSubmitError,
+    FormError,
+    FormField,
+    useAvailability,
+  } from "$lib/forms";
   import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {
@@ -44,8 +49,10 @@
       onComplete(normalizedSlug);
     } catch (err) {
       console.error("Creating the instance failed:", err);
-      submitError =
-        "We couldn't create your instance. Please try again in a moment.";
+      submitError = describeSubmitError(
+        err,
+        "We couldn't create your instance. Please try again in a moment.",
+      );
     } finally {
       submitting = false;
     }

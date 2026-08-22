@@ -109,10 +109,14 @@ public class MyTenantsController : ControllerBase
     /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
+    [AnonymousUntilSetupComplete]
+    [DenyDemoSubject]
     [AllowDuringSetup]
     [EnableRateLimiting("name-availability")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ValidateSlug([FromQuery] string slug, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(slug))
