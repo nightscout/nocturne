@@ -469,7 +469,7 @@ public class FoodController : ControllerBase
     /// <returns>No content if successful</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v1/food/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]

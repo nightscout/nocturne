@@ -917,7 +917,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of deletion</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]

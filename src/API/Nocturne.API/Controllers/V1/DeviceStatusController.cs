@@ -281,7 +281,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]

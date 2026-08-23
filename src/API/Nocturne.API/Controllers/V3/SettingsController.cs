@@ -324,7 +324,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

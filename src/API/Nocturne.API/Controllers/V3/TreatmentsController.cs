@@ -430,7 +430,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

@@ -443,7 +443,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

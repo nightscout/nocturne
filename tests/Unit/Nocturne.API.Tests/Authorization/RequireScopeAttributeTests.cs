@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Behavioural tests for <see cref="RequireScopeAttribute"/>, the filter that guards every
 /// V1/V3 write endpoint. Verifies the exact security semantics relied on by the fix for the
 /// unauthenticated-write bug: an anonymous request is rejected, a read-only grant cannot write,
-/// a matching read-write scope is accepted, and delete requires full access (<c>*</c>).
+/// and a matching read-write scope is accepted.
 /// </summary>
 public class RequireScopeAttributeTests
 {
@@ -96,11 +96,23 @@ public class RequireScopeAttributeTests
     }
 
     [Fact]
-    public void Delete_RequiresFullAccess_ReadWriteScopeIsInsufficient()
+    public void ReadWriteGrant_DoesNotReachAnotherCategory()
     {
-        // Delete endpoints require FullAccess by design; a scoped readwrite grant cannot delete.
+        // A collection delete now gates on that collection's readwrite scope, so the boundary that
+        // remains is the category one: treatments.readwrite must not reach the entries surface.
+        var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
+            authenticated: true, OAuthScopes.TreatmentsReadWrite);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public void ScopeRequiringFullAccess_IsNotSatisfiedByEveryReadWriteScope()
+    {
+        // Endpoints that still name "*" (tenant administration) are unreachable from the health-data
+        // readwrite scopes however many of them a grant holds.
         var result = Evaluate(new RequireScopeAttribute(OAuthScopes.FullAccess),
-            authenticated: true, OAuthScopes.GlucoseReadWrite, OAuthScopes.TreatmentsReadWrite);
+            authenticated: true, [.. OAuthScopes.HealthReadWriteExpansion]);
 
         result.Should().BeOfType<ForbidResult>();
     }

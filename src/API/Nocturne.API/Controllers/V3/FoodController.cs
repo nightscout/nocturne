@@ -577,7 +577,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

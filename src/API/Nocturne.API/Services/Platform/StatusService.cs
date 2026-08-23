@@ -748,8 +748,16 @@ public class StatusService : IStatusService
     }
 
     /// <summary>
-    /// Get per-collection CRUD permission strings matching legacy Nightscout apiPermissions format
+    /// Get per-collection CRUD permission strings matching legacy Nightscout apiPermissions format.
     /// </summary>
+    /// <remarks>
+    /// Deliberately caller-independent. AAPS reduces this map to a single boolean — every one of the
+    /// six collections must read "crud" or <c>hasWritePermission</c> is false and its uploader stops
+    /// syncing entirely — so a token scoped to the categories AAPS actually uses would be answered
+    /// with a narrower map and lose upload, not just delete. The per-action
+    /// <see cref="Attributes.RequireScopeAttribute"/> remains the enforcement point; this map
+    /// advertises the collections the API serves, not one credential's grant.
+    /// </remarks>
     private static Dictionary<string, string> GetV3ApiPermissions()
     {
         return new Dictionary<string, string>

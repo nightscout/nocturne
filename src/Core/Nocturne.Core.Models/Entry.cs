@@ -83,7 +83,10 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleLongConverter))]
     public long DateMills
     {
-        get => _dateMills;
+        // Nightscout emits "date" and "mills" with the same value on every entry it returns, and
+        // AAPS reads "date" alone with no fallback to either sibling. An entry that reached us with
+        // only "mills" set would otherwise serialise as date: 0 and land in AAPS at the epoch.
+        get => _dateMills != 0 ? _dateMills : Mills;
         set => _dateMills = value;
     }
     private long _dateMills;

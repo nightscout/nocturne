@@ -74,12 +74,35 @@ public class ScopeTranslatorTests
     }
 
     [Fact]
-    public void FromPermissions_EntriesDelete_MapsToFullAccess()
+    public void FromPermissions_EntriesDelete_MapsToGlucoseReadWriteOnly()
     {
-        var permissions = new[] { "api:entries:delete" };
-        var scopes = ScopeTranslator.FromPermissions(permissions);
+        // A delete verb on one collection is authority over that collection, not superuser: mapping
+        // it to "*" handed a subject holding only "api:entries:delete" every other collection too.
+        var scopes = ScopeTranslator.FromPermissions(["api:entries:delete"]);
 
-        Assert.Contains(OAuthScopes.FullAccess, scopes);
+        Assert.Contains(OAuthScopes.GlucoseReadWrite, scopes);
+        Assert.DoesNotContain(OAuthScopes.FullAccess, scopes);
+        Assert.DoesNotContain(OAuthScopes.TreatmentsReadWrite, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_CareportalTreatmentsWildcard_CanDeleteTreatments()
+    {
+        // Nightscout's seeded careportal role is "api:treatments:*", which covers its delete verb.
+        var scopes = ScopeTranslator.FromPermissions(["api:treatments:*"]);
+
+        Assert.True(OAuthScopes.SatisfiesScope(scopes, OAuthScopes.TreatmentsReadWrite));
+    }
+
+    [Fact]
+    public void ToPermissions_ReadWriteScope_RoundTripsThroughItsDeleteVerb()
+    {
+        var permissions = ScopeTranslator.ToPermissions([OAuthScopes.TreatmentsReadWrite]);
+
+        Assert.Contains("api:treatments:delete", permissions);
+        Assert.Contains(
+            OAuthScopes.TreatmentsReadWrite,
+            ScopeTranslator.FromPermissions(permissions));
     }
 
     [Fact]
@@ -181,7 +204,7 @@ public class ScopeTranslatorTests
     }
 
     [Fact]
-    public void ToPermissions_EntriesReadWrite_IncludesReadCreateUpdate()
+    public void ToPermissions_EntriesReadWrite_IncludesEveryWriteVerb()
     {
         var scopes = new[] { OAuthScopes.GlucoseReadWrite };
         var permissions = ScopeTranslator.ToPermissions(scopes);
@@ -189,7 +212,7 @@ public class ScopeTranslatorTests
         Assert.Contains("api:entries:read", permissions);
         Assert.Contains("api:entries:create", permissions);
         Assert.Contains("api:entries:update", permissions);
-        Assert.DoesNotContain("api:entries:delete", permissions);
+        Assert.Contains("api:entries:delete", permissions);
     }
 
     [Fact]
@@ -231,7 +254,7 @@ public class ScopeTranslatorTests
     }
 
     [Fact]
-    public void ToPermissions_FoodReadWrite_IncludesReadCreateUpdate()
+    public void ToPermissions_FoodReadWrite_IncludesEveryWriteVerb()
     {
         var scopes = new[] { OAuthScopes.FoodReadWrite };
         var permissions = ScopeTranslator.ToPermissions(scopes);
@@ -239,7 +262,7 @@ public class ScopeTranslatorTests
         Assert.Contains("api:food:read", permissions);
         Assert.Contains("api:food:create", permissions);
         Assert.Contains("api:food:update", permissions);
-        Assert.DoesNotContain("api:food:delete", permissions);
+        Assert.Contains("api:food:delete", permissions);
     }
 
     [Fact]

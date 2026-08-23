@@ -39,9 +39,10 @@ public static class ScopeTranslator
 
     /// <summary>
     /// Maps legacy trie permission strings to their equivalent OAuth scopes.
-    /// Collapsing create/update into readwrite is intentional. The only lossy case:
-    /// someone who had api:X:create but not api:X:delete gets readwrite (slightly more
-    /// permissive but cannot delete since delete requires *).
+    /// Collapsing create/update/delete into the collection's readwrite scope is intentional:
+    /// <see cref="OAuthScopes"/> makes readwrite the whole write authority over one category, so a
+    /// subject holding any one write verb on a collection gets all three. Nightscout grants its own
+    /// write verbs the same way — the seeded careportal role is "api:treatments:*".
     /// </summary>
     private static readonly Dictionary<string, string[]> TrieToScopes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -49,25 +50,25 @@ public static class ScopeTranslator
         ["api:entries:read"] = [OAuthScopes.GlucoseRead],
         ["api:entries:create"] = [OAuthScopes.GlucoseReadWrite],
         ["api:entries:update"] = [OAuthScopes.GlucoseReadWrite],
-        ["api:entries:delete"] = [OAuthScopes.FullAccess],
+        ["api:entries:delete"] = [OAuthScopes.GlucoseReadWrite],
 
         // Treatments
         ["api:treatments:read"] = [OAuthScopes.TreatmentsRead],
         ["api:treatments:create"] = [OAuthScopes.TreatmentsReadWrite],
         ["api:treatments:update"] = [OAuthScopes.TreatmentsReadWrite],
-        ["api:treatments:delete"] = [OAuthScopes.FullAccess],
+        ["api:treatments:delete"] = [OAuthScopes.TreatmentsReadWrite],
 
         // Device status
         ["api:devicestatus:read"] = [OAuthScopes.DevicesRead],
         ["api:devicestatus:create"] = [OAuthScopes.DevicesReadWrite],
         ["api:devicestatus:update"] = [OAuthScopes.DevicesReadWrite],
-        ["api:devicestatus:delete"] = [OAuthScopes.FullAccess],
+        ["api:devicestatus:delete"] = [OAuthScopes.DevicesReadWrite],
 
         // Food
         ["api:food:read"] = [OAuthScopes.FoodRead],
         ["api:food:create"] = [OAuthScopes.FoodReadWrite],
         ["api:food:update"] = [OAuthScopes.FoodReadWrite],
-        ["api:food:delete"] = [OAuthScopes.FullAccess],
+        ["api:food:delete"] = [OAuthScopes.FoodReadWrite],
 
         // Activity. The legacy activity collection is the merged read plane over four Nocturne
         // storages, so its read permission carries all three dedicated categories. StateSpan-backed
@@ -84,11 +85,11 @@ public static class ScopeTranslator
         ["api:profile:read"] = [OAuthScopes.TherapyRead],
         ["api:profile:create"] = [OAuthScopes.TherapyReadWrite],
         ["api:profile:update"] = [OAuthScopes.TherapyReadWrite],
-        ["api:profile:delete"] = [OAuthScopes.FullAccess],
+        ["api:profile:delete"] = [OAuthScopes.TherapyReadWrite],
 
         // Verb wildcards, which is how Nightscout's own seeded roles are written ("api:activity:*"
         // on activity, "api:treatments:*" on careportal). Collapsed to readwrite on the same basis
-        // as create/update above: delete stays gated behind "*".
+        // as the individual write verbs above.
         ["api:entries:*"] = [OAuthScopes.GlucoseReadWrite],
         ["api:treatments:*"] = [OAuthScopes.TreatmentsReadWrite],
         ["api:devicestatus:*"] = [OAuthScopes.DevicesReadWrite],
@@ -107,7 +108,7 @@ public static class ScopeTranslator
         // Wildcard writes
         ["api:*:create"] = WriteEverything,
         ["api:*:update"] = WriteEverything,
-        ["api:*:delete"] = [OAuthScopes.FullAccess],
+        ["api:*:delete"] = WriteEverything,
 
         // Full wildcards
         ["api:*"] = [OAuthScopes.FullAccess],
@@ -166,6 +167,7 @@ public static class ScopeTranslator
                     permissions.Add("api:entries:read");
                     permissions.Add("api:entries:create");
                     permissions.Add("api:entries:update");
+                    permissions.Add("api:entries:delete");
                     break;
 
                 case OAuthScopes.TreatmentsRead:
@@ -175,6 +177,7 @@ public static class ScopeTranslator
                     permissions.Add("api:treatments:read");
                     permissions.Add("api:treatments:create");
                     permissions.Add("api:treatments:update");
+                    permissions.Add("api:treatments:delete");
                     break;
 
                 case OAuthScopes.DevicesRead:
@@ -184,6 +187,7 @@ public static class ScopeTranslator
                     permissions.Add("api:devicestatus:read");
                     permissions.Add("api:devicestatus:create");
                     permissions.Add("api:devicestatus:update");
+                    permissions.Add("api:devicestatus:delete");
                     break;
 
                 case OAuthScopes.FoodRead:
@@ -193,6 +197,7 @@ public static class ScopeTranslator
                     permissions.Add("api:food:read");
                     permissions.Add("api:food:create");
                     permissions.Add("api:food:update");
+                    permissions.Add("api:food:delete");
                     break;
 
                 case OAuthScopes.TherapyRead:
@@ -202,6 +207,7 @@ public static class ScopeTranslator
                     permissions.Add("api:profile:read");
                     permissions.Add("api:profile:create");
                     permissions.Add("api:profile:update");
+                    permissions.Add("api:profile:delete");
                     break;
 
                 // The three dedicated activity categories share one legacy collection. Without

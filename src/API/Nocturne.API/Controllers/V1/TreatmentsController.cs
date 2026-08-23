@@ -385,7 +385,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]

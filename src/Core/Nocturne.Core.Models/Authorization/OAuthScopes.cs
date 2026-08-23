@@ -3,7 +3,12 @@ namespace Nocturne.Core.Models.Authorization;
 /// <summary>
 /// Defines the OAuth 2.0 scope taxonomy for Nocturne.
 /// Three tiers: read, readwrite, and full access (*).
-/// Delete is intentionally restricted to * only.
+/// A readwrite scope carries the whole write authority over its own data category — create, update
+/// and delete of a single record alike. Withholding delete from a grant that may already rewrite
+/// every field of a record buys nothing, and the V4 surface has always read the tier that way.
+/// Full access differs by spanning every category and the tenant-administration atoms; the one
+/// data verb it alone unlocks is the V1 query-driven bulk delete, which empties a collection in one
+/// request and so is not something a per-category grant should reach.
 /// </summary>
 /// <seealso cref="OAuthScope"/>
 /// <seealso cref="ScopeTranslator"/>
@@ -83,9 +88,9 @@ public static class OAuthScopes
     /// <summary>Allows the alert engine to actuate hardware on a registered client device (torch, vibration, sound, full-screen).</summary>
     public const string DeviceActuate = "device.actuate";
 
-    // Full access (includes delete)
+    // Full access
 
-    /// <summary>Superuser scope granting all permissions including delete.</summary>
+    /// <summary>Superuser scope granting every permission across every data category.</summary>
     public const string FullAccess = "*";
 
     // Convenience aliases

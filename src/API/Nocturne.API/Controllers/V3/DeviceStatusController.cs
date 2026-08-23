@@ -435,7 +435,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(OAuthScopes.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
