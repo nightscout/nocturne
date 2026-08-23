@@ -13,7 +13,13 @@ namespace Nocturne.Connectors.Glooko.Tests.Mappers;
 /// </summary>
 public class GlookoTimeMapperTests
 {
-    private static GlookoTimeMapper Mapper(TimezoneTimeline? timeline, double offset = 0)
+    /// <summary>
+    /// Timeline-bearing cases pass a non-zero static offset that matches no zone under test, so a
+    /// mapper that added the legacy offset to the timeline result instead of replacing it would fail.
+    /// </summary>
+    private const double DecoyOffset = 3;
+
+    private static GlookoTimeMapper Mapper(TimezoneTimeline? timeline, double offset = DecoyOffset)
     {
         var mapper = new GlookoTimeMapper(
             new GlookoConnectorConfiguration { TimezoneOffset = offset }, NullLogger.Instance);
@@ -44,18 +50,22 @@ public class GlookoTimeMapperTests
     }
 
     [Fact]
-    public void ToGlookoTime_AfterRelocation_UsesTheZoneInEffect()
+    public void ToGlookoTime_AcrossRelocation_UsesTheZoneInEffectAtEachInstant()
     {
-        var timeline = new TimezoneTimeline(
+        var mapper = Mapper(new TimezoneTimeline(
         [
             new TimezoneTimelineEntry { Timezone = "Australia/Sydney", EffectiveFrom = DateTime.MinValue },
             new TimezoneTimelineEntry { Timezone = "Europe/London", EffectiveFrom = new DateTime(2026, 3, 1) },
-        ]);
+        ]));
 
-        // 2026-06-10 09:00Z falls after the move, when London is BST (+1).
-        var result = Mapper(timeline).ToGlookoTime(new DateTime(2026, 6, 10, 9, 0, 0, DateTimeKind.Utc));
+        // Before the move: Sydney, AEDT (+11).
+        mapper.ToGlookoTime(new DateTime(2026, 2, 15, 13, 0, 0, DateTimeKind.Utc))
+            .Should().Be(new DateTime(2026, 2, 16, 0, 0, 0));
 
-        result.Should().Be(new DateTime(2026, 6, 10, 10, 0, 0));
+        // After the move: London, BST (+1). Picking the newest entry regardless of instant would
+        // return the London offset for both.
+        mapper.ToGlookoTime(new DateTime(2026, 6, 10, 9, 0, 0, DateTimeKind.Utc))
+            .Should().Be(new DateTime(2026, 6, 10, 10, 0, 0));
     }
 
     [Fact]
@@ -67,10 +77,16 @@ public class GlookoTimeMapperTests
         result.Should().Be(new DateTime(2026, 1, 9, 23, 0, 0));
     }
 
+    /// <summary>
+    /// Round-tripping is only lossless away from transition boundaries: <see cref="TimezoneTimeline.ToLocal"/>
+    /// resolves entries in wall-clock space, so near a relocation or a fall-back overlap the pair is off
+    /// by the zone delta. The request window is padded a day either side to absorb that.
+    /// </summary>
     [Theory]
     [InlineData(2026, 1, 9)]
     [InlineData(2026, 7, 9)]
-    public void ToGlookoTime_RoundTripsThroughGetCorrectedGlookoTime(int year, int month, int day)
+    public void ToGlookoTime_AwayFromTransitions_RoundTripsThroughGetCorrectedGlookoTime(
+        int year, int month, int day)
     {
         var mapper = Mapper(Sydney());
         var utc = new DateTime(year, month, day, 13, 0, 0, DateTimeKind.Utc);
