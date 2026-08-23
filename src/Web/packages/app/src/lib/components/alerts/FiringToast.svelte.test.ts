@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import type { ActiveExcursionResponse } from "$api-clients";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 // Mock the generated remote surface before importing the component. The
 // component reads `getActiveAlerts().current` inside an effect, so the backing
@@ -10,11 +11,7 @@ import type { ActiveExcursionResponse } from "$api-clients";
 let activeAlerts = $state<ActiveExcursionResponse[]>([]);
 
 vi.mock("$api/generated/alerts.generated.remote", () => ({
-	getActiveAlerts: () => ({
-		get current() {
-			return activeAlerts;
-		},
-	}),
+	getActiveAlerts: () => remoteQuery(() => activeAlerts),
 	snoozeInstance: () => Promise.resolve(),
 	acknowledgeExcursion: () => Promise.resolve(),
 }));
