@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
+import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -27,17 +28,12 @@ const suggestions = [suggestion];
 let acceptImpl: () => Promise<unknown>;
 
 vi.mock("$api/generated/compressionLows.generated.remote", () => ({
-  getSuggestions: () => ({
-    current: suggestions,
-    loading: false,
-    error: undefined,
-    refresh: () => {},
-  }),
-  getSuggestion: () => ({ run: () => Promise.resolve(detail) }),
-  acceptSuggestion: () => acceptImpl(),
-  dismissSuggestion: () => Promise.resolve(),
-  deleteSuggestion: () => Promise.resolve(),
-  triggerDetection: () => Promise.resolve({}),
+  getSuggestions: () => remoteQuery(() => suggestions),
+  getSuggestion: () => remoteQuery(() => detail),
+  acceptSuggestion: remoteCommand(() => acceptImpl()),
+  dismissSuggestion: remoteCommand(() => undefined),
+  deleteSuggestion: remoteCommand(() => undefined),
+  triggerDetection: remoteCommand(() => ({})),
 }));
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));

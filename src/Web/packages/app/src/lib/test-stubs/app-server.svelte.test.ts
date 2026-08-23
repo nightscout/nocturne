@@ -10,10 +10,11 @@ import { remoteQuery } from "./remote-resource";
  * about the stub.
  *
  * What is pinned here is shape: that a query call is a resource and not the
- * implementation, that the `(schema, fn)` overloads reach `fn`, and that a
- * command call is a promise carrying `updates()`. Reactivity, per-argument
- * caching, schema validation and form submission are deliberately absent from
- * the stub, so nothing below asserts them.
+ * implementation, that the `(schema, fn)` overloads reach `fn`, that a command
+ * call is a promise carrying `updates()`, and that a form's fields answer
+ * `undefined` rather than `[]` when they have no issues. Reactivity,
+ * per-argument caching, schema validation and form submission are deliberately
+ * absent from the stub, so nothing below asserts them.
  */
 describe("$app/server stub", () => {
   it("hands back a resource rather than the implementation", async () => {
@@ -45,11 +46,41 @@ describe("$app/server stub", () => {
     });
     const resource = boom();
 
-    await expect(resource.run()).rejects.toThrow("nope");
+    // Awaited, not `run()`: awaiting is the path a template takes and the one
+    // that settles `error`. The framework's `run()` bypasses the instance, so
+    // asserting `error` after it would pin something production does not do.
+    await expect(async () => await resource).rejects.toThrow("nope");
 
     expect(resource.error).toBeInstanceOf(Error);
     expect(resource.loading).toBe(false);
     expect(resource.ready).toBe(false);
+  });
+
+  it("keeps a rejection nobody awaited off the unhandled-rejection channel", async () => {
+    const unhandled: unknown[] = [];
+    const record = (event: PromiseRejectionEvent) => {
+      unhandled.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", record);
+
+    try {
+      const boom = query(async () => {
+        throw new Error("unobserved");
+      });
+      const resource = boom();
+
+      // Reading a getter starts the work. Nothing chains onto it, which is what
+      // a component reading only `error` does.
+      expect(resource.error).toBeUndefined();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(unhandled).toEqual([]);
+      expect(resource.error).toBeInstanceOf(Error);
+    } finally {
+      window.removeEventListener("unhandledrejection", record);
+    }
   });
 
   it("re-runs the implementation on refresh", async () => {
@@ -110,8 +141,23 @@ describe("$app/server stub", () => {
     expect(submit.pending).toBe(0);
     expect(submit.result).toBeUndefined();
     expect(submit.enhance(async () => {})).toMatchObject({ method: "POST" });
-    expect(submit.fields.allIssues()).toEqual([]);
-    expect(submit.fields.username.issues()).toEqual([]);
+  });
+
+  it("spreads only the attributes a <form> takes", () => {
+    const submit = form(z.object({ username: z.string() }), async () => ({
+      ok: true,
+    }));
+
+    expect(Object.keys(submit)).toEqual(["method", "action"]);
+  });
+
+  it("reports no issues as undefined, the way the framework's lookup does", () => {
+    const submit = form(z.object({ username: z.string() }), async () => ({
+      ok: true,
+    }));
+
+    expect(submit.fields.allIssues()).toBeUndefined();
+    expect(submit.fields.username.issues()).toBeUndefined();
   });
 
   it("refuses getRequestEvent rather than answering with a half-built event", () => {

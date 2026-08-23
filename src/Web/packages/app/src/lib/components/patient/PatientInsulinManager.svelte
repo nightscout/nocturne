@@ -298,7 +298,7 @@
             <input type="hidden" name="formulationId" value={inlineFormulationId} />
           {/if}
 
-          {#each insulinList.createForm.fields.allIssues() as issue}
+          {#each insulinList.createForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -458,7 +458,7 @@
             <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
           {/if}
 
-          {#each activeForm.fields.allIssues() as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>
