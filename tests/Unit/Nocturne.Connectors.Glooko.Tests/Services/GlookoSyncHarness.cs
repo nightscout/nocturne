@@ -239,7 +239,7 @@ internal sealed class GlookoEndpointHandler(
         if (!healed && failingPaths?.Any(failing => Matches(path, failing)) == true)
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
-        if (malformedPaths?.Any(malformed => Matches(path, malformed)) == true)
+        if (!healed && malformedPaths?.Any(malformed => Matches(path, malformed)) == true)
             return Json(MalformedPayload);
 
         if (Matches(path, GlookoConstants.V3UsersPath))

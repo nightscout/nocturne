@@ -127,27 +127,35 @@ public class GlookoConnectorServiceReauthTests
     }
 
     /// <summary>
-    /// The retry re-syncs from scratch, so the abandoned pass's recorded fetch failure must not
-    /// survive into the retried pass's result and redden a run that went on to fetch everything.
+    /// The retry re-syncs from scratch, so neither the abandoned pass's recorded fetch failure nor
+    /// the records it already published may survive into the retried pass's result — the first would
+    /// redden a run that went on to fetch everything, the second would count the same records twice.
+    /// The 403 lands on the device settings, which are fetched after the chunks have published, so
+    /// the abandoned pass has both to leave behind.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_WhenTheRetriedPassSucceeds_DropsTheAbandonedPassFailures()
+    public async Task SyncDataAsync_WhenTheRetriedPassSucceeds_DropsTheAbandonedPassResults()
     {
         var tokenProvider = new StaticGlookoTokenProvider();
         var handler = new GlookoEndpointHandler(
             failingPaths: [GlookoConstants.ScheduledBasalsPath],
-            forbiddenPaths: [GlookoConstants.CgmReadingsPath],
+            forbiddenPaths: [GlookoConstants.V3DeviceSettingsPath],
             recoversAfterForbidden: true);
         var service = GlookoSyncHarness.Service(handler, tokenProvider: tokenProvider);
 
         var result = await service.SyncDataAsync(
-            SingleChunkRequest(SyncDataType.Glucose, SyncDataType.TempBasals),
+            SingleChunkRequest(SyncDataType.StateSpans, SyncDataType.TempBasals, SyncDataType.Profiles),
             GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
 
         tokenProvider.AcquireCount.Should().Be(2,
-            "the abandoned pass's basal failure is only abandoned if a retry actually happened");
-        result.Errors.Should().BeEmpty();
+            "the abandoned pass's results are only abandoned if a retry actually happened");
         result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+
+        // One suspended basal and one temporary basal per chunk; one pump-mode span from that
+        // suspend, plus the active-basal-program span the device settings carry.
+        result.ItemsSynced[SyncDataType.TempBasals].Should().Be(2);
+        result.ItemsSynced[SyncDataType.StateSpans].Should().Be(2);
     }
 
     // ── Test infrastructure ─────────────────────────────────────────────

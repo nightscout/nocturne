@@ -20,39 +20,40 @@ namespace Nocturne.Connectors.Glooko.Tests.Services;
 public class GlookoConnectorServiceFetchFailureTests
 {
     /// <summary>
-    /// Glucose is the connector's primary type and has one V2 source, so a dead CGM endpoint reporting
-    /// green was indistinguishable from a quiet day. The rest of the batch is unaffected by it.
+    /// Every V2 batch endpoint against the types its payload feeds, so a row that stops matching what
+    /// the mappers actually read off that payload ships red. Glucose is the connector's primary type
+    /// and has one V2 source, so a dead CGM endpoint reporting green was indistinguishable from a
+    /// quiet day; a bolus carries the wizard's carbs alongside its insulin, foods become carb intakes
+    /// as well as catalog entries, and all three basal endpoints feed temp basals.
     /// </summary>
-    [Fact]
-    public async Task SyncDataAsync_WhenAV2BatchEndpointFails_ReportsItsTypeAndPublishesTheRest()
+    /// <param name="stillPublished">
+    ///     A publish the failing endpoint has no part in, which must still be reached — the failure is
+    ///     sticky, not an abort.
+    /// </param>
+    [Theory]
+    [InlineData(GlookoConstants.CgmReadingsPath, "Glucose", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.MeterReadingsPath, "ManualBG", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.NormalBolusesPath, "Boluses,CarbIntake", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.FoodsPath, "CarbIntake,Food", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.ScheduledBasalsPath, "TempBasals", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.TemporaryBasalsPath, "TempBasals", PublishKind.StateSpans)]
+    [InlineData(GlookoConstants.SuspendBasalsPath, "StateSpans,TempBasals", PublishKind.TempBasals)]
+    public async Task SyncDataAsync_WhenAV2BatchEndpointFails_ReportsEveryTypeItServes(
+        string failingPath, string expectedTypes, PublishKind stillPublished)
     {
-        var service = BuildService(GlookoConstants.CgmReadingsPath);
+        var service = BuildService(failingPath);
 
         var result = await service.SyncDataAsync(
-            Request(SyncDataType.Glucose, SyncDataType.StateSpans, SyncDataType.TempBasals),
-            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+            Request(V2BatchTypes), GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
 
-        result.Success.Should().BeFalse();
-        result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch Glucose");
+        // The whole batch is fetched before anything publishes, so a publish rejection can never be
+        // the failure that named the run.
         result.Message.Should().Be("Sync failed while fetching data");
-        service.Published.Should().Contain([PublishKind.StateSpans, PublishKind.TempBasals]);
-    }
-
-    /// <summary>
-    /// One endpoint can carry several types — a normal bolus carries the wizard's carbs alongside the
-    /// insulin — and losing the endpoint loses every one of them.
-    /// </summary>
-    [Fact]
-    public async Task SyncDataAsync_WhenAV2BatchEndpointServingSeveralTypesFails_ReportsEachType()
-    {
-        var service = BuildService(GlookoConstants.NormalBolusesPath);
-
-        var result = await service.SyncDataAsync(
-            Request(SyncDataType.Boluses, SyncDataType.CarbIntake),
-            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Errors.Should().Contain(["Failed to fetch Boluses", "Failed to fetch CarbIntake"]);
+        result.Errors
+            .Where(error => error.StartsWith("Failed to fetch ", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(
+                expectedTypes.Split(',').Select(type => $"Failed to fetch {type}"));
+        service.Published.Should().Contain(stillPublished);
     }
 
     /// <summary>
@@ -179,6 +180,13 @@ public class GlookoConnectorServiceFetchFailureTests
     }
 
     // ── Test infrastructure ─────────────────────────────────────────────
+
+    /// <summary>Every type the V2 batch endpoints serve, so no row is gated off by an inactive type.</summary>
+    private static readonly SyncDataType[] V2BatchTypes =
+    [
+        SyncDataType.Glucose, SyncDataType.ManualBG, SyncDataType.Boluses, SyncDataType.CarbIntake,
+        SyncDataType.Food, SyncDataType.StateSpans, SyncDataType.TempBasals,
+    ];
 
     private static SyncRequest Request(params SyncDataType[] dataTypes) => new()
     {
