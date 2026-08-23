@@ -102,7 +102,61 @@ public class GlookoConnectorServiceReauthTests
             .Should().ContainSingle().Which.Phase.Should().Be(expectedPhase);
     }
 
+    /// <summary>
+    /// The V2 batch loop and the V3 histories fetch each swallowed every exception per endpoint,
+    /// including the 403 the whole recovery turns on: a code that went stale mid-batch logged a
+    /// warning and the run carried on querying the stale one.
+    /// </summary>
+    [Theory]
+    [InlineData(false, GlookoConstants.CgmReadingsPath)]
+    [InlineData(true, GlookoConstants.V3HistoriesPath)]
+    public async Task SyncDataAsync_WhenAForbiddenEndpointIsReachedMidPass_Reauthenticates(
+        bool useV3Api, string forbiddenPath)
+    {
+        var tokenProvider = new StaticGlookoTokenProvider();
+        var handler = new GlookoEndpointHandler(forbiddenPaths: [forbiddenPath]);
+        var service = GlookoSyncHarness.Service(handler, tokenProvider: tokenProvider);
+
+        var result = await service.SyncDataAsync(
+            SingleChunkRequest(SyncDataType.Glucose, SyncDataType.CarbIntake),
+            GlookoSyncHarness.Config(useV3Api), CancellationToken.None);
+
+        tokenProvider.AcquireCount.Should().Be(2, "the 403 must reach the re-authentication retry");
+        handler.RequestsFor(forbiddenPath).Should().Be(2, "the retried pass must re-run the fetch");
+        result.Success.Should().BeFalse("the code never refreshes, so the retried pass is forbidden too");
+    }
+
+    /// <summary>
+    /// The retry re-syncs from scratch, so the abandoned pass's recorded fetch failure must not
+    /// survive into the retried pass's result and redden a run that went on to fetch everything.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRetriedPassSucceeds_DropsTheAbandonedPassFailures()
+    {
+        var tokenProvider = new StaticGlookoTokenProvider();
+        var handler = new GlookoEndpointHandler(
+            failingPaths: [GlookoConstants.ScheduledBasalsPath],
+            forbiddenPaths: [GlookoConstants.CgmReadingsPath],
+            recoversAfterForbidden: true);
+        var service = GlookoSyncHarness.Service(handler, tokenProvider: tokenProvider);
+
+        var result = await service.SyncDataAsync(
+            SingleChunkRequest(SyncDataType.Glucose, SyncDataType.TempBasals),
+            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+
+        tokenProvider.AcquireCount.Should().Be(2,
+            "the abandoned pass's basal failure is only abandoned if a retry actually happened");
+        result.Errors.Should().BeEmpty();
+        result.Success.Should().BeTrue();
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
+
+    private static SyncRequest SingleChunkRequest(params SyncDataType[] dataTypes) => new()
+    {
+        DataTypes = [.. dataTypes],
+        From = DateTime.UtcNow.AddDays(-3),
+    };
 
     private static GlookoConnectorConfiguration BuildConfig() => new()
     {

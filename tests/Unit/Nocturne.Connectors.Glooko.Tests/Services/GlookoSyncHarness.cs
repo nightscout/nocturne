@@ -35,8 +35,9 @@ internal static class GlookoSyncHarness
     public static RecordingGlookoConnectorService Service(
         GlookoEndpointHandler handler,
         PublishKind? rejected = null,
-        IConnectorPublisher? publisher = null) =>
-        new(new HttpClient(handler), new StaticGlookoTokenProvider(), rejected, publisher);
+        IConnectorPublisher? publisher = null,
+        StaticGlookoTokenProvider? tokenProvider = null) =>
+        new(new HttpClient(handler), tokenProvider ?? new StaticGlookoTokenProvider(), rejected, publisher);
 }
 
 /// <summary>
@@ -115,6 +116,9 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 /// </summary>
 internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 {
+    /// <summary>How many logins the sync has driven; a second one is a re-authentication.</summary>
+    public int AcquireCount { get; private set; }
+
     public StaticGlookoTokenProvider()
         : base(
             new HttpClient(),
@@ -128,6 +132,8 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
     protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        AcquireCount++;
+
         const string cookie = "_logbook-web_session=sess";
         var userData = JsonSerializer.Serialize(
             new GlookoUserData { User = new GlookoUserLogin { GlookoCode = GlookoSyncHarness.PatientCode } });
@@ -162,6 +168,18 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 ///     Endpoint paths that answer 500 however often they are asked, standing in for a Glooko
 ///     endpoint that is down while the rest of the account still serves.
 /// </param>
+/// <param name="forbiddenPaths">
+///     Endpoint paths that answer 403 <c>data_cant_view</c>, standing in for a patient code Glooko no
+///     longer authorizes.
+/// </param>
+/// <param name="malformedPaths">
+///     Endpoint paths that answer 200 with a well-formed envelope whose every record array is a bare
+///     number, so the response arrives and only the record mapping fails.
+/// </param>
+/// <param name="recoversAfterForbidden">
+///     Whether every broken path starts serving normally once a 403 has been issued — the account
+///     state a re-authentication repairs, and what tells a retried pass apart from the first.
+/// </param>
 /// <param name="withHistoryMeals">
 ///     Whether the histories endpoint carries one meal (one food, 30g of carbs), which is what
 ///     switches on the V3 path's meal carbs and food entries.
@@ -169,11 +187,16 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
 internal sealed class GlookoEndpointHandler(
     Func<int, int>? recordsPerWindow = null,
     IReadOnlyCollection<string>? failingPaths = null,
+    IReadOnlyCollection<string>? forbiddenPaths = null,
+    IReadOnlyCollection<string>? malformedPaths = null,
+    bool recoversAfterForbidden = false,
     bool withHistoryMeals = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
     private readonly List<string> _windows = [];
+    private readonly List<string> _requested = [];
     private readonly Lock _gate = new();
+    private bool _forbiddenIssued;
 
     private const string DeviceSettingsTimestamp = "2026-01-10T00:00:00Z";
 
@@ -183,13 +206,41 @@ internal sealed class GlookoEndpointHandler(
         get { lock (_gate) return _windows.Count; }
     }
 
+    /// <summary>How many times an endpoint was asked, over every date window and sync pass.</summary>
+    public int RequestsFor(string endpoint)
+    {
+        lock (_gate) return _requested.Count(path => Matches(path, endpoint));
+    }
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
-        if (failingPaths?.Any(failing => Matches(path, failing)) == true)
+        bool healed;
+        lock (_gate)
+        {
+            _requested.Add(path);
+            healed = recoversAfterForbidden && _forbiddenIssued;
+        }
+
+        if (!healed && forbiddenPaths?.Any(forbidden => Matches(path, forbidden)) == true)
+        {
+            lock (_gate) _forbiddenIssued = true;
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent(
+                    "{\"status\":403,\"code\":\"data_cant_view\",\"message\":\"user is not authorized to view data\"}",
+                    Encoding.UTF8, "application/json"),
+            });
+        }
+
+        if (!healed && failingPaths?.Any(failing => Matches(path, failing)) == true)
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        if (malformedPaths?.Any(malformed => Matches(path, malformed)) == true)
+            return Json(MalformedPayload);
 
         if (Matches(path, GlookoConstants.V3UsersPath))
             return Json("{\"currentUser\":{\"meterUnits\":\"mgdl\",\"timezone\":\"Australia/Sydney\"}}");
@@ -271,6 +322,16 @@ internal sealed class GlookoEndpointHandler(
 
         return $"{{\"series\":{{{series}}}}}";
     }
+
+    /// <summary>
+    /// Every V2 envelope property at once, each holding a number where an array belongs, so whichever
+    /// endpoint serves it the response parses and only the records do not.
+    /// </summary>
+    private const string MalformedPayload =
+        """
+        {"foods":0,"scheduledBasals":0,"normalBoluses":0,"readings":0,"suspendBasals":0,
+         "temporaryBasals":0}
+        """;
 
     /// <summary>
     /// One meal of one food, which the V3 path maps to a single carb intake and a single food entry.

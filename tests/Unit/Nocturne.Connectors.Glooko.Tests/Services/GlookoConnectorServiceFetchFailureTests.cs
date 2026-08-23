@@ -11,13 +11,87 @@ using Xunit;
 namespace Nocturne.Connectors.Glooko.Tests.Services;
 
 /// <summary>
-/// Glooko's supporting fetches each sit behind their own catch, so a Glooko endpoint that is down
-/// used to cost the tenant that data while the run still reported green. A failed fetch of a type
-/// the tenant enabled must reach <see cref="SyncResult.Success"/> and <see cref="SyncResult.Errors"/>,
-/// while whatever the run already fetched still publishes.
+/// Glooko's fetches each sit behind their own catch — the supporting ones singly, the V2 batch's
+/// endpoints in a loop — so a Glooko endpoint that is down used to cost the tenant that data while
+/// the run still reported green. A failed fetch of a type the tenant enabled must reach
+/// <see cref="SyncResult.Success"/> and <see cref="SyncResult.Errors"/>, while whatever the run
+/// already fetched still publishes.
 /// </summary>
 public class GlookoConnectorServiceFetchFailureTests
 {
+    /// <summary>
+    /// Glucose is the connector's primary type and has one V2 source, so a dead CGM endpoint reporting
+    /// green was indistinguishable from a quiet day. The rest of the batch is unaffected by it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAV2BatchEndpointFails_ReportsItsTypeAndPublishesTheRest()
+    {
+        var service = BuildService(GlookoConstants.CgmReadingsPath);
+
+        var result = await service.SyncDataAsync(
+            Request(SyncDataType.Glucose, SyncDataType.StateSpans, SyncDataType.TempBasals),
+            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch Glucose");
+        result.Message.Should().Be("Sync failed while fetching data");
+        service.Published.Should().Contain([PublishKind.StateSpans, PublishKind.TempBasals]);
+    }
+
+    /// <summary>
+    /// One endpoint can carry several types — a normal bolus carries the wizard's carbs alongside the
+    /// insulin — and losing the endpoint loses every one of them.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAV2BatchEndpointServingSeveralTypesFails_ReportsEachType()
+    {
+        var service = BuildService(GlookoConstants.NormalBolusesPath);
+
+        var result = await service.SyncDataAsync(
+            Request(SyncDataType.Boluses, SyncDataType.CarbIntake),
+            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().Contain(["Failed to fetch Boluses", "Failed to fetch CarbIntake"]);
+    }
+
+    /// <summary>
+    /// A payload that arrived but would not map loses the tenant exactly what one that never arrived
+    /// does, so the two report alike.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAV2BatchEndpointServesUnmappablePayload_ReportsItsType()
+    {
+        var service = GlookoSyncHarness.Service(
+            new GlookoEndpointHandler(malformedPaths: [GlookoConstants.CgmReadingsPath]));
+
+        var result = await service.SyncDataAsync(
+            Request(SyncDataType.Glucose, SyncDataType.StateSpans),
+            GlookoSyncHarness.Config(useV3Api: false), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("Failed to fetch Glucose");
+        service.Published.Should().Contain(PublishKind.StateSpans);
+    }
+
+    /// <summary>
+    /// A failed run withholds the connector's last-successful-sync stamp, so a batch endpoint whose
+    /// types the tenant switched off must not be able to fail the sync.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAV2BatchEndpointFailsForSwitchedOffTypes_ReportsSuccess()
+    {
+        var service = BuildService(GlookoConstants.CgmReadingsPath);
+
+        var result = await service.SyncDataAsync(
+            Request(SyncDataType.StateSpans), GlookoSyncHarness.Config(useV3Api: false),
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+        service.Published.Should().Contain(PublishKind.StateSpans);
+    }
+
     /// <summary>
     /// Device settings are the only profile source in either fetch mode, so both modes must report
     /// the loss — and both must still publish the chunk's own state spans.
