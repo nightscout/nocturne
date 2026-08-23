@@ -38,3 +38,10 @@ packageExtensions:
   "@microsoft/signalr":
     dependencies:
       tough-cookie: "*"
+
+# pnpm rejects a lockfile entry published within the last day. openapi-remote-codegen
+# is ours (ryceg/openapi-remote-codegen) and each release exists to fix a defect in
+# the wrappers this workspace generates, so waiting a day to adopt one buys nothing.
+# Drop an entry once its version ages past the cutoff.
+minimumReleaseAgeExclude:
+  - openapi-remote-codegen@0.5.0
