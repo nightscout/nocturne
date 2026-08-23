@@ -10,7 +10,6 @@ RUN npm install -g pnpm@10
 
 # Copy workspace files
 COPY src/Web/package.json src/Web/pnpm-lock.yaml src/Web/pnpm-workspace.yaml ./
-COPY src/Web/patches ./patches
 COPY src/Web/supportedLocales.json ./
 COPY src/Web/locales ./locales
 COPY src/Web/packages ./packages
@@ -42,7 +41,6 @@ RUN npm install -g pnpm@10
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/patches ./patches
 COPY --from=builder /app/packages/app/package.json ./packages/app/
 COPY --from=builder /app/packages/bridge/package.json ./packages/bridge/
 COPY --from=builder /app/packages/bridge/dist ./packages/bridge/dist
