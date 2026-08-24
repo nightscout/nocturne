@@ -46,7 +46,7 @@ public class TenantResolutionMiddleware
     /// Whether <paramref name="Path"/> admits everything beneath it. Needed by controllers whose
     /// routes carry an id segment; prefer an exact entry, which cannot admit a route added later.
     /// </param>
-    private readonly record struct TenantlessPath(
+    public readonly record struct TenantlessPath(
         string Path, string? Method = null, bool Prefix = false)
     {
         /// <summary>Admit every method on a path, which is the case for most of the list.</summary>
@@ -66,13 +66,11 @@ public class TenantResolutionMiddleware
     /// </summary>
     private static readonly TenantlessPath[] TenantlessAllowedPaths =
     [
-        // Aspire ServiceDefaults health endpoints — must never be tenant-gated;
-        // they are used by Kubernetes liveness/readiness probes and external
-        // monitoring. Returning 503 on these when no tenant exists causes
-        // liveness probes to kill the pod, preventing first-time setup.
+        // The two paths MapDefaultEndpoints maps, and the only two the deployment probes.
+        // Returning 503 on these when no tenant exists causes liveness probes to kill the pod,
+        // preventing first-time setup.
         "/health",
         "/alive",
-        "/ready",
         "/api/v4/status",
         "/api/v4/me/tenants/validate-slug",
         // Cross-tenant caregiver overview: aggregates across the subject's tenants,
@@ -95,8 +93,6 @@ public class TenantResolutionMiddleware
         // only presentation: the dashboard tiles render glucose in the units held here, so a 404
         // shows an mmol/L user their children's readings in mg/dL.
         "/api/v4/user/preferences",
-        "/api/v4/admin/tenants/validate-slug",
-        "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
@@ -184,6 +180,11 @@ public class TenantResolutionMiddleware
         // exact path: SignalR appends /negotiate to the hub path.
         new TenantlessPath("/hubs/overview", Prefix: true),
     ];
+
+    /// <summary>
+    /// The entries themselves, for the guard that asserts each one still names a routed endpoint.
+    /// </summary>
+    public static IReadOnlyList<TenantlessPath> TenantlessPaths => TenantlessAllowedPaths;
 
     /// <summary>
     /// Whether a request is served without a resolved tenant. Public so the authorization
