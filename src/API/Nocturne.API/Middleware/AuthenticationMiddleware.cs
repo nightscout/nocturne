@@ -130,7 +130,7 @@ public class AuthenticationMiddleware
             context.SetGrantedScopes(grantedScopes);
 
             // Also set the legacy AuthenticationContext for backward compatibility
-            context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+            context.SetLegacyAuthContext(MapToLegacyContext(authContext));
 
             // Load platform admin flag from subject before building claims,
             // so [Authorize(Roles = "platform_admin")] works correctly.
@@ -288,7 +288,7 @@ public class AuthenticationMiddleware
                 categoryReadContext?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
                 categoryReadContext?.SetFullHistory(!publicAccess.LimitTo24Hours);
 
-                context.Items["AuthenticationContext"] = MapToLegacyContext(publicAuthContext);
+                context.SetLegacyAuthContext(MapToLegacyContext(publicAuthContext));
 
                 _logger.LogDebug(
                     "Public access resolved for tenant {TenantId} with {Count} permissions",
@@ -423,7 +423,7 @@ public class AuthenticationMiddleware
         context.SetAuthContext(identityOnly);
         context.SetPermissionTrie(new PermissionTrie());
         context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
-        context.Items["AuthenticationContext"] = MapToLegacyContext(identityOnly);
+        context.SetLegacyAuthContext(MapToLegacyContext(identityOnly));
 
         // The principal built earlier carries the subject's roles, its platform-admin role and a
         // claim per permission. [Authorize] reads the principal, so it is replaced rather than
@@ -457,7 +457,7 @@ public class AuthenticationMiddleware
         context.SetAuthContext(authContext);
         context.SetPermissionTrie(new PermissionTrie());
         context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
-        context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+        context.SetLegacyAuthContext(MapToLegacyContext(authContext));
 
         // Clearing Items is not enough: this method is also the tenant-membership rejection
         // path, and by then the principal above has already been built. [Authorize] reads

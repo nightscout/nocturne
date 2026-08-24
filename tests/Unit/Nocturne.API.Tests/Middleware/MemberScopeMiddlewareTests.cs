@@ -38,7 +38,6 @@ public class MemberScopeMiddlewareTests
 
         // Assert: should NOT have superuser wildcard
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain("treatments.readwrite");
@@ -70,7 +69,6 @@ public class MemberScopeMiddlewareTests
 
         // Assert: full access normalizes to all scopes
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
         var permissionTrie = context.GetPermissionTrie();
@@ -95,7 +93,6 @@ public class MemberScopeMiddlewareTests
 
         // Assert: always superuser regardless of scopes
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
         var permissionTrie = context.GetPermissionTrie();
@@ -121,7 +118,6 @@ public class MemberScopeMiddlewareTests
         await middleware.InvokeAsync(context);
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
         var permissionTrie = context.GetPermissionTrie();
@@ -147,7 +143,6 @@ public class MemberScopeMiddlewareTests
 
         // Assert
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().Contain("treatments.readwrite");
         grantedScopes.Should().NotContain("*");
@@ -210,7 +205,6 @@ public class MemberScopeMiddlewareTests
         permissionTrie.Check("*").Should().BeTrue();
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes!.Should().Contain("*");
     }
 
@@ -235,7 +229,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.GlucoseRead);
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
@@ -269,7 +262,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
         var permissionTrie = context.GetPermissionTrie();
@@ -298,7 +290,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
@@ -324,7 +315,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.DeviceNotify);
         grantedScopes.Should().Contain(Scope.DeviceActuate);
         // Role atoms the token didn't request stay excluded.
@@ -358,7 +348,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.DeviceNotify);
         grantedScopes.Should().Contain(Scope.DeviceActuate);
         // The role intersection still applies to everything else.
@@ -387,7 +376,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEmpty();
     }
 
@@ -419,7 +407,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotBeEmpty();
 
         foreach (var atom in new[]
@@ -462,7 +449,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.GlucoseRead);
         grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
         // The IdP's protocol scopes are not Nocturne scopes and must not be published.
@@ -516,6 +502,8 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
+        context.Items.Should().ContainKey("GrantedScopes",
+            "the middleware has to resolve a scope set, not leave the request unscoped");
         (context.GetGrantedScopes()).Should().BeEmpty();
         (context.GetPermissionTrie())!.IsEmpty.Should().BeTrue();
     }
@@ -657,7 +645,6 @@ public class MemberScopeMiddlewareTests
         // The Viewer's own scopes (glucose.read, reports.read) are not in the grant either, so the
         // intersection is empty.
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEmpty();
 
         var permissionTrie = context.GetPermissionTrie();
@@ -690,7 +677,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotContain(Scope.FullAccess);
         grantedScopes.Should().Contain(Scope.GlucoseReadWrite);
         grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
@@ -753,7 +739,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotContain(Scope.GlucoseReadWrite);
         grantedScopes.Should().NotContain(Scope.DevicesReadWrite);
         grantedScopes.Should().Contain(Scope.GlucoseRead, "reads are retained");
@@ -786,7 +771,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.HealthReadWriteExpansion);
 
         var permissionTrie = context.GetPermissionTrie();
@@ -828,7 +812,6 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.GetGrantedScopes();
-        grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
 
         var permissionTrie = context.GetPermissionTrie();

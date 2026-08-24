@@ -207,6 +207,17 @@ public static class HttpContextExtensions
         context.Items[AuthContextKeys.GrantedScopes] = scopes;
     }
 
+    /// <summary>
+    /// Records the legacy authentication context v1-v3 read through
+    /// <see cref="GetLegacyAuthContext"/>. Written from the same place as the modern one, so the
+    /// pair cannot fall out of step.
+    /// </summary>
+    public static void SetLegacyAuthContext(
+        this HttpContext context, AuthenticationContext legacyContext)
+    {
+        context.Items[AuthContextKeys.LegacyAuthContext] = legacyContext;
+    }
+
     /// <summary>Records the resolved auth context.</summary>
     public static void SetAuthContext(this HttpContext context, AuthContext authContext)
     {
