@@ -153,9 +153,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
 
         var grant = await _dbContext.OAuthGrants
             .AsNoTracking()
-            .Where(g => g.TokenHash == tokenHash
-                     && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null)
+            .Where(g => g.TokenHash == tokenHash)
+            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
             .FirstOrDefaultAsync();
 
         if (grant == null)

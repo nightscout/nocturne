@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -145,11 +146,25 @@ public class DirectGrantTokenHandler : IAuthHandler
     {
         return grants
             .IgnoreQueryFilters()
-            .Where(g => g.TenantId == tenantId
-                     && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null
-                     && (g.ExpiresAt == null || g.ExpiresAt > now));
+            .Where(g => g.TenantId == tenantId)
+            .Where(IsLiveDirectGrant(now));
     }
+
+    /// <summary>
+    /// What makes a direct grant usable, independent of how the caller scopes it to a tenant.
+    /// </summary>
+    /// <remarks>
+    /// Shared with the <c>/api/v2/authorization/request/{token}</c> exchange, which scopes by the
+    /// global query filter rather than an explicit tenant id and so cannot reuse
+    /// <see cref="ActiveDirectGrants"/> wholesale. It previously restated the predicate and omitted
+    /// the expiry term, so a grant this handler and the hubs both refused could still be exchanged
+    /// for a one-hour JWT.
+    /// </remarks>
+    /// <param name="now">The instant to judge expiry against.</param>
+    internal static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
+        g => g.GrantType == OAuthGrantTypes.Direct
+             && g.RevokedAt == null
+             && (g.ExpiresAt == null || g.ExpiresAt > now);
 
     /// <summary>
     /// Extracts a direct grant token from the request. Accepts the <c>Authorization: Bearer</c>
