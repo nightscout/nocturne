@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -124,7 +123,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         DateTime now,
         CancellationToken ct = default)
     {
-        var tokenHash = ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(ct);
         dbContext.TenantId = tenantId;
@@ -216,11 +215,5 @@ public class DirectGrantTokenHandler : IAuthHandler
         {
             _logger.LogWarning(ex, "Failed to update last used metadata for grant {GrantId}", grantId);
         }
-    }
-
-    internal static string ComputeSha256Hex(string input)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexStringLower(bytes);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -68,7 +69,7 @@ public class ApiKeyHandler : IAuthHandler
 
         if (apiKey.StartsWith("noc_", StringComparison.Ordinal))
         {
-            tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(apiKey);
+            tokenHash = HashUtils.Sha256Hex(apiKey);
         }
         else
         {

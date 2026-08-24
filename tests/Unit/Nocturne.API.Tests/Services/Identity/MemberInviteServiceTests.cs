@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -33,7 +34,7 @@ public class MemberInviteServiceTests : IDisposable
     private static readonly string[] OwnerPermissions = [Scope.FullAccess];
 
     private const string FakeToken = "fake-random-token-abc123";
-    private const string FakeTokenHash = "hashed-fake-token";
+    private static readonly string FakeTokenHash = HashUtils.Sha256Hex(FakeToken);
     private const string BaseDomain = "app.nocturnecgm.com";
 
     public MemberInviteServiceTests()
@@ -55,7 +56,6 @@ public class MemberInviteServiceTests : IDisposable
 
         _jwtService = new Mock<IJwtService>();
         _jwtService.Setup(j => j.GenerateRefreshToken()).Returns(FakeToken);
-        _jwtService.Setup(j => j.HashRefreshToken(FakeToken)).Returns(FakeTokenHash);
 
         _tenantService = new Mock<ITenantService>();
 

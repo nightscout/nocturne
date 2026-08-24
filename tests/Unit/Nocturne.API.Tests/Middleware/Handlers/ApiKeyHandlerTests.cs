@@ -80,7 +80,7 @@ public class ApiKeyHandlerTests : IDisposable
     public async Task AuthenticateAsync_NocPrefixedToken_LooksUpBySha256TokenHash()
     {
         var token = "noc_myapikey12345";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -152,8 +152,8 @@ public class ApiKeyHandlerTests : IDisposable
     {
         var firstToken = "noc_firstapikey12345";
         var secondToken = "noc_secondapikey12345";
-        var firstHash = DirectGrantTokenHandler.ComputeSha256Hex(firstToken);
-        var secondHash = DirectGrantTokenHandler.ComputeSha256Hex(secondToken);
+        var firstHash = HashUtils.Sha256Hex(firstToken);
+        var secondHash = HashUtils.Sha256Hex(secondToken);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -270,7 +270,7 @@ public class ApiKeyHandlerTests : IDisposable
         // SHA-1(token) in the api-secret header, it must authenticate via the legacy lookup path —
         // and must NOT trigger the migrated-secret rotation nudge.
         var token = "noc_minteduploaderkey";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
         var sha1Hash = HashUtils.Sha1Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
@@ -316,7 +316,7 @@ public class ApiKeyHandlerTests : IDisposable
     public async Task AuthenticateAsync_RevokedGrant_ReturnsFailure()
     {
         var token = "noc_revokedkey123";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -372,7 +372,7 @@ public class ApiKeyHandlerTests : IDisposable
     public async Task AuthenticateAsync_ResolvedGrantScopes_AreUsedNotHardcoded()
     {
         var token = "noc_scopedkey456";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -404,7 +404,7 @@ public class ApiKeyHandlerTests : IDisposable
     public async Task AuthenticateAsync_SecretQueryParam_CheckedWhenHeaderAbsent()
     {
         var token = "noc_queryparam789";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -505,7 +505,7 @@ public class ApiKeyHandlerTests : IDisposable
         string token, DateTime? expiresAt, DateTime? createdAt = null)
     {
         await SeedGrantAsync(
-            DirectGrantTokenHandler.ComputeSha256Hex(token), null, expiresAt, createdAt);
+            HashUtils.Sha256Hex(token), null, expiresAt, createdAt);
         return token;
     }
 

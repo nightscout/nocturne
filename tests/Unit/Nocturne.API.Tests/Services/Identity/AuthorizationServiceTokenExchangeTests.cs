@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Utilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -89,7 +90,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             SubjectId = _subjectId,
             TenantId = _testTenantId,
             GrantType = OAuthGrantTypes.Direct,
-            TokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token),
+            TokenHash = HashUtils.Sha256Hex(token),
             Scopes = scopes ?? ["glucose.read", "treatments.readwrite"],
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,

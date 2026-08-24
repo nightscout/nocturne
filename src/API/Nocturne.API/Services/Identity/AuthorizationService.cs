@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -81,7 +82,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             }
 
             // Hash the access token to look it up
-            var tokenHash = ComputeSha256Hash(accessToken);
+            var tokenHash = HashUtils.Sha256Hex(accessToken);
 
             // Find subject by access token hash, falling back to legacy Nightscout digest matching
             // for tokens migrated from a classic instance (AAPS V3 exchanges its plaintext token
@@ -149,7 +150,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// </summary>
     private async Task<AuthorizationResponse?> GenerateJwtFromDirectGrantAsync(string accessToken)
     {
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(accessToken);
+        var tokenHash = HashUtils.Sha256Hex(accessToken);
 
         var grant = await _dbContext.OAuthGrants
             .AsNoTracking()
@@ -212,16 +213,6 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             Iat = now.ToUnixTimeSeconds(),
             Exp = exp.ToUnixTimeSeconds(),
         };
-    }
-
-    /// <summary>
-    /// Compute SHA-256 hash of a string
-    /// </summary>
-    private static string ComputeSha256Hash(string input)
-    {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>

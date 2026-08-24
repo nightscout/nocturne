@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -146,7 +147,7 @@ public class DirectGrantControllerTests : IDisposable
         // Verify the stored hash matches what we'd compute
         var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.NotNull(grant);
-        var expectedHash = DirectGrantTokenHandler.ComputeSha256Hex(response.Token);
+        var expectedHash = HashUtils.Sha256Hex(response.Token);
         Assert.Equal(expectedHash, grant!.TokenHash);
         Assert.Equal(OAuthGrantTypes.Direct, grant.GrantType);
         Assert.Null(grant.ClientEntityId);

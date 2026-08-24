@@ -19,7 +19,7 @@ namespace Nocturne.API.Controllers.Authentication;
 ///
 /// Token generation uses <see cref="System.Security.Cryptography.RandomNumberGenerator"/> to produce
 /// 32 bytes of entropy encoded as a Base64-URL string. Only the SHA-256 hash of the token is stored
-/// (<see cref="DirectGrantTokenHandler.ComputeSha256Hex"/>); the plaintext is returned once at
+/// (<see cref="Connectors.Core.Utilities.HashUtils.Sha256Hex"/>); the plaintext is returned once at
 /// creation and cannot be retrieved again.
 ///
 /// Scopes are validated and normalized via <see cref="Scope.Normalize"/> before storage.

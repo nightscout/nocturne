@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -75,7 +76,7 @@ public class MemberInviteService : IMemberInviteService
 
         // Generate token
         var token = _jwtService.GenerateRefreshToken();
-        var tokenHash = _jwtService.HashRefreshToken(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         var entity = new MemberInviteEntity
         {
@@ -120,7 +121,7 @@ public class MemberInviteService : IMemberInviteService
         if (string.IsNullOrEmpty(token))
             return null;
 
-        var tokenHash = _jwtService.HashRefreshToken(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         var entity = await _dbContext.MemberInvites
             .Include(i => i.Tenant)
@@ -141,7 +142,7 @@ public class MemberInviteService : IMemberInviteService
         if (string.IsNullOrEmpty(token))
             return new AcceptMemberInviteResult(false, "invalid_token", "Invite token is required.");
 
-        var tokenHash = _jwtService.HashRefreshToken(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         // Bounded by the tenant the request resolved to, not by the one the token names. The token
         // is the only thing authorizing the join, so a token minted for another tenant must read as

@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
@@ -109,7 +110,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
     public async Task AuthenticateAsync_ValidOpaqueToken_ReturnsSuccess()
     {
         var token = "noc_testtoken12345";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         // Seed the grant
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
@@ -144,7 +145,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
     {
         // Nightscout uploaders (xDrip4iOS etc.) send the token as ?token=noc_...
         var token = "noc_querytoken12345";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -179,7 +180,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
         // The bare suffix must still resolve to the grant stored under the full noc_ token.
         var token = "noc_baretoken1234567";
         var bareSuffix = token["noc_".Length..];
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
         {
@@ -236,7 +237,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
     public async Task AuthenticateAsync_RevokedGrant_ReturnsSkip()
     {
         var token = "noc_revokedtoken123";
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var tokenHash = HashUtils.Sha256Hex(token);
 
         // Seed a revoked grant
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
@@ -316,7 +317,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
             SubjectId = _subjectId,
             TenantId = _testTenantId,
             GrantType = OAuthGrantTypes.Direct,
-            TokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token),
+            TokenHash = HashUtils.Sha256Hex(token),
             Scopes = ["glucose.read"],
             CreatedAt = createdAt ?? Now,
             ExpiresAt = expiresAt,

@@ -148,7 +148,7 @@ public class DirectGrantService : IDirectGrantService
 
         var randomBytes = RandomNumberGenerator.GetBytes(TokenRandomBytes);
         var plaintextToken = TokenPrefix + Base64UrlEncode(randomBytes);
-        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(plaintextToken);
+        var tokenHash = HashUtils.Sha256Hex(plaintextToken);
 
         var entity = new OAuthGrantEntity
         {

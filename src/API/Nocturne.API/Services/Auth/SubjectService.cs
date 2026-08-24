@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -216,7 +216,7 @@ public class SubjectService : ISubjectService
         if (subject.Type == SubjectType.Device || subject.Type == SubjectType.Service)
         {
             plainAccessToken = GenerateAccessToken();
-            entity.AccessTokenHash = HashAccessToken(plainAccessToken);
+            entity.AccessTokenHash = HashUtils.Sha256Hex(plainAccessToken);
             entity.AccessTokenPrefix = $"{subject.Name.ToLowerInvariant()}-{plainAccessToken[..8]}";
         }
 
@@ -332,7 +332,7 @@ public class SubjectService : ISubjectService
         }
 
         var plainAccessToken = GenerateAccessToken();
-        entity.AccessTokenHash = HashAccessToken(plainAccessToken);
+        entity.AccessTokenHash = HashUtils.Sha256Hex(plainAccessToken);
         entity.AccessTokenPrefix = $"{entity.Name.ToLowerInvariant()}-{plainAccessToken[..8]}";
         // Rotation must revoke the legacy Nightscout token too, otherwise the old (possibly
         // leaked) migrated token would keep authenticating through the legacy digest fallback.
@@ -817,16 +817,6 @@ public class SubjectService : ISubjectService
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
-    /// <summary>
-    /// Hash an access token with SHA256
-    /// </summary>
-    private static string HashAccessToken(string accessToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(accessToken);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>

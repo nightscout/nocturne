@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Audit;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -635,7 +636,7 @@ internal class MigrationJob
             SourceIdentifier = identifier,
             NightscoutUrl = isApi ? _request.NightscoutUrl : null,
             NightscoutApiSecretHash = isApi && !string.IsNullOrEmpty(_request.NightscoutApiSecret)
-                ? Sha256Hex(_request.NightscoutApiSecret)
+                ? HashUtils.Sha256Hex(_request.NightscoutApiSecret)
                 : null,
             MongoDatabaseName = isApi ? null : _request.MongoDatabaseName,
             CreatedAt = DateTime.UtcNow,
@@ -648,10 +649,8 @@ internal class MigrationJob
     internal static string ApiSourceIdentifier(string nightscoutUrl) => nightscoutUrl.TrimEnd('/');
 
     /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
-    internal static string MongoSourceIdentifier(string connectionString) => Sha256Hex(connectionString);
-
-    private static string Sha256Hex(string value) =>
-        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    internal static string MongoSourceIdentifier(string connectionString) =>
+        HashUtils.Sha256Hex(connectionString);
 
     /// <summary>Npgsql rejects Local/Unspecified kinds for timestamptz; normalize optional caller-supplied dates.</summary>
     private static DateTime? AsUtc(DateTime? value) => value switch
@@ -1654,7 +1653,7 @@ internal class MigrationJob
                         continue;
                     }
 
-                    var tokenHash = HashAccessToken(subject.AccessToken);
+                    var tokenHash = HashUtils.Sha256Hex(subject.AccessToken);
 
                     if (existingHashes.Contains(tokenHash))
                     {
@@ -1862,13 +1861,6 @@ internal class MigrationJob
         }
 
         return result;
-    }
-
-    private static string HashAccessToken(string accessToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(accessToken);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexStringLower(hash);
     }
 
     private record NightscoutSubject

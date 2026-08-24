@@ -148,7 +148,7 @@ public class HubTokenAuthorizerTests
             TenantId = tenantId,
             SubjectId = subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            TokenHash = DirectGrantTokenHandler.ComputeSha256Hex(DirectGrantToken),
+            TokenHash = HashUtils.Sha256Hex(DirectGrantToken),
             Scopes = [.. scopes],
             RevokedAt = revokedAt,
         };

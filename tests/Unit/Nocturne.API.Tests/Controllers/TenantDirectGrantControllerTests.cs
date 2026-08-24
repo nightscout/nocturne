@@ -155,7 +155,7 @@ public class TenantDirectGrantControllerTests : IDisposable
 
         var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.NotNull(grant);
-        Assert.Equal(DirectGrantTokenHandler.ComputeSha256Hex(response.Token), grant!.TokenHash);
+        Assert.Equal(HashUtils.Sha256Hex(response.Token), grant!.TokenHash);
         Assert.Equal(HashUtils.Sha1Hex(response.Token), grant.LegacySecretHash);
     }
 

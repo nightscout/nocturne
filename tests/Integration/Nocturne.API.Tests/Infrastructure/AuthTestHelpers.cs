@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 
@@ -40,7 +40,7 @@ public static class AuthTestHelpers
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
-        var tokenHash = ComputeSha256Hex(accessToken);
+        var tokenHash = HashUtils.Sha256Hex(accessToken);
         var prefix = accessToken.Length > 10 ? accessToken[..10] + "..." : accessToken;
 
         // Insert subject
@@ -161,7 +161,7 @@ public static class AuthTestHelpers
     {
         var subjectId = Guid.CreateVersion7();
         var accessToken = $"{name.ToLowerInvariant().Replace(" ", "-")}-{Guid.NewGuid():N}";
-        var tokenHash = ComputeSha256Hex(accessToken);
+        var tokenHash = HashUtils.Sha256Hex(accessToken);
         var prefix = accessToken.Length > 10 ? accessToken[..10] + "..." : accessToken;
 
         // Insert subject
@@ -330,7 +330,7 @@ public static class AuthTestHelpers
     {
         var grantId = Guid.CreateVersion7();
         var code = GenerateGuestCode();
-        var codeHash = ComputeSha256Hex(code.ToUpperInvariant());
+        var codeHash = HashUtils.Sha256Hex(code.ToUpperInvariant());
 
         // Resolve tenant for the data owner
         Guid tenantId;
@@ -696,17 +696,6 @@ public static class AuthTestHelpers
         }
 
         return (excursionId, instanceId);
-    }
-
-    /// <summary>
-    /// Computes the SHA-256 hash of a string, returned as lowercase hex.
-    /// Matches DirectGrantTokenHandler.ComputeSha256Hex.
-    /// </summary>
-    public static string ComputeSha256Hex(string input)
-    {
-        var bytes = Encoding.UTF8.GetBytes(input);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>
