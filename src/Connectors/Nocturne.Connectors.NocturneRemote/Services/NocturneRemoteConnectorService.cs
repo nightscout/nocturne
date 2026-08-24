@@ -148,7 +148,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
             // A run carrying no glucose cursor imports the remote's full history here, which no
             // family's resume point may narrow — unlike ResumeFrom's own reading of an absent
-            // caller bound, which the remaining families keep.
+            // caller bound, which the other connectors keep.
             return request.From is null ? null : ResumeFrom(request.From, resume ?? request.From);
         }
 
