@@ -39,16 +39,16 @@ public class ShareDataCategoriesGuardTests
         "user_food_favorites",
     };
 
-    private static IReadOnlySet<string> TenantScopedTables()
+    private static readonly Lazy<IReadOnlySet<string>> TenantScopedTables = new(() =>
     {
         using var context = OfflineDbContext.Create();
         return ShareRlsPolicy.TenantScopedTableNames(context.Model).ToHashSet(StringComparer.Ordinal);
-    }
+    });
 
     [Fact]
     public void EveryTenantScopedTable_IsClassifiedShareableOrHidden()
     {
-        var unclassified = TenantScopedTables()
+        var unclassified = TenantScopedTables.Value
             .Where(t => ShareDataCategories.GoverningScopeFor(t) is null && !KnownHiddenTables.Contains(t))
             .OrderBy(t => t, StringComparer.Ordinal)
             .ToList();
@@ -61,7 +61,7 @@ public class ShareDataCategoriesGuardTests
     [Fact]
     public void GovernedTables_OnlyReferenceRealTenantScopedTables()
     {
-        var real = TenantScopedTables();
+        var real = TenantScopedTables.Value;
 
         ShareDataCategories.GovernedTables.Values.SelectMany(t => t)
             .Where(t => !real.Contains(t))
@@ -71,7 +71,7 @@ public class ShareDataCategoriesGuardTests
     [Fact]
     public void KnownHiddenTables_AreAllStillTenantScoped()
     {
-        var real = TenantScopedTables();
+        var real = TenantScopedTables.Value;
 
         KnownHiddenTables.Where(t => !real.Contains(t))
             .Should().BeEmpty("KnownHiddenTables must not list a stale, non-ITenantScoped table");

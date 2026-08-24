@@ -7,8 +7,9 @@ internal static class OfflineDbContext
 {
     /// <summary>
     /// The Npgsql provider is required — table names, index filters and column types exist only on
-    /// the relational mapping — but the model builds without a server, so nothing here is reachable
-    /// and the connection is never opened.
+    /// the relational mapping — but building the model opens no connection, so the host and
+    /// credentials are placeholders for as long as a caller touches nothing but
+    /// <see cref="DbContext.Model"/>.
     /// </summary>
     public static NocturneDbContext Create() =>
         new(new DbContextOptionsBuilder<NocturneDbContext>()

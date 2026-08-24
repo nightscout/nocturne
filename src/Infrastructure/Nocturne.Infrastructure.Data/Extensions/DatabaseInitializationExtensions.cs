@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
@@ -269,17 +268,9 @@ public static class DatabaseInitializationExtensions
         var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
 
-        var tenantScopedTables = context.Model.GetEntityTypes()
-            .Where(et => typeof(ITenantScoped).IsAssignableFrom(et.ClrType))
-            .Select(et => et.GetTableName())
-            .Where(name => !string.IsNullOrEmpty(name))
-            .Select(name => name!)
-            .Distinct()
-            .ToArray();
-
         await VerifyRlsAsync(
             context.Database.GetDbConnection(),
-            tenantScopedTables,
+            ShareRlsPolicy.TenantScopedTableNames(context.Model),
             logger,
             cancellationToken);
 
@@ -326,7 +317,7 @@ public static class DatabaseInitializationExtensions
     /// if it isn't already, and is left open on return.
     /// </summary>
     /// <param name="connection">Open or closed DbConnection to run the checks against. Opened if needed and left open.</param>
-    /// <param name="tenantScopedTables">Names of tables expected to have RLS configured (typically derived from the EF model walk for <see cref="ITenantScoped"/> entities).</param>
+    /// <param name="tenantScopedTables">Names of tables expected to have RLS configured — <see cref="ShareRlsPolicy.TenantScopedTableNames"/> in production.</param>
     /// <param name="logger">Logger for pass/warn/fail messages. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance"/> to suppress.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async Task VerifyRlsAsync(

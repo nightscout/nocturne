@@ -98,9 +98,8 @@ public class ShareRlsPolicyTests
     [Fact]
     public void TenantScopedTableNames_CoversEveryTenantScopedEntity()
     {
-        // Every consumer — the startup reconciler, the share-category classification guard, the
-        // data-migration tenant-loop guard, the RLS integration suites — reads its table set from
-        // here, so an entity this misses is unpoliced and unguarded everywhere at once.
+        // Every caller takes its table set from here, so an entity this misses is unpoliced and
+        // unguarded everywhere at once.
         var model = Model();
         var tables = ShareRlsPolicy.TenantScopedTableNames(model).ToHashSet(StringComparer.Ordinal);
 

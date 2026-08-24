@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
@@ -36,8 +37,12 @@ public class RlsCompletenessFixture : IAsyncLifetime
     public string MigratorConnectionString { get; private set; } = string.Empty;
 
     /// <summary>
-    /// <see cref="ShareRlsPolicy.TenantScopedTableNames"/> off the model this fixture migrated
-    /// and reconciled, so the tables asserted over and the tables policied cannot come apart.
+    /// Tables the suites in this collection expect the live database to have policied, cascaded
+    /// and forced. Deliberately NOT <see cref="ShareRlsPolicy.TenantScopedTableNames"/>: that
+    /// method produced the DDL under test, so asserting against it would only restate what the
+    /// reconciler was told to do. Walks <see cref="ITenantScoped"/> CLR types instead and asks
+    /// the model for each one's table, so a table dropped from the reconciler's set still
+    /// appears here and the database is caught missing it.
     /// </summary>
     public IReadOnlyList<string> TenantScopedTableNames { get; private set; } = [];
 
@@ -77,7 +82,15 @@ public class RlsCompletenessFixture : IAsyncLifetime
 
         await using var context = new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(MigratorConnectionString).Options);
-        TenantScopedTableNames = ShareRlsPolicy.TenantScopedTableNames(context.Model);
+
+        TenantScopedTableNames = typeof(ITenantScoped).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
+            .Select(t => context.Model.FindEntityType(t)?.GetTableName())
+            .Where(n => n is not null)
+            .Select(n => n!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
     }
 
     public async Task DisposeAsync()
