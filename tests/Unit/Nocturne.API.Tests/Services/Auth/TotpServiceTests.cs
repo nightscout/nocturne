@@ -145,27 +145,44 @@ public class TotpServiceTests : IDisposable
     /// A challenge that is readable but stale is refused as expired, not as unreadable: the two
     /// are the same 400 to the caller but different copy, so the split has to survive here.
     /// </summary>
-    [Fact]
+    /// <remarks>
+    /// The hand-minted payload is only evidence if it deserializes — a shape
+    /// <see cref="System.Text.Json.JsonSerializer"/> could not read would leave
+    /// <c>ExpiresAt</c> at <c>default</c>, which is also in the past. The accepted case proves the
+    /// property names match, so the refused one can only be the expiry.
+    /// </remarks>
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(1, false)]
     [Trait("Category", "Unit")]
-    public async Task CompleteSetupAsync_WithAnExpiredChallenge_ReportsExpired()
+    public async Task CompleteSetupAsync_RefusesOnlyTheChallengeThatHasExpired(
+        int minutesFromNow, bool expectRefusal)
     {
         var service = CreateService();
+        SeedSubject(TestUsername, _subjectId);
         var secret = TotpHelper.GenerateSecret();
 
         var setupProtector = _dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
-        var expired = setupProtector.Protect(JsonSerializer.Serialize(new
+        var challenge = setupProtector.Protect(JsonSerializer.Serialize(new
         {
             Secret = secret,
             SubjectId = _subjectId,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(minutesFromNow),
         }));
 
-        // A code that would otherwise be accepted, so only the expiry refuses it.
+        // A code the verifier accepts, so the expiry is the only thing that can refuse.
         var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-        var act = () => service.CompleteSetupAsync(code, "Label", expired);
+        var act = () => service.CompleteSetupAsync(code, "Label", challenge);
 
-        (await act.Should().ThrowAsync<TotpSetupException>())
-            .Which.Failure.Should().Be(TotpSetupFailure.ChallengeExpired);
+        if (expectRefusal)
+        {
+            (await act.Should().ThrowAsync<TotpSetupException>())
+                .Which.Failure.Should().Be(TotpSetupFailure.ChallengeExpired);
+        }
+        else
+        {
+            (await act()).SubjectId.Should().Be(_subjectId);
+        }
     }
 
     #endregion

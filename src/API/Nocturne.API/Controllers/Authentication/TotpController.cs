@@ -136,7 +136,7 @@ public class TotpController : ControllerBase
     /// <returns>A <see cref="TotpVerifySetupResponse"/> with the new credential ID on success.</returns>
     /// <exception cref="TotpSetupException">Thrown when the challenge token is invalid or the code does not match.</exception>
     /// <response code="200">TOTP setup verified and credential created.</response>
-    /// <response code="400">Invalid code or challenge token; <c>detail</c> is a <see cref="TotpSetupFailure"/> value.</response>
+    /// <response code="400">Invalid code or challenge token; <c>detail</c> is a <c>TotpSetupFailure</c> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("verify-setup")]
     [DenyDemoSubject]

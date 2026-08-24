@@ -9,7 +9,10 @@ import {
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
 import { TotpSetupFailure } from "$api-clients";
-import { describeTotpSetupError } from "../components/account/totp-errors";
+import {
+  describeTotpSetupError,
+  TOTP_SETUP_FALLBACK,
+} from "../components/account/totp-errors";
 
 /**
  * What a failed API call looks like by the time a page sees it.
@@ -227,39 +230,34 @@ describe("the status a generated remote function lets through", () => {
   });
 });
 
-const TOTP_FALLBACK = "Verification failed. Check the code and try again.";
+/** The settings page calls this with no fallback of its own, so the default is what ships. */
+const describeAsThePageDoes = (err: unknown) => describeTotpSetupError(err);
+
+async function wordingFor(detail: string): Promise<string> {
+  return describeAsThePageDoes(
+    await crossTheBoundary(problemDetails(400, detail, "Bad Request"))
+  );
+}
 
 describe("a refused authenticator setup", () => {
   it("turns each failure the server can raise into its own wording", async () => {
     const wordings = await Promise.all(
-      Object.values(TotpSetupFailure).map(async (failure) =>
-        describeTotpSetupError(
-          await crossTheBoundary(problemDetails(400, failure, "Bad Request")),
-          TOTP_FALLBACK
-        )
-      )
+      Object.values(TotpSetupFailure).map(wordingFor)
     );
 
-    expect(wordings).not.toContain(TOTP_FALLBACK);
+    expect(wordings).not.toContain(TOTP_SETUP_FALLBACK);
     expect(new Set(wordings).size).toBe(Object.values(TotpSetupFailure).length);
   });
 
   it("names the expiry rather than the generic refusal", async () => {
-    const crossed = await crossTheBoundary(
-      problemDetails(400, TotpSetupFailure.ChallengeExpired, "Bad Request")
+    expect(await wordingFor(TotpSetupFailure.ChallengeExpired)).toContain(
+      "took too long"
     );
-
-    expect(describeTotpSetupError(crossed, TOTP_FALLBACK)).toContain("took too long");
   });
 
   it("shows no failure value to the user", async () => {
     const wordings = await Promise.all(
-      Object.values(TotpSetupFailure).map(async (failure) =>
-        describeTotpSetupError(
-          await crossTheBoundary(problemDetails(400, failure, "Bad Request")),
-          TOTP_FALLBACK
-        )
-      )
+      Object.values(TotpSetupFailure).map(wordingFor)
     );
 
     for (const failure of Object.values(TotpSetupFailure)) {
@@ -268,10 +266,24 @@ describe("a refused authenticator setup", () => {
   });
 
   it("falls back rather than showing a failure this build does not know", async () => {
-    const crossed = await crossTheBoundary(
-      problemDetails(400, "SomethingAddedLater", "Bad Request")
-    );
+    expect(await wordingFor("SomethingAddedLater")).toBe(TOTP_SETUP_FALLBACK);
+  });
 
-    expect(describeTotpSetupError(crossed, TOTP_FALLBACK)).toBe(TOTP_FALLBACK);
+  /**
+   * `Object.prototype` answers to these; a lookup that walked the chain would hand
+   * back a function where the page expects a sentence.
+   */
+  it.each(["toString", "constructor", "hasOwnProperty"])(
+    "does not mistake %s for a failure it has copy for",
+    async (inherited) => {
+      expect(await wordingFor(inherited)).toBe(TOTP_SETUP_FALLBACK);
+    }
+  );
+
+  it("still says something when the request failed for another reason", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeAsThePageDoes(crossed)).toBe(TOTP_SETUP_FALLBACK);
+    expect(TOTP_SETUP_FALLBACK.trim()).not.toBe("");
   });
 });

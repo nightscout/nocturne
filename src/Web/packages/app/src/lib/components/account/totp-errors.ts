@@ -22,10 +22,16 @@ const SETUP_FAILURES: Record<TotpSetupFailure, string> = {
 
 function setupFailure(err: unknown): TotpSetupFailure | undefined {
   const body = errorMessage(err)?.trim();
-  return body !== undefined && body in SETUP_FAILURES
+  // Own keys only: `in` would also answer to "toString" and "constructor",
+  // which resolve to functions rather than copy.
+  return body !== undefined && Object.hasOwn(SETUP_FAILURES, body)
     ? (body as TotpSetupFailure)
     : undefined;
 }
+
+/** Shown when nothing more specific applies. */
+export const TOTP_SETUP_FALLBACK =
+  "Verification failed. Check the code and try again.";
 
 /**
  * @param err The thrown value.
@@ -33,7 +39,7 @@ function setupFailure(err: unknown): TotpSetupFailure | undefined {
  */
 export function describeTotpSetupError(
   err: unknown,
-  fallback = "Verification failed. Check the code and try again."
+  fallback = TOTP_SETUP_FALLBACK
 ): string {
   const failure = setupFailure(err);
   if (failure !== undefined) return SETUP_FAILURES[failure];
