@@ -386,24 +386,33 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     The lower bound a family crawls from: whichever of the caller's bound and the family's
-    ///     own resume point reaches further back, where a null bound reaches back without limit.
+    ///     The lower bound a family crawls from, given the caller's bound and the family's own
+    ///     resume point: whichever of the two reaches further back, where an open resume point
+    ///     reaches back without limit and an absent caller bound leaves the resume point standing.
     /// </summary>
     /// <remarks>
-    ///     Neither may narrow the other. The resume point cannot narrow the caller's bound, because
+    ///     Neither bound may narrow the other. The resume point cannot narrow the caller's, because
     ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
     ///     answering that from the watermark returns nothing and reports it as a success. The
-    ///     caller's bound cannot narrow the resume point either, because on a background catch-up
-    ///     that bound is the glucose watermark, and honouring it alone is what strands the other
+    ///     caller's cannot narrow the resume point either, because on a background catch-up the
+    ///     caller's bound is the glucose watermark, and honouring it alone is what strands the other
     ///     families behind glucose — a resume point left open by an unbounded
-    ///     <see cref="InitialSyncFloor"/> included, since that one is a family with no history
-    ///     stored at all. A resume point that is absent rather than open is resolved by the caller
-    ///     before it gets here; <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> and
-    ///     <see cref="CalculateActivityCatchUpSinceAsync"/> are the two that answer that way.
+    ///     <see cref="InitialSyncFloor"/> included, since that is a family with nothing stored at
+    ///     all asking for the source's whole history.
+    ///     <para>
+    ///     A caller that supplies no bound is not asking for everything: a background cycle whose
+    ///     glucose watermark is null reaches here, as does the tenant's own sync button, and a
+    ///     family with a resume point still stands on it. A resume point that is absent rather than
+    ///     open is resolved by the caller before it gets here — see
+    ///     <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> for the two that answer that way.
+    ///     </para>
     /// </remarks>
     protected static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
     {
-        if (requested is null || resumePoint is null)
+        if (requested is null)
+            return resumePoint;
+
+        if (resumePoint is null)
             return null;
 
         return requested < resumePoint ? requested : resumePoint;

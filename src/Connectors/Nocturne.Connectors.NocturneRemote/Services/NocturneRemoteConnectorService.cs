@@ -137,11 +137,20 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         Task<DateTime?> ActivityFromAsync() =>
             activity ??= BoundAsync(() => CalculateActivityCatchUpSinceAsync(config));
 
-        // Device status and activity answer with no resume point at all when nothing of theirs is
-        // stored yet; taking the caller's bound there keeps a first sync off the whole initial
-        // window of collections this high-volume.
-        async Task<DateTime?> BoundAsync(Func<Task<DateTime?>> resumePoint) =>
-            openEnded ? ResumeFrom(request.From, await resumePoint() ?? request.From) : request.From;
+        async Task<DateTime?> BoundAsync(Func<Task<DateTime?>> resumePoint)
+        {
+            if (!openEnded)
+                return request.From;
+
+            // Awaited before the bound is decided, so a watermark the publisher cannot answer
+            // fails this family whether or not the value is used.
+            var resume = await resumePoint();
+
+            // A run carrying no glucose cursor imports the remote's full history here, which no
+            // family's resume point may narrow — unlike ResumeFrom's own reading of an absent
+            // caller bound, which the remaining families keep.
+            return request.From is null ? null : ResumeFrom(request.From, resume ?? request.From);
+        }
 
         foreach (var type in activeTypes)
         {

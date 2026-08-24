@@ -69,6 +69,34 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
+    /// A caller supplying no lower bound is not asking for everything, and each family stands on
+    /// its own resume point. This connector's glucose floor is open, so a background cycle for a
+    /// tenant with glucose switched off — or with none published yet — carries a null <c>from</c>
+    /// on every run, as do the tenant's own sync button and the dev-admin sweep. Reading that as a
+    /// request for the whole source re-crawls the entire history on every one of those runs.
+    /// </summary>
+    [Theory]
+    [InlineData(SyncDataType.Boluses, "treatments")]
+    [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
+    [InlineData(SyncDataType.Activity, "activity")]
+    public async Task SyncDataAsync_WhenTheCallerSuppliesNoLowerBound_ResumesFromTheFamilysWatermark(
+        SyncDataType dataType, string collection)
+    {
+        var watermark = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark);
+
+        await service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [dataType] },
+            NewConfig(),
+            CancellationToken.None);
+
+        handler.CrawlOf(collection).Should()
+            .Contain(LowerBound(watermark - CatchUpOverlap),
+                "the family has a resume point and the caller supplied nothing to widen it with");
+    }
+
+    /// <summary>
     /// An explicit range is answered as asked, resume points and all: it is the shape a manual
     /// re-import of one window sends, and a bound widened back to the watermark re-crawls
     /// everything between — the whole source, for a family that has stored nothing.

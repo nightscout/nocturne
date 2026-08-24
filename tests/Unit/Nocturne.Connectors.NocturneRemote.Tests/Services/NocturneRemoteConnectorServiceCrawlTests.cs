@@ -416,6 +416,26 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
+    /// A run carrying no lower bound imports this remote's full history, and no family's resume
+    /// point may narrow it back — the remote is another Nocturne instance, so the first sync is
+    /// meant to take everything it holds.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheCallerSuppliesNoLowerBound_AsksEveryFamilyForEverything()
+    {
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler, latestTreatment: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { From = null, To = null, DataTypes = [SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should().NotContain("from=");
+    }
+
+    /// <summary>
     /// The tenant's configured attempt budget governs, not the frozen startup defaults. Only the
     /// background entry point primes the field the defaults live in, so a manual sync or a cursor
     /// reset — the long full-history re-pull where the budget matters most — would otherwise run on
