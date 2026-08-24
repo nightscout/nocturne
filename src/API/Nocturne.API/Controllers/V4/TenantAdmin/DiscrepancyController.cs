@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -474,14 +475,11 @@ public class DiscrepancyController : ControllerBase
             return false;
         }
 
-        var header = Request.Headers.Authorization.ToString();
-        const string scheme = "Bearer ";
-        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        if (Request.GetAuthorizationCredential() is not { } provided)
         {
             return false;
         }
 
-        var provided = header[scheme.Length..].Trim();
         return CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(provided),
             Encoding.UTF8.GetBytes(expectedKey));

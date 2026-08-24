@@ -145,12 +145,9 @@ public class OAuthAccessTokenHandler : IAuthHandler
     /// </remarks>
     private static string? ExtractToken(HttpContext context)
     {
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-
-        if (!string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        if (context.Request.GetAuthorizationCredential() is { } bearer)
         {
-            return authHeader["Bearer ".Length..].Trim();
+            return bearer;
         }
 
         if (context.Request.Path.StartsWithSegments(HubPathPrefix))

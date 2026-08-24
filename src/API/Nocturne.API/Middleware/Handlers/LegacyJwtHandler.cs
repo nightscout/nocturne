@@ -46,19 +46,7 @@ public class LegacyJwtHandler : IAuthHandler
     /// <inheritdoc />
     public Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // Check for Bearer token in Authorization header
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-
-        if (
-            string.IsNullOrEmpty(authHeader)
-            || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            // No Bearer token, skip to next handler
-            return Task.FromResult(AuthResult.Skip());
-        }
-
-        var token = authHeader["Bearer ".Length..].Trim();
+        var token = context.Request.GetAuthorizationCredential();
 
         // Check if it looks like a JWT (has 3 parts separated by dots)
         if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)

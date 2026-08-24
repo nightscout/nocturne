@@ -181,15 +181,10 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// </remarks>
     private static string? ExtractToken(HttpContext context)
     {
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        var bearer = context.Request.GetAuthorizationCredential();
+        if (!string.IsNullOrEmpty(bearer))
         {
-            var bearer = authHeader["Bearer ".Length..].Trim();
-            if (!string.IsNullOrEmpty(bearer))
-            {
-                return bearer;
-            }
+            return bearer;
         }
 
         var queryToken = context.Request.Query["token"].FirstOrDefault();

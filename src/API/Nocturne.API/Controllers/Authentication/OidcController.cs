@@ -714,16 +714,7 @@ public class OidcController : ControllerBase
         }
 
         // Then try from Authorization header (for API clients)
-        var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        if (
-            !string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith("Refresh ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return authHeader["Refresh ".Length..].Trim();
-        }
-
-        return null;
+        return Request.GetAuthorizationCredential("Refresh");
     }
 
     /// <summary>
