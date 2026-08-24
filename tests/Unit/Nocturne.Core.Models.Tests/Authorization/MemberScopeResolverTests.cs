@@ -248,14 +248,38 @@ public class MemberScopeResolverTests
     /// <summary>
     /// Scope atoms are lowercase and matched ordinally everywhere else in the vocabulary. A
     /// resolved set that compared case-insensitively would admit a scope string the vocabulary
-    /// never defines, and set-equivalence assertions cannot see a comparer.
+    /// never defines, and set-equivalence assertions cannot see a comparer — so each of the three
+    /// return paths needs its own case. The superuser branch is the least trafficked of them:
+    /// every non-owner member and every scoped credential leaves by one of the other two.
     /// </summary>
     [Fact]
-    public void ResolvedScopes_AreMatchedOrdinally()
+    public void ResolvedScopes_AreMatchedOrdinally_OnTheSuperuserPath()
     {
         var resolved = Resolve([Scope.FullAccess, Scope.MembersManage], AuthType.SessionCookie);
 
         resolved.Contains(Scope.MembersManage.ToUpperInvariant()).Should().BeFalse(
+            "scope matching is ordinal, so an upper-cased atom is a different string");
+    }
+
+    [Fact]
+    public void ResolvedScopes_AreMatchedOrdinally_OnTheUnscopedMemberPath()
+    {
+        var resolved = Resolve(
+            [Scope.GlucoseReadWrite, Scope.MembersManage], AuthType.SessionCookie);
+
+        resolved.Should().Contain(Scope.GlucoseReadWrite);
+        resolved.Contains(Scope.GlucoseReadWrite.ToUpperInvariant()).Should().BeFalse(
+            "scope matching is ordinal, so an upper-cased atom is a different string");
+    }
+
+    [Fact]
+    public void ResolvedScopes_AreMatchedOrdinally_OnTheScopedCredentialPath()
+    {
+        var resolved = Resolve(
+            [Scope.GlucoseReadWrite], AuthType.OAuthAccessToken, Scope.GlucoseRead);
+
+        resolved.Should().Contain(Scope.GlucoseRead);
+        resolved.Contains(Scope.GlucoseRead.ToUpperInvariant()).Should().BeFalse(
             "scope matching is ordinal, so an upper-cased atom is a different string");
     }
 

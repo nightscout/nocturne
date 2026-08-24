@@ -120,4 +120,57 @@ public class OAuthScopeEnumConformanceTests
             "{0} cannot be requested at /authorize, so it must not appear on the consent surface",
             atom);
     }
+
+    /// <summary>
+    /// Each member must serialize to the atom its NAME claims. The set-equality check above cannot
+    /// see a transposition: swapping two members' attributes leaves the set, the per-member
+    /// agreement and the uniqueness check all intact, while <c>OAuthScope.SleepRead</c> starts
+    /// requesting <c>sleep.readwrite</c>. The frontend keys consent descriptions off the member
+    /// name, so that reads as "View sleep data" over a write grant.
+    /// </summary>
+    [Fact]
+    public void EveryMember_SerializesToTheAtomItsNameClaims()
+    {
+        var expected = new Dictionary<OAuthScope, string>
+        {
+            [OAuthScope.GlucoseRead] = Scope.GlucoseRead,
+            [OAuthScope.GlucoseReadWrite] = Scope.GlucoseReadWrite,
+            [OAuthScope.TreatmentsRead] = Scope.TreatmentsRead,
+            [OAuthScope.TreatmentsReadWrite] = Scope.TreatmentsReadWrite,
+            [OAuthScope.DevicesRead] = Scope.DevicesRead,
+            [OAuthScope.DevicesReadWrite] = Scope.DevicesReadWrite,
+            [OAuthScope.TherapyRead] = Scope.TherapyRead,
+            [OAuthScope.TherapyReadWrite] = Scope.TherapyReadWrite,
+            [OAuthScope.AlertsRead] = Scope.AlertsRead,
+            [OAuthScope.AlertsReadWrite] = Scope.AlertsReadWrite,
+            [OAuthScope.ReportsRead] = Scope.ReportsRead,
+            [OAuthScope.IdentityRead] = Scope.IdentityRead,
+            [OAuthScope.SharingReadWrite] = Scope.SharingReadWrite,
+            [OAuthScope.HeartRateRead] = Scope.HeartRateRead,
+            [OAuthScope.HeartRateReadWrite] = Scope.HeartRateReadWrite,
+            [OAuthScope.StepCountRead] = Scope.StepCountRead,
+            [OAuthScope.StepCountReadWrite] = Scope.StepCountReadWrite,
+            [OAuthScope.SleepRead] = Scope.SleepRead,
+            [OAuthScope.SleepReadWrite] = Scope.SleepReadWrite,
+            [OAuthScope.FoodRead] = Scope.FoodRead,
+            [OAuthScope.FoodReadWrite] = Scope.FoodReadWrite,
+            [OAuthScope.DeviceNotify] = Scope.DeviceNotify,
+            [OAuthScope.DeviceActuate] = Scope.DeviceActuate,
+            [OAuthScope.HealthRead] = Scope.HealthRead,
+            [OAuthScope.HealthReadWrite] = Scope.HealthReadWrite,
+            [OAuthScope.FullAccess] = Scope.FullAccess,
+        };
+
+        expected.Keys.Should().BeEquivalentTo(
+            Enum.GetValues<OAuthScope>(),
+            "a member added to the enum without a row here would go unpinned, which is the gap "
+            + "this test exists to close");
+
+        foreach (var (member, atom) in expected)
+        {
+            SerializedValue(member).Should().Be(atom,
+                "{0} must serialize to the atom its name claims, or a consent screen describes one "
+                + "grant and requests another", member);
+        }
+    }
 }
