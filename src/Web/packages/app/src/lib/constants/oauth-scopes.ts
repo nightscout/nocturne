@@ -4,9 +4,7 @@ import { OAuthScope } from "../api/generated/nocturne-api-client";
 
 export { OAuthScope } from "../api/generated/nocturne-api-client";
 
-// The device.* scopes gate the alert engine's device-actuation feature. They are
-// not part of the generated OAuthScope enum (which covers data-access scopes), so
-// they are keyed by their literal string values here.
+// The device.* scopes gate the alert engine's device-actuation feature.
 export const DEVICE_NOTIFY_SCOPE = "device.notify";
 export const DEVICE_ACTUATE_SCOPE = "device.actuate";
 

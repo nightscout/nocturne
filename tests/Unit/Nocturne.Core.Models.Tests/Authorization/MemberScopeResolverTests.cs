@@ -211,6 +211,40 @@ public class MemberScopeResolverTests
             .Should().Contain(Scope.FullAccess);
     }
 
+    /// <summary>
+    /// The superuser branch publishes the membership's permissions RAW rather than the normalized
+    /// expansion. Asserting only that the wildcard survives is too weak to pin that: normalization
+    /// re-adds the wildcard, so a resolver that normalized here would still pass such a check while
+    /// changing the granted set from one atom to the whole expansion.
+    /// </summary>
+    [Fact]
+    public void Superuser_OnUnscopedCredential_PublishesTheRawPermissionsNotTheExpansion()
+    {
+        Resolve([Scope.FullAccess], AuthType.SessionCookie)
+            .Should().BeEquivalentTo([Scope.FullAccess],
+                "the raw permission set is published, so the wildcard travels alone rather than "
+                + "expanded into every atom it stands for");
+    }
+
+    /// <summary>
+    /// The consequence that makes the raw publication load-bearing: normalizing a superuser set
+    /// would route through the full-access short circuit, which expands to
+    /// <see cref="Scope.AllScopes"/> — a set that excludes the tenant-administration atoms. A
+    /// superuser would silently lose them.
+    /// </summary>
+    [Fact]
+    public void Superuser_OnUnscopedCredential_KeepsAdministrationAtomsTheExpansionWouldDrop()
+    {
+        var resolved = Resolve(
+            [Scope.FullAccess, Scope.MembersManage, Scope.AuditManage],
+            AuthType.SessionCookie);
+
+        resolved.Should().Contain(Scope.MembersManage);
+        resolved.Should().Contain(Scope.AuditManage);
+        Scope.AllScopes.Should().NotContain(Scope.MembersManage,
+            "this is why the raw set has to be published rather than the expansion");
+    }
+
     [Theory]
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]

@@ -165,7 +165,7 @@ public class WellKnownController : ControllerBase
                     "urn:ietf:params:oauth:grant-type:device_code",
                 },
                 TokenEndpointAuthMethodsSupported = new[] { "none" },
-                ScopesSupported = Scope.ValidRequestScopes.OrderBy(s => s, StringComparer.Ordinal).ToArray(),
+                ScopesSupported = Enum.GetValues<OAuthScope>(),
                 CodeChallengeMethodsSupported = new[] { "S256" },
                 ServiceDocumentation = "https://github.com/nightscout/nocturne",
             }
@@ -317,7 +317,7 @@ public class OAuthAuthorizationServerMetadata
     public string[] TokenEndpointAuthMethodsSupported { get; set; } = Array.Empty<string>();
 
     [JsonPropertyName("scopes_supported")]
-    public string[] ScopesSupported { get; set; } = Array.Empty<string>();
+    public OAuthScope[] ScopesSupported { get; set; } = Array.Empty<OAuthScope>();
 
     [JsonPropertyName("code_challenge_methods_supported")]
     public string[] CodeChallengeMethodsSupported { get; set; } = Array.Empty<string>();
