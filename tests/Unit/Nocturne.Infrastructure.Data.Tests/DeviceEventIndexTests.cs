@@ -19,11 +19,7 @@ public class DeviceEventIndexTests
     [Fact]
     public void LatestByEventTypeLookup_IsBackedByATenantEventTypeTimestampIndex()
     {
-        using var ctx = new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql("Host=localhost;Database=nocturne;Username=test;Password=test")
-                .Options)
-        { TenantId = Guid.NewGuid() };
+        using var ctx = OfflineDbContext.Create();
 
         // Column sort direction only survives on the design-time model; the runtime model drops it.
         var index = ctx.GetService<IDesignTimeModel>().Model

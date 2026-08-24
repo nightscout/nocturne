@@ -1,6 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -32,6 +34,12 @@ public class RlsCompletenessFixture : IAsyncLifetime
 
     public string AppConnectionString { get; private set; } = string.Empty;
     public string MigratorConnectionString { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// <see cref="ShareRlsPolicy.TenantScopedTableNames"/> off the model this fixture migrated
+    /// and reconciled, so the tables asserted over and the tables policied cannot come apart.
+    /// </summary>
+    public IReadOnlyList<string> TenantScopedTableNames { get; private set; } = [];
 
     public async Task InitializeAsync()
     {
@@ -66,6 +74,10 @@ public class RlsCompletenessFixture : IAsyncLifetime
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
             MigratorConnectionString,
             NullLogger.Instance);
+
+        await using var context = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(MigratorConnectionString).Options);
+        TenantScopedTableNames = ShareRlsPolicy.TenantScopedTableNames(context.Model);
     }
 
     public async Task DisposeAsync()

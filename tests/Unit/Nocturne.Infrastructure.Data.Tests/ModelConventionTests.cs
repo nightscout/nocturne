@@ -187,11 +187,7 @@ public class ModelConventionTests
     /// </summary>
     private static IModel Model()
     {
-        using var ctx = new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql("Host=localhost;Database=nocturne;Username=test;Password=test")
-                .Options)
-        { TenantId = Guid.NewGuid() };
+        using var ctx = OfflineDbContext.Create();
 
         return ctx.GetService<IDesignTimeModel>().Model;
     }

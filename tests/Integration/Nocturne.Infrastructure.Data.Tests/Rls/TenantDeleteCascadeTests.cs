@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
@@ -27,12 +26,7 @@ public class TenantDeleteCascadeTests
     [Fact]
     public async Task EveryTenantScopedTable_CascadesFromTenantDelete()
     {
-        await using var context = new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(_fixture.MigratorConnectionString)
-                .Options);
-
-        var tenantScoped = ShareRlsPolicy.TenantScopedTableNames(context.Model);
+        var tenantScoped = _fixture.TenantScopedTableNames;
         tenantScoped.Should().NotBeEmpty("the model must expose tenant-scoped entities");
 
         var cascadeEdges = await LoadCascadeEdgesAsync();
