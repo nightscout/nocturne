@@ -79,10 +79,7 @@ public class OAuthAccessTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        // Validate using IJwtService (uses the correct Jwt:SecretKey, issuer, audience)
         using var scope = _scopeFactory.CreateScope();
-        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
-
         var credentialValidator = scope.ServiceProvider.GetRequiredService<IJwtCredentialValidator>();
         var validationResult = await credentialValidator.ValidateAsync(token);
 

@@ -180,4 +180,24 @@ public class JwtCredentialValidatorTests
         result.IsValid.Should().BeTrue();
         _revocation.Verify(r => r.IsRevokedAsync(It.IsAny<string>()), Times.Never);
     }
+
+    /// <summary>
+    /// Both downstream calls accept a token and a caller can abandon a request mid-chain; the
+    /// forwarding is otherwise invisible, since a mock matching any token cannot tell whether one
+    /// was passed.
+    /// </summary>
+    [Fact]
+    public async Task The_caller_s_cancellation_token_reaches_both_downstream_lookups()
+    {
+        TokenValidatesAs(TenantId, GrantId);
+        var validator = CreateValidator();
+        using var cts = new CancellationTokenSource();
+
+        await validator.ValidateAsync(Token, cts.Token);
+
+        _grants.Verify(
+            g => g.IsGrantRevokedAsync(GrantId, TenantId, cts.Token), Times.Once);
+        _revocation.Verify(
+            r => r.IsRevokedAsync("jti-1", cts.Token), Times.Once);
+    }
 }

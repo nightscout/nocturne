@@ -59,7 +59,6 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtService _jwtService;
     private readonly IJwtCredentialValidator _credentialValidator;
-    private readonly IOAuthGrantService _grantService;
     private readonly IAuthorizationService _authorizationService;
     private readonly ITenantMemberService _memberService;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
@@ -70,7 +69,6 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     public HubTokenAuthorizer(
         IJwtService jwtService,
         IJwtCredentialValidator credentialValidator,
-        IOAuthGrantService grantService,
         IAuthorizationService authorizationService,
         ITenantMemberService memberService,
         IDbContextFactory<NocturneDbContext> dbContextFactory,
@@ -80,7 +78,6 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     {
         _jwtService = jwtService;
         _credentialValidator = credentialValidator;
-        _grantService = grantService;
         _authorizationService = authorizationService;
         _memberService = memberService;
         _dbContextFactory = dbContextFactory;

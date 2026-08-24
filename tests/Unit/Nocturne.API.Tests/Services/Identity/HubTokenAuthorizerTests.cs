@@ -64,7 +64,6 @@ public class HubTokenAuthorizerTests
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
         _jwtService.Object,
         CreateCredentialValidator(),
-        _grantService.Object,
         _authorizationService.Object,
         _memberService.Object,
         _dbContextFactory,
