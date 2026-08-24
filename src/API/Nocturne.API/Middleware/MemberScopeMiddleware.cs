@@ -3,7 +3,7 @@ using Nocturne.API.Extensions;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
-using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Middleware;
@@ -86,7 +86,7 @@ public class MemberScopeMiddleware
         // Guest sessions get their scopes directly from the grant — no membership lookup
         if (authContext.AuthType == AuthType.Guest)
         {
-            var guestScopes = OAuthScopes.Normalize(authContext.Scopes);
+            var guestScopes = Scope.Normalize(authContext.Scopes);
             context.Items["GrantedScopes"] = (IReadOnlySet<string>)guestScopes;
             var guestPermissions = ScopeTranslator.ToPermissions(guestScopes);
             var guestTrie = new PermissionTrie();

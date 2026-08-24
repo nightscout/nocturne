@@ -94,8 +94,8 @@ public class ActivityControllerV4Tests
     [Fact]
     public async Task CreateActivities_SleepRecordWithoutSleepScope_ReturnsForbidden()
     {
-        GrantScopes(OAuthScopes.GlucoseReadWrite);
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        GrantScopes(Scope.GlucoseReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
 
         var result = await _controller.CreateActivities(
             [new UpsertActivityRequest { Type = "sleep", Mills = 1700000000000 }], CancellationToken.None);
@@ -111,10 +111,10 @@ public class ActivityControllerV4Tests
     public async Task DeleteActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
     {
         const string id = "sleep-session-1";
-        GrantScopes(OAuthScopes.GlucoseReadWrite);
+        GrantScopes(Scope.GlucoseReadWrite);
         _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);
 
@@ -127,10 +127,10 @@ public class ActivityControllerV4Tests
     public async Task DeleteActivity_ExistingRecordIsSleep_WithSleepScope_Proceeds()
     {
         const string id = "sleep-session-1";
-        GrantScopes(OAuthScopes.SleepReadWrite);
+        GrantScopes(Scope.SleepReadWrite);
         _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
-        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(OAuthScopes.SleepReadWrite);
+        _decomposer.Setup(d => d.RequiredWriteScope(It.IsAny<Activity>())).Returns(Scope.SleepReadWrite);
         _service.Setup(x => x.DeleteActivityAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var result = await _controller.DeleteActivity(id, CancellationToken.None);

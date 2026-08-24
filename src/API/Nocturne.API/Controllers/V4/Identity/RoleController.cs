@@ -41,7 +41,7 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HasPermission(Scope.RolesManage))
             return Forbid();
 
         var roles = await _roleService.GetRolesAsync(_tenantAccessor.TenantId, ct);
@@ -58,10 +58,10 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HasPermission(Scope.RolesManage))
             return Forbid();
 
-        var violation = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
         if (violation != null)
             return GrantProblem(violation);
 
@@ -81,10 +81,10 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HasPermission(Scope.RolesManage))
             return Forbid();
 
-        var violation = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        var violation = Scope.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
         if (violation != null)
             return GrantProblem(violation);
 
@@ -114,7 +114,7 @@ public class RoleController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteRole(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.RolesManage))
+        if (!HasPermission(Scope.RolesManage))
             return Forbid();
 
         var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
@@ -133,7 +133,7 @@ public class RoleController : ControllerBase
             : Problem(detail: violation.Description, statusCode: 403, title: "Forbidden");
 
     private bool HasPermission(string permission)
-        => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);
+        => Scope.Satisfies(HttpContext.GetGrantedScopes(), permission);
 }
 
 public record CreateRoleRequest(string Name, string? Description, List<string> Permissions);

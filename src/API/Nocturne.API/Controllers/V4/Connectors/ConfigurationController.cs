@@ -59,7 +59,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>Configuration response or 404 if not found</returns>
     [HttpGet("{connectorName}")]
     [RemoteQuery]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> GetConfiguration(
@@ -110,7 +110,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>Dictionary of property names to effective values</returns>
     [HttpGet("{connectorName}/effective")]
     [RemoteQuery]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(Dictionary<string, object?>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<Dictionary<string, object?>>> GetEffectiveConfiguration(
@@ -142,7 +142,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>The saved configuration</returns>
     [HttpPut("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(ConnectorConfigurationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ConnectorConfigurationResponse>> SaveConfiguration(
@@ -394,7 +394,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpPut("{connectorName}/secrets")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SaveSecrets(
@@ -425,7 +425,7 @@ public class ConfigurationController : ControllerBase
     /// <returns>List of connector status information</returns>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(IReadOnlyList<ConnectorStatusInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ConnectorStatusInfo>>> GetAllConnectorStatus(
         CancellationToken ct)
@@ -444,7 +444,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpPatch("{connectorName}/active")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(
         string connectorName,
@@ -466,7 +466,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="ct">Cancellation token</param>
     [HttpDelete("{connectorName}")]
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteConfiguration(

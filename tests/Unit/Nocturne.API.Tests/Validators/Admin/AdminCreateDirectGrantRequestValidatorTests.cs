@@ -14,7 +14,7 @@ public class AdminCreateDirectGrantRequestValidatorTests
     {
         SubjectId = Guid.CreateVersion7(),
         Label = "Partner Integration",
-        Scopes = [OAuthScopes.GlucoseRead],
+        Scopes = [Scope.GlucoseRead],
     };
 
     [Fact]

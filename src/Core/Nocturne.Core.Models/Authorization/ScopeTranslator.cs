@@ -6,69 +6,69 @@ namespace Nocturne.Core.Models.Authorization;
 /// requests using legacy api-secret or access tokens get translated to
 /// equivalent scopes so controllers only need to check scopes.
 /// </summary>
-/// <seealso cref="OAuthScopes"/>
-/// <seealso cref="TenantPermissions"/>
+/// <seealso cref="Scope"/>
+/// <seealso cref="Scope"/>
 /// <seealso cref="Role"/>
 public static class ScopeTranslator
 {
     private static readonly string[] ReadEverything =
     [
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.DevicesRead,
-        OAuthScopes.TherapyRead,
-        OAuthScopes.FoodRead,
-        OAuthScopes.AlertsRead,
-        OAuthScopes.ReportsRead,
-        OAuthScopes.IdentityRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
+        Scope.DevicesRead,
+        Scope.TherapyRead,
+        Scope.FoodRead,
+        Scope.AlertsRead,
+        Scope.ReportsRead,
+        Scope.IdentityRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     ];
 
     private static readonly string[] WriteEverything =
     [
-        OAuthScopes.GlucoseReadWrite,
-        OAuthScopes.TreatmentsReadWrite,
-        OAuthScopes.DevicesReadWrite,
-        OAuthScopes.TherapyReadWrite,
-        OAuthScopes.FoodReadWrite,
-        OAuthScopes.AlertsReadWrite,
-        OAuthScopes.SharingReadWrite,
+        Scope.GlucoseReadWrite,
+        Scope.TreatmentsReadWrite,
+        Scope.DevicesReadWrite,
+        Scope.TherapyReadWrite,
+        Scope.FoodReadWrite,
+        Scope.AlertsReadWrite,
+        Scope.SharingReadWrite,
     ];
 
     /// <summary>
     /// Maps legacy trie permission strings to their equivalent OAuth scopes.
     /// Collapsing create/update/delete into the collection's readwrite scope is intentional:
-    /// <see cref="OAuthScopes"/> makes readwrite the whole write authority over one category, so a
+    /// <see cref="Scope"/> makes readwrite the whole write authority over one category, so a
     /// subject holding any one write verb on a collection gets all three. Nightscout grants its own
     /// write verbs the same way — the seeded careportal role is "api:treatments:*".
     /// </summary>
     private static readonly Dictionary<string, string[]> TrieToScopes = new(StringComparer.OrdinalIgnoreCase)
     {
         // Entries
-        ["api:entries:read"] = [OAuthScopes.GlucoseRead],
-        ["api:entries:create"] = [OAuthScopes.GlucoseReadWrite],
-        ["api:entries:update"] = [OAuthScopes.GlucoseReadWrite],
-        ["api:entries:delete"] = [OAuthScopes.GlucoseReadWrite],
+        ["api:entries:read"] = [Scope.GlucoseRead],
+        ["api:entries:create"] = [Scope.GlucoseReadWrite],
+        ["api:entries:update"] = [Scope.GlucoseReadWrite],
+        ["api:entries:delete"] = [Scope.GlucoseReadWrite],
 
         // Treatments
-        ["api:treatments:read"] = [OAuthScopes.TreatmentsRead],
-        ["api:treatments:create"] = [OAuthScopes.TreatmentsReadWrite],
-        ["api:treatments:update"] = [OAuthScopes.TreatmentsReadWrite],
-        ["api:treatments:delete"] = [OAuthScopes.TreatmentsReadWrite],
+        ["api:treatments:read"] = [Scope.TreatmentsRead],
+        ["api:treatments:create"] = [Scope.TreatmentsReadWrite],
+        ["api:treatments:update"] = [Scope.TreatmentsReadWrite],
+        ["api:treatments:delete"] = [Scope.TreatmentsReadWrite],
 
         // Device status
-        ["api:devicestatus:read"] = [OAuthScopes.DevicesRead],
-        ["api:devicestatus:create"] = [OAuthScopes.DevicesReadWrite],
-        ["api:devicestatus:update"] = [OAuthScopes.DevicesReadWrite],
-        ["api:devicestatus:delete"] = [OAuthScopes.DevicesReadWrite],
+        ["api:devicestatus:read"] = [Scope.DevicesRead],
+        ["api:devicestatus:create"] = [Scope.DevicesReadWrite],
+        ["api:devicestatus:update"] = [Scope.DevicesReadWrite],
+        ["api:devicestatus:delete"] = [Scope.DevicesReadWrite],
 
         // Food
-        ["api:food:read"] = [OAuthScopes.FoodRead],
-        ["api:food:create"] = [OAuthScopes.FoodReadWrite],
-        ["api:food:update"] = [OAuthScopes.FoodReadWrite],
-        ["api:food:delete"] = [OAuthScopes.FoodReadWrite],
+        ["api:food:read"] = [Scope.FoodRead],
+        ["api:food:create"] = [Scope.FoodReadWrite],
+        ["api:food:update"] = [Scope.FoodReadWrite],
+        ["api:food:delete"] = [Scope.FoodReadWrite],
 
         // Activity. The legacy activity collection is the merged read plane over four Nocturne
         // storages, so its read permission carries all three dedicated categories. StateSpan-backed
@@ -76,29 +76,29 @@ public static class ScopeTranslator
         // it here as well would let an activity-only permission read /api/v1/treatments.
         // The "readable" and "public" seed roles both grant "api:activity:read".
         ["api:activity:read"] = [
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
+            Scope.HeartRateRead,
+            Scope.StepCountRead,
+            Scope.SleepRead,
         ],
 
         // Profile
-        ["api:profile:read"] = [OAuthScopes.TherapyRead],
-        ["api:profile:create"] = [OAuthScopes.TherapyReadWrite],
-        ["api:profile:update"] = [OAuthScopes.TherapyReadWrite],
-        ["api:profile:delete"] = [OAuthScopes.TherapyReadWrite],
+        ["api:profile:read"] = [Scope.TherapyRead],
+        ["api:profile:create"] = [Scope.TherapyReadWrite],
+        ["api:profile:update"] = [Scope.TherapyReadWrite],
+        ["api:profile:delete"] = [Scope.TherapyReadWrite],
 
         // Verb wildcards, which is how Nightscout's own seeded roles are written ("api:activity:*"
         // on activity, "api:treatments:*" on careportal). Collapsed to readwrite on the same basis
         // as the individual write verbs above.
-        ["api:entries:*"] = [OAuthScopes.GlucoseReadWrite],
-        ["api:treatments:*"] = [OAuthScopes.TreatmentsReadWrite],
-        ["api:devicestatus:*"] = [OAuthScopes.DevicesReadWrite],
-        ["api:food:*"] = [OAuthScopes.FoodReadWrite],
-        ["api:profile:*"] = [OAuthScopes.TherapyReadWrite],
+        ["api:entries:*"] = [Scope.GlucoseReadWrite],
+        ["api:treatments:*"] = [Scope.TreatmentsReadWrite],
+        ["api:devicestatus:*"] = [Scope.DevicesReadWrite],
+        ["api:food:*"] = [Scope.FoodReadWrite],
+        ["api:profile:*"] = [Scope.TherapyReadWrite],
         ["api:activity:*"] = [
-            OAuthScopes.HeartRateReadWrite,
-            OAuthScopes.StepCountReadWrite,
-            OAuthScopes.SleepReadWrite,
+            Scope.HeartRateReadWrite,
+            Scope.StepCountReadWrite,
+            Scope.SleepReadWrite,
         ],
 
         // Wildcard reads. "*:*:read" is how Nightscout's own seeded "readable" role spells it.
@@ -111,11 +111,11 @@ public static class ScopeTranslator
         ["api:*:delete"] = WriteEverything,
 
         // Full wildcards
-        ["api:*"] = [OAuthScopes.FullAccess],
-        ["*"] = [OAuthScopes.FullAccess],
+        ["api:*"] = [Scope.FullAccess],
+        ["*"] = [Scope.FullAccess],
 
         // Named roles
-        ["admin"] = [OAuthScopes.FullAccess],
+        ["admin"] = [Scope.FullAccess],
         ["readable"] = ReadEverything,
     };
 
@@ -134,9 +134,9 @@ public static class ScopeTranslator
             .ToHashSet();
 
         // If full access is granted, normalize to include everything
-        if (scopes.Contains(OAuthScopes.FullAccess))
+        if (scopes.Contains(Scope.FullAccess))
         {
-            scopes.UnionWith(OAuthScopes.AllScopes);
+            scopes.UnionWith(Scope.AllScopes);
         }
 
         return scopes;
@@ -156,54 +156,54 @@ public static class ScopeTranslator
         {
             switch (scope)
             {
-                case OAuthScopes.FullAccess:
+                case Scope.FullAccess:
                     permissions.Add("*");
                     return permissions; // * covers everything
 
-                case OAuthScopes.GlucoseRead:
+                case Scope.GlucoseRead:
                     permissions.Add("api:entries:read");
                     break;
-                case OAuthScopes.GlucoseReadWrite:
+                case Scope.GlucoseReadWrite:
                     permissions.Add("api:entries:read");
                     permissions.Add("api:entries:create");
                     permissions.Add("api:entries:update");
                     permissions.Add("api:entries:delete");
                     break;
 
-                case OAuthScopes.TreatmentsRead:
+                case Scope.TreatmentsRead:
                     permissions.Add("api:treatments:read");
                     break;
-                case OAuthScopes.TreatmentsReadWrite:
+                case Scope.TreatmentsReadWrite:
                     permissions.Add("api:treatments:read");
                     permissions.Add("api:treatments:create");
                     permissions.Add("api:treatments:update");
                     permissions.Add("api:treatments:delete");
                     break;
 
-                case OAuthScopes.DevicesRead:
+                case Scope.DevicesRead:
                     permissions.Add("api:devicestatus:read");
                     break;
-                case OAuthScopes.DevicesReadWrite:
+                case Scope.DevicesReadWrite:
                     permissions.Add("api:devicestatus:read");
                     permissions.Add("api:devicestatus:create");
                     permissions.Add("api:devicestatus:update");
                     permissions.Add("api:devicestatus:delete");
                     break;
 
-                case OAuthScopes.FoodRead:
+                case Scope.FoodRead:
                     permissions.Add("api:food:read");
                     break;
-                case OAuthScopes.FoodReadWrite:
+                case Scope.FoodReadWrite:
                     permissions.Add("api:food:read");
                     permissions.Add("api:food:create");
                     permissions.Add("api:food:update");
                     permissions.Add("api:food:delete");
                     break;
 
-                case OAuthScopes.TherapyRead:
+                case Scope.TherapyRead:
                     permissions.Add("api:profile:read");
                     break;
-                case OAuthScopes.TherapyReadWrite:
+                case Scope.TherapyReadWrite:
                     permissions.Add("api:profile:read");
                     permissions.Add("api:profile:create");
                     permissions.Add("api:profile:update");
@@ -214,37 +214,37 @@ public static class ScopeTranslator
                 // these the PermissionTrie built from a heart-rate/step/sleep-only grant would be
                 // empty, and the HasPermissions policy on the V1/V2/V3 controllers rejects an
                 // empty trie before any scope check runs.
-                case OAuthScopes.HeartRateRead:
-                case OAuthScopes.StepCountRead:
-                case OAuthScopes.SleepRead:
+                case Scope.HeartRateRead:
+                case Scope.StepCountRead:
+                case Scope.SleepRead:
                     permissions.Add("api:activity:read");
                     break;
-                case OAuthScopes.HeartRateReadWrite:
-                case OAuthScopes.StepCountReadWrite:
-                case OAuthScopes.SleepReadWrite:
+                case Scope.HeartRateReadWrite:
+                case Scope.StepCountReadWrite:
+                case Scope.SleepReadWrite:
                     permissions.Add("api:activity:read");
                     permissions.Add("api:activity:create");
                     permissions.Add("api:activity:update");
                     break;
 
-                case OAuthScopes.AlertsRead:
+                case Scope.AlertsRead:
                     permissions.Add("api:notifications:read");
                     break;
-                case OAuthScopes.AlertsReadWrite:
+                case Scope.AlertsReadWrite:
                     permissions.Add("api:notifications:read");
                     permissions.Add("api:notifications:create");
                     permissions.Add("api:notifications:update");
                     break;
 
-                case OAuthScopes.ReportsRead:
+                case Scope.ReportsRead:
                     permissions.Add("api:reports:read");
                     break;
 
-                case OAuthScopes.IdentityRead:
+                case Scope.IdentityRead:
                     permissions.Add("api:identity:read");
                     break;
 
-                case OAuthScopes.SharingReadWrite:
+                case Scope.SharingReadWrite:
                     permissions.Add("api:sharing:read");
                     permissions.Add("api:sharing:create");
                     permissions.Add("api:sharing:update");

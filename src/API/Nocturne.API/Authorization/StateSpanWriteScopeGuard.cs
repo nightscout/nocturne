@@ -47,25 +47,25 @@ internal static class StateSpanWriteScopeGuard
     public static readonly IReadOnlyDictionary<StateSpanCategory, string> CategoryWriteScopes =
         new Dictionary<StateSpanCategory, string>
         {
-            [StateSpanCategory.PumpMode] = OAuthScopes.DevicesReadWrite,
-            [StateSpanCategory.PumpConnectivity] = OAuthScopes.DevicesReadWrite,
-            [StateSpanCategory.Profile] = OAuthScopes.TherapyReadWrite,
-            [StateSpanCategory.DataExclusion] = OAuthScopes.GlucoseReadWrite,
-            [StateSpanCategory.Override] = OAuthScopes.TreatmentsReadWrite,
-            [StateSpanCategory.Exercise] = OAuthScopes.TreatmentsReadWrite,
-            [StateSpanCategory.Illness] = OAuthScopes.TreatmentsReadWrite,
-            [StateSpanCategory.Travel] = OAuthScopes.TreatmentsReadWrite,
-            [StateSpanCategory.TemporaryTarget] = OAuthScopes.TreatmentsReadWrite,
+            [StateSpanCategory.PumpMode] = Scope.DevicesReadWrite,
+            [StateSpanCategory.PumpConnectivity] = Scope.DevicesReadWrite,
+            [StateSpanCategory.Profile] = Scope.TherapyReadWrite,
+            [StateSpanCategory.DataExclusion] = Scope.GlucoseReadWrite,
+            [StateSpanCategory.Override] = Scope.TreatmentsReadWrite,
+            [StateSpanCategory.Exercise] = Scope.TreatmentsReadWrite,
+            [StateSpanCategory.Illness] = Scope.TreatmentsReadWrite,
+            [StateSpanCategory.Travel] = Scope.TreatmentsReadWrite,
+            [StateSpanCategory.TemporaryTarget] = Scope.TreatmentsReadWrite,
         };
 
     /// <summary>
     /// Returns the write scope required for <paramref name="category"/>. An unmapped category —
     /// one added to the enum without being classified here — resolves to
-    /// <see cref="OAuthScopes.FullAccess"/> so a new category fails closed rather than inheriting
+    /// <see cref="Scope.FullAccess"/> so a new category fails closed rather than inheriting
     /// whichever scope happened to be listed first.
     /// </summary>
     public static string RequiredWriteScope(StateSpanCategory category) =>
-        CategoryWriteScopes.TryGetValue(category, out var scope) ? scope : OAuthScopes.FullAccess;
+        CategoryWriteScopes.TryGetValue(category, out var scope) ? scope : Scope.FullAccess;
 
     /// <summary>
     /// Returns the first write scope the caller is missing across
@@ -81,7 +81,7 @@ internal static class StateSpanWriteScopeGuard
     {
         foreach (var scope in categories.Select(RequiredWriteScope).Distinct())
         {
-            if (!OAuthScopes.SatisfiesScope(grantedScopes, scope))
+            if (!Scope.Satisfies(grantedScopes, scope))
                 return scope;
         }
 

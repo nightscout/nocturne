@@ -14,7 +14,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// Controller for managing custom alert sounds (upload, list, stream, delete).
 /// </summary>
 /// <remarks>
-/// Uploading and deleting require <see cref="OAuthScopes.AlertsReadWrite"/>: the stored audio is
+/// Uploading and deleting require <see cref="Scope.AlertsReadWrite"/>: the stored audio is
 /// what an alert plays, and an upload writes tenant-scoped caller-supplied bytes. The class-level
 /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
 /// which holds <c>alerts.read</c>.
@@ -46,7 +46,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// Upload a custom alert sound file.
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetSounds"])]
     [RequestSizeLimit(512_000)]
     [ProducesResponseType(typeof(AlertCustomSoundResponse), StatusCodes.Status201Created)]
@@ -142,7 +142,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// Delete a custom sound.
     /// </summary>
     [HttpDelete("{id:guid}")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetSounds"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

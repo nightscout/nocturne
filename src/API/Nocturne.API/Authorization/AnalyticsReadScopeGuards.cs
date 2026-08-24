@@ -22,12 +22,12 @@ internal static class AnalyticsReadScopes
     /// </summary>
     public static readonly IReadOnlyList<string> GlucoseAndTreatments =
     [
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.TreatmentsRead,
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
     ];
 
     public static bool Allows(IReadOnlySet<string> grantedScopes, string scope) =>
-        OAuthScopes.SatisfiesScope(grantedScopes, scope);
+        Scope.Satisfies(grantedScopes, scope);
 }
 
 /// <summary>
@@ -40,20 +40,20 @@ internal static class ChartDataReadScopeGuard
 {
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.DevicesRead,
-        OAuthScopes.TherapyRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
+        Scope.DevicesRead,
+        Scope.TherapyRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     ];
 
     public static DashboardChartData Redact(
         DashboardChartData data,
         IReadOnlySet<string> grantedScopes)
     {
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))
         {
             // Thresholds are the band edges of the glucose series, so they leave with it.
             data.GlucoseData = [];
@@ -61,7 +61,7 @@ internal static class ChartDataReadScopeGuard
             data.BgCheckMarkers = [];
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.IobSeries = [];
             data.CobSeries = [];
@@ -78,20 +78,20 @@ internal static class ChartDataReadScopeGuard
             data.MaxCob = 0;
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.DevicesRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
         {
             data.DeviceEventMarkers = [];
             data.SystemEventMarkers = [];
             data.PumpModeSpans = [];
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TherapyRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
             data.ProfileSpans = [];
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.HeartRateRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.HeartRateRead))
             data.HeartRateSeries = [];
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.StepCountRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.StepCountRead))
             data.StepSeries = [];
 
         // ActivitySpans is the one field with two governing categories: the exercise, illness and
@@ -99,7 +99,7 @@ internal static class ChartDataReadScopeGuard
         // beside them are their own category, so it is filtered per span rather than emptied.
         data.ActivitySpans = [.. data.ActivitySpans.Where(s => AnalyticsReadScopes.Allows(
             grantedScopes,
-            s.Kind == ChartSpanKind.Sleep ? OAuthScopes.SleepRead : OAuthScopes.TreatmentsRead))];
+            s.Kind == ChartSpanKind.Sleep ? Scope.SleepRead : Scope.TreatmentsRead))];
 
         return data;
     }
@@ -119,10 +119,10 @@ internal static class RetrospectiveReadScopeGuard
         RetrospectiveDataResponse data,
         IReadOnlySet<string> grantedScopes)
     {
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))
             data.Glucose = null;
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.Iob = null;
             data.Cob = null;
@@ -137,8 +137,8 @@ internal static class RetrospectiveReadScopeGuard
         RetrospectiveTimelineResponse data,
         IReadOnlySet<string> grantedScopes)
     {
-        var glucose = AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead);
-        var treatments = AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead);
+        var glucose = AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead);
+        var treatments = AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
 
         if (glucose && treatments)
             return data;
@@ -182,7 +182,7 @@ internal static class PredictionReadScopeGuard
         GlucosePredictionResponse data,
         IReadOnlySet<string> grantedScopes)
     {
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))
         {
             data.CurrentBg = 0;
             data.Delta = 0;
@@ -190,7 +190,7 @@ internal static class PredictionReadScopeGuard
             data.Predictions = new PredictionCurves();
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.Iob = 0;
             data.Cob = 0;
@@ -217,10 +217,10 @@ internal static class CorrelationReadScopeGuard
     public static readonly IReadOnlyList<string> AdmissionScopes = AnalyticsReadScopes.GlucoseAndTreatments;
 
     public static bool AllowsGlucose(IReadOnlySet<string> grantedScopes) =>
-        AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead);
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead);
 
     public static bool AllowsTreatments(IReadOnlySet<string> grantedScopes) =>
-        AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead);
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
 }
 
 /// <summary>
@@ -236,29 +236,29 @@ internal static class WidgetSummaryReadScopeGuard
 {
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.AlertsRead,
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
+        Scope.AlertsRead,
     ];
 
     public static V4SummaryResponse Redact(
         V4SummaryResponse data,
         IReadOnlySet<string> grantedScopes)
     {
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.GlucoseRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.GlucoseRead))
         {
             data.Current = null;
             data.History = [];
             data.Predictions = null;
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TreatmentsRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead))
         {
             data.Iob = 0;
             data.Cob = 0;
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.AlertsRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.AlertsRead))
             data.Alarm = null;
 
         return data;
@@ -275,15 +275,15 @@ internal static class CurrentTherapyStateReadScopeGuard
 {
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.DevicesRead,
-        OAuthScopes.TherapyRead,
+        Scope.DevicesRead,
+        Scope.TherapyRead,
     ];
 
     public static CurrentTherapyStateResponse Redact(
         CurrentTherapyStateResponse data,
         IReadOnlySet<string> grantedScopes)
     {
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.DevicesRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
         {
             data.CurrentPumpMode = null;
             data.Reservoir = null;
@@ -291,7 +291,7 @@ internal static class CurrentTherapyStateReadScopeGuard
             data.PumpBatteryVoltage = null;
         }
 
-        if (!AnalyticsReadScopes.Allows(grantedScopes, OAuthScopes.TherapyRead))
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
             data.SensitivityPercent = null;
 
         return data;

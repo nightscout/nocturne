@@ -23,7 +23,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Guards the connector configuration surface against a read-only credential. The stored values
 /// name the host the server fetches from and the credentials it presents, so reading them exposes
 /// account identifiers and writing them redirects or silences a CGM feed. Every action there
-/// requires <see cref="TenantPermissions.TenantSettings"/>; the exceptions are enumerated in
+/// requires <see cref="Scope.TenantSettings"/>; the exceptions are enumerated in
 /// <see cref="Ungated"/>.
 /// </summary>
 /// <remarks>
@@ -31,7 +31,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// files these controllers as an exemption, because <c>tenant.settings</c> is not one. This class
 /// is what that exemption defers to: it pins the gate that is there instead, and asserts the scope
 /// resolution that decides who keeps access — a seed role through <see cref="MemberScopeResolver"/>,
-/// a guest grant through <see cref="OAuthScopes.ValidateGrantScopes"/>, and the CareLink desktop
+/// a guest grant through <see cref="Scope.ValidateGrantScopes"/>, and the CareLink desktop
 /// link token.
 /// </remarks>
 public class ConnectorConfigurationScopeTests
@@ -81,7 +81,7 @@ public class ConnectorConfigurationScopeTests
 
             checkedActions++;
 
-            if (!RequiredScopes(controller, action).Contains(TenantPermissions.TenantSettings, StringComparer.Ordinal))
+            if (!RequiredScopes(controller, action).Contains(Scope.TenantSettings, StringComparer.Ordinal))
                 ungated.Add($"{controller.Name}.{action.Name}");
         }
 
@@ -111,8 +111,8 @@ public class ConnectorConfigurationScopeTests
     }
 
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Owner)]
-    [InlineData(TenantPermissions.SeedRoles.Admin)]
+    [InlineData(RoleSeeds.Owner)]
+    [InlineData(RoleSeeds.Admin)]
     public void SeedRoleHoldingTenantSettings_KeepsTheWholeConnectorSurface(string role)
     {
         var scopes = SeedRoleScopes(role);
@@ -126,15 +126,15 @@ public class ConnectorConfigurationScopeTests
     }
 
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Viewer)]
-    [InlineData(TenantPermissions.SeedRoles.Clinician)]
-    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
+    [InlineData(RoleSeeds.Viewer)]
+    [InlineData(RoleSeeds.Clinician)]
+    [InlineData(RoleSeeds.Caretaker)]
     public void SeedRoleWithoutTenantSettings_IsDeniedTheWholeConnectorSurface(string role)
     {
         var scopes = SeedRoleScopes(role);
 
-        scopes.Should().NotContain(TenantPermissions.TenantSettings);
-        scopes.Should().NotContain(OAuthScopes.FullAccess);
+        scopes.Should().NotContain(Scope.TenantSettings);
+        scopes.Should().NotContain(Scope.FullAccess);
 
         foreach (var (controller, action) in GatedActions())
         {
@@ -159,7 +159,7 @@ public class ConnectorConfigurationScopeTests
     [Fact]
     public void UnauthenticatedCaller_IsDeniedTheWholeConnectorSurface()
     {
-        var tenantSettings = new HashSet<string> { TenantPermissions.TenantSettings };
+        var tenantSettings = new HashSet<string> { Scope.TenantSettings };
 
         foreach (var (controller, action) in GatedActions())
         {
@@ -174,7 +174,7 @@ public class ConnectorConfigurationScopeTests
     {
         // A legacy api-secret and an instance-key service credential both normalise to "*", and the
         // provisioning paths that configure a connector for a tenant authenticate that way.
-        var wildcard = new HashSet<string> { OAuthScopes.FullAccess };
+        var wildcard = new HashSet<string> { Scope.FullAccess };
 
         foreach (var (controller, action) in GatedActions())
         {
@@ -185,7 +185,7 @@ public class ConnectorConfigurationScopeTests
 
     /// <summary>
     /// A scoped credential cannot reach the connector surface however wide its membership, because
-    /// <c>tenant.settings</c> is outside <see cref="OAuthScopes.ValidRequestScopes"/> and
+    /// <c>tenant.settings</c> is outside <see cref="Scope.ValidRequestScopes"/> and
     /// <see cref="MemberScopeResolver"/> re-normalises a credential's scopes through the request
     /// vocabulary before intersecting. Pinned so the CareLink desktop token's premise — that its
     /// bespoke scope reaches nothing else — stays true for every scoped credential.
@@ -194,11 +194,11 @@ public class ConnectorConfigurationScopeTests
     public void ScopedCredentialOnAnAdminMembership_IsDeniedTheWholeConnectorSurface()
     {
         var scopes = MemberScopeResolver.Resolve(
-            new HashSet<string>(TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]),
+            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Admin]),
             AuthType.OAuthAccessToken,
-            OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToHashSet());
+            Scope.Normalize([Scope.HealthReadWrite]).ToHashSet());
 
-        scopes.Should().NotContain(TenantPermissions.TenantSettings);
+        scopes.Should().NotContain(Scope.TenantSettings);
 
         foreach (var (controller, action) in GatedActions())
         {
@@ -211,8 +211,8 @@ public class ConnectorConfigurationScopeTests
     // ── the CareLink flow, whose gate is in the handler ────────────────────────────────────────
 
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Viewer)]
-    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
+    [InlineData(RoleSeeds.Viewer)]
+    [InlineData(RoleSeeds.Caretaker)]
     public async Task CareLinkFlow_RefusesASeedRoleWithoutTenantSettings(string role)
     {
         var controller = NewCareLinkController(SeedRoleScopes(role), credentialScopes: []);
@@ -243,7 +243,7 @@ public class ConnectorConfigurationScopeTests
     public async Task CareLinkFlow_AdmitsAnAdministratorAndADesktopLinkToken()
     {
         var admin = NewCareLinkController(
-            SeedRoleScopes(TenantPermissions.SeedRoles.Admin), credentialScopes: []);
+            SeedRoleScopes(RoleSeeds.Admin), credentialScopes: []);
 
         // The desktop token's scope survives no intersection, so its resolved scope set is empty.
         var desktop = NewCareLinkController(
@@ -262,14 +262,14 @@ public class ConnectorConfigurationScopeTests
 
     private static IReadOnlySet<string> SeedRoleScopes(string role) =>
         MemberScopeResolver.Resolve(
-            new HashSet<string>(TenantPermissions.SeedRolePermissions[role]),
+            new HashSet<string>(RoleSeeds.Permissions[role]),
             AuthType.SessionCookie,
             new HashSet<string>());
 
-    /// <summary>The widest grant a guest link can hold: <see cref="OAuthScopes.AllowedGuestScopes"/>, read-only.</summary>
+    /// <summary>The widest grant a guest link can hold: <see cref="Scope.AllowedGuestScopes"/>, read-only.</summary>
     private static IReadOnlySet<string> GuestScopes() =>
-        OAuthScopes.Normalize(
-            OAuthScopes.ValidateGrantScopes(OAuthScopes.AllowedGuestScopes, OAuthScopes.GrantTypeGuest));
+        Scope.Normalize(
+            Scope.ValidateGrantScopes(Scope.AllowedGuestScopes, OAuthGrantTypes.Guest));
 
     private static IEnumerable<(Type Controller, MethodInfo Action)> SurfaceActions() =>
         ConnectorSurface

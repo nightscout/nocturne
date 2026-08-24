@@ -24,14 +24,14 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/calculations")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class BolusCalculationController(IBolusCalculationRepository repo)
     : V4CrudControllerBase<BolusCalculation, UpsertBolusCalculationRequest, UpsertBolusCalculationRequest, IBolusCalculationRepository>(repo)
 {
     /// <inheritdoc/>
     /// <remarks>Bolus calculations sit in the treatments share category alongside the boluses they explain.</remarks>
-    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public override string WriteScope => Scope.TreatmentsReadWrite;
 
     protected override BolusCalculation MapCreateToModel(UpsertBolusCalculationRequest request) => new()
     {

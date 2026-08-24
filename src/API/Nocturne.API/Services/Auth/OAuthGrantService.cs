@@ -47,7 +47,7 @@ public class OAuthGrantService : IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default)
     {
@@ -280,7 +280,7 @@ public class OAuthGrantService : IOAuthGrantService
         // access.
         var validatedScopes = scopes is null
             ? null
-            : OAuthScopes.ValidateGrantScopes(scopes, grant.GrantType);
+            : Scope.ValidateGrantScopes(scopes, grant.GrantType);
 
         if (label != null)
         {

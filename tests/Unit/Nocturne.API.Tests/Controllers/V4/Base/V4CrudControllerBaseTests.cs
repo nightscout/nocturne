@@ -48,7 +48,7 @@ public interface ITestRecordRepository : IV4Repository<TestRecord>;
 public class TestCrudController(ITestRecordRepository repository)
     : V4CrudControllerBase<TestRecord, TestCreateRequest, TestUpdateRequest, ITestRecordRepository>(repository)
 {
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
 
     protected override TestRecord MapCreateToModel(TestCreateRequest request) => new()
     {

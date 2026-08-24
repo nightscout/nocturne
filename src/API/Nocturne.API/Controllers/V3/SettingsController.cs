@@ -48,7 +48,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetSettings(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -127,7 +127,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetSettingsById(
         string id,
         CancellationToken cancellationToken = default
@@ -178,7 +178,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Created settings records</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings")]
     [ProducesResponseType(typeof(Settings[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -250,7 +250,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Updated settings record</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
     [ProducesResponseType(typeof(Settings), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -324,7 +324,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

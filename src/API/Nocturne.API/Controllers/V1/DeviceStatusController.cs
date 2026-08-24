@@ -71,7 +71,7 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(typeof(DeviceStatus[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatus(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
@@ -168,7 +168,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Created device status entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus")]
     [ProducesResponseType(typeof(DeviceStatus[]), 200)]
     [ProducesResponseType(400)]
@@ -281,7 +281,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
@@ -346,7 +346,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Number of deleted entries</returns>
     [HttpDelete]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/devicestatus")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]

@@ -23,7 +23,7 @@ namespace Nocturne.API.Controllers.V4;
 // Reports the outcome of a fetch to a tenant-configured host — the readback half of the
 // request-forgery shape gated on ConfigurationController.
 [DenyDemoSubject]
-[RequireScope(TenantPermissions.TenantSettings)]
+[RequireScope(Scope.TenantSettings)]
 [ApiController]
 [Tags("Connectors")]
 [Route("api/v4/connectors")]

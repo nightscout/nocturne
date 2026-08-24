@@ -52,7 +52,7 @@ public class ReservoirReportsController(
     /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

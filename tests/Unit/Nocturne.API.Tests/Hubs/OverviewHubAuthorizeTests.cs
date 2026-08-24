@@ -37,7 +37,7 @@ public class OverviewHubAuthorizeTests
     private static GlucoseReadTenant Tenant(Guid id) =>
         new(
             new TenantEntity { Id = id, Slug = id.ToString("N")[..8], DisplayName = "T", IsActive = true },
-            new HashSet<string> { TenantPermissions.GlucoseRead });
+            new HashSet<string> { Scope.GlucoseRead });
 
     private static (OverviewHub hub,
         Mock<IGroupManager> groups,
@@ -92,7 +92,7 @@ public class OverviewHubAuthorizeTests
             SubjectId = Subject,
             AuthType = AuthType.SessionCookie,
         };
-        var grantedScopes = new HashSet<string> { OAuthScopes.GlucoseRead };
+        var grantedScopes = new HashSet<string> { Scope.GlucoseRead };
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)grantedScopes;
 
         overview
@@ -147,7 +147,7 @@ public class OverviewHubAuthorizeTests
     {
         var (hub, _, overview, jwt, revocation, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -170,7 +170,7 @@ public class OverviewHubAuthorizeTests
         // scopes it stands for, and an unrecognized scope is dropped.
         var (hub, _, overview, jwt, revocation, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.HealthRead, "not.a.scope"));
+            .Returns(ValidJwt(Subject, Scope.HealthRead, "not.a.scope"));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -182,8 +182,8 @@ public class OverviewHubAuthorizeTests
             o => o.GetGlucoseReadTenantsAsync(
                 Subject,
                 It.Is<IReadOnlySet<string>>(s =>
-                    s.IsSupersetOf(OAuthScopes.HealthReadExpansion)
-                    && !s.Contains(OAuthScopes.HealthRead)
+                    s.IsSupersetOf(Scope.HealthReadExpansion)
+                    && !s.Contains(Scope.HealthRead)
                     && !s.Contains("not.a.scope")),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
@@ -210,7 +210,7 @@ public class OverviewHubAuthorizeTests
             AuthType = authType,
         };
         httpContext.Items["GrantedScopes"] =
-            (IReadOnlySet<string>)new HashSet<string> { OAuthScopes.FullAccess };
+            (IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess };
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Tenant(TenantA), Tenant(TenantB) });
@@ -265,7 +265,7 @@ public class OverviewHubAuthorizeTests
     {
         var (hub, groups, overview, jwt, revocation, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -281,7 +281,7 @@ public class OverviewHubAuthorizeTests
         overview.Verify(
             o => o.GetGlucoseReadTenantsAsync(
                 Subject,
-                It.Is<IReadOnlySet<string>>(s => s.Contains(OAuthScopes.GlucoseRead)),
+                It.Is<IReadOnlySet<string>>(s => s.Contains(Scope.GlucoseRead)),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -291,7 +291,7 @@ public class OverviewHubAuthorizeTests
     {
         var (hub, groups, _, jwt, revocation, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(true);
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });
@@ -369,7 +369,7 @@ public class OverviewHubAuthorizeTests
     public async Task Authorize_with_tenant_pinned_jwt_is_rejected()
     {
         var (hub, groups, overview, jwt, revocation, _) = CreateHub();
-        var validation = ValidJwt(Subject, OAuthScopes.GlucoseRead);
+        var validation = ValidJwt(Subject, Scope.GlucoseRead);
         validation.Claims!.TenantId = TenantA;
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken)).Returns(validation);
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
@@ -414,7 +414,7 @@ public class OverviewHubAuthorizeTests
     {
         var (hub, groups, _, jwt, revocation, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Guid.Empty, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Guid.Empty, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });

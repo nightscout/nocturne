@@ -58,7 +58,7 @@ public class TreatmentsController : ControllerBase
     [ProducesResponseType(typeof(Treatment[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult> GetTreatments(
         [FromQuery] string? find = null,
         [FromQuery] int count = 10,
@@ -149,7 +149,7 @@ public class TreatmentsController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult<Treatment>> GetTreatmentById(
         string id,
         CancellationToken cancellationToken = default
@@ -200,7 +200,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Created treatments with assigned IDs</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments")]
     [ProducesResponseType(typeof(Treatment[]), 200)]
     [ProducesResponseType(400)]
@@ -308,7 +308,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Updated treatment</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(404)]
@@ -385,7 +385,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -436,7 +436,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Number of treatments deleted</returns>
     [HttpDelete]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/treatments")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]

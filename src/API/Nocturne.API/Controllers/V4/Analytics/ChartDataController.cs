@@ -58,13 +58,13 @@ public class ChartDataController : ControllerBase
     [HttpGet("dashboard")]
     [RemoteQuery]
     [RequireScope(
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.DevicesRead,
-        OAuthScopes.TherapyRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.GlucoseRead,
+        Scope.TreatmentsRead,
+        Scope.DevicesRead,
+        Scope.TherapyRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(DashboardChartData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -112,7 +112,7 @@ public class ChartDataController : ControllerBase
     /// <returns>A list of <see cref="BasalPoint"/> representing basal delivery over time.</returns>
     [HttpGet("basal-series")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

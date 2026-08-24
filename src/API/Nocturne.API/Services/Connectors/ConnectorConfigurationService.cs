@@ -312,7 +312,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return;
         }
 
-        var normalizedScopes = OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToList();
+        var normalizedScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
 
         var grant = new OAuthGrantEntity
         {

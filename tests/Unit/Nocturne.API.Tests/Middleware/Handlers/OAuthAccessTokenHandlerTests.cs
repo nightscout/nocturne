@@ -76,7 +76,7 @@ public class OAuthAccessTokenHandlerTests
             new SubjectInfo { Id = _subjectId, Name = "Acme User" },
             permissions: [],
             roles: [],
-            scopes: [OAuthScopes.GlucoseRead],
+            scopes: [Scope.GlucoseRead],
             tenantId: _tenantId,
             grantId: grantId);
 

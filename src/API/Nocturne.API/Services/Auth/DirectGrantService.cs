@@ -140,7 +140,7 @@ public class DirectGrantService : IDirectGrantService
             return DirectGrantCreationResult.Invalid("At least one scope is required");
         }
 
-        var normalizedScopes = OAuthScopes.Normalize(scopes).ToList();
+        var normalizedScopes = Scope.Normalize(scopes).ToList();
         if (normalizedScopes.Count == 0)
         {
             return DirectGrantCreationResult.Invalid("No valid scopes provided");

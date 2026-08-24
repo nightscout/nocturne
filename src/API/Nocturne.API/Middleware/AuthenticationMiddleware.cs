@@ -7,7 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
 
 namespace Nocturne.API.Middleware;
@@ -115,7 +115,7 @@ public class AuthenticationMiddleware
             if (authContext.IsAuthenticated && authContext.Scopes.Count > 0)
             {
                 // OAuth token path: scopes came directly from the token claims
-                grantedScopes = OAuthScopes.Normalize(authContext.Scopes);
+                grantedScopes = Scope.Normalize(authContext.Scopes);
             }
             else if (authContext.IsAuthenticated && authContext.Permissions.Count > 0)
             {
@@ -260,11 +260,11 @@ public class AuthenticationMiddleware
                 // Then narrow to the shareable read scopes: the share host can never resolve
                 // to more than public read access, so a broader grant on the Public membership
                 // (readwrite, superuser) degrades to its read counterpart via SatisfiesScope.
-                var resolvedGrants = OAuthScopes.Normalize(publicAccess.EffectivePermissions)
+                var resolvedGrants = Scope.Normalize(publicAccess.EffectivePermissions)
                     .Union(ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions))
                     .ToHashSet();
-                var publicScopes = TenantPermissions.PublicShareScopes
-                    .Where(scope => OAuthScopes.SatisfiesScope(resolvedGrants, scope))
+                var publicScopes = Scope.PublicShareScopes
+                    .Where(scope => Scope.Satisfies(resolvedGrants, scope))
                     .ToHashSet();
                 context.Items["GrantedScopes"] = (IReadOnlySet<string>)publicScopes;
 

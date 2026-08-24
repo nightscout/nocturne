@@ -96,7 +96,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetMutations_WithAuditRead_Returns200()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetMutationAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
@@ -108,7 +108,7 @@ public class AuditControllerTests : IDisposable
     public async Task GetMutations_WithAuditManage_Returns200()
     {
         // audit.manage implies audit.read
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.GetMutationAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
@@ -141,7 +141,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetReads_WithAuditRead_Returns200()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetReadAccessAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
@@ -166,7 +166,7 @@ public class AuditControllerTests : IDisposable
             .Setup(c => c.GetConfigAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAuditConfig(true, 90, 365));
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetAuditConfig(CancellationToken.None);
 
@@ -176,7 +176,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_WithoutAuditManage_Returns403()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -191,7 +191,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_WithAuditManage_Returns200()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -206,7 +206,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_WithSuperuser_Returns200()
     {
-        var controller = CreateController(Scopes(TenantPermissions.Superuser));
+        var controller = CreateController(Scopes(Scope.FullAccess));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -240,7 +240,7 @@ public class AuditControllerTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetMutationAuditLog(
             DateTime.UtcNow.AddHours(-1), DateTime.UtcNow, limit: 3);
@@ -279,7 +279,7 @@ public class AuditControllerTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetMutationAuditLog(
             now.AddDays(-1), now);
@@ -310,7 +310,7 @@ public class AuditControllerTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetReadAccessAuditLog(
             DateTime.UtcNow.AddHours(-1), DateTime.UtcNow);
@@ -330,7 +330,7 @@ public class AuditControllerTests : IDisposable
             .Setup(c => c.GetConfigAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantAuditConfig(true, 90, 365));
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditRead));
+        var controller = CreateController(Scopes(Scope.AuditRead));
 
         var result = await controller.GetAuditConfig(CancellationToken.None);
 
@@ -344,7 +344,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_CreatesConfigIfNoneExists()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -385,7 +385,7 @@ public class AuditControllerTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -408,7 +408,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_InvalidatesCache()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -446,7 +446,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_AuditShorterThanSoftDelete_Returns400()
     {
         await SeedSoftDeleteRetentionAsync(30);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -465,7 +465,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_AuditEqualToSoftDelete_Returns200()
     {
         await SeedSoftDeleteRetentionAsync(30);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -480,7 +480,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_AuditLongerThanSoftDelete_Returns200()
     {
         await SeedSoftDeleteRetentionAsync(30);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -495,7 +495,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_AuditNullWithFiniteSoftDelete_Returns200()
     {
         await SeedSoftDeleteRetentionAsync(30);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -512,7 +512,7 @@ public class AuditControllerTests : IDisposable
         // Null soft-delete retention is not "infinite" — the cleanup service falls back to
         // the instance default (30d), so audit retention must still cover that window.
         await SeedSoftDeleteRetentionAsync(null);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -531,7 +531,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_NullAuditWithNullSoftDelete_Returns200()
     {
         await SeedSoftDeleteRetentionAsync(null);
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -550,7 +550,7 @@ public class AuditControllerTests : IDisposable
         // shorter audit retention rather than skip the check. Otherwise a user-delete's
         // audit row ages out at 10d while the entity lives to 30d, and a connector resync
         // silently recreates it.
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -568,7 +568,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task UpdateConfig_FiniteAuditAtDefault_NoRetentionRow_Returns200()
     {
-        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+        var controller = CreateController(Scopes(Scope.AuditManage));
 
         var result = await controller.UpdateAuditConfig(new AuditConfigDto
         {
@@ -587,7 +587,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetMutations_LimitAtCeiling_IsUnchanged()
     {
-        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetMutationAuditLog(
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetMutationAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize, 0);
 
         PaginationOf<MutationAuditDto>(result).Should().BeEquivalentTo(
@@ -597,7 +597,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetMutations_LimitAboveCeiling_IsClamped()
     {
-        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetMutationAuditLog(
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetMutationAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize + 1, -1);
 
         PaginationOf<MutationAuditDto>(result).Should().BeEquivalentTo(
@@ -607,7 +607,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetReads_LimitAtCeiling_IsUnchanged()
     {
-        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetReadAccessAuditLog(
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetReadAccessAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize, 0);
 
         PaginationOf<ReadAccessAuditDto>(result).Should().BeEquivalentTo(
@@ -617,7 +617,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetReads_LimitAboveCeiling_IsClamped()
     {
-        var result = await CreateController(Scopes(TenantPermissions.AuditRead)).GetReadAccessAuditLog(
+        var result = await CreateController(Scopes(Scope.AuditRead)).GetReadAccessAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, V4ReadLimits.MaxPageSize + 1, -1);
 
         PaginationOf<ReadAccessAuditDto>(result).Should().BeEquivalentTo(

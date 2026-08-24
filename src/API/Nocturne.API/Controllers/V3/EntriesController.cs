@@ -65,7 +65,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -146,7 +146,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<Entry>> GetEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -198,7 +198,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <response code="500">Internal server error.</response>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
     [ProducesResponseType(typeof(Entry), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -295,7 +295,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Created entries</returns>
     [HttpPost("bulk")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/bulk")]
     [ProducesResponseType(typeof(Entry[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -372,7 +372,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -443,7 +443,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -492,7 +492,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [NightscoutEndpoint("/api/v3/entries/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,

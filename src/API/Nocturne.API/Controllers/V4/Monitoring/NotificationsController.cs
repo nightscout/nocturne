@@ -15,13 +15,13 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Creating a notification requires <see cref="OAuthScopes.AlertsReadWrite"/>: an in-app
+/// Creating a notification requires <see cref="Scope.AlertsReadWrite"/>: an in-app
 /// notification is a delivery channel for an alert, so minting one puts an alert in front of a
 /// user. The per-action <c>[Authorize]</c> alone is satisfied by any credential carrying a subject,
 /// including a read-only follower token holding nothing but <c>glucose.read</c>.
 /// </para>
 /// <para>
-/// <see cref="ExecuteAction"/> additionally accepts <see cref="OAuthScopes.DeviceNotify"/>, for the
+/// <see cref="ExecuteAction"/> additionally accepts <see cref="Scope.DeviceNotify"/>, for the
 /// same reason <see cref="AlertsController.AcknowledgeExcursion"/> does, but only for an
 /// <c>alert.firing</c> notification — see that action's remarks.
 /// </para>
@@ -67,7 +67,7 @@ public class NotificationsController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [ProducesResponseType(typeof(InAppNotificationDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -133,8 +133,8 @@ public class NotificationsController : ControllerBase
     /// <inheritdoc cref="IInAppNotificationService.ExecuteActionAsync"/>
     /// <remarks>
     /// <para>
-    /// Accepts <see cref="OAuthScopes.DeviceNotify"/> as well as
-    /// <see cref="OAuthScopes.AlertsReadWrite"/>, because this is the second path to the excursion
+    /// Accepts <see cref="Scope.DeviceNotify"/> as well as
+    /// <see cref="Scope.AlertsReadWrite"/>, because this is the second path to the excursion
     /// acknowledgement <see cref="AlertsController.AcknowledgeExcursion"/> serves: the Acknowledge
     /// action on an <c>alert.firing</c> in-app notification dispatches through
     /// <see cref="IInAppNotificationService.ExecuteActionAsync"/> to
@@ -164,7 +164,7 @@ public class NotificationsController : ControllerBase
     [HttpPost("{id:guid}/actions/{actionId}")]
     [RemoteCommand(Invalidates = ["GetNotifications"])]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite, OAuthScopes.DeviceNotify)]
+    [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -178,7 +178,7 @@ public class NotificationsController : ControllerBase
             return Unauthorized();
         }
 
-        if (!HttpContext.HasScope(OAuthScopes.AlertsReadWrite))
+        if (!HttpContext.HasScope(Scope.AlertsReadWrite))
         {
             var type = await _notificationService.GetNotificationTypeAsync(
                 id,

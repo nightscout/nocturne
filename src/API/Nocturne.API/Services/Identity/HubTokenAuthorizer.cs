@@ -144,7 +144,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 
         return new HubAuthorization(
             connectionTenantId.Value,
-            new HashSet<string> { OAuthScopes.FullAccess },
+            new HashSet<string> { Scope.FullAccess },
             HubCredentialKind.Infrastructure,
             SubjectId: null);
     }
@@ -209,9 +209,9 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         var scopes = MemberScopeResolver.Resolve(
             effectivePermissions,
             AuthType.OAuthAccessToken,
-            OAuthScopes.Normalize(claims.Scopes));
+            Scope.Normalize(claims.Scopes));
 
-        if (!OAuthScopes.SatisfiesScope(scopes, requiredScope))
+        if (!Scope.Satisfies(scopes, requiredScope))
         {
             return null;
         }
@@ -266,7 +266,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         var scopes = MemberScopeResolver.Resolve(
             effectivePermissions, AuthType.DirectGrant, grant.Scopes.ToHashSet());
 
-        if (!OAuthScopes.SatisfiesScope(scopes, requiredScope))
+        if (!Scope.Satisfies(scopes, requiredScope))
         {
             return null;
         }
@@ -336,7 +336,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             AuthType.LegacyAccessToken,
             credentialScopes: new HashSet<string>());
 
-        return OAuthScopes.SatisfiesScope(memberScopes, requiredScope)
+        return Scope.Satisfies(memberScopes, requiredScope)
             ? new HubAuthorization(
                 connectionTenantId, memberScopes, HubCredentialKind.Subject, claims.SubjectId)
             : null;

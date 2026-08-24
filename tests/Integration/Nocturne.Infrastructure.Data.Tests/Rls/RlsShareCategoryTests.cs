@@ -60,11 +60,11 @@ public class RlsShareCategoryTests
 
         await using var conn = await _fx.OpenAppConnectionAsync();
 
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.TreatmentsRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.TreatmentsRead);
         (await CountAsync(conn, TreatmentTable, tenant)).Should().Be(1,
             "a share granted treatments.read must see boluses");
 
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.GlucoseRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.GlucoseRead);
         (await CountAsync(conn, TreatmentTable, tenant)).Should().Be(0,
             "a glucose-only share must not see boluses (the original leak)");
     }
@@ -76,7 +76,7 @@ public class RlsShareCategoryTests
         await SeedAsync(tenant);
 
         await using var conn = await _fx.OpenAppConnectionAsync();
-        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: OAuthScopes.GlucoseRead);
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: Scope.GlucoseRead);
 
         (await CountAsync(conn, GovernedTable, tenant)).Should().Be(0,
             "a glucose-only share must not see stepcount data");

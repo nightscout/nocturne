@@ -51,7 +51,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/ack")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -302,7 +302,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("adminnotifies")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/adminnotifies (POST)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -389,7 +389,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpDelete("adminnotifies")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/adminnotifies (DELETE)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(
@@ -454,7 +454,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/pushover")]
     [Authorize]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/pushover")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]

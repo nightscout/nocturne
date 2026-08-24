@@ -66,7 +66,7 @@ public class MemberScopeFilterPipelineTests
 
                 // Delete endpoints are gated on "*" by design: an Administrator is deliberately not
                 // a superuser, so these must stay closed and act as the negative control.
-                var requiresFullAccess = RequiredScopesOf(filters).Contains(OAuthScopes.FullAccess);
+                var requiresFullAccess = RequiredScopesOf(filters).Contains(Scope.FullAccess);
 
                 yield return new GatedAction(
                     controller.Name, action.Name, filters, requiresFullAccess);
@@ -113,7 +113,7 @@ public class MemberScopeFilterPipelineTests
         // app resolved to an empty scope set, so every one of these actions returned 403 — heart
         // rate, step count, sleep reports and client devices were unreachable for every non-owner.
         var grantedScopes = await ResolveScopesForRoleAsync(
-            TenantPermissions.SeedRoles.Admin, AuthType.SessionCookie);
+            RoleSeeds.Admin, AuthType.SessionCookie);
 
         grantedScopes.Should().NotBeEmpty();
 
@@ -148,16 +148,16 @@ public class MemberScopeFilterPipelineTests
         // The fix must not flatten the roles: a read-only member reaches the read gates and is still
         // refused the write gates on the same controller.
         var grantedScopes = await ResolveScopesForRoleAsync(
-            TenantPermissions.SeedRoles.Clinician, AuthType.SessionCookie);
+            RoleSeeds.Clinician, AuthType.SessionCookie);
 
-        RunAuthorizationFilters(GatedActionFor("SleepController", OAuthScopes.SleepRead), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepRead), grantedScopes)
             .Should().BeNull("a Clinician holds sleep.read");
-        RunAuthorizationFilters(GatedActionFor("SleepController", OAuthScopes.SleepReadWrite), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepReadWrite), grantedScopes)
             .Should().BeOfType<ForbidResult>("a Clinician does not hold sleep.readwrite");
 
-        RunAuthorizationFilters(GatedActionFor("HeartRateController", OAuthScopes.HeartRateRead), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateRead), grantedScopes)
             .Should().BeNull("a Clinician holds heartrate.read");
-        RunAuthorizationFilters(GatedActionFor("HeartRateController", OAuthScopes.HeartRateReadWrite), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateReadWrite), grantedScopes)
             .Should().BeOfType<ForbidResult>("a Clinician does not hold heartrate.readwrite");
     }
 
@@ -166,16 +166,16 @@ public class MemberScopeFilterPipelineTests
     {
         // The narrowest authenticated role: glucose.read and reports.read only.
         var grantedScopes = await ResolveScopesForRoleAsync(
-            TenantPermissions.SeedRoles.Viewer, AuthType.SessionCookie);
+            RoleSeeds.Viewer, AuthType.SessionCookie);
 
-        RunAuthorizationFilters(GatedActionFor("SleepController", OAuthScopes.SleepRead), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("SleepController", Scope.SleepRead), grantedScopes)
             .Should().BeOfType<ForbidResult>("a Viewer does not hold sleep.read");
-        RunAuthorizationFilters(GatedActionFor("HeartRateController", OAuthScopes.HeartRateRead), grantedScopes)
+        RunAuthorizationFilters(GatedActionFor("HeartRateController", Scope.HeartRateRead), grantedScopes)
             .Should().BeOfType<ForbidResult>("a Viewer does not hold heartrate.read");
 
         // device.notify / device.actuate are member-personal capabilities every role holds.
         RunAuthorizationFilters(
-            GatedActionFor("ClientDevicesController", OAuthScopes.DeviceNotify), grantedScopes)
+            GatedActionFor("ClientDevicesController", Scope.DeviceNotify), grantedScopes)
             .Should().BeNull("client devices are the member's own, granted to every role");
     }
 
@@ -184,7 +184,7 @@ public class MemberScopeFilterPipelineTests
     {
         // Fail closed: removing the credential ceiling must not remove the membership check.
         var grantedScopes = await ResolveScopesForRoleAsync(
-            TenantPermissions.SeedRoles.Denied, AuthType.SessionCookie);
+            RoleSeeds.Denied, AuthType.SessionCookie);
 
         grantedScopes.Should().BeEmpty();
 
@@ -201,9 +201,9 @@ public class MemberScopeFilterPipelineTests
         // The consent boundary survives the fix: the same Administrator over a third-party token
         // scoped to glucose.read reaches nothing gated on heart rate, step count or sleep.
         var grantedScopes = await ResolveScopesForRoleAsync(
-            TenantPermissions.SeedRoles.Admin, AuthType.OAuthAccessToken, OAuthScopes.GlucoseRead);
+            RoleSeeds.Admin, AuthType.OAuthAccessToken, Scope.GlucoseRead);
 
-        grantedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        grantedScopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
 
         foreach (var gated in DiscoverGatedActions()
                      .Where(g => g.Controller is "HeartRateController" or "StepCountController"
@@ -286,7 +286,7 @@ public class MemberScopeFilterPipelineTests
                 // TestDatabaseSeeder already seeds the canonical slugs for this tenant, and
                 // (tenant_id, slug) is unique. The permission atoms are what this asserts on.
                 Slug = $"{roleSlug}-under-test",
-                Permissions = TenantPermissions.SeedRolePermissions[roleSlug],
+                Permissions = RoleSeeds.Permissions[roleSlug],
                 IsSystem = true,
                 SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
@@ -315,7 +315,7 @@ public class MemberScopeFilterPipelineTests
             Scopes = [.. credentialScopes],
         };
         // As AuthenticationMiddleware leaves it.
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(credentialScopes);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize(credentialScopes);
         httpContext.Items["PermissionTrie"] = new PermissionTrie();
 
         var middleware = new MemberScopeMiddleware(

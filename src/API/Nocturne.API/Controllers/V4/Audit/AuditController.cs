@@ -60,7 +60,7 @@ public class AuditController : ControllerBase
         [FromQuery] Guid? entityId = null,
         CancellationToken ct = default)
     {
-        if (!HasPermission(TenantPermissions.AuditRead))
+        if (!HasPermission(Scope.AuditRead))
             return Forbid();
 
         limit = V4ReadLimits.ClampLimit(limit);
@@ -134,7 +134,7 @@ public class AuditController : ControllerBase
         [FromQuery] int? statusCode = null,
         CancellationToken ct = default)
     {
-        if (!HasPermission(TenantPermissions.AuditRead))
+        if (!HasPermission(Scope.AuditRead))
             return Forbid();
 
         limit = V4ReadLimits.ClampLimit(limit);
@@ -199,7 +199,7 @@ public class AuditController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAuditConfig(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.AuditRead))
+        if (!HasPermission(Scope.AuditRead))
             return Forbid();
 
         var config = await _configCache.GetConfigAsync(_tenantAccessor.TenantId, ct);
@@ -224,7 +224,7 @@ public class AuditController : ControllerBase
         [FromBody] AuditConfigDto request,
         CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.AuditManage))
+        if (!HasPermission(Scope.AuditManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -307,6 +307,6 @@ public class AuditController : ControllerBase
     {
         var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
         if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
+        return Scope.Satisfies(grantedScopes, permission);
     }
 }

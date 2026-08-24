@@ -71,7 +71,7 @@ public class CorrelationController : ControllerBase
     /// Arrays are empty when no matching records exist in that category.
     /// </returns>
     [HttpGet("{correlationId:guid}")]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult> GetCorrelated(Guid correlationId, CancellationToken ct = default)
     {

@@ -35,7 +35,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HasPermission(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
@@ -51,7 +51,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HasPermission(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.RotateAsync(_tenantAccessor.TenantId, ct));
@@ -64,7 +64,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> DisableShareLink(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HasPermission(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.DisableAsync(_tenantAccessor.TenantId, ct));
@@ -78,7 +78,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HasPermission(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.SetFullHistoryAsync(_tenantAccessor.TenantId, request.FullHistory, ct));
@@ -86,7 +86,7 @@ public class ShareLinkController : ControllerBase
 
     /// <summary>
     /// Set which data categories anonymous viewers can see. Scopes must be read-permission atoms
-    /// drawn from <c>TenantPermissions.PublicShareScopes</c>; an empty list keeps the link live but
+    /// drawn from <c>Scope.PublicShareScopes</c>; an empty list keeps the link live but
     /// shares nothing.
     /// </summary>
     [HttpPut("scopes")]
@@ -97,7 +97,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.SharingManage))
+        if (!HasPermission(Scope.SharingManage))
             return Forbid();
 
         try
@@ -113,7 +113,7 @@ public class ShareLinkController : ControllerBase
     private bool HasPermission(string permission)
     {
         var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        return grantedScopes != null && TenantPermissions.HasPermission(grantedScopes, permission);
+        return grantedScopes != null && Scope.Satisfies(grantedScopes, permission);
     }
 }
 

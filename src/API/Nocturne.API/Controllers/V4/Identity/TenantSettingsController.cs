@@ -34,7 +34,7 @@ public class TenantSettingsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<TenantSettingsDto>> GetTenantSettings(CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.TenantSettings))
+        if (!HasPermission(Scope.TenantSettings))
             return Forbid();
 
         return Ok(await _tenantService.GetSettingsAsync(_tenantAccessor.TenantId, ct));
@@ -51,7 +51,7 @@ public class TenantSettingsController : ControllerBase
     public async Task<ActionResult<TenantSettingsDto>> SetPublicDocs(
         [FromBody] SetPublicDocsRequest request, CancellationToken ct)
     {
-        if (!HasPermission(TenantPermissions.TenantSettings))
+        if (!HasPermission(Scope.TenantSettings))
             return Forbid();
 
         return Ok(await _tenantService.SetAllowPublicDocsAsync(
@@ -59,7 +59,7 @@ public class TenantSettingsController : ControllerBase
     }
 
     private bool HasPermission(string permission)
-        => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);
+        => Scope.Satisfies(HttpContext.GetGrantedScopes(), permission);
 }
 
 public record SetPublicDocsRequest(bool Enabled);

@@ -36,7 +36,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
     /// <summary>Effective permissions of the seeded Caretaker role, which excludes members.invite.</summary>
     private static readonly string[] CaretakerScopes =
-        [.. TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]];
+        [.. RoleSeeds.Permissions[RoleSeeds.Caretaker]];
 
     public MemberInviteControllerAuthorizationTests()
     {
@@ -98,7 +98,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
 
         var result = await controller.CreateInvite(ClinicianInvite(roleId));
 
@@ -121,7 +121,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
 
@@ -136,7 +136,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     [Fact]
     public async Task RemoveMember_withoutMembersManage_isForbidden()
     {
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         var result = await controller.RemoveMember(Guid.CreateVersion7(), CancellationToken.None);
 
@@ -152,7 +152,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Setup(s => s.RemoveMemberAsync(_tenantId, subjectId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemberRemovalResult(true));
 
-        var controller = BuildController(TenantPermissions.MembersManage);
+        var controller = BuildController(Scope.MembersManage);
 
         var result = await controller.RemoveMember(subjectId, CancellationToken.None);
 
@@ -174,7 +174,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Setup(s => s.RemoveMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemberRemovalResult(false, "Cannot remove the last owner of a tenant"));
 
-        var controller = BuildController(TenantPermissions.MembersManage);
+        var controller = BuildController(Scope.MembersManage);
 
         var result = await controller.RemoveMember(Guid.CreateVersion7(), CancellationToken.None);
 
@@ -238,7 +238,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     [Fact]
     public async Task CreateInvite_withoutASubject_isUnauthorized()
     {
-        var controller = BuildController(TenantPermissions.Superuser);
+        var controller = BuildController(Scope.FullAccess);
         controller.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -265,14 +265,14 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
-        var controller = BuildController(TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead);
+        var controller = BuildController(Scope.MembersInvite, Scope.GlucoseRead);
 
         await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(),
             It.Is<IEnumerable<string>>(scopes => scopes.OrderBy(x => x).SequenceEqual(
-                new[] { TenantPermissions.GlucoseRead, TenantPermissions.MembersInvite }.OrderBy(x => x))),
+                new[] { Scope.GlucoseRead, Scope.MembersInvite }.OrderBy(x => x))),
             It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.Once);
@@ -293,7 +293,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
         controller.HttpContext.Request.Scheme = "https";
         controller.HttpContext.Request.Host = new HostString("chris-natoli-aps.nocturne.run");
 
@@ -324,7 +324,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
         controller.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -351,7 +351,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     [Fact]
     public async Task CreateInvite_withMembersManageAlone_isForbidden()
     {
-        var controller = BuildController(TenantPermissions.MembersManage);
+        var controller = BuildController(Scope.MembersManage);
 
         var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
 
@@ -383,7 +383,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
 
@@ -408,7 +408,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ThrowsAsync(new ArgumentException("One or more role IDs do not belong to this tenant."));
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
 
@@ -424,7 +424,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     {
         _inviteService.Setup(s => s.GetInvitesForTenantAsync(_tenantId)).ReturnsAsync([]);
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         var result = await controller.ListInvites();
 
@@ -464,7 +464,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var inviteId = Guid.CreateVersion7();
         _inviteService.Setup(s => s.RevokeInviteAsync(inviteId, _tenantId)).ReturnsAsync(false);
 
-        var controller = BuildController(TenantPermissions.MembersInvite);
+        var controller = BuildController(Scope.MembersInvite);
 
         var result = await controller.RevokeInvite(inviteId);
 
@@ -483,7 +483,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         "Chris",
         "Chris",
         [],
-        [TenantPermissions.GlucoseRead],
+        [Scope.GlucoseRead],
         "Dr. Smith",
         false,
         DateTime.UtcNow.AddDays(7),
@@ -576,7 +576,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Should().BeOfType<MemberInviteInfo>().Subject;
         info.TenantName.Should().Be("Chris");
         info.CreatedByName.Should().Be("Chris");
-        info.DirectPermissions.Should().Equal(TenantPermissions.GlucoseRead);
+        info.DirectPermissions.Should().Equal(Scope.GlucoseRead);
         info.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
     }
 
@@ -624,7 +624,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         body.Should().NotContain("Invite Author");
         body.Should().NotContain("Prior Joiner");
         body.Should().NotContain(joinedSubjectId.ToString());
-        body.Should().NotContain(TenantPermissions.GlucoseRead);
+        body.Should().NotContain(Scope.GlucoseRead);
     }
 
     /// <summary>

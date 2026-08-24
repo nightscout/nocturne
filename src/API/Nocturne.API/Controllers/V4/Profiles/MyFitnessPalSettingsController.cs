@@ -14,7 +14,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/connectors/myfitnesspal/settings")]
-[RequireScope(TenantPermissions.TenantSettings)]
+[RequireScope(Scope.TenantSettings)]
 public class MyFitnessPalSettingsController : ControllerBase
 {
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;

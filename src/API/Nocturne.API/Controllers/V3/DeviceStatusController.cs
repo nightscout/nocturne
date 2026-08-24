@@ -64,7 +64,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -156,7 +156,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(DeviceStatus), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatusById(
         string id,
         CancellationToken cancellationToken = default
@@ -194,7 +194,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Created device status records</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus")]
     [ProducesResponseType(typeof(DeviceStatus[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -335,7 +335,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>Updated device status record</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
     [ProducesResponseType(typeof(Dictionary<string, object>), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -435,7 +435,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -499,7 +499,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [NightscoutEndpoint("/api/v3/devicestatus/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.DevicesRead)]
+    [RequireScope(Scope.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,

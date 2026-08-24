@@ -50,7 +50,7 @@ public class WebhookSettingsController(
 
     /// <summary>Saves webhook notification settings.</summary>
     [HttpPut]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(WebhookNotificationSettings), 200)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status501NotImplemented)]
     public ActionResult<WebhookNotificationSettings> SaveWebhookSettings(
@@ -71,7 +71,7 @@ public class WebhookSettingsController(
     /// </remarks>
     [HttpPost("test")]
     [DenyDemoSubject]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(WebhookTestResult), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]

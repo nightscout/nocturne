@@ -28,7 +28,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every write action requires <see cref="OAuthScopes.AlertsReadWrite"/>: a rule decides whether a
+/// Every write action requires <see cref="Scope.AlertsReadWrite"/>: a rule decides whether a
 /// low-glucose alert reaches anyone, and the class-level <c>[Authorize]</c> alone is satisfied by
 /// read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
 /// </para>
@@ -120,7 +120,7 @@ public class AlertRulesController : ControllerBase
     /// Create an alert rule with a flat channel list.
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -194,7 +194,7 @@ public class AlertRulesController : ControllerBase
     /// Update an alert rule.
     /// </summary>
     [HttpPut("{id:guid}")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules", "GetRule"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -284,7 +284,7 @@ public class AlertRulesController : ControllerBase
     /// Delete an alert rule (cascades to its channels).
     /// </summary>
     [HttpDelete("{id:guid}")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -328,7 +328,7 @@ public class AlertRulesController : ControllerBase
     /// Toggle an alert rule enabled/disabled.
     /// </summary>
     [HttpPatch("{id:guid}/toggle")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules", "GetRule"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -356,7 +356,7 @@ public class AlertRulesController : ControllerBase
     /// without polluting the active-alerts surface.
     /// </summary>
     [HttpPost("{id:guid}/test-fire")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -387,7 +387,7 @@ public class AlertRulesController : ControllerBase
     /// rule lookup — channels and metadata come straight from the request body.
     /// </summary>
     [HttpPost("test-fire-dry-run")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

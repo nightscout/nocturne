@@ -78,7 +78,7 @@ public class OAuthControllerConsentTests
             SubjectId = _subjectId,
         };
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(
-            approverScopes.Length > 0 ? approverScopes : [OAuthScopes.FullAccess]);
+            approverScopes.Length > 0 ? approverScopes : [Scope.FullAccess]);
 
         return new OAuthController(
             _clientService.Object,
@@ -96,7 +96,7 @@ public class OAuthControllerConsentTests
     }
 
     private static ConsentApprovalRequest Consent(
-        bool approved, string redirectUri, string scope = OAuthScopes.GlucoseRead) => new()
+        bool approved, string redirectUri, string scope = Scope.GlucoseRead) => new()
     {
         ClientId = ClientId,
         RedirectUri = redirectUri,
@@ -153,34 +153,34 @@ public class OAuthControllerConsentTests
         // permissions on the tenant were — turning any member into a superuser via their
         // own browser. The demo makes that reachable anonymously, since its shared visitor
         // account is a real member anyone can get a session for.
-        var controller = CreateController(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead);
+        var controller = CreateController(Scope.GlucoseRead, Scope.TreatmentsRead);
 
         var result = await controller.ApproveConsent(
-            Consent(true, RegisteredRedirectUri, OAuthScopes.FullAccess));
+            Consent(true, RegisteredRedirectUri, Scope.FullAccess));
 
         result.Should().BeOfType<RedirectResult>();
-        _issuedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead]);
+        _issuedScopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
     }
 
     [Fact]
     public async Task Approving_a_scope_the_approver_lacks_drops_it()
     {
-        var controller = CreateController(OAuthScopes.GlucoseRead);
+        var controller = CreateController(Scope.GlucoseRead);
 
         var result = await controller.ApproveConsent(Consent(
-            true, RegisteredRedirectUri, $"{OAuthScopes.GlucoseRead} {OAuthScopes.TreatmentsReadWrite}"));
+            true, RegisteredRedirectUri, $"{Scope.GlucoseRead} {Scope.TreatmentsReadWrite}"));
 
         result.Should().BeOfType<RedirectResult>();
-        _issuedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        _issuedScopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
     public async Task Approving_when_none_of_the_scopes_are_held_is_rejected()
     {
-        var controller = CreateController(OAuthScopes.GlucoseRead);
+        var controller = CreateController(Scope.GlucoseRead);
 
         var result = await controller.ApproveConsent(
-            Consent(true, RegisteredRedirectUri, OAuthScopes.TreatmentsReadWrite));
+            Consent(true, RegisteredRedirectUri, Scope.TreatmentsReadWrite));
 
         result.Should().BeOfType<BadRequestObjectResult>()
             .Which.Value.Should().BeOfType<OAuthError>()

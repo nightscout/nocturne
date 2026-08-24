@@ -15,10 +15,10 @@ namespace Nocturne.API.Services.Demo;
 /// </summary>
 /// <remarks>
 /// The demo tenant carries two access paths. The Public system subject holds every scope in
-/// <see cref="TenantPermissions.PublicShareScopes"/> with no history limit, so the tenant's
+/// <see cref="Scope.PublicShareScopes"/> with no history limit, so the tenant's
 /// share link shows the full history of every shareable category. Separately, one non-system
 /// member holds the tenant's own <c>demo-visitor</c> role
-/// (<see cref="TenantPermissions.DemoVisitorPermissions"/>, not a seed role) so an anonymous
+/// (<see cref="Scope.DemoVisitorPermissions"/>, not a seed role) so an anonymous
 /// visitor can be signed in as a real member (see <c>DemoSessionController</c>) and reach the
 /// write and settings surfaces the read-only share host cannot serve.
 /// <para>
@@ -307,7 +307,7 @@ public sealed class DemoTenantService
     /// <c>Connection.RemoteIpAddress</c> onto every <c>mutation_audit_log</c> row, so a visitor's
     /// address is recorded for each write they make and survives until the next reset clears the
     /// table by cascade. Nobody can read it in the meantime — <c>AuditController</c> gates on
-    /// <c>audit.read</c>, which <see cref="TenantPermissions.DemoVisitorPermissions"/> excludes,
+    /// <c>audit.read</c>, which <see cref="Scope.DemoVisitorPermissions"/> excludes,
     /// so that exclusion is load-bearing and not merely tidy.
     /// </para>
     /// <para>
@@ -365,7 +365,7 @@ public sealed class DemoTenantService
 
     /// <summary>
     /// Ensures the demo tenant's own role exists, carrying
-    /// <see cref="TenantPermissions.DemoVisitorPermissions"/>, and rewrites its permissions
+    /// <see cref="Scope.DemoVisitorPermissions"/>, and rewrites its permissions
     /// to that list on every call so the role cannot drift.
     /// </summary>
     /// <remarks>
@@ -388,7 +388,7 @@ public sealed class DemoTenantService
                 TenantId = tenantId,
                 Name = "Demo Visitor",
                 Slug = DemoRoleSlug,
-                Permissions = new List<string>(TenantPermissions.DemoVisitorPermissions),
+                Permissions = new List<string>(Scope.DemoVisitorPermissions),
                 IsSystem = true,
                 SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
@@ -398,7 +398,7 @@ public sealed class DemoTenantService
             return role;
         }
 
-        role.Permissions = new List<string>(TenantPermissions.DemoVisitorPermissions);
+        role.Permissions = new List<string>(Scope.DemoVisitorPermissions);
         role.SysUpdatedAt = DateTime.UtcNow;
         return role;
     }
@@ -410,7 +410,7 @@ public sealed class DemoTenantService
     /// </summary>
     /// <remarks>
     /// Written as direct permissions bounded by
-    /// <see cref="TenantPermissions.PublicShareScopes"/>, not as the demo-visitor role. The
+    /// <see cref="Scope.PublicShareScopes"/>, not as the demo-visitor role. The
     /// Public subject serves the anonymous share viewer, and the other two writers of this
     /// membership — <c>MemberInviteController.SetMemberPermissions</c> and
     /// <c>ShareLinkService.SetScopesAsync</c> — both refuse anything outside that vocabulary.
@@ -443,7 +443,7 @@ public sealed class DemoTenantService
         }
 
         publicMember.LimitTo24Hours = false;
-        publicMember.DirectPermissions = [.. TenantPermissions.PublicShareScopes];
+        publicMember.DirectPermissions = [.. Scope.PublicShareScopes];
 
         if (publicMember.MemberRoles.Count > 0)
         {

@@ -39,8 +39,8 @@ public sealed class ShareLinkServiceTests : IDisposable
             Id = Guid.NewGuid(),
             TenantId = TenantId,
             Name = "Viewer",
-            Slug = TenantPermissions.SeedRoles.Viewer,
-            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer],
+            Slug = RoleSeeds.Viewer,
+            Permissions = RoleSeeds.Permissions[RoleSeeds.Viewer],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -112,10 +112,10 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         var dto = await _service.RotateAsync(TenantId);
 
-        dto.Scopes.Should().BeEquivalentTo(TenantPermissions.DefaultPublicShareScopes);
+        dto.Scopes.Should().BeEquivalentTo(Scope.DefaultPublicShareScopes);
 
         var member = await GetPublicMemberAsync();
-        member.DirectPermissions.Should().BeEquivalentTo(TenantPermissions.DefaultPublicShareScopes);
+        member.DirectPermissions.Should().BeEquivalentTo(Scope.DefaultPublicShareScopes);
         member.MemberRoles.Should().BeEmpty("rotation seeds direct permissions rather than a role");
     }
 
@@ -173,10 +173,10 @@ public sealed class ShareLinkServiceTests : IDisposable
         var dto = await _service.GetAsync(TenantId);
 
         dto.Scopes.Should().Contain([
-            TenantPermissions.GlucoseRead,
-            TenantPermissions.TreatmentsRead,
+            Scope.GlucoseRead,
+            Scope.TreatmentsRead,
         ]);
-        dto.Scopes.Should().OnlyContain(s => TenantPermissions.PublicShareScopes.Contains(s));
+        dto.Scopes.Should().OnlyContain(s => Scope.PublicShareScopes.Contains(s));
     }
 
     [Fact]
@@ -195,11 +195,11 @@ public sealed class ShareLinkServiceTests : IDisposable
     {
         await ResetPublicMemberAccessAsync();
         await _service.RotateAsync(TenantId);
-        await _service.SetScopesAsync(TenantId, [TenantPermissions.GlucoseRead]);
+        await _service.SetScopesAsync(TenantId, [Scope.GlucoseRead]);
 
         var dto = await _service.RotateAsync(TenantId);
 
-        dto.Scopes.Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        dto.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -209,13 +209,13 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         var dto = await _service.SetScopesAsync(TenantId,
-            [TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+            [Scope.GlucoseRead, Scope.TreatmentsRead]);
 
-        dto.Scopes.Should().BeEquivalentTo([TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+        dto.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
 
         var member = await GetPublicMemberAsync();
         member.MemberRoles.Should().BeEmpty("choosing scopes migrates the link onto direct permissions");
-        member.DirectPermissions.Should().BeEquivalentTo([TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+        member.DirectPermissions.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
     }
 
     [Fact]
@@ -238,8 +238,8 @@ public sealed class ShareLinkServiceTests : IDisposable
     {
         await _service.RotateAsync(TenantId);
 
-        var setReadWrite = async () => await _service.SetScopesAsync(TenantId, [TenantPermissions.GlucoseReadWrite]);
-        var setAdmin = async () => await _service.SetScopesAsync(TenantId, [TenantPermissions.MembersManage]);
+        var setReadWrite = async () => await _service.SetScopesAsync(TenantId, [Scope.GlucoseReadWrite]);
+        var setAdmin = async () => await _service.SetScopesAsync(TenantId, [Scope.MembersManage]);
 
         await setReadWrite.Should().ThrowAsync<ArgumentException>();
         await setAdmin.Should().ThrowAsync<ArgumentException>();

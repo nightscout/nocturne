@@ -28,7 +28,7 @@ public class MemberScopeMiddlewareTests
         var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.ApiKey);
+            options, subjectId, [Scope.GlucoseRead], AuthType.ApiKey);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -60,7 +60,7 @@ public class MemberScopeMiddlewareTests
         var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.FullAccess], AuthType.ApiKey);
+            options, subjectId, [Scope.FullAccess], AuthType.ApiKey);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -137,7 +137,7 @@ public class MemberScopeMiddlewareTests
         var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite], AuthType.ApiKey);
+            options, subjectId, [Scope.GlucoseRead, Scope.TreatmentsReadWrite], AuthType.ApiKey);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -224,9 +224,9 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+            options, RoleSeeds.Permissions[RoleSeeds.Owner]);
 
-        var (context, provider) = BuildMemberContext(options, subjectId, [OAuthScopes.GlucoseRead]);
+        var (context, provider) = BuildMemberContext(options, subjectId, [Scope.GlucoseRead]);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -235,10 +235,10 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead);
+        grantedScopes.Should().Contain(Scope.GlucoseRead);
         grantedScopes.Should().NotContain("*");
-        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
-        grantedScopes.Should().NotContain(OAuthScopes.TherapyReadWrite);
+        grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
+        grantedScopes.Should().NotContain(Scope.TherapyReadWrite);
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie.Should().NotBeNull();
@@ -258,9 +258,9 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+            options, RoleSeeds.Permissions[RoleSeeds.Owner]);
 
-        var (context, provider) = BuildMemberContext(options, subjectId, [OAuthScopes.FullAccess]);
+        var (context, provider) = BuildMemberContext(options, subjectId, [Scope.FullAccess]);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -286,10 +286,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+            options, RoleSeeds.Permissions[RoleSeeds.Owner]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.DirectGrant);
+            options, subjectId, [Scope.GlucoseRead], AuthType.DirectGrant);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -298,7 +298,7 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        grantedScopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+            options, RoleSeeds.Permissions[RoleSeeds.Caretaker]);
 
         var (context, provider) = BuildMemberContext(options, subjectId, CompanionTokenScopes);
         using (provider)
@@ -324,10 +324,10 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.DeviceNotify);
-        grantedScopes.Should().Contain(OAuthScopes.DeviceActuate);
+        grantedScopes.Should().Contain(Scope.DeviceNotify);
+        grantedScopes.Should().Contain(Scope.DeviceActuate);
         // Role atoms the token didn't request stay excluded.
-        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
         grantedScopes.Should().NotContain("*");
     }
 
@@ -343,9 +343,9 @@ public class MemberScopeMiddlewareTests
         connection.Open();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
-        var staleCaretakerPermissions = TenantPermissions
-            .SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]
-            .Where(p => !TenantPermissions.MemberPersonalScopes.Contains(p))
+        var staleCaretakerPermissions = RoleSeeds
+            .Permissions[RoleSeeds.Caretaker]
+            .Where(p => !Scope.MemberPersonalScopes.Contains(p))
             .ToList();
         var subjectId = SeedMemberWithRole(options, staleCaretakerPermissions);
 
@@ -358,11 +358,11 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.DeviceNotify);
-        grantedScopes.Should().Contain(OAuthScopes.DeviceActuate);
+        grantedScopes.Should().Contain(Scope.DeviceNotify);
+        grantedScopes.Should().Contain(Scope.DeviceActuate);
         // The role intersection still applies to everything else.
-        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead);
-        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().Contain(Scope.GlucoseRead);
+        grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
         grantedScopes.Should().NotContain("*");
     }
 
@@ -376,7 +376,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+            options, RoleSeeds.Permissions[RoleSeeds.Denied]);
 
         var (context, provider) = BuildMemberContext(options, subjectId, CompanionTokenScopes);
         using (provider)
@@ -402,13 +402,13 @@ public class MemberScopeMiddlewareTests
         // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
         // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
         // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,
-        // AuditController) reads GrantedScopes through TenantPermissions.HasPermission.
+        // AuditController) reads GrantedScopes through Scope.Satisfies.
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+            options, RoleSeeds.Permissions[RoleSeeds.Admin]);
 
         var (context, provider) = BuildMemberContext(options, subjectId, [], authType);
         using (provider)
@@ -423,18 +423,18 @@ public class MemberScopeMiddlewareTests
 
         foreach (var atom in new[]
                  {
-                     TenantPermissions.MembersManage, TenantPermissions.MembersInvite,
-                     TenantPermissions.RolesManage, TenantPermissions.TenantSettings,
-                     TenantPermissions.SharingManage, TenantPermissions.SharingGuest,
-                     TenantPermissions.AuditRead, TenantPermissions.GlucoseReadWrite,
+                     Scope.MembersManage, Scope.MembersInvite,
+                     Scope.RolesManage, Scope.TenantSettings,
+                     Scope.SharingManage, Scope.SharingGuest,
+                     Scope.AuditRead, Scope.GlucoseReadWrite,
                  })
         {
-            TenantPermissions.HasPermission(grantedScopes!, atom).Should().BeTrue($"'{atom}' is granted");
+            Scope.Satisfies(grantedScopes!, atom).Should().BeTrue($"'{atom}' is granted");
         }
 
         // An Administrator is not a superuser, and audit.manage is Owner-only by design.
-        grantedScopes.Should().NotContain(OAuthScopes.FullAccess);
-        TenantPermissions.HasPermission(grantedScopes!, TenantPermissions.AuditManage)
+        grantedScopes.Should().NotContain(Scope.FullAccess);
+        Scope.Satisfies(grantedScopes!, Scope.AuditManage)
             .Should().BeFalse();
     }
 
@@ -450,7 +450,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+            options, RoleSeeds.Permissions[RoleSeeds.Caretaker]);
 
         var (context, provider) = BuildMemberContext(
             options, subjectId, ["openid", "profile", "email"], AuthType.OidcToken);
@@ -462,8 +462,8 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead);
-        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().Contain(Scope.GlucoseRead);
+        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
         // The IdP's protocol scopes are not Nocturne scopes and must not be published.
         grantedScopes.Should().NotContain("openid");
         grantedScopes.Should().NotContain("profile");
@@ -479,7 +479,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+            options, RoleSeeds.Permissions[RoleSeeds.Caretaker]);
 
         var (context, provider) = BuildMemberContext(options, subjectId, [], AuthType.SessionCookie);
         using (provider)
@@ -506,7 +506,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+            options, RoleSeeds.Permissions[RoleSeeds.Denied]);
 
         var (context, provider) = BuildMemberContext(options, subjectId, [], AuthType.SessionCookie);
         using (provider)
@@ -533,10 +533,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+            options, RoleSeeds.Permissions[RoleSeeds.Admin]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.GlucoseReadWrite], authType);
+            options, subjectId, [Scope.GlucoseReadWrite], authType);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -544,8 +544,8 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
-        grantedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseReadWrite]);
-        TenantPermissions.HasPermission(grantedScopes!, TenantPermissions.MembersManage)
+        grantedScopes.Should().BeEquivalentTo([Scope.GlucoseReadWrite]);
+        Scope.Satisfies(grantedScopes!, Scope.MembersManage)
             .Should().BeFalse();
     }
 
@@ -560,10 +560,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+            options, RoleSeeds.Permissions[RoleSeeds.Caretaker]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.TreatmentsRead], AuthType.OAuthAccessToken);
+            options, subjectId, [Scope.TreatmentsRead], AuthType.OAuthAccessToken);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -571,8 +571,8 @@ public class MemberScopeMiddlewareTests
         }
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
-        grantedScopes.Should().BeEquivalentTo([OAuthScopes.TreatmentsRead]);
-        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().BeEquivalentTo([Scope.TreatmentsRead]);
+        grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie!.Check("api:treatments:read").Should().BeTrue();
@@ -590,10 +590,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+            options, RoleSeeds.Permissions[RoleSeeds.Admin]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.Guest);
+            options, subjectId, [Scope.GlucoseRead], AuthType.Guest);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -601,7 +601,7 @@ public class MemberScopeMiddlewareTests
         }
 
         (context.Items["GrantedScopes"] as IReadOnlySet<string>)
-            .Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+            .Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -611,7 +611,7 @@ public class MemberScopeMiddlewareTests
         // IsAuthenticated false, so the Public membership never reaches this middleware. A share can
         // therefore never be widened by membership resolution, whatever atoms the Public subject
         // carries.
-        var publicScopes = (IReadOnlySet<string>)new HashSet<string> { OAuthScopes.GlucoseRead };
+        var publicScopes = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
 
         var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
         var context = new DefaultHttpContext();
@@ -643,10 +643,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer]);
+            options, RoleSeeds.Permissions[RoleSeeds.Viewer]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.TreatmentsReadWrite], authType);
+            options, subjectId, [Scope.TreatmentsReadWrite], authType);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -678,10 +678,10 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
         var subjectId = SeedMemberWithRole(
-            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+            options, RoleSeeds.Permissions[RoleSeeds.Admin]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.FullAccess], authType);
+            options, subjectId, [Scope.FullAccess], authType);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -690,10 +690,10 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().NotContain(OAuthScopes.FullAccess);
-        grantedScopes.Should().Contain(OAuthScopes.GlucoseReadWrite);
-        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
-        grantedScopes.Should().Contain(OAuthScopes.DevicesReadWrite);
+        grantedScopes.Should().NotContain(Scope.FullAccess);
+        grantedScopes.Should().Contain(Scope.GlucoseReadWrite);
+        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
+        grantedScopes.Should().Contain(Scope.DevicesReadWrite);
     }
 
     [Fact]
@@ -703,14 +703,14 @@ public class MemberScopeMiddlewareTests
         // (the SHA-1 api-secret header the field uploaders send), so the same credential reaches
         // MemberScopeMiddleware as either AuthType. Both must resolve identically, or the
         // presentation format picks the privilege level.
-        var grantScopes = new List<string> { OAuthScopes.TreatmentsReadWrite, OAuthScopes.GlucoseReadWrite };
+        var grantScopes = new List<string> { Scope.TreatmentsReadWrite, Scope.GlucoseReadWrite };
 
         foreach (var rolePermissions in new[]
                  {
                      OwnerPermissions,
-                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin],
-                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker],
-                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer],
+                     RoleSeeds.Permissions[RoleSeeds.Admin],
+                     RoleSeeds.Permissions[RoleSeeds.Caretaker],
+                     RoleSeeds.Permissions[RoleSeeds.Viewer],
                  })
         {
             var headerScopes = await ResolveAsync(rolePermissions, grantScopes, AuthType.ApiKey);
@@ -723,8 +723,8 @@ public class MemberScopeMiddlewareTests
     }
 
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
-    [InlineData(TenantPermissions.SeedRoles.Clinician)]
+    [InlineData(RoleSeeds.Caretaker)]
+    [InlineData(RoleSeeds.Clinician)]
     public async Task NonWritingRole_WithFullAccessApiSecret_LosesTheUploadScopes(string roleSlug)
     {
         // The highest-impact narrowing in this change, pinned so it is a decision rather than a
@@ -741,10 +741,10 @@ public class MemberScopeMiddlewareTests
         connection.Open();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
 
-        var subjectId = SeedMemberWithRole(options, TenantPermissions.SeedRolePermissions[roleSlug]);
+        var subjectId = SeedMemberWithRole(options, RoleSeeds.Permissions[roleSlug]);
 
         var (context, provider) = BuildMemberContext(
-            options, subjectId, [OAuthScopes.FullAccess], AuthType.ApiKey);
+            options, subjectId, [Scope.FullAccess], AuthType.ApiKey);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -753,9 +753,9 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().NotContain(OAuthScopes.GlucoseReadWrite);
-        grantedScopes.Should().NotContain(OAuthScopes.DevicesReadWrite);
-        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead, "reads are retained");
+        grantedScopes.Should().NotContain(Scope.GlucoseReadWrite);
+        grantedScopes.Should().NotContain(Scope.DevicesReadWrite);
+        grantedScopes.Should().Contain(Scope.GlucoseRead, "reads are retained");
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie.Should().NotBeNull();
@@ -775,7 +775,7 @@ public class MemberScopeMiddlewareTests
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
         var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
-        var migratedGrantScopes = OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToList();
+        var migratedGrantScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
         var (context, provider) = BuildMemberContext(
             options, subjectId, migratedGrantScopes, AuthType.ApiKey);
         using (provider)
@@ -786,7 +786,7 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.HealthReadWriteExpansion);
+        grantedScopes.Should().Contain(Scope.HealthReadWriteExpansion);
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie.Should().NotBeNull();
@@ -819,7 +819,7 @@ public class MemberScopeMiddlewareTests
         }
 
         var (context, provider) = BuildMemberContext(
-            options, Guid.CreateVersion7(), [OAuthScopes.TreatmentsReadWrite], AuthType.ApiKey);
+            options, Guid.CreateVersion7(), [Scope.TreatmentsReadWrite], AuthType.ApiKey);
         using (provider)
         {
             var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
@@ -828,7 +828,7 @@ public class MemberScopeMiddlewareTests
 
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie.Should().NotBeNull();
@@ -862,13 +862,13 @@ public class MemberScopeMiddlewareTests
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
     private static List<string> OwnerPermissions =>
-        TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner];
+        RoleSeeds.Permissions[RoleSeeds.Owner];
 
     /// <summary>The desktop Companion's device-flow token scopes.</summary>
     private static readonly List<string> CompanionTokenScopes =
     [
-        OAuthScopes.GlucoseRead, OAuthScopes.TherapyRead, OAuthScopes.DevicesRead,
-        OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate,
+        Scope.GlucoseRead, Scope.TherapyRead, Scope.DevicesRead,
+        Scope.DeviceNotify, Scope.DeviceActuate,
     ];
 
     /// <summary>
@@ -943,7 +943,7 @@ public class MemberScopeMiddlewareTests
             TenantId = TestDatabaseSeeder.TenantId,
             Scopes = tokenScopes,
         };
-        context.Items["GrantedScopes"] = OAuthScopes.Normalize(tokenScopes);
+        context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
         context.Items["PermissionTrie"] = new PermissionTrie();
 
         return (context, provider);

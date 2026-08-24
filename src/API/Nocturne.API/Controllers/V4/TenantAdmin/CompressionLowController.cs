@@ -11,14 +11,14 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// Controller for compression low detection and review.
 /// </summary>
 /// <remarks>
-/// Every write here is the glucose category and requires <see cref="OAuthScopes.GlucoseReadWrite"/>.
+/// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
 /// Accepting a suggestion writes a <see cref="StateSpanCategory.DataExclusion"/> span
 /// (<c>CompressionLowService.AcceptSuggestionAsync</c>), which decides whether the flagged readings
 /// count towards analytics and reports — the same category-to-scope mapping
 /// <c>StateSpanWriteScopeGuard</c> applies — and dismiss, delete and detection all write the
 /// suggestions that propose one. Each write therefore carries its own
-/// <see cref="OAuthScopes.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
-/// the matching <see cref="OAuthScopes.GlucoseRead"/>.
+/// <see cref="Scope.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
+/// the matching <see cref="Scope.GlucoseRead"/>.
 /// <para>
 /// The gate is <see cref="RequireScopeAttribute"/> and not <c>[Authorize]</c> because the data
 /// quality report reads these suggestions: a public share is deliberately
@@ -33,7 +33,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
-[RequireScope(OAuthScopes.GlucoseRead)]
+[RequireScope(Scope.GlucoseRead)]
 public class CompressionLowController : ControllerBase
 {
     private readonly ICompressionLowService _compressionLowService;
@@ -90,7 +90,7 @@ public class CompressionLowController : ControllerBase
     /// Accept a suggestion with adjusted bounds
     /// </summary>
     [HttpPost("suggestions/{id:guid}/accept")]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -116,7 +116,7 @@ public class CompressionLowController : ControllerBase
     /// Dismiss a suggestion
     /// </summary>
     [HttpPost("suggestions/{id:guid}/dismiss")]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -140,7 +140,7 @@ public class CompressionLowController : ControllerBase
     /// Delete a suggestion and its associated state span
     /// </summary>
     [HttpDelete("suggestions/{id:guid}")]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -169,7 +169,7 @@ public class CompressionLowController : ControllerBase
     /// (<c>CompressionLowDetectionService.DetectForNightAsync</c>), so this is a write.
     /// </remarks>
     [HttpPost("detect")]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(DetectionResult), StatusCodes.Status200OK)]
     public async Task<ActionResult<DetectionResult>> TriggerDetection(

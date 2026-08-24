@@ -1,7 +1,7 @@
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using OAuthScopes = Nocturne.Core.Models.Authorization.OAuthScopes;
+using Scope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.Extensions;
 
@@ -142,6 +142,6 @@ public static class HttpContextExtensions
     public static bool HasScope(this HttpContext context, string scope)
     {
         var grantedScopes = context.GetGrantedScopes();
-        return OAuthScopes.SatisfiesScope(grantedScopes, scope);
+        return Scope.Satisfies(grantedScopes, scope);
     }
 }

@@ -25,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/device-status/aps")]
-[RequireScope(OAuthScopes.DevicesRead)]
+[RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
 public class ApsSnapshotController(IApsSnapshotRepository repo)
     : V4ReadOnlyControllerBase<ApsSnapshot, IApsSnapshotRepository>(repo)
@@ -44,7 +44,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo)
     /// so the stamper can't take them). Reads that join by <c>correlationId</c> are unaffected.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [ProducesResponseType(typeof(ApsSnapshot[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApsSnapshot[]>> CreateApsSnapshots(

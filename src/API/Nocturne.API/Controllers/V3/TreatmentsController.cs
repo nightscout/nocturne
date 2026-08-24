@@ -61,7 +61,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult> GetTreatments(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -137,7 +137,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult<Treatment>> GetTreatment(
         string id,
         CancellationToken cancellationToken = default
@@ -189,7 +189,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <response code="500">Internal server error.</response>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments")]
     [ProducesResponseType(typeof(Treatment), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -283,7 +283,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>Created treatments</returns>
     [HttpPost("bulk")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/bulk")]
     [ProducesResponseType(typeof(Treatment[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -359,7 +359,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>Updated treatment</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -430,7 +430,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -479,7 +479,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [NightscoutEndpoint("/api/v3/treatments/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     public async Task<ActionResult> GetTreatmentHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -534,7 +534,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// <response code="500">Internal server error.</response>
     [HttpPatch("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments/:id")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

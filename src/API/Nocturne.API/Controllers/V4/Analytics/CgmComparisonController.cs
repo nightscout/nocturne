@@ -17,7 +17,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/cgm-comparison")]
 [Produces("application/json")]
-[RequireScope(OAuthScopes.ReportsRead)]
+[RequireScope(Scope.ReportsRead)]
 public class CgmComparisonController : ControllerBase
 {
     private const double MaxRangeDays = 90;

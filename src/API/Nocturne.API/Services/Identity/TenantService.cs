@@ -350,13 +350,13 @@ public partial class TenantService : ITenantService
 
         var isOwner = await context.TenantMemberRoles
             .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole!.Slug == TenantPermissions.SeedRoles.Owner, ct);
+                && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
 
         if (isOwner)
         {
             var ownerCount = await context.TenantMemberRoles
                 .CountAsync(mr => mr.TenantRole!.TenantId == tenantId
-                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
+                    && mr.TenantRole.Slug == RoleSeeds.Owner
                     && mr.TenantMember!.RevokedAt == null, ct);
 
             if (ownerCount <= 1)
@@ -468,9 +468,9 @@ public partial class TenantService : ITenantService
 
                 // Seed default roles for this tenant (inline to share transaction context)
                 var now = DateTime.UtcNow;
-                foreach (var (roleSlug, permissions) in TenantPermissions.SeedRolePermissions)
+                foreach (var (roleSlug, permissions) in RoleSeeds.Permissions)
                 {
-                    var name = TenantPermissions.SeedRoleNames[roleSlug];
+                    var name = RoleSeeds.DisplayNames[roleSlug];
                     context.TenantRoles.Add(new TenantRoleEntity
                     {
                         Id = Guid.CreateVersion7(),

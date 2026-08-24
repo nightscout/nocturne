@@ -270,7 +270,7 @@ public class TenantController : ControllerBase
         var member = tenant.Members.FirstOrDefault(m => m.SubjectId == subjectId);
         if (member == null) return false;
 
-        return member.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Owner);
+        return member.Roles.Any(r => r.Slug == RoleSeeds.Owner);
     }
 }
 

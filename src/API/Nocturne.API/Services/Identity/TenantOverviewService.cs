@@ -58,7 +58,7 @@ public class TenantOverviewService : ITenantOverviewService
         var items = new List<TenantOverviewItem>();
         foreach (var (tenant, allowed) in glucoseReadTenants)
         {
-            var includeAlerts = TenantPermissions.HasPermission(allowed, TenantPermissions.AlertsRead);
+            var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
 
             try
             {
@@ -98,7 +98,7 @@ public class TenantOverviewService : ITenantOverviewService
             if (tenant is null || !tenant.IsActive) continue;
 
             var allowed = ResolveAllowedScopes(membership, tokenScopes, authType);
-            if (!TenantPermissions.HasPermission(allowed, TenantPermissions.GlucoseRead)) continue;
+            if (!Scope.Satisfies(allowed, Scope.GlucoseRead)) continue;
 
             result.Add(new GlucoseReadTenant(tenant, allowed));
         }

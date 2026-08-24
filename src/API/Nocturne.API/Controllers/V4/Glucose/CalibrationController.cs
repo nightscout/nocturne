@@ -24,14 +24,14 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/calibrations")]
-[RequireScope(OAuthScopes.GlucoseRead)]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class CalibrationController(ICalibrationRepository repo)
     : V4CrudControllerBase<Calibration, UpsertCalibrationRequest, UpsertCalibrationRequest, ICalibrationRepository>(repo)
 {
     /// <inheritdoc/>
     /// <remarks>Calibrations are glucose data; the legacy equivalent is a v1 <c>cal</c> entry.</remarks>
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
     /// <remarks>

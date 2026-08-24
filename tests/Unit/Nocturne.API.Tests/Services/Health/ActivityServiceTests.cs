@@ -861,10 +861,10 @@ public class ActivityServiceTests
 
         counts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
-            [OAuthScopes.TreatmentsRead] = 1,
-            [OAuthScopes.HeartRateRead] = 2,
-            [OAuthScopes.StepCountRead] = 3,
-            [OAuthScopes.SleepRead] = 4,
+            [Scope.TreatmentsRead] = 1,
+            [Scope.HeartRateRead] = 2,
+            [Scope.StepCountRead] = 3,
+            [Scope.SleepRead] = 4,
         });
     }
 
@@ -881,12 +881,12 @@ public class ActivityServiceTests
             .ReturnsAsync([new HeartRate(), new HeartRate()]);
 
         var counts = await _activityService.CountActivitiesByCategoryAsync(
-            new HashSet<string> { OAuthScopes.HeartRateRead },
+            new HashSet<string> { Scope.HeartRateRead },
             cancellationToken: CancellationToken.None);
 
         counts.Should().BeEquivalentTo(new Dictionary<string, long>
         {
-            [OAuthScopes.HeartRateRead] = 2,
+            [Scope.HeartRateRead] = 2,
         });
         _mockStateSpanService.Verify(
             s => s.GetActivitiesAsync(

@@ -59,7 +59,7 @@ public class DataHub : TenantAwareHub
                 authorization = await _tokenAuthorizer.AuthorizeTokenAsync(
                     authData.Token,
                     TenantContext?.TenantId,
-                    OAuthScopes.GlucoseRead
+                    Scope.GlucoseRead
                 );
             }
             else if (authorization is null && !string.IsNullOrEmpty(authData.Secret))
@@ -70,7 +70,7 @@ public class DataHub : TenantAwareHub
                 );
             }
 
-            if (authorization is null || !authorization.Satisfies(OAuthScopes.GlucoseRead))
+            if (authorization is null || !authorization.Satisfies(Scope.GlucoseRead))
             {
                 _logger.LogWarning(
                     "Client {ConnectionId} authorization failed",
@@ -136,7 +136,7 @@ public class DataHub : TenantAwareHub
             return new
             {
                 read = true,
-                write = authorization.Satisfies(OAuthScopes.GlucoseReadWrite),
+                write = authorization.Satisfies(Scope.GlucoseReadWrite),
                 success = true,
             };
         }
@@ -163,7 +163,7 @@ public class DataHub : TenantAwareHub
     /// categories it holds.
     /// </summary>
     /// <param name="request">Retro load request containing loadedMills timestamp</param>
-    [HubScope(OAuthScopes.GlucoseRead)]
+    [HubScope(Scope.GlucoseRead)]
     public async Task LoadRetro(RetroLoadRequest request)
     {
         try
@@ -208,7 +208,7 @@ public class DataHub : TenantAwareHub
             );
 
             IEnumerable<Core.Models.Treatment> treatments = [];
-            if (authorization.Satisfies(OAuthScopes.TreatmentsRead))
+            if (authorization.Satisfies(Scope.TreatmentsRead))
             {
                 treatments = await treatmentService.GetTreatmentsAsync(
                     find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
@@ -217,7 +217,7 @@ public class DataHub : TenantAwareHub
             }
 
             IEnumerable<Core.Models.DeviceStatus> deviceStatuses = [];
-            if (authorization.Satisfies(OAuthScopes.DevicesRead))
+            if (authorization.Satisfies(Scope.DevicesRead))
             {
                 deviceStatuses = await projectionService.GetAsync(
                     count: 1000,

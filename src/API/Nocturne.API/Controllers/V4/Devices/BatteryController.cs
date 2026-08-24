@@ -33,7 +33,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/[controller]")]
-[RequireScope(OAuthScopes.DevicesRead)]
+[RequireScope(Scope.DevicesRead)]
 public class BatteryController : ControllerBase
 {
     private readonly IBatteryService _batteryService;

@@ -18,7 +18,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [ApiController]
 [Tags("Monitoring")]
 [Authorize]
-[RequireScope(OAuthScopes.AlertsRead)]
+[RequireScope(Scope.AlertsRead)]
 [Route("api/v4/alerts/replay")]
 public class AlertReplayController : ControllerBase
 {

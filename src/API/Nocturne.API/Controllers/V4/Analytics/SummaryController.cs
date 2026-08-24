@@ -60,7 +60,7 @@ public class SummaryController : ControllerBase
     /// <returns>Widget summary response with aggregated diabetes management data</returns>
     [HttpGet]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.AlertsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.AlertsRead)]
     [ProducesResponseType(typeof(V4SummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<V4SummaryResponse>> GetSummary(

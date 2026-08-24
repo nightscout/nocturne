@@ -97,7 +97,7 @@ public class MembershipRequestServiceTests : IDisposable
             TenantId = _tenantId,
             Name = "Admin",
             Slug = "admin",
-            Permissions = [TenantPermissions.MembersManage],
+            Permissions = [Scope.MembersManage],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -191,7 +191,7 @@ public class MembershipRequestServiceTests : IDisposable
         var roleIds = new List<Guid> { _adminRoleId };
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, roleIds, _adminSubjectId, [TenantPermissions.Superuser]);
+            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess]);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeNull();
@@ -213,7 +213,7 @@ public class MembershipRequestServiceTests : IDisposable
     public async Task ApproveRequestAsync_RequestNotFound_ReturnsFailure()
     {
         var result = await _service.ApproveRequestAsync(
-            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId, [TenantPermissions.Superuser]);
+            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not found");
@@ -230,7 +230,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         // Try to approve the already-denied request
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [TenantPermissions.Superuser]);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [Scope.FullAccess]);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("no longer pending");

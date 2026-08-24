@@ -72,7 +72,7 @@ public class MyTenantsController : ControllerBase
         // handling: they never reach membership resolution there, so stand in a full-access grant.
         IReadOnlySet<string> tokenScopes =
             authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess
-                ? new HashSet<string> { OAuthScopes.FullAccess }
+                ? new HashSet<string> { Scope.FullAccess }
                 : HttpContext.GetGrantedScopes();
 
         var overview = await _overviewService.GetOverviewAsync(

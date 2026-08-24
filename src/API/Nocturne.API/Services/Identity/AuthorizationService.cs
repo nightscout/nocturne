@@ -9,7 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
-using OAuthGrantTypes = Nocturne.Infrastructure.Data.Entities.OAuthGrantTypes;
+using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
 
 namespace Nocturne.API.Services.Identity;
 

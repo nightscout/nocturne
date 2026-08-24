@@ -65,7 +65,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             "Chris",
             "Chris",
             [],
-            [TenantPermissions.GlucoseRead],
+            [Scope.GlucoseRead],
             "Dr. Smith",
             false,
             DateTime.UtcNow.AddDays(7),
@@ -134,7 +134,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             SubjectName = "Dr. Smith",
             Email = "smith@example.test",
             Roles = ["admin"],
-            Permissions = [TenantPermissions.Superuser],
+            Permissions = [Scope.FullAccess],
         };
 
         var middleware = new AuthenticationMiddleware(

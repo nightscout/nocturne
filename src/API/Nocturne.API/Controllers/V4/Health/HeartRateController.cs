@@ -52,7 +52,7 @@ public class HeartRateController : ControllerBase
     /// </remarks>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.HeartRateRead)]
+    [RequireScope(Scope.HeartRateRead)]
     [ProducesResponseType(typeof(IEnumerable<HeartRate>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<HeartRate>>> GetHeartRates(
@@ -92,7 +92,7 @@ public class HeartRateController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("{id}")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.HeartRateRead)]
+    [RequireScope(Scope.HeartRateRead)]
     [ProducesResponseType(typeof(HeartRate), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -120,7 +120,7 @@ public class HeartRateController : ControllerBase
     /// Create one or more heart rate records
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.HeartRateReadWrite)]
+    [RequireScope(Scope.HeartRateReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<HeartRate>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -160,7 +160,7 @@ public class HeartRateController : ControllerBase
     /// Update an existing heart rate record
     /// </summary>
     [HttpPut("{id}")]
-    [RequireScope(OAuthScopes.HeartRateReadWrite)]
+    [RequireScope(Scope.HeartRateReadWrite)]
     [ProducesResponseType(typeof(HeartRate), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -201,7 +201,7 @@ public class HeartRateController : ControllerBase
     /// Delete a heart rate record by ID
     /// </summary>
     [HttpDelete("{id}")]
-    [RequireScope(OAuthScopes.HeartRateReadWrite)]
+    [RequireScope(Scope.HeartRateReadWrite)]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

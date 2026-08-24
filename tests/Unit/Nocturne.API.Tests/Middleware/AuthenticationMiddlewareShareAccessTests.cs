@@ -144,7 +144,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
         scopes.Should().NotBeNull();
-        scopes!.Should().Contain(OAuthScopes.GlucoseRead,
+        scopes!.Should().Contain(Scope.GlucoseRead,
             "the seeded Public membership grants glucose.read via the Clinician role");
 
         var csv = ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv;
@@ -166,9 +166,9 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
         scopes.Should().NotBeNull();
-        scopes.Should().BeSubsetOf(TenantPermissions.PublicShareScopes,
+        scopes.Should().BeSubsetOf(Scope.PublicShareScopes,
             "a superuser grant on the Public membership must degrade to public read access");
-        scopes.Should().Contain(OAuthScopes.GlucoseRead);
+        scopes.Should().Contain(Scope.GlucoseRead);
     }
 
     [Fact]
@@ -178,12 +178,12 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         // administration atoms are now part of the grantable scope vocabulary. The share host
         // must still resolve to at most the shareable read scopes.
         SetPublicDirectPermissions([
-            OAuthScopes.GlucoseRead,
-            TenantPermissions.MembersManage,
-            TenantPermissions.RolesManage,
-            TenantPermissions.TenantSettings,
-            TenantPermissions.AuditRead,
-            TenantPermissions.SharingManage,
+            Scope.GlucoseRead,
+            Scope.MembersManage,
+            Scope.RolesManage,
+            Scope.TenantSettings,
+            Scope.AuditRead,
+            Scope.SharingManage,
         ]);
 
         var ctx = ContextFor(shareAccess: true);
@@ -192,12 +192,12 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
         scopes.Should().NotBeNull();
-        scopes.Should().BeSubsetOf(TenantPermissions.PublicShareScopes);
-        scopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        scopes.Should().BeSubsetOf(Scope.PublicShareScopes);
+        scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
 
         var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
-        trie!.Check(TenantPermissions.MembersManage).Should().BeFalse();
-        trie.Check(TenantPermissions.AuditRead).Should().BeFalse();
+        trie!.Check(Scope.MembersManage).Should().BeFalse();
+        trie.Check(Scope.AuditRead).Should().BeFalse();
     }
 
     [Fact]
@@ -206,14 +206,14 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         // heartrate.read/stepcount.read have no legacy api:* equivalent, so a trie derived
         // purely from ScopeTranslator.ToPermissions would be empty and the fallback
         // HasPermissions policy would 401 the whole share despite valid grants.
-        SetPublicDirectPermissions([OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead]);
+        SetPublicDirectPermissions([Scope.HeartRateRead, Scope.StepCountRead]);
 
         var ctx = ContextFor(shareAccess: true);
 
         await Build().InvokeAsync(ctx);
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
-        scopes.Should().BeEquivalentTo([OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead]);
+        scopes.Should().BeEquivalentTo([Scope.HeartRateRead, Scope.StepCountRead]);
         var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
         trie!.IsEmpty.Should().BeFalse();
     }
@@ -231,7 +231,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         await Build().InvokeAsync(ctx);
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
-        scopes.Should().Contain(OAuthScopes.GlucoseRead);
+        scopes.Should().Contain(Scope.GlucoseRead);
         ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv
             .Should().Contain("glucose.read");
     }

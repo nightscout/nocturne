@@ -30,7 +30,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/sensor")]
-[RequireScope(OAuthScopes.GlucoseRead)]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
@@ -43,7 +43,7 @@ public class SensorGlucoseController(
 {
     /// <inheritdoc/>
     /// <remarks>CGM readings are glucose data; the legacy equivalent is a v1 entry.</remarks>
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base

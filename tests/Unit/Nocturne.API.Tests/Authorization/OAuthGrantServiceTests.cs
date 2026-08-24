@@ -303,7 +303,7 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var grantId = await SeedGrantAsync(db,
             grantType: OAuthGrantTypes.Guest,
-            scopes: [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead]);
+            scopes: [Scope.GlucoseRead, Scope.TreatmentsRead]);
 
         // The cached session carries the grant's scopes, so narrowing them has to take effect now
         // rather than at the end of the 30-second TTL. Same structural hole as the DELETE path: this
@@ -316,15 +316,15 @@ public class OAuthGrantServiceTests : IDisposable
                 grantId,
                 _testTenantId,
                 _ownerSubjectId,
-                [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead],
+                [Scope.GlucoseRead, Scope.TreatmentsRead],
                 null,
                 DateTime.UtcNow.AddHours(1)));
 
         var service = CreateService(db);
         var result = await service.UpdateGrantAsync(
-            grantId, _ownerSubjectId, scopes: [OAuthScopes.GlucoseRead]);
+            grantId, _ownerSubjectId, scopes: [Scope.GlucoseRead]);
 
-        result!.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+        result!.Scopes.Should().Equal([Scope.GlucoseRead]);
         _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
     }
 
@@ -336,13 +336,13 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var grantId = await SeedGrantAsync(db,
             grantType: OAuthGrantTypes.Guest,
-            scopes: [OAuthScopes.GlucoseRead]);
+            scopes: [Scope.GlucoseRead]);
 
         var service = CreateService(db);
 
         // A guest link is a read-only share with no account behind it. The data owner it belongs to
         // reaches it here, so the cap has to hold against the owner too.
-        foreach (var widened in new[] { OAuthScopes.FullAccess, OAuthScopes.GlucoseReadWrite })
+        foreach (var widened in new[] { Scope.FullAccess, Scope.GlucoseReadWrite })
         {
             var attempt = () => service.UpdateGrantAsync(
                 grantId, _ownerSubjectId, scopes: [widened]);
@@ -352,7 +352,7 @@ public class OAuthGrantServiceTests : IDisposable
         }
 
         var entity = await db.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == grantId);
-        entity.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+        entity.Scopes.Should().Equal([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -361,7 +361,7 @@ public class OAuthGrantServiceTests : IDisposable
         using var db = CreateDbContext();
         await SeedClientAsync(db);
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db, scopes: [OAuthScopes.GlucoseRead]);
+        var grantId = await SeedGrantAsync(db, scopes: [Scope.GlucoseRead]);
 
         var service = CreateService(db);
 
@@ -374,7 +374,7 @@ public class OAuthGrantServiceTests : IDisposable
             .Where(e => e.Message.Contains("not a recognised scope"));
 
         var entity = await db.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == grantId);
-        entity.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+        entity.Scopes.Should().Equal([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -385,15 +385,15 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var grantId = await SeedGrantAsync(db,
             grantType: OAuthGrantTypes.App,
-            scopes: [OAuthScopes.GlucoseRead]);
+            scopes: [Scope.GlucoseRead]);
 
         var service = CreateService(db);
         var result = await service.UpdateGrantAsync(
-            grantId, _ownerSubjectId, scopes: [OAuthScopes.FullAccess]);
+            grantId, _ownerSubjectId, scopes: [Scope.FullAccess]);
 
         // The guest cap is scoped to guest grants: an app grant is still whatever the user consented
         // to, including full access.
-        result!.Scopes.Should().Equal([OAuthScopes.FullAccess]);
+        result!.Scopes.Should().Equal([Scope.FullAccess]);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ namespace Nocturne.API.Validators.Auth;
 /// <list type="bullet">
 /// <item><description>Label is required and capped at 200 characters.</description></item>
 /// <item><description>At least one scope is required.</description></item>
-/// <item><description>Each scope must be a value recognized by <see cref="OAuthScopes.IsValid"/>.</description></item>
+/// <item><description>Each scope must be a value recognized by <see cref="Scope.IsValid"/>.</description></item>
 /// <item><description>ExpiresAt is optional, and when set must be in the future: a grant issued
 /// at or past its expiry authenticates nothing.</description></item>
 /// </list>
@@ -28,7 +28,7 @@ public class CreateDirectGrantRequestValidator : AbstractValidator<CreateDirectG
     {
         RuleFor(x => x.Label).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Scopes).NotEmpty().WithMessage("At least one scope is required");
-        RuleForEach(x => x.Scopes).Must(OAuthScopes.IsValid)
+        RuleForEach(x => x.Scopes).Must(Scope.IsValid)
             .WithMessage(scope => $"Invalid scope: {scope}");
         RuleFor(x => x.ExpiresAt).Must(expiresAt => expiresAt > DateTime.UtcNow)
             .When(x => x.ExpiresAt.HasValue)

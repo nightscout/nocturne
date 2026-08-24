@@ -30,7 +30,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class BolusController(
     IBolusRepository repo,
@@ -41,7 +41,7 @@ public class BolusController(
 {
     /// <inheritdoc/>
     /// <remarks>Boluses are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
-    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
     /// <remarks>

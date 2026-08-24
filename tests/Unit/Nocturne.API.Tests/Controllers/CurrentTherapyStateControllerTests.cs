@@ -23,7 +23,7 @@ public class CurrentTherapyStateControllerTests
     {
         // The pump readings are the device category, so the response is redacted without it.
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = new HashSet<string> { OAuthScopes.DevicesRead };
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.DevicesRead };
 
         _controller = new CurrentTherapyStateController(
             _stateSpanService.Object,

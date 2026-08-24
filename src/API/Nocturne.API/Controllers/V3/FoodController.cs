@@ -45,7 +45,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.FoodRead)]
+    [RequireScope(Scope.FoodRead)]
     public async Task<ActionResult> GetFood(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -141,7 +141,7 @@ public class FoodController : BaseV3Controller<Food>
     [NightscoutEndpoint("/api/v3/food/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.FoodRead)]
+    [RequireScope(Scope.FoodRead)]
     public async Task<ActionResult> GetFoodHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -298,7 +298,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.FoodRead)]
+    [RequireScope(Scope.FoodRead)]
     public async Task<ActionResult> GetFoodById(
         string id,
         CancellationToken cancellationToken = default
@@ -346,7 +346,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Created food records</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.FoodReadWrite)]
+    [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food")]
     [ProducesResponseType(typeof(Food[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -439,7 +439,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Updated food record</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FoodReadWrite)]
+    [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -577,7 +577,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FoodReadWrite)]
+    [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

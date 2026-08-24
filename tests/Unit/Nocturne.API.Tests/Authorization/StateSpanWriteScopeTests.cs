@@ -21,18 +21,18 @@ namespace Nocturne.API.Tests.Authorization;
 /// <seealso cref="StateSpanWriteScopeGuard"/>
 public class StateSpanWriteScopeTests
 {
-    private static readonly string[] TreatmentsOnly = [OAuthScopes.TreatmentsReadWrite];
+    private static readonly string[] TreatmentsOnly = [Scope.TreatmentsReadWrite];
 
     [Theory]
-    [InlineData(StateSpanCategory.PumpMode, OAuthScopes.DevicesReadWrite)]
-    [InlineData(StateSpanCategory.PumpConnectivity, OAuthScopes.DevicesReadWrite)]
-    [InlineData(StateSpanCategory.Profile, OAuthScopes.TherapyReadWrite)]
-    [InlineData(StateSpanCategory.DataExclusion, OAuthScopes.GlucoseReadWrite)]
-    [InlineData(StateSpanCategory.Override, OAuthScopes.TreatmentsReadWrite)]
-    [InlineData(StateSpanCategory.Exercise, OAuthScopes.TreatmentsReadWrite)]
-    [InlineData(StateSpanCategory.Illness, OAuthScopes.TreatmentsReadWrite)]
-    [InlineData(StateSpanCategory.Travel, OAuthScopes.TreatmentsReadWrite)]
-    [InlineData(StateSpanCategory.TemporaryTarget, OAuthScopes.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.PumpMode, Scope.DevicesReadWrite)]
+    [InlineData(StateSpanCategory.PumpConnectivity, Scope.DevicesReadWrite)]
+    [InlineData(StateSpanCategory.Profile, Scope.TherapyReadWrite)]
+    [InlineData(StateSpanCategory.DataExclusion, Scope.GlucoseReadWrite)]
+    [InlineData(StateSpanCategory.Override, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.Exercise, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.Illness, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.Travel, Scope.TreatmentsReadWrite)]
+    [InlineData(StateSpanCategory.TemporaryTarget, Scope.TreatmentsReadWrite)]
     public void EveryCategory_MapsToItsDataCategoryScope(StateSpanCategory category, string expected)
     {
         StateSpanWriteScopeGuard.RequiredWriteScope(category).Should().Be(expected);
@@ -52,7 +52,7 @@ public class StateSpanWriteScopeTests
     public void AnUnmappedCategory_FailsClosed()
     {
         StateSpanWriteScopeGuard.RequiredWriteScope((StateSpanCategory)9999)
-            .Should().Be(OAuthScopes.FullAccess);
+            .Should().Be(Scope.FullAccess);
     }
 
     [Fact]
@@ -63,13 +63,13 @@ public class StateSpanWriteScopeTests
         StateSpanWriteScopeGuard.FindMissingScope(granted, StateSpanCategory.Exercise)
             .Should().BeNull();
         StateSpanWriteScopeGuard.FindMissingScope(granted, StateSpanCategory.DataExclusion)
-            .Should().Be(OAuthScopes.GlucoseReadWrite);
+            .Should().Be(Scope.GlucoseReadWrite);
     }
 
     [Fact]
     public void FullAccess_SatisfiesEveryCategory()
     {
-        var granted = (IReadOnlySet<string>)new HashSet<string> { OAuthScopes.FullAccess };
+        var granted = (IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess };
 
         StateSpanWriteScopeGuard.FindMissingScope(granted, Enum.GetValues<StateSpanCategory>())
             .Should().BeNull();
@@ -99,7 +99,7 @@ public class StateSpanWriteScopeTests
         var service = new Mock<IStateSpanService>(MockBehavior.Strict);
         service.Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StateSpan { Id = "s1", Category = StateSpanCategory.DataExclusion });
-        var controller = Build(service, [OAuthScopes.GlucoseReadWrite]);
+        var controller = Build(service, [Scope.GlucoseReadWrite]);
 
         var result = await controller.CreateStateSpan(
             new CreateStateSpanRequest { Category = StateSpanCategory.DataExclusion, StartMills = 1 });

@@ -27,10 +27,10 @@ internal static class ActivityReadScopeGuard
     /// </summary>
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     ];
 
     /// <summary>
@@ -43,7 +43,7 @@ internal static class ActivityReadScopeGuard
     {
         var granted = httpContext.GetGrantedScopes();
         return AdmissionScopes
-            .Where(scope => OAuthScopes.SatisfiesScope(granted, scope))
+            .Where(scope => Scope.Satisfies(granted, scope))
             .ToHashSet(StringComparer.Ordinal);
     }
 
@@ -56,7 +56,7 @@ internal static class ActivityReadScopeGuard
     public static ActionResult? RefuseUnlessEveryCategory(HttpContext httpContext)
     {
         var granted = httpContext.GetGrantedScopes();
-        if (AdmissionScopes.All(scope => OAuthScopes.SatisfiesScope(granted, scope)))
+        if (AdmissionScopes.All(scope => Scope.Satisfies(granted, scope)))
             return null;
 
         return new ObjectResult(new
@@ -81,7 +81,7 @@ internal static class ActivityReadScopeGuard
         IActivityDecomposer decomposer,
         IReadOnlySet<string> grantedScopes)
     {
-        return OAuthScopes.SatisfiesScope(grantedScopes, decomposer.RequiredReadScope(activity));
+        return Scope.Satisfies(grantedScopes, decomposer.RequiredReadScope(activity));
     }
 
     /// <summary>

@@ -25,12 +25,12 @@ public class LegacyCollectionDeleteScopeTests
     /// </summary>
     private static readonly Dictionary<string, string> GoverningScopeByController = new(StringComparer.Ordinal)
     {
-        ["EntriesController"] = OAuthScopes.GlucoseReadWrite,
-        ["TreatmentsController"] = OAuthScopes.TreatmentsReadWrite,
-        ["DeviceStatusController"] = OAuthScopes.DevicesReadWrite,
-        ["FoodController"] = OAuthScopes.FoodReadWrite,
-        ["ProfileController"] = OAuthScopes.TherapyReadWrite,
-        ["SettingsController"] = OAuthScopes.TherapyReadWrite,
+        ["EntriesController"] = Scope.GlucoseReadWrite,
+        ["TreatmentsController"] = Scope.TreatmentsReadWrite,
+        ["DeviceStatusController"] = Scope.DevicesReadWrite,
+        ["FoodController"] = Scope.FoodReadWrite,
+        ["ProfileController"] = Scope.TherapyReadWrite,
+        ["SettingsController"] = Scope.TherapyReadWrite,
     };
 
     /// <summary>
@@ -61,7 +61,7 @@ public class LegacyCollectionDeleteScopeTests
     /// <summary>
     /// One row per legacy collection DELETE: the action, the scope it requires today, and the scope
     /// its blast radius warrants — the collection's readwrite scope for a single-record delete,
-    /// <see cref="OAuthScopes.FullAccess"/> for a query-driven bulk delete (no <c>{id}</c> in its
+    /// <see cref="Scope.FullAccess"/> for a query-driven bulk delete (no <c>{id}</c> in its
     /// route).
     /// </summary>
     private static List<(string Action, string Required, string Expected)> ScanLegacyDeletes()
@@ -95,7 +95,7 @@ public class LegacyCollectionDeleteScopeTests
                 rows.Add((
                     $"{controller.Namespace![^2..]}.{controller.Name}.{action.Name}",
                     required,
-                    byId ? governing : OAuthScopes.FullAccess));
+                    byId ? governing : Scope.FullAccess));
             }
         }
 
@@ -155,9 +155,9 @@ public class LegacyCollectionDeleteScopeTests
         rows.Select(row => row.Action.Split('.')[1]).Distinct()
             .Should().BeEquivalentTo(GoverningScopeByController.Keys,
                 "every governed controller must contribute at least one delete to the scan");
-        rows.Should().Contain(row => row.Expected == OAuthScopes.FullAccess,
+        rows.Should().Contain(row => row.Expected == Scope.FullAccess,
             "the bulk-delete half of the split must be exercised too");
-        rows.Should().Contain(row => row.Expected == OAuthScopes.TreatmentsReadWrite,
+        rows.Should().Contain(row => row.Expected == Scope.TreatmentsReadWrite,
             "the single-record half must be exercised too");
     }
 
@@ -165,8 +165,8 @@ public class LegacyCollectionDeleteScopeTests
     public void AapsTypicalScopes_CoverTheTreatmentDeleteGate()
     {
         var aaps = KnownOAuthClients.MatchBySoftwareId("info.nightscout.androidaps");
-        var granted = OAuthScopes.Normalize(aaps!.TypicalScopes);
+        var granted = Scope.Normalize(aaps!.TypicalScopes);
 
-        OAuthScopes.SatisfiesScope(granted, OAuthScopes.TreatmentsReadWrite).Should().BeTrue();
+        Scope.Satisfies(granted, Scope.TreatmentsReadWrite).Should().BeTrue();
     }
 }

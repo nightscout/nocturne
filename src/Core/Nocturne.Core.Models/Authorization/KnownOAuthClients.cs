@@ -6,7 +6,7 @@ namespace Nocturne.Core.Models.Authorization;
 /// seeding pre-verified OAuth client rows per tenant via DCR.
 /// </summary>
 /// <seealso cref="KnownClientEntry"/>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 public static class KnownOAuthClients
 {
     /// <summary>
@@ -25,10 +25,10 @@ public static class KnownOAuthClients
             RedirectUris = ["org.nightscout.trio://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseReadWrite,
-                OAuthScopes.TreatmentsReadWrite,
-                OAuthScopes.DevicesReadWrite,
-                OAuthScopes.TherapyRead,
+                Scope.GlucoseReadWrite,
+                Scope.TreatmentsReadWrite,
+                Scope.DevicesReadWrite,
+                Scope.TherapyRead,
             ],
         },
         new()
@@ -41,11 +41,11 @@ public static class KnownOAuthClients
             RedirectUris = ["com.eveningoutpost.dexdrip://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseReadWrite,
-                OAuthScopes.TreatmentsReadWrite,
-                OAuthScopes.DevicesReadWrite,
-                OAuthScopes.HeartRateReadWrite,
-                OAuthScopes.StepCountReadWrite,
+                Scope.GlucoseReadWrite,
+                Scope.TreatmentsReadWrite,
+                Scope.DevicesReadWrite,
+                Scope.HeartRateReadWrite,
+                Scope.StepCountReadWrite,
             ],
         },
         new()
@@ -57,9 +57,9 @@ public static class KnownOAuthClients
             RedirectUris = ["org.loopkit.loop://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseReadWrite,
-                OAuthScopes.TreatmentsReadWrite,
-                OAuthScopes.DevicesReadWrite,
+                Scope.GlucoseReadWrite,
+                Scope.TreatmentsReadWrite,
+                Scope.DevicesReadWrite,
             ],
         },
         new()
@@ -73,10 +73,10 @@ public static class KnownOAuthClients
             RedirectUris = ["info.nightscout.androidaps://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseReadWrite,
-                OAuthScopes.TreatmentsReadWrite,
-                OAuthScopes.TherapyRead,
-                OAuthScopes.DevicesReadWrite,
+                Scope.GlucoseReadWrite,
+                Scope.TreatmentsReadWrite,
+                Scope.TherapyRead,
+                Scope.DevicesReadWrite,
             ],
         },
         new()
@@ -91,10 +91,10 @@ public static class KnownOAuthClients
             RedirectUris = [],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseRead,
-                OAuthScopes.TreatmentsRead,
-                OAuthScopes.DevicesRead,
-                OAuthScopes.TherapyRead,
+                Scope.GlucoseRead,
+                Scope.TreatmentsRead,
+                Scope.DevicesRead,
+                Scope.TherapyRead,
             ],
         },
         new()
@@ -105,7 +105,7 @@ public static class KnownOAuthClients
             Homepage = "https://sugarmate.io/",
             LogoUri = "/logos/sugarmate.svg",
             RedirectUris = [],
-            TypicalScopes = [OAuthScopes.GlucoseRead],
+            TypicalScopes = [Scope.GlucoseRead],
         },
         new()
         {
@@ -115,7 +115,7 @@ public static class KnownOAuthClients
             Homepage = "https://play.google.com/store/apps/details?id=se.cornixit.nightwatch",
             LogoUri = "/logos/nightwatch.svg",
             RedirectUris = [],
-            TypicalScopes = [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead],
+            TypicalScopes = [Scope.GlucoseRead, Scope.TreatmentsRead],
         },
         new()
         {
@@ -125,10 +125,10 @@ public static class KnownOAuthClients
             RedirectUris = [],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseRead,
-                OAuthScopes.TreatmentsRead,
-                OAuthScopes.DevicesRead,
-                OAuthScopes.TherapyRead,
+                Scope.GlucoseRead,
+                Scope.TreatmentsRead,
+                Scope.DevicesRead,
+                Scope.TherapyRead,
             ],
         },
         new()
@@ -140,9 +140,9 @@ public static class KnownOAuthClients
             RedirectUris = ["dev.nocturne.prelude://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseRead,
-                OAuthScopes.TreatmentsRead,
-                OAuthScopes.DevicesRead,
+                Scope.GlucoseRead,
+                Scope.TreatmentsRead,
+                Scope.DevicesRead,
             ],
         },
         new()
@@ -154,10 +154,10 @@ public static class KnownOAuthClients
             RedirectUris = ["com.nocturne.widget.windows://oauth/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseRead,
-                OAuthScopes.TreatmentsRead,
-                OAuthScopes.DevicesRead,
-                OAuthScopes.TherapyRead,
+                Scope.GlucoseRead,
+                Scope.TreatmentsRead,
+                Scope.DevicesRead,
+                Scope.TherapyRead,
             ],
         },
         new()
@@ -171,10 +171,10 @@ public static class KnownOAuthClients
             RedirectUris = ["http://127.0.0.1/callback"],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseRead,
-                OAuthScopes.TreatmentsRead,
-                OAuthScopes.DevicesRead,
-                OAuthScopes.TherapyRead,
+                Scope.GlucoseRead,
+                Scope.TreatmentsRead,
+                Scope.DevicesRead,
+                Scope.TherapyRead,
             ],
         },
         new()
@@ -186,12 +186,12 @@ public static class KnownOAuthClients
             RedirectUris = [],
             TypicalScopes =
             [
-                OAuthScopes.GlucoseReadWrite,
-                OAuthScopes.TreatmentsReadWrite,
-                OAuthScopes.DevicesRead,
-                OAuthScopes.TherapyRead,
-                OAuthScopes.HeartRateReadWrite,
-                OAuthScopes.StepCountReadWrite,
+                Scope.GlucoseReadWrite,
+                Scope.TreatmentsReadWrite,
+                Scope.DevicesRead,
+                Scope.TherapyRead,
+                Scope.HeartRateReadWrite,
+                Scope.StepCountReadWrite,
             ],
         },
     };
@@ -219,7 +219,7 @@ public static class KnownOAuthClients
 /// Entry in the known OAuth client directory.
 /// </summary>
 /// <seealso cref="KnownOAuthClients"/>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 public class KnownClientEntry
 {
     /// <summary>

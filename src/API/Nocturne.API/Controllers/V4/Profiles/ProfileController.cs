@@ -35,7 +35,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// profile write endpoints. The class-level <c>[Authorize]</c> alone is satisfied by read-only
     /// credentials such as a guest-link session.
     /// </summary>
-    public string WriteScope => OAuthScopes.TherapyReadWrite;
+    public string WriteScope => Scope.TherapyReadWrite;
 
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IBasalScheduleRepository _basalRepo;

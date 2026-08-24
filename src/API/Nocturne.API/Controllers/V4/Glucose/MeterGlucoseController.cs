@@ -28,7 +28,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/glucose/meter")]
-[RequireScope(OAuthScopes.GlucoseRead)]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class MeterGlucoseController(
     IMeterGlucoseRepository repo,
@@ -38,7 +38,7 @@ public class MeterGlucoseController(
 {
     /// <inheritdoc/>
     /// <remarks>Meter readings are glucose data; the legacy equivalent is a v1 <c>mbg</c> entry.</remarks>
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
     /// <remarks>

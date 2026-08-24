@@ -51,7 +51,7 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HasPermission(TenantPermissions.SharingGuest)
+        if (!HasPermission(Scope.SharingGuest)
             && auth.SubjectId != auth.EffectiveSubjectId)
             return Forbid();
 
@@ -182,7 +182,7 @@ public class GuestLinkController : ControllerBase
     {
         var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
         if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
+        return Scope.Satisfies(grantedScopes, permission);
     }
 }
 

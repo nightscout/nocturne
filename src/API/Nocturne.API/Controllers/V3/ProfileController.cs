@@ -49,7 +49,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetProfiles(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -119,7 +119,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [NightscoutEndpoint("/api/v3/profile/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetProfileHistory(
         long lastModified,
         [FromQuery] int limit = 10,
@@ -177,7 +177,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetProfileById(
         string id,
         CancellationToken cancellationToken = default
@@ -224,7 +224,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>Created profiles</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile")]
     [ProducesResponseType(typeof(Profile[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -288,7 +288,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>Updated profile</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -358,7 +358,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

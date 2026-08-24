@@ -143,7 +143,7 @@ public class GuestSessionHandlerTests
             grantId,
             _tenantId,
             _dataOwnerId,
-            [OAuthScopes.GlucoseRead],
+            [Scope.GlucoseRead],
             "Caregiver",
             DateTime.UtcNow.AddHours(1)));
 

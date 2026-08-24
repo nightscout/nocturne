@@ -25,7 +25,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/device-status/uploader")]
-[RequireScope(OAuthScopes.DevicesRead)]
+[RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
 public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
     : V4ReadOnlyControllerBase<UploaderSnapshot, IUploaderSnapshotRepository>(repo)
@@ -44,7 +44,7 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
     /// so the stamper can't take them). Reads that join by <c>correlationId</c> are unaffected.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [ProducesResponseType(typeof(UploaderSnapshot[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<UploaderSnapshot[]>> CreateUploaderSnapshots(

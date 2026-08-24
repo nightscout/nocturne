@@ -65,7 +65,7 @@ public class PasskeyController : ControllerBase
     /// <summary>
     /// What makes a token a recovery session, as opposed to any credential that merely carries
     /// <see cref="RecoverySessionPermission"/>. It sits outside
-    /// <see cref="Core.Models.Authorization.OAuthScopes.ValidRequestScopes"/>, so no client can
+    /// <see cref="Core.Models.Authorization.Scope.ValidRequestScopes"/>, so no client can
     /// register it and no scope gate resolves anything from it, leaving
     /// <see cref="RecoveryVerify"/> its only source.
     /// </summary>
@@ -1036,7 +1036,7 @@ public class PasskeyController : ControllerBase
                 tenant.Id, HttpContext.RequestAborted);
             var ownerIds = await ownerCtx.TenantMembers
                 .Where(tm => tm.TenantId == tenant.Id
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == Core.Models.Authorization.TenantPermissions.SeedRoles.Owner))
+                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == Core.Models.Authorization.RoleSeeds.Owner))
                 .Select(tm => tm.SubjectId)
                 .ToListAsync();
 

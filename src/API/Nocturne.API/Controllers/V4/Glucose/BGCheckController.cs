@@ -26,7 +26,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 [ApiController]
 [Tags("Glucose")]
 [Route("api/v4/observations/bg-checks")]
-[RequireScope(OAuthScopes.GlucoseRead)]
+[RequireScope(Scope.GlucoseRead)]
 [Produces("application/json")]
 public class BGCheckController(IBGCheckRepository repo)
     : V4CrudControllerBase<BGCheck, UpsertBGCheckRequest, UpsertBGCheckRequest, IBGCheckRepository>(repo)
@@ -37,7 +37,7 @@ public class BGCheckController(IBGCheckRepository repo)
     /// other glucose tables, so they follow glucose rather than the treatments category their
     /// legacy <c>BG Check</c> event type came from.
     /// </remarks>
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <summary>
     /// Maps a <see cref="UpsertBGCheckRequest"/> to a new <see cref="BGCheck"/> domain model for creation.

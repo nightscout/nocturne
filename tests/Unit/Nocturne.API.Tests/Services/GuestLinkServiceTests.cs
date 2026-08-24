@@ -81,21 +81,21 @@ public class GuestLinkServiceTests : IDisposable
     {
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Bad Scopes", "https://example.com",
-            [OAuthScopes.GlucoseReadWrite]);
+            [Scope.GlucoseReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*not allowed*");
     }
 
     [Theory]
-    [InlineData(TenantPermissions.MembersManage)]
-    [InlineData(TenantPermissions.MembersInvite)]
-    [InlineData(TenantPermissions.RolesManage)]
-    [InlineData(TenantPermissions.TenantSettings)]
-    [InlineData(TenantPermissions.SharingManage)]
-    [InlineData(TenantPermissions.SharingGuest)]
-    [InlineData(TenantPermissions.AuditRead)]
-    [InlineData(TenantPermissions.AuditManage)]
+    [InlineData(Scope.MembersManage)]
+    [InlineData(Scope.MembersInvite)]
+    [InlineData(Scope.RolesManage)]
+    [InlineData(Scope.TenantSettings)]
+    [InlineData(Scope.SharingManage)]
+    [InlineData(Scope.SharingGuest)]
+    [InlineData(Scope.AuditRead)]
+    [InlineData(Scope.AuditManage)]
     public async Task CreateGuestLink_RejectsTenantAdministrationScopes(string scope)
     {
         var act = () => _service.CreateGuestLinkAsync(
@@ -128,9 +128,9 @@ public class GuestLinkServiceTests : IDisposable
     {
         var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Defaults", "https://example.com");
 
-        result.Info.Scopes.Should().Contain(OAuthScopes.HealthRead);
-        result.Info.Scopes.Should().Contain(OAuthScopes.TherapyRead);
-        result.Info.Scopes.Should().Contain(OAuthScopes.ReportsRead);
+        result.Info.Scopes.Should().Contain(Scope.HealthRead);
+        result.Info.Scopes.Should().Contain(Scope.TherapyRead);
+        result.Info.Scopes.Should().Contain(Scope.ReportsRead);
         result.Info.Scopes.Should().NotContain(s => s.Contains("readwrite", StringComparison.OrdinalIgnoreCase));
     }
 

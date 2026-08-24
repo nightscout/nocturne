@@ -44,7 +44,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class NutritionController : ControllerBase, IWriteScopedController
 {
@@ -55,7 +55,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// treatment write endpoints. The per-carb-intake food breakdown is keyed by carb intake and
     /// reads the food catalog without mutating it, so it is gated with the treatment it describes.
     /// </summary>
-    public string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public string WriteScope => Scope.TreatmentsReadWrite;
 
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBolusRepository _bolusRepo;

@@ -9,7 +9,7 @@ namespace Nocturne.API.Hubs;
 /// Connectors can subscribe to receive notifications when their configuration changes.
 /// </summary>
 /// <remarks>
-/// Every method requires <see cref="OAuthScopes.FullAccess"/>. Connector configuration is tenant
+/// Every method requires <see cref="Scope.FullAccess"/>. Connector configuration is tenant
 /// administration and the OAuth vocabulary has no narrower scope for it, and the broadcasts name the
 /// member who made each change. The consumers are the realtime bridge (instance key) and the tenant
 /// owner, both of which hold full access.
@@ -31,7 +31,7 @@ public class ConfigHub : TenantAwareHub
     /// Subscribe to configuration changes for a specific connector.
     /// </summary>
     /// <param name="connectorName">The connector name to subscribe to</param>
-    [HubScope(OAuthScopes.FullAccess)]
+    [HubScope(Scope.FullAccess)]
     [HubTenantGroup]
     public async Task Subscribe(string connectorName)
     {
@@ -45,7 +45,7 @@ public class ConfigHub : TenantAwareHub
     /// Unsubscribe from configuration changes for a specific connector.
     /// </summary>
     /// <param name="connectorName">The connector name to unsubscribe from</param>
-    [HubScope(OAuthScopes.FullAccess)]
+    [HubScope(Scope.FullAccess)]
     public async Task Unsubscribe(string connectorName)
     {
         _logger.LogDebug("Client {ConnectionId} unsubscribing from config changes for {ConnectorName}",
@@ -57,7 +57,7 @@ public class ConfigHub : TenantAwareHub
     /// <summary>
     /// Subscribe to configuration changes for all connectors.
     /// </summary>
-    [HubScope(OAuthScopes.FullAccess)]
+    [HubScope(Scope.FullAccess)]
     [HubTenantGroup]
     public async Task SubscribeAll()
     {
@@ -69,7 +69,7 @@ public class ConfigHub : TenantAwareHub
     /// <summary>
     /// Unsubscribe from all connector configuration changes.
     /// </summary>
-    [HubScope(OAuthScopes.FullAccess)]
+    [HubScope(Scope.FullAccess)]
     public async Task UnsubscribeAll()
     {
         _logger.LogDebug("Client {ConnectionId} unsubscribing from all config changes", Context.ConnectionId);

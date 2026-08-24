@@ -57,10 +57,10 @@ public class ActivityController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(PaginatedResponse<Activity>), StatusCodes.Status200OK)]
     [RequireScope(
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<PaginatedResponse<Activity>>> GetActivities(
         [FromQuery] int limit = 100,
         [FromQuery] int offset = 0,
@@ -98,10 +98,10 @@ public class ActivityController : ControllerBase
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [RequireScope(
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     public async Task<ActionResult<Activity>> GetActivity(
         string id,
         CancellationToken cancellationToken = default)

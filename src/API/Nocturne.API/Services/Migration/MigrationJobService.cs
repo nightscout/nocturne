@@ -1810,8 +1810,8 @@ internal class MigrationJob
 
         // A "*" grant is stored as the single superuser atom: NormalizeMemberPermissions expands it
         // back to every scope, so spelling out the expansion would only bake today's scope list in.
-        List<string> permissions = scopes.Contains(TenantPermissions.Superuser)
-            ? [TenantPermissions.Superuser]
+        List<string> permissions = scopes.Contains(Scope.FullAccess)
+            ? [Scope.FullAccess]
             : [.. scopes];
 
         dbContext.TenantMembers.Add(new TenantMemberEntity

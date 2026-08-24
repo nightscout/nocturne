@@ -75,7 +75,7 @@ public class EntriesController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetCurrentEntry(
         CancellationToken cancellationToken = default
     )
@@ -169,7 +169,7 @@ public class EntriesController : ControllerBase
     [NightscoutEndpoint("/api/v1/entries/{spec}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetEntry(
         string spec,
         CancellationToken cancellationToken = default
@@ -314,7 +314,7 @@ public class EntriesController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult> GetEntries(
         [FromQuery] string? find = null,
         [FromQuery] int? count = null,
@@ -540,7 +540,7 @@ public class EntriesController : ControllerBase
     /// <returns>Created entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -828,7 +828,7 @@ public class EntriesController : ControllerBase
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -917,7 +917,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of deletion</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -1006,7 +1006,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of bulk deletion</returns>
     [HttpDelete]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -1087,7 +1087,7 @@ public class EntriesController : ControllerBase
     /// <returns>Async processing response with correlation ID and status URL</returns>
     [HttpPost("async")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/async")]
     [ProducesResponseType(typeof(AsyncProcessingResponse), 202)]
     [ProducesResponseType(typeof(object), 400)]

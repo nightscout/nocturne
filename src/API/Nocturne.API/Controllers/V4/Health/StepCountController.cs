@@ -52,7 +52,7 @@ public class StepCountController : ControllerBase
     /// </remarks>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.StepCountRead)]
+    [RequireScope(Scope.StepCountRead)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
@@ -92,7 +92,7 @@ public class StepCountController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("{id}")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.StepCountRead)]
+    [RequireScope(Scope.StepCountRead)]
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -120,7 +120,7 @@ public class StepCountController : ControllerBase
     /// Create one or more step count records
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -160,7 +160,7 @@ public class StepCountController : ControllerBase
     /// Update an existing step count record
     /// </summary>
     [HttpPut("{id}")]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
@@ -201,7 +201,7 @@ public class StepCountController : ControllerBase
     /// Delete a step count record by ID
     /// </summary>
     [HttpDelete("{id}")]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

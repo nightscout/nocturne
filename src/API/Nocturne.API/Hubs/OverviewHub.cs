@@ -140,7 +140,7 @@ public class OverviewHub : Hub
                 }
 
                 subjectId = claims.SubjectId;
-                tokenScopes = OAuthScopes.Normalize(claims.Scopes);
+                tokenScopes = Scope.Normalize(claims.Scopes);
                 authType = AuthType.OAuthAccessToken;
             }
             else

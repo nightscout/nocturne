@@ -37,7 +37,7 @@ public class SleepController : ControllerBase
     /// Query sleep sessions with optional filtering (stages and biometrics excluded)
     /// </summary>
     [HttpGet]
-    [RequireScope(OAuthScopes.SleepRead)]
+    [RequireScope(Scope.SleepRead)]
     [ProducesResponseType(typeof(PaginatedResponse<SleepSession>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<SleepSession>>> GetSessions(
@@ -66,7 +66,7 @@ public class SleepController : ControllerBase
     /// Get a sleep session by ID (includes stages and biometric samples)
     /// </summary>
     [HttpGet("{id:guid}")]
-    [RequireScope(OAuthScopes.SleepRead)]
+    [RequireScope(Scope.SleepRead)]
     [ProducesResponseType(typeof(SleepSession), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SleepSession>> GetSession(Guid id, CancellationToken cancellationToken = default)
@@ -81,7 +81,7 @@ public class SleepController : ControllerBase
     /// Create or upsert a sleep session
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.SleepReadWrite)]
+    [RequireScope(Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(SleepSession), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SleepSession>> CreateSession(
@@ -111,7 +111,7 @@ public class SleepController : ControllerBase
     /// batch is safe.
     /// </remarks>
     [HttpPost("bulk")]
-    [RequireScope(OAuthScopes.SleepReadWrite)]
+    [RequireScope(Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(SleepSession[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -147,7 +147,7 @@ public class SleepController : ControllerBase
     /// Update an existing sleep session
     /// </summary>
     [HttpPut("{id:guid}")]
-    [RequireScope(OAuthScopes.SleepReadWrite)]
+    [RequireScope(Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(SleepSession), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SleepSession>> UpdateSession(
@@ -165,7 +165,7 @@ public class SleepController : ControllerBase
     /// Delete a sleep session
     /// </summary>
     [HttpDelete("{id:guid}")]
-    [RequireScope(OAuthScopes.SleepReadWrite)]
+    [RequireScope(Scope.SleepReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSession(Guid id, CancellationToken cancellationToken = default)

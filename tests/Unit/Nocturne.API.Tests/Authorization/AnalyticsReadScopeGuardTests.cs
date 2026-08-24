@@ -79,7 +79,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void ChartData_GlucoseOnlyGrant_KeepsGlucoseAndItsBand()
     {
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.GlucoseRead));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.GlucoseRead));
 
         data.GlucoseData.Should().HaveCount(1);
         data.BgCheckMarkers.Should().HaveCount(1);
@@ -107,7 +107,7 @@ public class AnalyticsReadScopeGuardTests
     {
         // The scaling maxima are computed from the series they scale, so leaving them behind would
         // publish the peak IOB, COB and basal rate of a window the caller may not read.
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.GlucoseRead));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.GlucoseRead));
 
         data.DefaultBasalRate.Should().Be(0);
         data.MaxBasalRate.Should().Be(0);
@@ -118,7 +118,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void ChartData_WithoutGlucose_ClearsTheThresholds()
     {
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.DevicesRead));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.DevicesRead));
 
         data.Thresholds.Should().BeEquivalentTo(new ChartThresholdsDto());
         data.DeviceEventMarkers.Should().HaveCount(1);
@@ -135,18 +135,18 @@ public class AnalyticsReadScopeGuardTests
     public void ChartData_ActivitySpans_AreFilteredPerSpanNotPerField()
     {
         var treatments = ChartDataReadScopeGuard.Redact(
-            OneRecordPerCategory(), Granted(OAuthScopes.TreatmentsRead));
+            OneRecordPerCategory(), Granted(Scope.TreatmentsRead));
         treatments.ActivitySpans.Should().ContainSingle().Which.Id.Should().Be("ex");
 
         var sleep = ChartDataReadScopeGuard.Redact(
-            OneRecordPerCategory(), Granted(OAuthScopes.SleepRead));
+            OneRecordPerCategory(), Granted(Scope.SleepRead));
         sleep.ActivitySpans.Should().ContainSingle().Which.Id.Should().Be("sl");
     }
 
     [Fact]
     public void ChartData_TherapyOnlyGrant_KeepsOnlyTheProfileSwitches()
     {
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.TherapyRead));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.TherapyRead));
 
         data.ProfileSpans.Should().HaveCount(1);
         data.GlucoseData.Should().BeEmpty();
@@ -157,7 +157,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void ChartData_FullAccess_KeepsEveryCategory()
     {
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.FullAccess));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.FullAccess));
 
         data.GlucoseData.Should().HaveCount(1);
         data.IobSeries.Should().HaveCount(1);
@@ -172,7 +172,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void ChartData_ReadWriteGrant_SatisfiesTheReadCategory()
     {
-        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.HeartRateReadWrite));
+        var data = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.HeartRateReadWrite));
 
         data.HeartRateSeries.Should().HaveCount(1);
         data.GlucoseData.Should().BeEmpty();
@@ -197,13 +197,13 @@ public class AnalyticsReadScopeGuardTests
     {
         ChartDataReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo(new[]
         {
-            OAuthScopes.GlucoseRead,
-            OAuthScopes.TreatmentsRead,
-            OAuthScopes.DevicesRead,
-            OAuthScopes.TherapyRead,
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
+            Scope.GlucoseRead,
+            Scope.TreatmentsRead,
+            Scope.DevicesRead,
+            Scope.TherapyRead,
+            Scope.HeartRateRead,
+            Scope.StepCountRead,
+            Scope.SleepRead,
         });
     }
 
@@ -217,7 +217,7 @@ public class AnalyticsReadScopeGuardTests
         gate.RequiredScopes.Should().BeEquivalentTo(ChartDataReadScopeGuard.AdmissionScopes);
 
         GateOn<ChartDataController>(nameof(ChartDataController.GetBasalSeries))!
-            .RequiredScopes.Should().Equal(OAuthScopes.TreatmentsRead);
+            .RequiredScopes.Should().Equal(Scope.TreatmentsRead);
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public class AnalyticsReadScopeGuardTests
 
         var controller = new ChartDataController(service.Object, NullLogger<ChartDataController>.Instance)
         {
-            ControllerContext = ContextWith(Granted(OAuthScopes.GlucoseRead)),
+            ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
 
         var result = await controller.GetDashboardChartData(startTime: 0, endTime: 1);
@@ -258,7 +258,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void Retrospective_GlucoseOnlyGrant_DropsTheDosingState()
     {
-        var data = RetrospectiveReadScopeGuard.Redact(BothCategories(), Granted(OAuthScopes.GlucoseRead));
+        var data = RetrospectiveReadScopeGuard.Redact(BothCategories(), Granted(Scope.GlucoseRead));
 
         data.Glucose.Should().NotBeNull();
         data.Iob.Should().BeNull();
@@ -270,7 +270,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void Retrospective_TreatmentsOnlyGrant_DropsTheGlucose()
     {
-        var data = RetrospectiveReadScopeGuard.Redact(BothCategories(), Granted(OAuthScopes.TreatmentsRead));
+        var data = RetrospectiveReadScopeGuard.Redact(BothCategories(), Granted(Scope.TreatmentsRead));
 
         data.Glucose.Should().BeNull();
         data.Iob.Should().NotBeNull();
@@ -294,7 +294,7 @@ public class AnalyticsReadScopeGuardTests
         };
 
         var point = RetrospectiveReadScopeGuard
-            .Redact(timeline, Granted(OAuthScopes.GlucoseRead)).Data!.Single();
+            .Redact(timeline, Granted(Scope.GlucoseRead)).Data!.Single();
 
         point.Glucose.Should().Be(120);
         point.GlucoseDirection.Should().Be("Flat");
@@ -315,7 +315,7 @@ public class AnalyticsReadScopeGuardTests
         };
 
         var point = RetrospectiveReadScopeGuard
-            .Redact(timeline, Granted(OAuthScopes.TreatmentsRead)).Data!.Single();
+            .Redact(timeline, Granted(Scope.TreatmentsRead)).Data!.Single();
 
         point.Glucose.Should().BeNull();
         point.GlucoseDirection.Should().BeNull();
@@ -339,7 +339,7 @@ public class AnalyticsReadScopeGuardTests
 
         // The basal timeline is wholly the treatment category, so it is not broadened to the OR.
         GateOn<RetrospectiveController>(nameof(RetrospectiveController.GetBasalTimeline))!
-            .RequiredScopes.Should().Equal(OAuthScopes.TreatmentsRead);
+            .RequiredScopes.Should().Equal(Scope.TreatmentsRead);
     }
 
     [Fact]
@@ -397,7 +397,7 @@ public class AnalyticsReadScopeGuardTests
             tempBasals.Object, projectionService: null!, basal.Object,
             NullLogger<RetrospectiveController>.Instance)
         {
-            ControllerContext = ContextWith(Granted(OAuthScopes.GlucoseRead)),
+            ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
 
         var result = await controller.GetRetrospectiveData(time: 1_000);
@@ -426,7 +426,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void Prediction_GlucoseOnlyGrant_DropsTheDosingScalars()
     {
-        var data = PredictionReadScopeGuard.Redact(Forecast(), Granted(OAuthScopes.GlucoseRead));
+        var data = PredictionReadScopeGuard.Redact(Forecast(), Granted(Scope.GlucoseRead));
 
         data.CurrentBg.Should().Be(120);
         data.Predictions.Default.Should().HaveCount(2);
@@ -438,7 +438,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void Prediction_TreatmentsOnlyGrant_DropsTheCurves()
     {
-        var data = PredictionReadScopeGuard.Redact(Forecast(), Granted(OAuthScopes.TreatmentsRead));
+        var data = PredictionReadScopeGuard.Redact(Forecast(), Granted(Scope.TreatmentsRead));
 
         data.CurrentBg.Should().Be(0);
         data.Delta.Should().Be(0);
@@ -467,7 +467,7 @@ public class AnalyticsReadScopeGuardTests
         }
 
         GateOn<PredictionController>(nameof(PredictionController.GetProfileSnapshot))!
-            .RequiredScopes.Should().Equal(OAuthScopes.TherapyRead);
+            .RequiredScopes.Should().Equal(Scope.TherapyRead);
     }
 
     [Fact]
@@ -489,7 +489,7 @@ public class AnalyticsReadScopeGuardTests
             Mock.Of<IProfileSnapshotService>(),
             predictions.Object)
         {
-            ControllerContext = ContextWith(Granted(OAuthScopes.GlucoseRead)),
+            ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
 
         var result = await controller.GetPredictions();
@@ -534,7 +534,7 @@ public class AnalyticsReadScopeGuardTests
             Mock.Of<IBGCheckRepository>(),
             Mock.Of<INoteRepository>())
         {
-            ControllerContext = ContextWith(Granted(OAuthScopes.GlucoseRead)),
+            ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
 
         await controller.GetCorrelated(Guid.NewGuid());
@@ -559,7 +559,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void WidgetSummary_GlucoseOnlyGrant_DropsDosingAndAlarm()
     {
-        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(OAuthScopes.GlucoseRead));
+        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(Scope.GlucoseRead));
 
         data.Current.Should().NotBeNull();
         data.History.Should().HaveCount(1);
@@ -572,7 +572,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void WidgetSummary_AlertsOnlyGrant_KeepsOnlyTheAlarm()
     {
-        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(OAuthScopes.AlertsRead));
+        var data = WidgetSummaryReadScopeGuard.Redact(Summary(), Granted(Scope.AlertsRead));
 
         data.Alarm.Should().NotBeNull();
         data.Current.Should().BeNull();
@@ -613,7 +613,7 @@ public class AnalyticsReadScopeGuardTests
                 It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Summary());
 
-        var context = ContextWith(Granted(OAuthScopes.GlucoseRead));
+        var context = ContextWith(Granted(Scope.GlucoseRead));
         context.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -648,7 +648,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void CurrentTherapyState_DevicesOnlyGrant_DropsTheSensitivity()
     {
-        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), Granted(OAuthScopes.DevicesRead));
+        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), Granted(Scope.DevicesRead));
 
         data.CurrentPumpMode.Should().Be(PumpModeState.Manual);
         data.Reservoir.Should().Be(42);
@@ -660,7 +660,7 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void CurrentTherapyState_TherapyOnlyGrant_DropsThePumpReadings()
     {
-        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), Granted(OAuthScopes.TherapyRead));
+        var data = CurrentTherapyStateReadScopeGuard.Redact(TherapyState(), Granted(Scope.TherapyRead));
 
         data.SensitivityPercent.Should().Be(90);
         data.CurrentPumpMode.Should().BeNull();
@@ -675,11 +675,11 @@ public class AnalyticsReadScopeGuardTests
     [Fact]
     public void CurrentTherapyState_ViewerScopes_SeeNothing()
     {
-        var viewer = OAuthScopes.NormalizeMemberPermissions(
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer]);
+        var viewer = Scope.NormalizeMemberPermissions(
+            RoleSeeds.Permissions[RoleSeeds.Viewer]);
 
         CurrentTherapyStateReadScopeGuard.AdmissionScopes
-            .Should().NotContain(s => OAuthScopes.SatisfiesScope(viewer, s));
+            .Should().NotContain(s => Scope.Satisfies(viewer, s));
     }
 
     [Fact]
@@ -710,7 +710,7 @@ public class AnalyticsReadScopeGuardTests
         var controller = new CurrentTherapyStateController(
             stateSpans.Object, sensitivity.Object, pumps.Object)
         {
-            ControllerContext = ContextWith(Granted(OAuthScopes.TherapyRead)),
+            ControllerContext = ContextWith(Granted(Scope.TherapyRead)),
         };
 
         var result = await controller.GetCurrentTherapyState();
@@ -736,25 +736,25 @@ public class AnalyticsReadScopeGuardTests
         var gate = typeof(AnalyticsController).GetCustomAttribute<RequireScopeAttribute>();
 
         gate.Should().NotBeNull();
-        gate!.RequiredScopes.Should().Equal(TenantPermissions.TenantSettings);
+        gate!.RequiredScopes.Should().Equal(Scope.TenantSettings);
 
         foreach (var role in new[]
                  {
-                     TenantPermissions.SeedRoles.Viewer,
-                     TenantPermissions.SeedRoles.Clinician,
-                     TenantPermissions.SeedRoles.Caretaker,
+                     RoleSeeds.Viewer,
+                     RoleSeeds.Clinician,
+                     RoleSeeds.Caretaker,
                  })
         {
-            OAuthScopes.SatisfiesScope(
-                OAuthScopes.NormalizeMemberPermissions(TenantPermissions.SeedRolePermissions[role]),
-                TenantPermissions.TenantSettings)
+            Scope.Satisfies(
+                Scope.NormalizeMemberPermissions(RoleSeeds.Permissions[role]),
+                Scope.TenantSettings)
                 .Should().BeFalse($"{role} does not administer the tenant");
         }
 
-        OAuthScopes.SatisfiesScope(
-            OAuthScopes.NormalizeMemberPermissions(
-                TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]),
-            TenantPermissions.TenantSettings)
+        Scope.Satisfies(
+            Scope.NormalizeMemberPermissions(
+                RoleSeeds.Permissions[RoleSeeds.Admin]),
+            Scope.TenantSettings)
             .Should().BeTrue("an administrator must keep managing analytics collection");
     }
 }

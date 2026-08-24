@@ -20,6 +20,6 @@ public static class DevTenantMemberSelection
     /// <summary>The first owner-role member, else the first candidate.</summary>
     public static TenantMemberEntity PickOwnerOrFirst(List<TenantMemberEntity> candidates) =>
         candidates.FirstOrDefault(m => m.MemberRoles.Any(mr =>
-            mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
+            mr.TenantRole.Slug == RoleSeeds.Owner))
         ?? candidates[0];
 }

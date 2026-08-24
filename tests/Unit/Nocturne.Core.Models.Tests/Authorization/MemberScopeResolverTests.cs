@@ -64,15 +64,15 @@ public class MemberScopeResolverTests
     {
         // A credential that presents no scopes and is not classified as unscoped grants nothing,
         // however broad the membership.
-        Resolve([TenantPermissions.Superuser], authType).Should().BeEmpty();
+        Resolve([Scope.FullAccess], authType).Should().BeEmpty();
     }
 
     [Theory]
     [MemberData(nameof(UnscopedTypes))]
     public void UnscopedCredential_WithNoScopes_ResolvesFromMembership(AuthType authType)
     {
-        Resolve([TenantPermissions.GlucoseRead], authType)
-            .Should().Contain(OAuthScopes.GlucoseRead);
+        Resolve([Scope.GlucoseRead], authType)
+            .Should().Contain(Scope.GlucoseRead);
     }
 
     public static TheoryData<AuthType> UnscopedTypes()
@@ -94,18 +94,18 @@ public class MemberScopeResolverTests
         // claims are the subject's GLOBAL roles (empty for a member who joined by invite).
         // Intersecting against that resolved every non-owner role to zero scopes.
         var resolved = Resolve(
-            TenantPermissions.SeedRolePermissions[roleSlug], authType);
+            RoleSeeds.Permissions[roleSlug], authType);
 
         foreach (var scope in expected)
-            TenantPermissions.HasPermission(resolved, scope).Should().BeTrue($"'{scope}' is granted");
+            Scope.Satisfies(resolved, scope).Should().BeTrue($"'{scope}' is granted");
         foreach (var scope in notExpected)
-            TenantPermissions.HasPermission(resolved, scope).Should().BeFalse($"'{scope}' is not granted");
+            Scope.Satisfies(resolved, scope).Should().BeFalse($"'{scope}' is not granted");
     }
 
     /// <summary>
     /// Every seed role crossed with every unscoped credential type: the permissions the role must
     /// resolve to, and the permissions it must not reach. Asserted through
-    /// <see cref="TenantPermissions.HasPermission"/> because that is the gate the administration and
+    /// <see cref="Scope.Satisfies"/> because that is the gate the administration and
     /// data controllers actually apply to <c>GrantedScopes</c>.
     /// </summary>
     public static TheoryData<string, AuthType, string[], string[]> SeedRoleExpectations()
@@ -113,72 +113,72 @@ public class MemberScopeResolverTests
         (string Role, string[] Expected, string[] NotExpected)[] roles =
         [
             (
-                TenantPermissions.SeedRoles.Owner,
-                // "*" satisfies every atom through TenantPermissions.Satisfies.
-                [TenantPermissions.Superuser, TenantPermissions.GlucoseReadWrite, TenantPermissions.AuditManage],
+                RoleSeeds.Owner,
+                // "*" satisfies every atom through Scope.Satisfies.
+                [Scope.FullAccess, Scope.GlucoseReadWrite, Scope.AuditManage],
                 []
             ),
             (
-                TenantPermissions.SeedRoles.Admin,
+                RoleSeeds.Admin,
                 [
-                    TenantPermissions.GlucoseReadWrite, TenantPermissions.TreatmentsReadWrite,
-                    TenantPermissions.TherapyReadWrite, TenantPermissions.FoodReadWrite,
-                    TenantPermissions.AlertsReadWrite, TenantPermissions.DevicesReadWrite,
-                    TenantPermissions.SleepReadWrite, TenantPermissions.ReportsRead,
-                    TenantPermissions.MembersManage, TenantPermissions.MembersInvite,
-                    TenantPermissions.TenantSettings, TenantPermissions.RolesManage,
-                    TenantPermissions.SharingManage, TenantPermissions.SharingGuest,
-                    TenantPermissions.AuditRead,
-                    TenantPermissions.DeviceNotify, TenantPermissions.DeviceActuate,
+                    Scope.GlucoseReadWrite, Scope.TreatmentsReadWrite,
+                    Scope.TherapyReadWrite, Scope.FoodReadWrite,
+                    Scope.AlertsReadWrite, Scope.DevicesReadWrite,
+                    Scope.SleepReadWrite, Scope.ReportsRead,
+                    Scope.MembersManage, Scope.MembersInvite,
+                    Scope.TenantSettings, Scope.RolesManage,
+                    Scope.SharingManage, Scope.SharingGuest,
+                    Scope.AuditRead,
+                    Scope.DeviceNotify, Scope.DeviceActuate,
                 ],
                 // audit.manage is Owner-only by design, and an Administrator is not a superuser.
-                [TenantPermissions.Superuser, TenantPermissions.AuditManage]
+                [Scope.FullAccess, Scope.AuditManage]
             ),
             (
-                TenantPermissions.SeedRoles.Clinician,
+                RoleSeeds.Clinician,
                 [
-                    TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead,
-                    TenantPermissions.TherapyRead, TenantPermissions.AlertsRead,
-                    TenantPermissions.ReportsRead, TenantPermissions.SleepRead,
+                    Scope.GlucoseRead, Scope.TreatmentsRead,
+                    Scope.TherapyRead, Scope.AlertsRead,
+                    Scope.ReportsRead, Scope.SleepRead,
                 ],
                 [
-                    TenantPermissions.Superuser, TenantPermissions.GlucoseReadWrite,
-                    TenantPermissions.TreatmentsReadWrite, TenantPermissions.TherapyReadWrite,
-                    TenantPermissions.AlertsReadWrite,
-                    TenantPermissions.MembersManage, TenantPermissions.TenantSettings,
-                    TenantPermissions.AuditRead,
+                    Scope.FullAccess, Scope.GlucoseReadWrite,
+                    Scope.TreatmentsReadWrite, Scope.TherapyReadWrite,
+                    Scope.AlertsReadWrite,
+                    Scope.MembersManage, Scope.TenantSettings,
+                    Scope.AuditRead,
                 ]
             ),
             (
-                TenantPermissions.SeedRoles.Caretaker,
+                RoleSeeds.Caretaker,
                 [
-                    TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsReadWrite,
-                    TenantPermissions.TherapyRead, TenantPermissions.AlertsReadWrite,
-                    TenantPermissions.FoodRead,
+                    Scope.GlucoseRead, Scope.TreatmentsReadWrite,
+                    Scope.TherapyRead, Scope.AlertsReadWrite,
+                    Scope.FoodRead,
                 ],
                 [
-                    TenantPermissions.Superuser, TenantPermissions.GlucoseReadWrite,
-                    TenantPermissions.TherapyReadWrite, TenantPermissions.FoodReadWrite,
-                    TenantPermissions.MembersManage, TenantPermissions.TenantSettings,
-                    TenantPermissions.AuditRead,
+                    Scope.FullAccess, Scope.GlucoseReadWrite,
+                    Scope.TherapyReadWrite, Scope.FoodReadWrite,
+                    Scope.MembersManage, Scope.TenantSettings,
+                    Scope.AuditRead,
                 ]
             ),
             (
-                TenantPermissions.SeedRoles.Viewer,
-                [TenantPermissions.GlucoseRead, TenantPermissions.ReportsRead],
+                RoleSeeds.Viewer,
+                [Scope.GlucoseRead, Scope.ReportsRead],
                 [
-                    TenantPermissions.Superuser, TenantPermissions.GlucoseReadWrite,
-                    TenantPermissions.TreatmentsRead, TenantPermissions.TherapyRead,
-                    TenantPermissions.TenantSettings, TenantPermissions.MembersManage,
+                    Scope.FullAccess, Scope.GlucoseReadWrite,
+                    Scope.TreatmentsRead, Scope.TherapyRead,
+                    Scope.TenantSettings, Scope.MembersManage,
                 ]
             ),
             (
-                TenantPermissions.SeedRoles.Denied,
+                RoleSeeds.Denied,
                 [],
                 [
-                    TenantPermissions.Superuser, TenantPermissions.GlucoseRead,
-                    TenantPermissions.ReportsRead, TenantPermissions.DeviceNotify,
-                    TenantPermissions.DeviceActuate, TenantPermissions.MembersManage,
+                    Scope.FullAccess, Scope.GlucoseRead,
+                    Scope.ReportsRead, Scope.DeviceNotify,
+                    Scope.DeviceActuate, Scope.MembersManage,
                 ]
             ),
         ];
@@ -198,7 +198,7 @@ public class MemberScopeResolverTests
         // An unscoped credential removes the ceiling, not the membership check. Zero permissions
         // means zero scopes, including the member-personal device capabilities — alert actuations
         // reveal patient state.
-        Resolve(TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied],
+        Resolve(RoleSeeds.Permissions[RoleSeeds.Denied],
             AuthType.SessionCookie).Should().BeEmpty();
     }
 
@@ -207,8 +207,8 @@ public class MemberScopeResolverTests
     [Fact]
     public void Superuser_OnUnscopedCredential_KeepsTheWildcard()
     {
-        Resolve([TenantPermissions.Superuser], AuthType.SessionCookie)
-            .Should().Contain(TenantPermissions.Superuser);
+        Resolve([Scope.FullAccess], AuthType.SessionCookie)
+            .Should().Contain(Scope.FullAccess);
     }
 
     [Theory]
@@ -217,10 +217,10 @@ public class MemberScopeResolverTests
     public void Superuser_OnScopedCredential_KeepsOnlyTheCredentialScopes(AuthType authType)
     {
         // An owner who authorized a third-party app for glucose.read must not hand it superuser.
-        var resolved = Resolve([TenantPermissions.Superuser], authType, OAuthScopes.GlucoseRead);
+        var resolved = Resolve([Scope.FullAccess], authType, Scope.GlucoseRead);
 
-        resolved.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
-        resolved.Should().NotContain(TenantPermissions.Superuser);
+        resolved.Should().BeEquivalentTo([Scope.GlucoseRead]);
+        resolved.Should().NotContain(Scope.FullAccess);
     }
 
     [Theory]
@@ -229,8 +229,8 @@ public class MemberScopeResolverTests
     public void Superuser_OnFullAccessCredential_KeepsTheWildcard(AuthType authType)
     {
         // "*" on the credential bounds nothing, so the owner keeps superuser.
-        Resolve([TenantPermissions.Superuser], authType, OAuthScopes.FullAccess)
-            .Should().Contain(OAuthScopes.FullAccess);
+        Resolve([Scope.FullAccess], authType, Scope.FullAccess)
+            .Should().Contain(Scope.FullAccess);
     }
 
     // ---- the readwrite/read downgrade ----
@@ -242,20 +242,20 @@ public class MemberScopeResolverTests
         // NormalizeMemberPermissions adds no read counterpart, so this member previously resolved
         // to NEITHER scope. Both sides permit the read counterpart.
         var resolved = Resolve(
-            [TenantPermissions.GlucoseReadWrite], AuthType.OAuthAccessToken, OAuthScopes.GlucoseRead);
+            [Scope.GlucoseReadWrite], AuthType.OAuthAccessToken, Scope.GlucoseRead);
 
-        resolved.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
-        resolved.Should().NotContain(OAuthScopes.GlucoseReadWrite);
+        resolved.Should().BeEquivalentTo([Scope.GlucoseRead]);
+        resolved.Should().NotContain(Scope.GlucoseReadWrite);
     }
 
     [Fact]
     public void ReadWriteMembership_OnReadOnlyCredential_DowngradesEveryTieredScope()
     {
-        var readWriteRole = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin];
+        var readWriteRole = RoleSeeds.Permissions[RoleSeeds.Admin];
         var readOnlyCredential = new[]
         {
-            OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.TherapyRead,
-            OAuthScopes.AlertsRead, OAuthScopes.FoodRead, OAuthScopes.DevicesRead,
+            Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead,
+            Scope.AlertsRead, Scope.FoodRead, Scope.DevicesRead,
         };
 
         var resolved = Resolve(readWriteRole, AuthType.OAuthAccessToken, readOnlyCredential);
@@ -267,8 +267,8 @@ public class MemberScopeResolverTests
     public void ReadOnlyMembership_OnReadWriteCredential_StaysRead()
     {
         // The downgrade never runs backwards: membership is still the other bound.
-        Resolve([TenantPermissions.GlucoseRead], AuthType.OAuthAccessToken, OAuthScopes.GlucoseReadWrite)
-            .Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        Resolve([Scope.GlucoseRead], AuthType.OAuthAccessToken, Scope.GlucoseReadWrite)
+            .Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     // ---- administration atoms ----
@@ -277,10 +277,10 @@ public class MemberScopeResolverTests
     public void AdministrationAtoms_SurviveOnAnUnscopedCredential()
     {
         var resolved = Resolve(
-            [TenantPermissions.MembersManage, TenantPermissions.AuditRead], AuthType.SessionCookie);
+            [Scope.MembersManage, Scope.AuditRead], AuthType.SessionCookie);
 
-        resolved.Should().Contain(TenantPermissions.MembersManage);
-        resolved.Should().Contain(TenantPermissions.AuditRead);
+        resolved.Should().Contain(Scope.MembersManage);
+        resolved.Should().Contain(Scope.AuditRead);
     }
 
     [Theory]
@@ -293,23 +293,23 @@ public class MemberScopeResolverTests
         // credential holds one; the resolver bounds the credential's scopes by the request
         // vocabulary so an atom that arrived by any other route is dropped here too.
         var resolved = Resolve(
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin],
+            RoleSeeds.Permissions[RoleSeeds.Admin],
             authType,
-            OAuthScopes.GlucoseRead,
-            TenantPermissions.MembersManage, TenantPermissions.RolesManage,
-            TenantPermissions.TenantSettings, TenantPermissions.AuditRead,
-            TenantPermissions.SharingManage, TenantPermissions.SharingGuest);
+            Scope.GlucoseRead,
+            Scope.MembersManage, Scope.RolesManage,
+            Scope.TenantSettings, Scope.AuditRead,
+            Scope.SharingManage, Scope.SharingGuest);
 
-        resolved.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        resolved.Should().BeEquivalentTo([Scope.GlucoseRead]);
 
         foreach (var atom in new[]
                  {
-                     TenantPermissions.MembersManage, TenantPermissions.RolesManage,
-                     TenantPermissions.TenantSettings, TenantPermissions.AuditRead,
-                     TenantPermissions.SharingManage, TenantPermissions.SharingGuest,
+                     Scope.MembersManage, Scope.RolesManage,
+                     Scope.TenantSettings, Scope.AuditRead,
+                     Scope.SharingManage, Scope.SharingGuest,
                  })
         {
-            TenantPermissions.HasPermission(resolved, atom).Should().BeFalse(
+            Scope.Satisfies(resolved, atom).Should().BeFalse(
                 $"a delegated credential must not administer the tenant via '{atom}'");
         }
     }
@@ -322,9 +322,9 @@ public class MemberScopeResolverTests
         // The credential presents only administration atoms. It resolves to nothing rather than to
         // tenant administration, so a forged or hand-written grant row cannot escalate.
         Resolve(
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin],
+            RoleSeeds.Permissions[RoleSeeds.Admin],
             authType,
-            TenantPermissions.MembersManage, TenantPermissions.RolesManage)
+            Scope.MembersManage, Scope.RolesManage)
             .Should().BeEmpty();
     }
 
@@ -335,28 +335,28 @@ public class MemberScopeResolverTests
     {
         // Seed role rows are never reconciled, so a tenant seeded before these atoms existed has
         // role rows without them. They authorize the member's OWN client devices, not patient data.
-        var resolved = Resolve([TenantPermissions.GlucoseRead], AuthType.SessionCookie);
+        var resolved = Resolve([Scope.GlucoseRead], AuthType.SessionCookie);
 
-        resolved.Should().Contain(OAuthScopes.DeviceNotify);
-        resolved.Should().Contain(OAuthScopes.DeviceActuate);
+        resolved.Should().Contain(Scope.DeviceNotify);
+        resolved.Should().Contain(Scope.DeviceActuate);
     }
 
     [Fact]
     public void StaleRoleWithoutDeviceAtoms_StillResolvesDeviceScopes_FromAScopedCredential()
     {
         var resolved = Resolve(
-            [TenantPermissions.GlucoseRead], AuthType.OAuthAccessToken,
-            OAuthScopes.GlucoseRead, OAuthScopes.DeviceNotify);
+            [Scope.GlucoseRead], AuthType.OAuthAccessToken,
+            Scope.GlucoseRead, Scope.DeviceNotify);
 
-        resolved.Should().Contain(OAuthScopes.DeviceNotify);
+        resolved.Should().Contain(Scope.DeviceNotify);
         // The credential did not carry device.actuate, so membership must not add it.
-        resolved.Should().NotContain(OAuthScopes.DeviceActuate);
+        resolved.Should().NotContain(Scope.DeviceActuate);
     }
 
     [Fact]
     public void ZeroPermissionMember_GetsNoDeviceScopes_FromAScopedCredential()
     {
-        Resolve([], AuthType.OAuthAccessToken, OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate)
+        Resolve([], AuthType.OAuthAccessToken, Scope.DeviceNotify, Scope.DeviceActuate)
             .Should().BeEmpty();
     }
 
@@ -369,22 +369,22 @@ public class MemberScopeResolverTests
         // recognizes (entries.* -> glucose.*, profile.* -> therapy.*). They resolve to nothing
         // rather than leaking through as opaque scope strings.
         var resolved = Resolve(
-            ["entries.read", "profile.read", "members.destroy", TenantPermissions.GlucoseRead],
+            ["entries.read", "profile.read", "members.destroy", Scope.GlucoseRead],
             AuthType.SessionCookie);
 
         resolved.Should().NotContain("entries.read");
         resolved.Should().NotContain("profile.read");
         resolved.Should().NotContain("members.destroy");
-        resolved.Should().Contain(OAuthScopes.GlucoseRead);
+        resolved.Should().Contain(Scope.GlucoseRead);
     }
 
     [Fact]
     public void Resolve_DoesNotMutateTheCallersPermissionSet()
     {
-        var permissions = new HashSet<string> { TenantPermissions.GlucoseRead };
+        var permissions = new HashSet<string> { Scope.GlucoseRead };
 
         MemberScopeResolver.Resolve(permissions, AuthType.SessionCookie, NoScopes);
 
-        permissions.Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        permissions.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 }

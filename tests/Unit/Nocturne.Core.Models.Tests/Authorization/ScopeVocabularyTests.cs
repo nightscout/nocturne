@@ -6,52 +6,52 @@ namespace Nocturne.Core.Models.Tests.Authorization;
 
 /// <summary>
 /// Pins the relationship between the tenant RBAC permission vocabulary
-/// (<see cref="TenantPermissions"/>) and the OAuth scope vocabulary
-/// (<see cref="OAuthScopes"/>). <c>MemberScopeMiddleware</c> converts a member's effective
+/// (<see cref="Scope"/>) and the OAuth scope vocabulary
+/// (<see cref="Scope"/>). <c>MemberScopeMiddleware</c> converts a member's effective
 /// permissions into granted scopes, so an atom the scope vocabulary does not recognize is
 /// silently deleted and the permission becomes unenforceable.
 /// </summary>
 [Trait("Category", "Unit")]
-public class OAuthScopeVocabularyTests
+public class ScopeVocabularyTests
 {
     /// <summary>The tenant-administration atoms: grantable through a tenant role, never requestable.</summary>
     private static readonly string[] AdministrationAtoms =
     [
-        TenantPermissions.MembersInvite,
-        TenantPermissions.MembersManage,
-        TenantPermissions.RolesManage,
-        TenantPermissions.TenantSettings,
-        TenantPermissions.SharingManage,
-        TenantPermissions.SharingGuest,
-        TenantPermissions.AuditRead,
-        TenantPermissions.AuditManage,
+        Scope.MembersInvite,
+        Scope.MembersManage,
+        Scope.RolesManage,
+        Scope.TenantSettings,
+        Scope.SharingManage,
+        Scope.SharingGuest,
+        Scope.AuditRead,
+        Scope.AuditManage,
     ];
 
     [Fact]
     public void EveryTenantPermissionAtom_IsGrantableAsAScope()
     {
-        OAuthScopes.MemberGrantableScopes.Should().Contain(TenantPermissions.All);
+        Scope.MemberGrantableScopes.Should().Contain(Scope.PermissionAtoms);
     }
 
     [Fact]
     public void NormalizeMemberPermissions_PreservesEveryTenantPermissionAtom()
     {
-        OAuthScopes.NormalizeMemberPermissions(TenantPermissions.All)
-            .Should().Contain(TenantPermissions.All);
+        Scope.NormalizeMemberPermissions(Scope.PermissionAtoms)
+            .Should().Contain(Scope.PermissionAtoms);
     }
 
     [Fact]
     public void NormalizeMemberPermissions_PreservesAdministrationAtoms()
     {
-        OAuthScopes.NormalizeMemberPermissions(AdministrationAtoms)
+        Scope.NormalizeMemberPermissions(AdministrationAtoms)
             .Should().BeEquivalentTo(AdministrationAtoms);
     }
 
     [Fact]
     public void NormalizeMemberPermissions_StillDropsUnknownAtoms()
     {
-        OAuthScopes.NormalizeMemberPermissions(new[] { "glucose.read", "members.destroy", "entries.readwrite" })
-            .Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+        Scope.NormalizeMemberPermissions(new[] { "glucose.read", "members.destroy", "entries.readwrite" })
+            .Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -62,41 +62,41 @@ public class OAuthScopeVocabularyTests
         // administration atom would let any client ask a user to consent to tenant administration.
         foreach (var atom in AdministrationAtoms)
         {
-            OAuthScopes.IsValid(atom).Should().BeFalse($"'{atom}' must not be requestable");
-            OAuthScopes.ValidRequestScopes.Should().NotContain(atom);
+            Scope.IsValid(atom).Should().BeFalse($"'{atom}' must not be requestable");
+            Scope.ValidRequestScopes.Should().NotContain(atom);
         }
     }
 
     [Fact]
     public void Normalize_DropsAdministrationAtoms()
     {
-        OAuthScopes.Normalize(AdministrationAtoms).Should().BeEmpty();
+        Scope.Normalize(AdministrationAtoms).Should().BeEmpty();
     }
 
     [Fact]
     public void FullAccessExpansion_DoesNotEnumerateAdministrationAtoms()
     {
         // A "*" grant keeps satisfying every permission through the FullAccess shortcut in
-        // SatisfiesScope/TenantPermissions.Satisfies; what must not change is the literal
+        // SatisfiesScope/Scope.Satisfies; what must not change is the literal
         // expansion, which is what share narrowing and the scope-display surfaces enumerate.
-        var expanded = OAuthScopes.Normalize([OAuthScopes.FullAccess]);
+        var expanded = Scope.Normalize([Scope.FullAccess]);
 
-        expanded.Should().Contain(OAuthScopes.FullAccess);
+        expanded.Should().Contain(Scope.FullAccess);
         expanded.Should().NotIntersectWith(AdministrationAtoms);
-        OAuthScopes.AllScopes.Should().NotIntersectWith(AdministrationAtoms);
+        Scope.AllScopes.Should().NotIntersectWith(AdministrationAtoms);
 
         foreach (var atom in AdministrationAtoms)
         {
-            OAuthScopes.SatisfiesScope(expanded, atom).Should().BeTrue();
-            TenantPermissions.HasPermission(expanded, atom).Should().BeTrue();
+            Scope.Satisfies(expanded, atom).Should().BeTrue();
+            Scope.Satisfies(expanded, atom).Should().BeTrue();
         }
     }
 
     [Fact]
     public void PublicShareScopes_ContainNoAdministrationAtom()
     {
-        TenantPermissions.PublicShareScopes.Should().NotIntersectWith(AdministrationAtoms);
-        TenantPermissions.PublicShareScopes.Should().OnlyContain(scope => scope.EndsWith(".read"));
+        Scope.PublicShareScopes.Should().NotIntersectWith(AdministrationAtoms);
+        Scope.PublicShareScopes.Should().OnlyContain(scope => scope.EndsWith(".read"));
     }
 
     [Fact]
@@ -128,41 +128,41 @@ public class OAuthScopeVocabularyTests
     [Fact]
     public void MemberGrantableScopes_IsDerivedFromTheTenantPermissionVocabulary()
     {
-        // Derived, not hand-listed: a new atom in TenantPermissions.All is grantable with no second
+        // Derived, not hand-listed: a new atom in Scope.PermissionAtoms is grantable with no second
         // edit, so the two vocabularies cannot drift.
-        OAuthScopes.MemberGrantableScopes.Should().BeEquivalentTo(
-            OAuthScopes.ValidRequestScopes.Concat(TenantPermissions.All).ToHashSet());
+        Scope.MemberGrantableScopes.Should().BeEquivalentTo(
+            Scope.ValidRequestScopes.Concat(Scope.PermissionAtoms).ToHashSet());
     }
 
     [Theory]
-    [InlineData(OAuthScopes.GlucoseReadWrite, OAuthScopes.GlucoseRead)]
-    [InlineData(OAuthScopes.TreatmentsReadWrite, OAuthScopes.TreatmentsRead)]
-    [InlineData(OAuthScopes.DevicesReadWrite, OAuthScopes.DevicesRead)]
-    [InlineData(OAuthScopes.TherapyReadWrite, OAuthScopes.TherapyRead)]
-    [InlineData(OAuthScopes.AlertsReadWrite, OAuthScopes.AlertsRead)]
-    [InlineData(OAuthScopes.HeartRateReadWrite, OAuthScopes.HeartRateRead)]
-    [InlineData(OAuthScopes.StepCountReadWrite, OAuthScopes.StepCountRead)]
-    [InlineData(OAuthScopes.SleepReadWrite, OAuthScopes.SleepRead)]
-    [InlineData(OAuthScopes.FoodReadWrite, OAuthScopes.FoodRead)]
+    [InlineData(Scope.GlucoseReadWrite, Scope.GlucoseRead)]
+    [InlineData(Scope.TreatmentsReadWrite, Scope.TreatmentsRead)]
+    [InlineData(Scope.DevicesReadWrite, Scope.DevicesRead)]
+    [InlineData(Scope.TherapyReadWrite, Scope.TherapyRead)]
+    [InlineData(Scope.AlertsReadWrite, Scope.AlertsRead)]
+    [InlineData(Scope.HeartRateReadWrite, Scope.HeartRateRead)]
+    [InlineData(Scope.StepCountReadWrite, Scope.StepCountRead)]
+    [InlineData(Scope.SleepReadWrite, Scope.SleepRead)]
+    [InlineData(Scope.FoodReadWrite, Scope.FoodRead)]
     public void TryGetImpliedReadScope_NarrowsEveryTieredScope(string readWrite, string expectedRead)
     {
-        OAuthScopes.TryGetImpliedReadScope(readWrite, out var readScope).Should().BeTrue();
+        Scope.TryGetImpliedReadScope(readWrite, out var readScope).Should().BeTrue();
         readScope.Should().Be(expectedRead);
     }
 
     [Theory]
-    [InlineData(OAuthScopes.GlucoseRead)]
-    [InlineData(OAuthScopes.ReportsRead)]
-    [InlineData(OAuthScopes.IdentityRead)]
-    [InlineData(OAuthScopes.DeviceNotify)]
-    [InlineData(OAuthScopes.DeviceActuate)]
-    [InlineData(OAuthScopes.FullAccess)]
-    [InlineData(TenantPermissions.MembersManage)]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.ReportsRead)]
+    [InlineData(Scope.IdentityRead)]
+    [InlineData(Scope.DeviceNotify)]
+    [InlineData(Scope.DeviceActuate)]
+    [InlineData(Scope.FullAccess)]
+    [InlineData(Scope.MembersManage)]
     public void TryGetImpliedReadScope_HasNoCounterpartForAnUntieredScope(string scope)
     {
         // Notably "*": a superuser membership on a read-only credential must not downgrade the
         // wildcard to some read scope, it must simply not survive.
-        OAuthScopes.TryGetImpliedReadScope(scope, out _).Should().BeFalse();
+        Scope.TryGetImpliedReadScope(scope, out _).Should().BeFalse();
     }
 
     [Fact]
@@ -170,9 +170,9 @@ public class OAuthScopeVocabularyTests
     {
         // The asymmetry the downgrade in MemberScopeResolver exists to handle. Pinned here so the
         // downgrade is not silently made redundant (or contradicted) by a change to SatisfiesScope.
-        OAuthScopes.SatisfiesScope([OAuthScopes.GlucoseRead], OAuthScopes.GlucoseReadWrite)
+        Scope.Satisfies([Scope.GlucoseRead], Scope.GlucoseReadWrite)
             .Should().BeFalse();
-        OAuthScopes.SatisfiesScope([OAuthScopes.GlucoseReadWrite], OAuthScopes.GlucoseRead)
+        Scope.Satisfies([Scope.GlucoseReadWrite], Scope.GlucoseRead)
             .Should().BeTrue();
     }
 
@@ -181,7 +181,7 @@ public class OAuthScopeVocabularyTests
     {
         // The other half of the asymmetry: normalization leaves readwrite alone, so an intersection
         // against a read-only credential had nothing to match.
-        OAuthScopes.NormalizeMemberPermissions([TenantPermissions.GlucoseReadWrite])
-            .Should().BeEquivalentTo([OAuthScopes.GlucoseReadWrite]);
+        Scope.NormalizeMemberPermissions([Scope.GlucoseReadWrite])
+            .Should().BeEquivalentTo([Scope.GlucoseReadWrite]);
     }
 }

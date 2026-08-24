@@ -16,34 +16,34 @@ public class DemoRolePermissionsTests
     /// any of these, or an anonymous visitor can escalate to tenant superuser.
     /// </summary>
     [Theory]
-    [InlineData(TenantPermissions.Superuser)]
-    [InlineData(TenantPermissions.MembersManage)]
-    [InlineData(TenantPermissions.MembersInvite)]
-    [InlineData(TenantPermissions.RolesManage)]
-    [InlineData(TenantPermissions.SharingManage)]
-    [InlineData(TenantPermissions.AuditManage)]
-    [InlineData(TenantPermissions.AuditRead)]
+    [InlineData(Scope.FullAccess)]
+    [InlineData(Scope.MembersManage)]
+    [InlineData(Scope.MembersInvite)]
+    [InlineData(Scope.RolesManage)]
+    [InlineData(Scope.SharingManage)]
+    [InlineData(Scope.AuditManage)]
+    [InlineData(Scope.AuditRead)]
     public void DemoVisitorPermissions_ExcludeEscalationAndDisclosureAtoms(string atom) =>
-        TenantPermissions.DemoVisitorPermissions.Should().NotContain(atom);
+        Scope.DemoVisitorPermissions.Should().NotContain(atom);
 
     [Fact]
     public void DemoVisitorPermissions_StillCoverTheSurfacesTheDemoExistsToShow()
     {
-        TenantPermissions.DemoVisitorPermissions.Should().Contain(
+        Scope.DemoVisitorPermissions.Should().Contain(
         [
-            TenantPermissions.GlucoseReadWrite,
-            TenantPermissions.TreatmentsReadWrite,
-            TenantPermissions.TherapyReadWrite,
-            TenantPermissions.AlertsReadWrite,
-            TenantPermissions.ReportsRead,
-            TenantPermissions.TenantSettings,
+            Scope.GlucoseReadWrite,
+            Scope.TreatmentsReadWrite,
+            Scope.TherapyReadWrite,
+            Scope.AlertsReadWrite,
+            Scope.ReportsRead,
+            Scope.TenantSettings,
         ]);
     }
 
     [Fact]
     public void DemoVisitorPermissions_AreAllKnownAtoms() =>
-        TenantPermissions.DemoVisitorPermissions
-            .Where(p => !TenantPermissions.All.Contains(p))
+        Scope.DemoVisitorPermissions
+            .Where(p => !Scope.PermissionAtoms.Contains(p))
             .Should().BeEmpty();
 
     [Fact]
@@ -51,8 +51,8 @@ public class DemoRolePermissionsTests
     {
         // Documents the deliberate divergence: the demo used to reuse the admin role, which
         // carries the member-management atoms above.
-        var admin = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin];
-        TenantPermissions.DemoVisitorPermissions.Should().BeSubsetOf(admin);
-        TenantPermissions.DemoVisitorPermissions.Should().NotBeEquivalentTo(admin);
+        var admin = RoleSeeds.Permissions[RoleSeeds.Admin];
+        Scope.DemoVisitorPermissions.Should().BeSubsetOf(admin);
+        Scope.DemoVisitorPermissions.Should().NotBeEquivalentTo(admin);
     }
 }

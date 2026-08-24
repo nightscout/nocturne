@@ -25,14 +25,14 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/observations/notes")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class NoteController(INoteRepository repo)
     : V4CrudControllerBase<Note, UpsertNoteRequest, UpsertNoteRequest, INoteRepository>(repo)
 {
     /// <inheritdoc/>
     /// <remarks>Notes are the V4 form of a legacy text treatment (Note/Announcement/Question).</remarks>
-    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public override string WriteScope => Scope.TreatmentsReadWrite;
 
     protected override Note MapCreateToModel(UpsertNoteRequest request) => new()
     {

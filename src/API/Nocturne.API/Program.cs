@@ -427,7 +427,7 @@ app.MapScalarApiReference((options, httpContext) =>
                 flow.RedirectUri = scalarAuth.RedirectUri;
             }
             flow.Pkce = Pkce.Sha256;
-            flow.SelectedScopes = [OAuthScopes.FullAccess];
+            flow.SelectedScopes = [Scope.FullAccess];
         })
         .AddApiKeyAuthentication("apiSecret", apiKey =>
         {

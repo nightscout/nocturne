@@ -35,7 +35,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// alone is satisfied by read-only credentials such as a guest-link session, which holds
     /// <c>alerts.read</c>.
     /// </summary>
-    public string WriteScope => OAuthScopes.AlertsReadWrite;
+    public string WriteScope => Scope.AlertsReadWrite;
 
     /// <summary>
     /// Deadline for the demo service's ui-settings read. The demo service is co-deployed and answers

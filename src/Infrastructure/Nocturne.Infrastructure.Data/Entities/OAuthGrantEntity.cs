@@ -193,21 +193,3 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public ICollection<OAuthRefreshTokenEntity> RefreshTokens { get; set; } =
         new List<OAuthRefreshTokenEntity>();
 }
-
-/// <summary>
-/// Grant type constants. References OAuthScopes for the canonical values.
-/// </summary>
-public static class OAuthGrantTypes
-{
-    /// <summary>Third-party application grant.</summary>
-    public const string App = OAuthScopes.GrantTypeApp;
-
-    /// <summary>User-to-user follower/caregiver sharing grant.</summary>
-    public const string Follower = OAuthScopes.GrantTypeFollower;
-
-    /// <summary>Direct token grant (API key style, no OAuth client).</summary>
-    public const string Direct = OAuthScopes.GrantTypeDirect;
-
-    /// <summary>Guest grant: temporary read-only access link.</summary>
-    public const string Guest = OAuthScopes.GrantTypeGuest;
-}
