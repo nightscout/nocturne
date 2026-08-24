@@ -100,10 +100,11 @@ public class ApiKeyHandler : IAuthHandler
             return AuthResult.Failure("Invalid API key");
         }
 
-        // 6. Fire-and-forget UpdateLastUsedAsync
+        // 6. Fire-and-forget last-used stamp
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
-        _ = UpdateLastUsedAsync(grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
+        _ = DirectGrantTokenHandler.RecordLastUsedAsync(
+            _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
 
         // 7. If this is a migrated full-access secret's first use, nudge rotation to scoped keys.
         //    Minted noc_ tokens also carry a LegacySecretHash (for pre-hashing clients), so the
@@ -130,26 +131,6 @@ public class ApiKeyHandler : IAuthHandler
             CredentialFingerprint = AuditFingerprint.Of(
                 AuditFingerprint.ApiSecretDomain, grant.TokenHash ?? grant.LegacySecretHash),
         });
-    }
-
-    private async Task UpdateLastUsedAsync(Guid grantId, Guid tenantId, string? ipAddress, string? userAgent)
-    {
-        try
-        {
-            await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-            dbContext.TenantId = tenantId;
-            await dbContext.OAuthGrants
-                .IgnoreQueryFilters()
-                .Where(g => g.Id == grantId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
-                    .SetProperty(g => g.LastUsedIp, ipAddress)
-                    .SetProperty(g => g.LastUsedUserAgent, userAgent));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to update last used metadata for grant {GrantId}", grantId);
-        }
     }
 
     private async Task SendRotationNudgeAsync(IServiceScopeFactory scopeFactory, OAuthGrantEntity grant)
