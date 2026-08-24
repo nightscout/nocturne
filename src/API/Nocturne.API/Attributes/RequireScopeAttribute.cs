@@ -88,10 +88,9 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
         // Restricting it to read requirements keeps "an unauthenticated principal can never pass a
         // write gate" a property of this attribute. Deriving it from the scopes a share happens to
         // hold would instead make it depend on every present and future anonymous path publishing
-        // only read scopes, and SatisfiesScope matches device.notify and device.actuate on an exact
-        // string — neither is ".read" nor ".readwrite".
-        if (!httpContext.IsAuthenticated()
-            && !_requiredScopes.All(scope => scope.EndsWith(".read", StringComparison.Ordinal)))
+        // only read scopes, and the capability atoms device.notify and device.actuate are matched
+        // exactly — they are neither a read nor a write of a data category.
+        if (!httpContext.IsAuthenticated() && !_requiredScopes.All(Scope.IsReadScope))
         {
             context.Result = new UnauthorizedResult();
             return;

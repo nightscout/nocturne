@@ -323,6 +323,23 @@ public static class Scope
     };
 
     /// <summary>
+    /// The read tier of the vocabulary: every atom that confers sight of a data category and no
+    /// authority over it. The atoms <see cref="ReadWriteImpliesRead"/> narrows to, plus the four
+    /// that exist only as read. Nothing else belongs, whatever it is spelled like: the
+    /// tenant-administration atoms and the client-device capability atoms are not reads, and
+    /// <see cref="FullAccess"/> spans every tier.
+    /// </summary>
+    /// <seealso cref="IsReadScope"/>
+    public static readonly IReadOnlySet<string> ReadScopes =
+        new HashSet<string>(ReadWriteImpliesRead.Values, StringComparer.Ordinal)
+        {
+            ReportsRead,
+            IdentityRead,
+            AuditRead,
+            HealthRead,
+        };
+
+    /// <summary>
     /// For each atom, the other atoms that satisfy it without matching it. Every readwrite tier
     /// satisfies its read tier, and <see cref="AuditManage"/> satisfies <see cref="AuditRead"/> —
     /// a member who may change what is audited may read the log.
@@ -406,6 +423,14 @@ public static class Scope
     {
         return ReadWriteImpliesRead.TryGetValue(readWriteScope, out readScope!);
     }
+
+    /// <summary>
+    /// Whether <paramref name="scope"/> is in the read tier. Asks the vocabulary rather than the
+    /// string's shape, so an atom that reads like a read but confers more cannot pass for one.
+    /// </summary>
+    /// <param name="scope">The scope to classify.</param>
+    /// <seealso cref="ReadScopes"/>
+    public static bool IsReadScope(string scope) => ReadScopes.Contains(scope);
 
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
