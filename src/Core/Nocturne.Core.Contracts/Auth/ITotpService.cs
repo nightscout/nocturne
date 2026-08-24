@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Contracts.Auth;
 
 /// <summary>
@@ -12,6 +14,8 @@ public interface ITotpService
     Task<TotpSetupResult> GenerateSetupAsync(Guid subjectId, string username);
 
     /// <summary>Verifies a TOTP code against the pending setup challenge and registers the credential.</summary>
+    /// <exception cref="TotpSetupException">The code or the challenge token was refused; the
+    /// exception names which check refused it.</exception>
     Task<TotpCredentialResult> CompleteSetupAsync(string code, string label, string challengeToken);
 
     /// <summary>
@@ -69,3 +73,38 @@ public record TotpLoginResult(Guid SubjectId, string Username, string DisplayNam
 /// <param name="CreatedAt">When the credential was registered.</param>
 /// <param name="LastUsedAt">When the credential was last used for authentication, if ever.</param>
 public record TotpCredentialInfo(Guid Id, string? Label, DateTime CreatedAt, DateTime? LastUsedAt);
+
+/// <summary>
+/// Why a TOTP setup attempt was refused. The wording belongs to whichever client is asking, so
+/// the service names the check that refused and nothing else.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TotpSetupFailure>))]
+public enum TotpSetupFailure
+{
+    /// <summary>The submitted code did not match the secret the challenge carries.</summary>
+    InvalidCode,
+
+    /// <summary>The challenge token could not be decrypted or read — tampered, or from another key ring.</summary>
+    ChallengeUnreadable,
+
+    /// <summary>The challenge token was readable but past its expiry.</summary>
+    ChallengeExpired,
+}
+
+/// <summary>
+/// Thrown when <see cref="ITotpService.CompleteSetupAsync"/> refuses an attempt.
+/// <see cref="Failure"/> is the whole answer; the message is for logs.
+/// </summary>
+public class TotpSetupException : Exception
+{
+    /// <param name="failure">Which check refused the attempt.</param>
+    /// <param name="innerException">The underlying failure, when one caused this.</param>
+    public TotpSetupException(TotpSetupFailure failure, Exception? innerException = null)
+        : base($"TOTP setup refused: {failure}", innerException)
+    {
+        Failure = failure;
+    }
+
+    /// <summary>Which check refused the attempt.</summary>
+    public TotpSetupFailure Failure { get; }
+}

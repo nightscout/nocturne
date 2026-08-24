@@ -125,8 +125,8 @@ public class TotpServiceTests : IDisposable
 
         var act = () => service.CompleteSetupAsync("000000", "Label", setup.ChallengeToken);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Invalid TOTP code*");
+        (await act.Should().ThrowAsync<TotpSetupException>())
+            .Which.Failure.Should().Be(TotpSetupFailure.InvalidCode);
     }
 
     [Fact]
@@ -137,8 +137,35 @@ public class TotpServiceTests : IDisposable
 
         var act = () => service.CompleteSetupAsync("123456", "Label", "tampered-token");
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*no longer valid*");
+        (await act.Should().ThrowAsync<TotpSetupException>())
+            .Which.Failure.Should().Be(TotpSetupFailure.ChallengeUnreadable);
+    }
+
+    /// <summary>
+    /// A challenge that is readable but stale is refused as expired, not as unreadable: the two
+    /// are the same 400 to the caller but different copy, so the split has to survive here.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteSetupAsync_WithAnExpiredChallenge_ReportsExpired()
+    {
+        var service = CreateService();
+        var secret = TotpHelper.GenerateSecret();
+
+        var setupProtector = _dataProtectionProvider.CreateProtector("Nocturne.Totp.Setup");
+        var expired = setupProtector.Protect(JsonSerializer.Serialize(new
+        {
+            Secret = secret,
+            SubjectId = _subjectId,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+        }));
+
+        // A code that would otherwise be accepted, so only the expiry refuses it.
+        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var act = () => service.CompleteSetupAsync(code, "Label", expired);
+
+        (await act.Should().ThrowAsync<TotpSetupException>())
+            .Which.Failure.Should().Be(TotpSetupFailure.ChallengeExpired);
     }
 
     #endregion

@@ -134,9 +134,9 @@ public class TotpController : ControllerBase
     /// </summary>
     /// <param name="request">A <see cref="TotpVerifySetupRequest"/> containing the 6-digit code, label, and challenge token.</param>
     /// <returns>A <see cref="TotpVerifySetupResponse"/> with the new credential ID on success.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the challenge token is invalid or the code does not match.</exception>
+    /// <exception cref="TotpSetupException">Thrown when the challenge token is invalid or the code does not match.</exception>
     /// <response code="200">TOTP setup verified and credential created.</response>
-    /// <response code="400">Invalid code or challenge token.</response>
+    /// <response code="400">Invalid code or challenge token; <c>detail</c> is a <see cref="TotpSetupFailure"/> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("verify-setup")]
     [DenyDemoSubject]
@@ -160,9 +160,12 @@ public class TotpController : ControllerBase
                 Success = true,
             });
         }
-        catch (InvalidOperationException ex)
+        catch (TotpSetupException ex)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            // detail carries the TotpSetupFailure value, not a sentence. The generated remote
+            // wrapper forwards detail and drops the rest of the body, so it is the only channel
+            // to the browser, and the wording is the web app's to choose.
+            return Problem(detail: ex.Failure.ToString(), statusCode: 400, title: "Bad Request");
         }
     }
 

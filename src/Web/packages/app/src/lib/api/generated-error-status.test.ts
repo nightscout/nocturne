@@ -8,6 +8,8 @@ import {
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
+import { TotpSetupFailure } from "$api-clients";
+import { describeTotpSetupError } from "../components/account/totp-errors";
 
 /**
  * What a failed API call looks like by the time a page sees it.
@@ -222,5 +224,54 @@ describe("the status a generated remote function lets through", () => {
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
+  });
+});
+
+const TOTP_FALLBACK = "Verification failed. Check the code and try again.";
+
+describe("a refused authenticator setup", () => {
+  it("turns each failure the server can raise into its own wording", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(async (failure) =>
+        describeTotpSetupError(
+          await crossTheBoundary(problemDetails(400, failure, "Bad Request")),
+          TOTP_FALLBACK
+        )
+      )
+    );
+
+    expect(wordings).not.toContain(TOTP_FALLBACK);
+    expect(new Set(wordings).size).toBe(Object.values(TotpSetupFailure).length);
+  });
+
+  it("names the expiry rather than the generic refusal", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.ChallengeExpired, "Bad Request")
+    );
+
+    expect(describeTotpSetupError(crossed, TOTP_FALLBACK)).toContain("took too long");
+  });
+
+  it("shows no failure value to the user", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(async (failure) =>
+        describeTotpSetupError(
+          await crossTheBoundary(problemDetails(400, failure, "Bad Request")),
+          TOTP_FALLBACK
+        )
+      )
+    );
+
+    for (const failure of Object.values(TotpSetupFailure)) {
+      expect(wordings.join(" ")).not.toContain(failure);
+    }
+  });
+
+  it("falls back rather than showing a failure this build does not know", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, "SomethingAddedLater", "Bad Request")
+    );
+
+    expect(describeTotpSetupError(crossed, TOTP_FALLBACK)).toBe(TOTP_FALLBACK);
   });
 });

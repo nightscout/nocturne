@@ -33,16 +33,6 @@ public class TotpService : ITotpService
     /// </summary>
     private static readonly byte[] DummySecret = new byte[20];
 
-    /// <summary>
-    /// What a setup attempt is told when the token carrying its state is unreadable or out of date.
-    /// These reach the person setting up two-factor sign-in, so they say what to do next rather
-    /// than what the token did.
-    /// </summary>
-    private const string SetupNoLongerValid =
-        "This two-factor setup is no longer valid. Start it again from your security settings.";
-    private const string SetupExpired =
-        "This two-factor setup took too long. Start it again from your security settings.";
-
     private readonly NocturneDbContext _dbContext;
     private readonly IDataProtector _protector;
     private readonly IDataProtector _stepUpProtector;
@@ -83,7 +73,7 @@ public class TotpService : ITotpService
 
         if (!TotpHelper.TryVerify(payload.Secret, code, lastUsedStep: null, out var setupStep))
         {
-            throw new InvalidOperationException("Invalid TOTP code. Please try again.");
+            throw new TotpSetupException(TotpSetupFailure.InvalidCode);
         }
 
         var entity = new TotpCredentialEntity
@@ -325,15 +315,15 @@ public class TotpService : ITotpService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to decrypt TOTP challenge token");
-            throw new InvalidOperationException(SetupNoLongerValid, ex);
+            throw new TotpSetupException(TotpSetupFailure.ChallengeUnreadable, ex);
         }
 
         var payload = JsonSerializer.Deserialize<TotpChallengePayload>(json)
-            ?? throw new InvalidOperationException(SetupNoLongerValid);
+            ?? throw new TotpSetupException(TotpSetupFailure.ChallengeUnreadable);
 
         if (payload.ExpiresAt < DateTime.UtcNow)
         {
-            throw new InvalidOperationException(SetupExpired);
+            throw new TotpSetupException(TotpSetupFailure.ChallengeExpired);
         }
 
         return payload;
