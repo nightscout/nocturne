@@ -245,6 +245,20 @@ public class MemberScopeResolverTests
             "this is why the raw set has to be published rather than the expansion");
     }
 
+    /// <summary>
+    /// Scope atoms are lowercase and matched ordinally everywhere else in the vocabulary. A
+    /// resolved set that compared case-insensitively would admit a scope string the vocabulary
+    /// never defines, and set-equivalence assertions cannot see a comparer.
+    /// </summary>
+    [Fact]
+    public void ResolvedScopes_AreMatchedOrdinally()
+    {
+        var resolved = Resolve([Scope.FullAccess, Scope.MembersManage], AuthType.SessionCookie);
+
+        resolved.Contains(Scope.MembersManage.ToUpperInvariant()).Should().BeFalse(
+            "scope matching is ordinal, so an upper-cased atom is a different string");
+    }
+
     [Theory]
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]
