@@ -104,9 +104,11 @@ public class ShareLinkController : ControllerBase
         {
             return Ok(await _shareLinkService.SetScopesAsync(_tenantAccessor.TenantId, request.Scopes, ct));
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Invalid scopes");
+            return Problem(
+                detail: "Some of the chosen sharing options aren't available. Reload the page and choose again.",
+                statusCode: 400);
         }
     }
 

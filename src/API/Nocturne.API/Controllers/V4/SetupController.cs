@@ -323,7 +323,9 @@ public partial class SetupController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to generate setup OIDC authorization URL");
-            return Problem(detail: ex.Message, statusCode: 400, title: "Provider Error");
+            return Problem(
+                detail: "We couldn't reach that sign-in provider. Try another one, or check the provider settings.",
+                statusCode: 400);
         }
     }
 

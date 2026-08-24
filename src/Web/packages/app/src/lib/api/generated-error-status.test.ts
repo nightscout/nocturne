@@ -71,16 +71,29 @@ function nswagApiException(
 
 /**
  * An RFC-7807 body, which NSwag throws as the parsed object itself when the
- * operation declares a typed error response. `title` is the status phrase, so
- * the only thing here a caller can act on is the status.
+ * operation declares a typed error response. `title` is the status phrase;
+ * `detail` is the sentence saying what went wrong.
  */
-function problemDetails(status: number, detail: string) {
+function problemDetails(status: number, detail: string, title = "Not Found") {
   return {
     type: `https://tools.ietf.org/html/rfc9110#status.${status}`,
-    title: "Not Found",
+    title,
     status,
     detail,
   };
+}
+
+/**
+ * A SvelteKit `HttpError`, which is what the refresh of an invalidated query
+ * throws from inside the same `try` as the client call. Its reason lives on
+ * `body.message` and nowhere else.
+ */
+function refusal(status: number, message: string): unknown {
+  try {
+    error(status, message);
+  } catch (thrown) {
+    return thrown;
+  }
 }
 
 const RATE_LIMIT_BODY = JSON.stringify({
@@ -156,6 +169,50 @@ describe("the status a generated remote function lets through", () => {
     expect(
       remoteErrorMessage(crossed, "Changing alerts requires alerts.readwrite.")
     ).toBe(MISSING_ITEM_ERROR);
+  });
+
+  it("keeps a 404 detail that echoes back an id out of what it forwards", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(404, "Body weight record with ID 3f2a not found")
+    );
+
+    expect(JSON.stringify(crossed)).not.toContain("3f2a");
+  });
+
+  it("says why a conflict happened rather than saying 'Conflict'", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(409, "Cannot revoke an already-redeemed invite", "Conflict")
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(describeSubmitError(crossed, "Couldn't revoke the invite.")).toBe(
+      "Cannot revoke an already-redeemed invite"
+    );
+  });
+
+  it("names the field a validation failure came from, not the summary above it", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "One or more validation errors occurred.",
+        "Bad Request"
+      ),
+      errors: { ids: ["The ids field is required."] },
+    });
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "The ids field is required."
+    );
+  });
+
+  it("forwards the message when an invalidated query's refresh is what failed", async () => {
+    const crossed = await crossTheBoundary(
+      refusal(409, "Another device changed this entry.")
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Another device changed this entry."
+    );
   });
 
   it("still flattens a status it does not forward", async () => {
