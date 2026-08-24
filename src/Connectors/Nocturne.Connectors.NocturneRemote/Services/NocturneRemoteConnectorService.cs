@@ -137,8 +137,11 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         Task<DateTime?> ActivityFromAsync() =>
             activity ??= BoundAsync(() => CalculateActivityCatchUpSinceAsync(config));
 
+        // Device status and activity answer with no resume point at all when nothing of theirs is
+        // stored yet; taking the caller's bound there keeps a first sync off the whole initial
+        // window of collections this high-volume.
         async Task<DateTime?> BoundAsync(Func<Task<DateTime?>> resumePoint) =>
-            openEnded ? ResumeFrom(request.From, await resumePoint()) : request.From;
+            openEnded ? ResumeFrom(request.From, await resumePoint() ?? request.From) : request.From;
 
         foreach (var type in activeTypes)
         {
@@ -175,30 +178,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         result.EndTime = DateTimeOffset.UtcNow;
         return result;
-    }
-
-    /// <summary>
-    ///     The lower bound a family crawls from: whichever of the caller's bound and the family's own
-    ///     resume point reaches further back.
-    /// </summary>
-    /// <remarks>
-    ///     Neither may narrow the other. The resume point cannot narrow the caller's bound, because
-    ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
-    ///     answering that from the watermark returns nothing and reports it as a success. The
-    ///     caller's bound cannot narrow the resume point either, because on a background catch-up
-    ///     that bound is the glucose watermark, and honouring it alone is what strands the other
-    ///     families behind glucose. A family with no resume point has nothing stored yet, so the
-    ///     caller's bound stands as given — a null one included, which imports the full history.
-    /// </remarks>
-    private static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
-    {
-        if (resumePoint is null)
-            return requested;
-
-        if (requested is null)
-            return null;
-
-        return requested < resumePoint ? requested : resumePoint;
     }
 
     #region V4 Data Type Sync Methods

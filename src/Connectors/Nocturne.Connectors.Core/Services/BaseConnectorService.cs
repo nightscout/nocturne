@@ -386,6 +386,30 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     The lower bound a family crawls from: whichever of the caller's bound and the family's
+    ///     own resume point reaches further back, where a null bound reaches back without limit.
+    /// </summary>
+    /// <remarks>
+    ///     Neither may narrow the other. The resume point cannot narrow the caller's bound, because
+    ///     an explicit <c>from</c> with no <c>to</c> is the shape an admin repairing a gap sends, and
+    ///     answering that from the watermark returns nothing and reports it as a success. The
+    ///     caller's bound cannot narrow the resume point either, because on a background catch-up
+    ///     that bound is the glucose watermark, and honouring it alone is what strands the other
+    ///     families behind glucose — a resume point left open by an unbounded
+    ///     <see cref="InitialSyncFloor"/> included, since that one is a family with no history
+    ///     stored at all. A resume point that is absent rather than open is resolved by the caller
+    ///     before it gets here; <see cref="CalculateDeviceStatusCatchUpSinceAsync"/> and
+    ///     <see cref="CalculateActivityCatchUpSinceAsync"/> are the two that answer that way.
+    /// </remarks>
+    protected static DateTime? ResumeFrom(DateTime? requested, DateTime? resumePoint)
+    {
+        if (requested is null || resumePoint is null)
+            return null;
+
+        return requested < resumePoint ? requested : resumePoint;
+    }
+
+    /// <summary>
     ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp
     ///     minus a small overlap (to absorb clock drift), or <c>null</c> when there is no
     ///     usable prior timestamp.

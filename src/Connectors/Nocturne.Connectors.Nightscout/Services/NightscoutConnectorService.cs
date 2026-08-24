@@ -157,10 +157,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
         var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
-        // For open-ended background catch-up (no explicit upper bound), each data type
-        // resolves its own "since" from its OWN latest stored record rather than reusing
-        // the glucose-derived request.From. Otherwise a single type that fell behind (or
-        // failed once) would be permanently stranded behind the glucose cursor. Explicit
+        // On an open-ended catch-up (no explicit upper bound) each data type below widens the
+        // glucose-derived request.From with its own resume point (see ResumeFrom), so a single type
+        // that fell behind — or failed once — is not stranded behind the glucose cursor. Explicit
         // ranged syncs (request.To set, e.g. a manual re-import) honour request.From/To as-is.
         var openEnded = request.To is null;
 
@@ -206,10 +205,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             try
             {
-                // Treatments track their own cursor (latest treatment, else 6-month initial
-                // backfill) so historical boluses/carbs are filled even once glucose is current.
+                // Treatments track their own cursor (latest treatment, else this connector's
+                // unbounded initial backfill) so historical boluses/carbs are filled even once
+                // glucose is current.
                 var treatmentFrom = openEnded
-                    ? await CalculateTreatmentSinceTimestampAsync(config)
+                    ? ResumeFrom(request.From, await CalculateTreatmentSinceTimestampAsync(config))
                     : request.From;
 
                 var outcome = await CrawlAndPublishAsync(
@@ -250,10 +250,10 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             try
             {
                 // Device status tracks its own cursor when a watermark is available; if none
-                // exists yet it falls back to request.From (current behaviour) rather than
-                // re-fetching the full initial window of this high-volume telemetry every sync.
+                // exists yet it falls back to request.From rather than re-fetching the full
+                // initial window of this high-volume telemetry every sync.
                 var deviceStatusFrom = openEnded
-                    ? await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From
+                    ? ResumeFrom(request.From, await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From)
                     : request.From;
 
                 var outcome = await CrawlAndPublishAsync(
@@ -295,7 +295,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 // Activity tracks its own cursor when a watermark is available, else falls
                 // back to request.From.
                 var activityFrom = openEnded
-                    ? await CalculateActivityCatchUpSinceAsync(config) ?? request.From
+                    ? ResumeFrom(request.From, await CalculateActivityCatchUpSinceAsync(config) ?? request.From)
                     : request.From;
 
                 var outcome = await CrawlAndPublishAsync(
