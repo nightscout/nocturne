@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
@@ -56,6 +57,11 @@ public class OAuthAccessTokenHandlerTests
         services.AddSingleton(_jwt);
         services.AddSingleton(revocationCache.Object);
         services.AddSingleton(_grantService.Object);
+        // The real chain, matching the composition root: stubbing it here would stop these tests
+        // covering the grant and revocation links the handler now delegates.
+        services.AddScoped<IJwtCredentialValidator, JwtCredentialValidator>();
+        services.AddSingleton<ILogger<JwtCredentialValidator>>(
+            NullLogger<JwtCredentialValidator>.Instance);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         _handler = new OAuthAccessTokenHandler(scopeFactory, NullLogger<OAuthAccessTokenHandler>.Instance);

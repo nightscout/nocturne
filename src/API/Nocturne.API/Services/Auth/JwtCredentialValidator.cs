@@ -5,11 +5,13 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>
 /// Validates a bearer JWT down to the point where a transport has to decide for itself.
 ///
-/// Four call sites used to run this chain independently — the HTTP handler, the SignalR hub
-/// authorizer, the overview hub's in-band authorize, and token introspection — and they had
-/// drifted: the overview hub checked the revocation cache but never asked whether the token's
-/// GRANT had been revoked, so disconnecting a connected app left its hub connections authorized
-/// until the access token expired.
+/// The HTTP handler, the SignalR hub authorizer and the overview hub's in-band authorize each ran
+/// this chain independently, in three different orders, and had drifted: the overview hub checked
+/// the revocation cache but never asked whether the token's GRANT had been revoked. Nothing
+/// reachable got past it — every grant-bound token is minted with its grant's tenant pin and that
+/// hub refuses pinned tokens — but the divergence was invisible and free to widen. Token
+/// introspection still carries its own copy; it answers a different question (describing a token
+/// rather than admitting one) and is left for a follow-up.
 ///
 /// The tenant pin is deliberately NOT decided here. The three transports disagree on purpose: an
 /// HTTP request accepts an unpinned token because <c>MemberScopeMiddleware</c> re-resolves
@@ -110,7 +112,7 @@ public sealed class JwtCredentialValidator : IJwtCredentialValidator
                     JwtCredentialRejection.Revoked, "Token has been revoked");
             }
 
-            if (await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+            if (await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value, cancellationToken))
             {
                 _logger.LogDebug(
                     "Access token's grant has been revoked (grant: {GrantId})", claims.GrantId);
@@ -120,7 +122,7 @@ public sealed class JwtCredentialValidator : IJwtCredentialValidator
         }
 
         if (!string.IsNullOrEmpty(claims.JwtId)
-            && await _revocationCache.IsRevokedAsync(claims.JwtId))
+            && await _revocationCache.IsRevokedAsync(claims.JwtId, cancellationToken))
         {
             _logger.LogDebug("Access token has been revoked (jti: {Jti})", claims.JwtId);
             return JwtCredentialResult.Refused(
