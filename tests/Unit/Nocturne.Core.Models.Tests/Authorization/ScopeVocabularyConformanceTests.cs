@@ -160,4 +160,94 @@ public class ScopeVocabularyConformanceTests
         Scope.HealthReadExpansion.Should().HaveSameCount(Scope.HealthReadWriteExpansion,
             "health.read and health.readwrite should expand over the same data categories");
     }
+
+    /// <summary>
+    /// The security-relevant half of the two-set split: a tenant role may confer the administration
+    /// atoms, but an OAuth client must not be able to ask for them at <c>/authorize</c>. There is no
+    /// per-client ceiling that could bound such a request and no consent screen that could describe
+    /// it, so a client that could request <c>members.manage</c> would be requesting the ability to
+    /// grant itself anything.
+    /// </summary>
+    [Theory]
+    [InlineData(Scope.RolesManage)]
+    [InlineData(Scope.MembersInvite)]
+    [InlineData(Scope.MembersManage)]
+    [InlineData(Scope.TenantSettings)]
+    [InlineData(Scope.SharingManage)]
+    [InlineData(Scope.SharingGuest)]
+    [InlineData(Scope.AuditRead)]
+    [InlineData(Scope.AuditManage)]
+    public void AdministrationAtoms_AreMemberGrantableButNotOAuthRequestable(string atom)
+    {
+        Scope.PermissionAtoms.Should().Contain(atom,
+            "a tenant role has to be able to confer {0}", atom);
+
+        Scope.MemberGrantableScopes.Should().Contain(atom,
+            "membership resolution has to preserve {0} rather than dropping it", atom);
+
+        Scope.ValidRequestScopes.Should().NotContain(atom,
+            "an OAuth client must not be able to request {0} at /authorize", atom);
+
+        Scope.IsValid(atom).Should().BeFalse(
+            "{0} must not pass client scope validation", atom);
+    }
+
+    /// <summary>
+    /// A guest link is capped at read. Anything a guest grant may hold must be a read atom or the
+    /// read alias, never a write tier or an administration atom.
+    /// </summary>
+    [Fact]
+    public void AllowedGuestScopes_GrantNoWriteOrAdministrationAuthority()
+    {
+        Scope.AllowedGuestScopes.Should().NotBeEmpty();
+
+        foreach (var atom in Scope.AllowedGuestScopes)
+        {
+            Scope.Satisfies(atom, Scope.GlucoseReadWrite).Should().BeFalse(
+                "guest atom {0} must not confer write authority", atom);
+            Scope.Satisfies(atom, Scope.MembersManage).Should().BeFalse(
+                "guest atom {0} must not confer administration authority", atom);
+            Scope.Satisfies(atom, Scope.FullAccess).Should().BeFalse(
+                "guest atom {0} must not confer full access", atom);
+        }
+    }
+
+    /// <summary>
+    /// The public share surface is read-only for the same reason, and is reachable with no account
+    /// behind it at all.
+    /// </summary>
+    [Fact]
+    public void PublicShareScopes_GrantNoWriteOrAdministrationAuthority()
+    {
+        Scope.PublicShareScopes.Should().NotBeEmpty();
+
+        foreach (var atom in Scope.PublicShareScopes)
+        {
+            Scope.Satisfies(atom, Scope.GlucoseReadWrite).Should().BeFalse(
+                "public share atom {0} must not confer write authority", atom);
+            Scope.Satisfies(atom, Scope.MembersManage).Should().BeFalse(
+                "public share atom {0} must not confer administration authority", atom);
+        }
+    }
+
+    /// <summary>
+    /// The demo visitor's session is obtainable by anyone, so it must hold nothing that can change
+    /// who else can get in. Member management is an escalation primitive: direct and role
+    /// permissions are unioned into the effective set, so being able to edit either is being able
+    /// to confer <see cref="Scope.FullAccess"/> on oneself.
+    /// </summary>
+    [Theory]
+    [InlineData(Scope.MembersManage)]
+    [InlineData(Scope.MembersInvite)]
+    [InlineData(Scope.RolesManage)]
+    [InlineData(Scope.SharingManage)]
+    [InlineData(Scope.AuditRead)]
+    [InlineData(Scope.FullAccess)]
+    public void DemoVisitorPermissions_HoldNoEscalationPrimitive(string forbidden)
+    {
+        Scope.DemoVisitorPermissions.Should().NotBeEmpty();
+
+        Scope.Satisfies(Scope.DemoVisitorPermissions, forbidden).Should().BeFalse(
+            "anyone can obtain the demo visitor session, so it must not satisfy {0}", forbidden);
+    }
 }
