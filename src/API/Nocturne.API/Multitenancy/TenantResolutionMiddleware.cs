@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
 
@@ -229,8 +230,8 @@ public class TenantResolutionMiddleware
             }
 
             tenantAccessor.SetTenant(shareTenant);
-            context.Items["TenantContext"] = shareTenant;
-            context.Items["ShareAccess"] = true;
+            context.SetTenantContext(shareTenant);
+            context.SetShareAccess();
             // Mark the share before pinning the scoped context so the carrier is in place
             // for both the scoped-direct and the factory DbContext paths.
             context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
@@ -254,7 +255,7 @@ public class TenantResolutionMiddleware
             if (soleStatusTenant != null)
             {
                 tenantAccessor.SetTenant(soleStatusTenant);
-                context.Items["TenantContext"] = soleStatusTenant;
+                context.SetTenantContext(soleStatusTenant);
                 PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
                 await _next(context);
                 return;
@@ -298,7 +299,7 @@ public class TenantResolutionMiddleware
 
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
-            context.Items["TenantContext"] = soleTenant;
+            context.SetTenantContext(soleTenant);
             PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
@@ -328,7 +329,7 @@ public class TenantResolutionMiddleware
         }
 
         tenantAccessor.SetTenant(tenantContext);
-        context.Items["TenantContext"] = tenantContext;
+        context.SetTenantContext(tenantContext);
         PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);

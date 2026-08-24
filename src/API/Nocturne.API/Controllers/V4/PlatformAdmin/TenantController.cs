@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -61,7 +62,7 @@ public class TenantController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] CreateTenantRequest request, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var tenant = authContext?.SubjectId is { } creatorId
             ? await _tenantService.CreateAsync(request.Slug, request.DisplayName, creatorId, ct)
             : await _tenantService.CreateWithoutOwnerAsync(request.Slug, request.DisplayName, ct);
@@ -253,7 +254,7 @@ public class TenantController : ControllerBase
     /// </summary>
     private async Task<bool> IsCallerTenantOwnerAsync(Guid tenantId, CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
 
         // Instance-key / platform-admin callers bypass ownership checks —
         // they already passed [Authorize(Roles = "platform_admin")] and have

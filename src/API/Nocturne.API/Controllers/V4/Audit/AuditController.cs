@@ -11,6 +11,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Audit;
 
@@ -60,7 +61,7 @@ public class AuditController : ControllerBase
         [FromQuery] Guid? entityId = null,
         CancellationToken ct = default)
     {
-        if (!HasPermission(Scope.AuditRead))
+        if (!HttpContext.HasScope(Scope.AuditRead))
             return Forbid();
 
         limit = V4ReadLimits.ClampLimit(limit);
@@ -134,7 +135,7 @@ public class AuditController : ControllerBase
         [FromQuery] int? statusCode = null,
         CancellationToken ct = default)
     {
-        if (!HasPermission(Scope.AuditRead))
+        if (!HttpContext.HasScope(Scope.AuditRead))
             return Forbid();
 
         limit = V4ReadLimits.ClampLimit(limit);
@@ -199,7 +200,7 @@ public class AuditController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAuditConfig(CancellationToken ct)
     {
-        if (!HasPermission(Scope.AuditRead))
+        if (!HttpContext.HasScope(Scope.AuditRead))
             return Forbid();
 
         var config = await _configCache.GetConfigAsync(_tenantAccessor.TenantId, ct);
@@ -224,7 +225,7 @@ public class AuditController : ControllerBase
         [FromBody] AuditConfigDto request,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.AuditManage))
+        if (!HttpContext.HasScope(Scope.AuditManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -303,10 +304,4 @@ public class AuditController : ControllerBase
         });
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return Scope.Satisfies(grantedScopes, permission);
-    }
 }

@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 using ScopeTranslator = Nocturne.Core.Models.Authorization.ScopeTranslator;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware;
 
@@ -26,9 +27,9 @@ namespace Nocturne.API.Middleware;
 /// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
 /// </para>
 /// <para>
-/// Populates <c>HttpContext.Items["AuthContext"]</c> with an <see cref="AuthContext"/>,
-/// <c>HttpContext.Items["PermissionTrie"]</c> with a <see cref="PermissionTrie"/>,
-/// and <c>HttpContext.Items["GrantedScopes"]</c> with normalized OAuth scopes.
+/// Populates <c>HttpContext.Items[AuthContextKeys.AuthContext]</c> with an <see cref="AuthContext"/>,
+/// <c>HttpContext.Items[AuthContextKeys.PermissionTrie]</c> with a <see cref="PermissionTrie"/>,
+/// and <c>HttpContext.Items[AuthContextKeys.GrantedScopes]</c> with normalized OAuth scopes.
 /// Depends on <see cref="Multitenancy.TenantResolutionMiddleware"/> having resolved a
 /// <see cref="TenantContext"/> first. For unauthenticated requests with a resolved tenant,
 /// delegates to <see cref="PublicAccessCacheService"/> for public/read-only access.
@@ -93,10 +94,10 @@ public class AuthenticationMiddleware
             var authContext = await AuthenticateRequestAsync(context);
 
             // Set authentication context in HttpContext items
-            context.Items["AuthContext"] = authContext;
+            context.SetAuthContext(authContext);
 
             // Set tenant ID from the resolved tenant context
-            if (context.Items["TenantContext"] is TenantContext tenantCtx)
+            if (context.GetTenantContext() is { } tenantCtx)
             {
                 authContext.TenantId = tenantCtx.TenantId;
             }
@@ -107,7 +108,7 @@ public class AuthenticationMiddleware
             {
                 permissionTrie.Add(authContext.Permissions);
             }
-            context.Items["PermissionTrie"] = permissionTrie;
+            context.SetPermissionTrie(permissionTrie);
 
             // Resolve OAuth scopes from either explicit scopes (OAuth tokens) or
             // translated from legacy permissions (api-secret, access tokens, etc.)
@@ -126,7 +127,7 @@ public class AuthenticationMiddleware
             {
                 grantedScopes = new HashSet<string>();
             }
-            context.Items["GrantedScopes"] = grantedScopes;
+            context.SetGrantedScopes(grantedScopes);
 
             // Also set the legacy AuthenticationContext for backward compatibility
             context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
@@ -201,7 +202,7 @@ public class AuthenticationMiddleware
         }
 
         // Verify authenticated subject is a member of the resolved tenant
-        var resolvedAuth = context.Items["AuthContext"] as AuthContext;
+        var resolvedAuth = context.GetAuthContext();
         if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null, TenantId: not null })
         {
             // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved
@@ -235,10 +236,10 @@ public class AuthenticationMiddleware
         // ({token}.share.{baseDomain}); TenantResolutionMiddleware sets ShareAccess. The bare
         // {slug}.{baseDomain} host is login-only — an unauthenticated request there gets nothing,
         // even when the tenant's Public subject carries a read role.
-        resolvedAuth = context.Items["AuthContext"] as AuthContext;
+        resolvedAuth = context.GetAuthContext();
         if (resolvedAuth is { IsAuthenticated: false }
-            && context.Items["ShareAccess"] is true
-            && context.Items["TenantContext"] is TenantContext publicTenantCtx)
+            && context.IsShareAccess()
+            && context.GetTenantContext() is { } publicTenantCtx)
         {
             var publicAccess = await _publicAccessCacheService.GetPublicAccessAsync(publicTenantCtx.TenantId);
             if (publicAccess != null)
@@ -251,7 +252,7 @@ public class AuthenticationMiddleware
                     TenantId = publicTenantCtx.TenantId,
                     LimitTo24Hours = publicAccess.LimitTo24Hours,
                 };
-                context.Items["AuthContext"] = publicAuthContext;
+                context.SetAuthContext(publicAuthContext);
 
                 // The Public subject's effective permissions are stored in the OAuth scope
                 // vocabulary (glucose.read, ...) — the same vocabulary member grants use — so
@@ -266,7 +267,7 @@ public class AuthenticationMiddleware
                 var publicScopes = Scope.PublicShareScopes
                     .Where(scope => Scope.Satisfies(resolvedGrants, scope))
                     .ToHashSet();
-                context.Items["GrantedScopes"] = (IReadOnlySet<string>)publicScopes;
+                context.SetGrantedScopes((IReadOnlySet<string>)publicScopes);
 
                 // Legacy (HasPermissions-gated) endpoints check the trie, so derive it from the
                 // narrowed scopes; a share that resolves to zero scopes gets an empty trie and
@@ -278,7 +279,7 @@ public class AuthenticationMiddleware
                 var publicPermissionTrie = new PermissionTrie();
                 publicPermissionTrie.Add(ScopeTranslator.ToPermissions(publicScopes));
                 publicPermissionTrie.Add(publicScopes);
-                context.Items["PermissionTrie"] = publicPermissionTrie;
+                context.SetPermissionTrie(publicPermissionTrie);
 
                 // Carry the share's visible categories and history window to the DbContext
                 // factory for the share RLS policies. Resolved here (post-auth); a share whose
@@ -308,7 +309,7 @@ public class AuthenticationMiddleware
         // Public share host ({token}.share.{baseDomain}): never honor credentials. The share host
         // serves only the anonymous read-only view, so a logged-in owner's session cookie must not
         // authenticate the request — the host can never resolve to more than public read access.
-        if (context.Items["ShareAccess"] is true)
+        if (context.IsShareAccess())
         {
             return AuthContext.Unauthenticated();
         }
@@ -419,9 +420,9 @@ public class AuthenticationMiddleware
             Email = resolvedAuth.Email,
         };
 
-        context.Items["AuthContext"] = identityOnly;
-        context.Items["PermissionTrie"] = new PermissionTrie();
-        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
+        context.SetAuthContext(identityOnly);
+        context.SetPermissionTrie(new PermissionTrie());
+        context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
         context.Items["AuthenticationContext"] = MapToLegacyContext(identityOnly);
 
         // The principal built earlier carries the subject's roles, its platform-admin role and a
@@ -453,9 +454,9 @@ public class AuthenticationMiddleware
     private static void SetUnauthenticated(HttpContext context)
     {
         var authContext = AuthContext.Unauthenticated();
-        context.Items["AuthContext"] = authContext;
-        context.Items["PermissionTrie"] = new PermissionTrie();
-        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
+        context.SetAuthContext(authContext);
+        context.SetPermissionTrie(new PermissionTrie());
+        context.SetGrantedScopes((IReadOnlySet<string>)new HashSet<string>());
         context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
 
         // Clearing Items is not enough: this method is also the tenant-membership rejection

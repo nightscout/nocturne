@@ -21,6 +21,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -106,7 +107,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);
         if (shareAccess)
         {
-            ctx.Items["ShareAccess"] = true;
+            ctx.SetShareAccess();
             // TenantResolutionMiddleware marks the share upstream; simulate that here so the
             // post-auth CSV set-point is exercised.
             ctx.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
@@ -121,7 +122,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var auth = ctx.Items["AuthContext"] as AuthContext;
+        var auth = ctx.GetAuthContext();
         auth!.IsAuthenticated.Should().BeFalse();
         auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId);
         // The post-auth CSV set-point ran: the share carries a (possibly empty) visible-categories
@@ -142,7 +143,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var scopes = ctx.GetGrantedScopes();
         scopes.Should().NotBeNull();
         scopes!.Should().Contain(Scope.GlucoseRead,
             "the seeded Public membership grants glucose.read via the Clinician role");
@@ -164,7 +165,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var scopes = ctx.GetGrantedScopes();
         scopes.Should().NotBeNull();
         scopes.Should().BeSubsetOf(Scope.PublicShareScopes,
             "a superuser grant on the Public membership must degrade to public read access");
@@ -190,12 +191,12 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var scopes = ctx.GetGrantedScopes();
         scopes.Should().NotBeNull();
         scopes.Should().BeSubsetOf(Scope.PublicShareScopes);
         scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
 
-        var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
+        var trie = ctx.GetPermissionTrie();
         trie!.Check(Scope.MembersManage).Should().BeFalse();
         trie.Check(Scope.AuditRead).Should().BeFalse();
     }
@@ -212,9 +213,9 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var scopes = ctx.GetGrantedScopes();
         scopes.Should().BeEquivalentTo([Scope.HeartRateRead, Scope.StepCountRead]);
-        var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
+        var trie = ctx.GetPermissionTrie();
         trie!.IsEmpty.Should().BeFalse();
     }
 
@@ -230,7 +231,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var scopes = ctx.GetGrantedScopes();
         scopes.Should().Contain(Scope.GlucoseRead);
         ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv
             .Should().Contain("glucose.read");
@@ -282,7 +283,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build().InvokeAsync(ctx);
 
-        var auth = ctx.Items["AuthContext"] as AuthContext;
+        var auth = ctx.GetAuthContext();
         auth!.IsAuthenticated.Should().BeFalse();
         auth.SubjectId.Should().BeNull("the bare host must not grant the Public subject's access");
     }
@@ -294,7 +295,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build(new AlwaysAuthHandler()).InvokeAsync(ctx);
 
-        var auth = ctx.Items["AuthContext"] as AuthContext;
+        var auth = ctx.GetAuthContext();
         auth!.IsAuthenticated.Should().BeFalse("the share host must never honor credentials");
         auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId);
     }
@@ -315,7 +316,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build(scopeFactory, handler).InvokeAsync(ctx);
 
-        var auth = ctx.Items["AuthContext"] as AuthContext;
+        var auth = ctx.GetAuthContext();
         auth!.IsAuthenticated.Should().BeFalse(
             "a valid session cookie must not authenticate on a share host");
         auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId,
@@ -338,7 +339,7 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         await Build(scopeFactory, handler).InvokeAsync(ctx);
 
-        var auth = ctx.Items["AuthContext"] as AuthContext;
+        var auth = ctx.GetAuthContext();
         auth!.IsAuthenticated.Should().BeTrue();
         auth.SubjectId.Should().Be(TestDatabaseSeeder.TestSubjectId);
     }

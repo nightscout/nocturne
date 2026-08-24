@@ -65,7 +65,7 @@ public class ReadAccessAuditFilter : IAsyncResultFilter
                 return;
 
             // Resolve tenant
-            if (httpContext.Items["TenantContext"] is not TenantContext tenantContext)
+            if (httpContext.GetTenantContext() is not { } tenantContext)
                 return;
 
             // Check if read audit is enabled for this tenant

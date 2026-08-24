@@ -47,7 +47,7 @@ public class MyTenantsController : ControllerBase
     [ProducesResponseType(typeof(List<TenantDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyTenants(CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -61,7 +61,7 @@ public class MyTenantsController : ControllerBase
     [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<TenantOverviewResponse>> GetOverview(CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -92,7 +92,7 @@ public class MyTenantsController : ControllerBase
         if (!_config.AllowSelfServiceCreation)
             return Forbid();
 
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 

@@ -9,6 +9,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -36,13 +37,13 @@ public class MemberScopeMiddlewareTests
         }
 
         // Assert: should NOT have superuser wildcard
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain("treatments.readwrite");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:read").Should().BeTrue();
         permissionTrie.Check("api:treatments:read").Should().BeFalse();
@@ -68,11 +69,11 @@ public class MemberScopeMiddlewareTests
         }
 
         // Assert: full access normalizes to all scopes
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("*").Should().BeTrue();
     }
@@ -93,11 +94,11 @@ public class MemberScopeMiddlewareTests
         await middleware.InvokeAsync(context);
 
         // Assert: always superuser regardless of scopes
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("*").Should().BeTrue();
     }
@@ -119,11 +120,11 @@ public class MemberScopeMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("*").Should().BeTrue();
     }
@@ -145,14 +146,14 @@ public class MemberScopeMiddlewareTests
         }
 
         // Assert
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().Contain("treatments.readwrite");
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain("therapy.read");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:read").Should().BeTrue();
         permissionTrie.Check("api:treatments:read").Should().BeTrue();
@@ -203,12 +204,12 @@ public class MemberScopeMiddlewareTests
         await middleware.InvokeAsync(context);
 
         // Assert — a non-empty wildcard trie so the HasPermissions policy succeeds.
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.IsEmpty.Should().BeFalse();
         permissionTrie.Check("*").Should().BeTrue();
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes!.Should().Contain("*");
     }
@@ -233,14 +234,14 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.GlucoseRead);
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
         grantedScopes.Should().NotContain(Scope.TherapyReadWrite);
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:read").Should().BeTrue();
         permissionTrie.Check("api:entries:create").Should().BeFalse();
@@ -267,11 +268,11 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain("*");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("*").Should().BeTrue();
     }
@@ -296,7 +297,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
@@ -322,7 +323,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.DeviceNotify);
         grantedScopes.Should().Contain(Scope.DeviceActuate);
@@ -356,7 +357,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.DeviceNotify);
         grantedScopes.Should().Contain(Scope.DeviceActuate);
@@ -385,7 +386,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEmpty();
     }
@@ -417,7 +418,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotBeEmpty();
 
@@ -460,7 +461,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.GlucoseRead);
         grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
@@ -488,7 +489,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:read").Should().BeTrue();
         permissionTrie.Check("api:treatments:create").Should().BeTrue();
@@ -515,8 +516,8 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        (context.Items["GrantedScopes"] as IReadOnlySet<string>).Should().BeEmpty();
-        (context.Items["PermissionTrie"] as PermissionTrie)!.IsEmpty.Should().BeTrue();
+        (context.GetGrantedScopes()).Should().BeEmpty();
+        (context.GetPermissionTrie())!.IsEmpty.Should().BeTrue();
     }
 
     [Theory]
@@ -543,7 +544,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().BeEquivalentTo([Scope.GlucoseReadWrite]);
         Scope.Satisfies(grantedScopes!, Scope.MembersManage)
             .Should().BeFalse();
@@ -570,11 +571,11 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().BeEquivalentTo([Scope.TreatmentsRead]);
         grantedScopes.Should().NotContain(Scope.TreatmentsReadWrite);
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie!.Check("api:treatments:read").Should().BeTrue();
         permissionTrie.Check("api:treatments:create").Should().BeFalse();
     }
@@ -600,7 +601,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        (context.Items["GrantedScopes"] as IReadOnlySet<string>)
+        (context.GetGrantedScopes())
             .Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
@@ -655,11 +656,11 @@ public class MemberScopeMiddlewareTests
 
         // The Viewer's own scopes (glucose.read, reports.read) are not in the grant either, so the
         // intersection is empty.
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().BeEmpty();
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:treatments:create").Should().BeFalse();
     }
@@ -688,7 +689,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotContain(Scope.FullAccess);
         grantedScopes.Should().Contain(Scope.GlucoseReadWrite);
@@ -751,13 +752,13 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().NotContain(Scope.GlucoseReadWrite);
         grantedScopes.Should().NotContain(Scope.DevicesReadWrite);
         grantedScopes.Should().Contain(Scope.GlucoseRead, "reads are retained");
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:create").Should().BeFalse();
         permissionTrie.Check("api:entries:read").Should().BeTrue();
@@ -784,11 +785,11 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.HealthReadWriteExpansion);
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:entries:create").Should().BeTrue();
         permissionTrie.Check("api:treatments:create").Should().BeTrue();
@@ -826,11 +827,11 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        var grantedScopes = context.GetGrantedScopes();
         grantedScopes.Should().NotBeNull();
         grantedScopes.Should().Contain(Scope.TreatmentsReadWrite);
 
-        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        var permissionTrie = context.GetPermissionTrie();
         permissionTrie.Should().NotBeNull();
         permissionTrie!.Check("api:treatments:create").Should().BeTrue(
             "HasPermissionsHandler succeeds only on a non-empty trie");
@@ -857,7 +858,7 @@ public class MemberScopeMiddlewareTests
             await middleware.InvokeAsync(context);
         }
 
-        return (context.Items["GrantedScopes"] as IReadOnlySet<string>)!;
+        return (context.GetGrantedScopes())!;
     }
 
     /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>

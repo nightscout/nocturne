@@ -78,7 +78,7 @@ public class MembershipRequestController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPendingRequests(CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -101,7 +101,7 @@ public class MembershipRequestController(
         [FromBody] ApproveMembershipRequestRequest request,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -129,7 +129,7 @@ public class MembershipRequestController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DenyRequest(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = tenantAccessor.TenantId;
@@ -156,7 +156,7 @@ public class MembershipRequestController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMembershipRequestSettings(CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var allow = await membershipRequestService.GetAllowRequestsAsync(tenantAccessor.TenantId, ct);
@@ -175,7 +175,7 @@ public class MembershipRequestController(
         [FromBody] UpdateMembershipRequestSettingsRequest request,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var allow = await membershipRequestService.SetAllowRequestsAsync(
@@ -183,12 +183,6 @@ public class MembershipRequestController(
         return Ok(new MembershipRequestSettingsDto(allow));
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return Scope.Satisfies(grantedScopes, permission);
-    }
 }
 
 public record CreateMembershipRequestRequest(string? Message);

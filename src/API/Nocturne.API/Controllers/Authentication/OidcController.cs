@@ -122,7 +122,7 @@ public class OidcController : ControllerBase
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var authRequest = await _authService.GenerateAuthorizationUrlAsync(provider, returnUrl, tenantSlug: tenantSlug);
 
             // Store state in a secure cookie for verification on callback
@@ -206,7 +206,7 @@ public class OidcController : ControllerBase
         // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
-        var currentTenantId = (HttpContext.Items["TenantContext"] as TenantContext)?.TenantId;
+        var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
 
         // Handle the callback
         var result = await _authService.HandleCallbackAsync(
@@ -292,7 +292,7 @@ public class OidcController : ControllerBase
 
         try
         {
-            var tenantSlug = (HttpContext.Items["TenantContext"] as TenantContext)?.Slug;
+            var tenantSlug = (HttpContext.GetTenantContext())?.Slug;
             var req = await _authService.GenerateLinkAuthorizationUrlAsync(
                 provider, auth.SubjectId.Value, returnUrl, tenantSlug);
             SetLinkStateCookie(req.State, req.ExpiresAt);

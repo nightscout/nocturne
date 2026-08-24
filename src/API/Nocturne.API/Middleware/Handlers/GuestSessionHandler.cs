@@ -3,6 +3,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -73,7 +74,7 @@ public class GuestSessionHandler : IAuthHandler
 
         // A guest grant belongs to exactly one tenant, so a session cannot be validated
         // without a resolved tenant to validate it against.
-        if (context.Items["TenantContext"] is not TenantContext tenantCtx)
+        if (context.GetTenantContext() is not { } tenantCtx)
         {
             _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant, clearing cookie", grantId);
             ClearGuestSessionCookie(context);
