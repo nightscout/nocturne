@@ -69,6 +69,37 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     }
 
     /// <summary>
+    /// An explicit range is answered as asked, resume points and all: it is the shape a manual
+    /// re-import of one window sends, and a bound widened back to the watermark re-crawls
+    /// everything between — the whole source, for a family that has stored nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(SyncDataType.Boluses, "treatments")]
+    [InlineData(SyncDataType.DeviceStatus, "devicestatus")]
+    [InlineData(SyncDataType.Activity, "activity")]
+    public async Task SyncDataAsync_WhenGivenAnExplicitRange_AsksForItAsGiven(
+        SyncDataType dataType, string collection)
+    {
+        var askedFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var watermark = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new CollectingHandler();
+        var service = NewService(handler, watermarks: watermark);
+
+        await service.SyncDataAsync(
+            new SyncRequest
+            {
+                From = askedFrom,
+                To = new DateTime(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc),
+                DataTypes = [dataType],
+            },
+            NewConfig(),
+            CancellationToken.None);
+
+        handler.CrawlOf(collection).Should()
+            .Contain(LowerBound(askedFrom), "the caller bounded the range at both ends");
+    }
+
+    /// <summary>
     /// A Nightscout instance is a full data export, so with no treatments stored the initial
     /// backfill has no lower bound at all — and the glucose cursor <c>request.From</c> carries on a
     /// background run must not narrow it to one. A treatments crawl that failed on the first sync
