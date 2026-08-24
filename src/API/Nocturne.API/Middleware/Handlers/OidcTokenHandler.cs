@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 
@@ -57,8 +58,7 @@ public class OidcTokenHandler : IAuthHandler
     {
         var token = context.Request.GetAuthorizationCredential();
 
-        // Must be a JWT (has 3 parts separated by dots)
-        if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)
+        if (!TokenFormat.IsJwt(token))
         {
             return AuthResult.Skip();
         }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
@@ -100,8 +101,7 @@ public class OverviewHub : Hub
             }
             else if (!string.IsNullOrEmpty(request.Token))
             {
-                // JWTs are three-segment; legacy opaque tokens are not (mirrors HubTokenAuthorizer).
-                if (request.Token.Count(c => c == '.') != 2)
+                if (!TokenFormat.IsJwt(request.Token))
                 {
                     return OverviewAuthorizeResponse.Failed(
                         "Opaque access tokens cannot be authenticated in-band here; present one on "

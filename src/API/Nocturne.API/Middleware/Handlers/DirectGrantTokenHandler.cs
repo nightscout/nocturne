@@ -59,7 +59,8 @@ public class DirectGrantTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        // Skip JWT-formatted tokens (base64url-encoded JSON starts with eyJ)
+        // Deliberately looser than TokenFormat.IsJwt: a malformed JWT still belongs to the JWT
+        // handlers, and no noc_ token can open with a Base64-URL JSON header.
         if (token.StartsWith("eyJ", StringComparison.Ordinal))
         {
             return AuthResult.Skip();

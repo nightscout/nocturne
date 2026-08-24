@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 
@@ -361,7 +362,7 @@ public class OAuthTokenService : IOAuthTokenService
     /// </summary>
     private async Task<bool> RevokeAsAccessTokenAsync(string token, CancellationToken ct)
     {
-        if (token.Count(c => c == '.') != 2)
+        if (!TokenFormat.IsJwt(token))
         {
             return false;
         }

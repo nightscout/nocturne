@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 
@@ -52,8 +53,7 @@ public class OAuthAccessTokenHandler : IAuthHandler
     {
         var token = ExtractToken(context);
 
-        // Must be a JWT (3 dot-separated parts)
-        if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)
+        if (!TokenFormat.IsJwt(token))
         {
             return AuthResult.Skip();
         }

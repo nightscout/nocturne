@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
@@ -104,9 +105,9 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             return await AuthorizeDirectGrantAsync(token, connectionTenantId.Value, requiredScope);
         }
 
-        // JWTs are three-segment; legacy opaque tokens are not. Mirrors OAuthAccessTokenHandler:
-        // once a token reads as a JWT it is decided on the JWT path only.
-        if (token.Count(c => c == '.') == 2)
+        // Once a token reads as a JWT it is decided on the JWT path only, as in
+        // OAuthAccessTokenHandler.
+        if (TokenFormat.IsJwt(token))
         {
             return await AuthorizeJwtAsync(token, connectionTenantId.Value, requiredScope);
         }

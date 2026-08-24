@@ -952,7 +952,8 @@ public class OAuthController : ControllerBase
             return Ok(new TokenIntrospectionResponse { Active = false });
         }
 
-        // Try as JWT access token
+        // Deliberately looser than TokenFormat.IsJwt: introspection reports on whatever it is
+        // handed, so a malformed JWT is answered here rather than looked up as an opaque token.
         if (token.Contains('.'))
         {
             var validation = _jwtService.ValidateAccessToken(token);
