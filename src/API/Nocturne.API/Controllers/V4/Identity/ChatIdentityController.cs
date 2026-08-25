@@ -41,28 +41,49 @@ public class ChatIdentityController : ControllerBase
         _tenantAccessor = tenantAccessor;
     }
 
+    /// <summary>The authenticated subject, or <c>null</c> for a credential that carries none.</summary>
+    private Guid? SubjectId => (HttpContext.Items["AuthContext"] as AuthContext)?.SubjectId;
+
     /// <summary>
     /// Resolves the authenticated user's subject ID or throws if unavailable.
     /// </summary>
     /// <returns>The authenticated subject's <see cref="Guid"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when <see cref="AuthContext"/> is missing or has no subject ID.</exception>
     private Guid GetUserIdOrThrow()
-    {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext
-            ?? throw new InvalidOperationException("AuthContext not available");
-        return authContext.SubjectId
-            ?? throw new InvalidOperationException("Authenticated request has no subject id");
-    }
+        => SubjectId ?? throw new InvalidOperationException(
+            "Authenticated request has no subject id");
 
     /// <summary>List active chat identity links for the current tenant.</summary>
+    /// <remarks>
+    /// The list stays tenant-scoped, so a chat account linked to several tenants shows a
+    /// non-default row here while its default sits on a row this tenant cannot see. Naming that
+    /// row's label closes the gap without widening the list, and it is filled in only for the
+    /// caller's own links: a co-member's chat account may be linked to tenants the caller has no
+    /// part in, and its label is that tenant's slug.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<ChatIdentityLinkResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<ChatIdentityLinkResponse>>> GetLinks(CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
+        var subjectId = SubjectId;
         var links = await _service.GetByTenantAsync(tenantId, ct);
-        return Ok(links.Select(MapResponse).ToList());
+
+        var responses = new List<ChatIdentityLinkResponse>(links.Count);
+        foreach (var link in links)
+        {
+            var response = MapResponse(link);
+            if (link.NocturneUserId == subjectId)
+            {
+                var holder = await _service.GetDefaultAsync(link.Platform, link.PlatformUserId, ct);
+                response.DefaultLabel = holder?.Label;
+            }
+
+            responses.Add(response);
+        }
+
+        return Ok(responses);
     }
 
     /// <summary>Claim a pending link token after /connect slash command auth.</summary>
@@ -206,6 +227,14 @@ public class ChatIdentityLinkResponse
     public string Label { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// Label of the link a bare bot invocation from this chat account resolves to, which may be a
+    /// link in another tenant. Null when the chat account has no default, and on links belonging to
+    /// another subject.
+    /// </summary>
+    public string? DefaultLabel { get; set; }
+
     public string DisplayUnit { get; set; } = "mg/dL";
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
