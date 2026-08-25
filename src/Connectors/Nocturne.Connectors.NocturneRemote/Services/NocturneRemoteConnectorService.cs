@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -16,7 +17,6 @@ namespace Nocturne.Connectors.NocturneRemote.Services;
 public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemoteConnectorConfiguration>
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private NocturneRemoteConnectorConfiguration _config;
     private string? _resolvedBaseUrl;
     private Dictionary<string, string>? _authHeaders;
 
@@ -24,86 +24,140 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         HttpClient httpClient,
         IConnectorServerResolver<NocturneRemoteConnectorConfiguration> serverResolver,
         ILogger<NocturneRemoteConnectorService> logger,
-        IConnectorRegistration<NocturneRemoteConnectorConfiguration> registration,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null
     )
         : base(httpClient, serverResolver, logger, publisher)
     {
-        _config = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
     }
 
     protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
     public override string ServiceName => "Nocturne Remote";
 
+    /// <summary>
+    ///     Legacy no-config overload, carrying no configuration to authenticate against. This
+    ///     connector resolves and checks the run's credential in
+    ///     <see cref="PerformSyncInternalAsync"/>, where both entry points supply their own.
+    /// </summary>
+    public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
 
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // Legacy no-config overload; uses the injected startup config.
-        return await AuthenticateWithConfigAsync(_config);
-    }
-
-    private async Task<bool> AuthenticateWithConfigAsync(NocturneRemoteConnectorConfiguration config)
+    /// <summary>
+    ///     Resolves the run's base URL and bearer header, then asks the remote whether it accepts the
+    ///     credential. Answers with the result that ends the run, or null for a run that may proceed.
+    /// </summary>
+    /// <remarks>
+    ///     The question is put to a data endpoint, so of the answers it can get only a 401 is this
+    ///     connector's to report: a 403 is a grant the tenant scoped deliberately, and any other
+    ///     status is that endpoint being unwell. Failing the run on either sends the tenant to
+    ///     re-authorize a credential that was never the problem and costs them every other type; both
+    ///     are left to the per-type crawls, which reach the same endpoint under the tenant's retry
+    ///     budget and scope the failure to the types that asked for it.
+    ///     <para>
+    ///     A remote that answers nothing at all is neither, and is not per-endpoint either: every
+    ///     enabled type reads the same silent host, so there is nothing for a crawl to scope and each
+    ///     of them would spend the client's whole timeout rediscovering it. That ends the run here
+    ///     instead, under its own message rather than the credential's.
+    ///     </para>
+    ///     <para>
+    ///     One attempt, not the tenant's budget: a 401 is terminal in
+    ///     <see cref="BaseConnectorService{TConfig}.ExecuteWithRetryAsync{T}"/> and never retried, and
+    ///     every other answer proceeds regardless, so a second attempt cannot change what this
+    ///     returns — it can only spend another request on a remote already known to be unwell.
+    ///     </para>
+    /// </remarks>
+    private async Task<SyncResult?> AuthenticateWithConfigAsync(
+        NocturneRemoteConnectorConfiguration config,
+        CancellationToken cancellationToken)
     {
         ResolveConfiguration(config);
 
+        // Captured as in FetchOrFailAsync, and for the same reason: the retry loop answers with
+        // nothing rather than with the status it ended on.
+        HttpStatusCode? answered = null;
+
         try
         {
-            var url = BuildAbsoluteUrl($"{NocturneRemoteConstants.SensorGlucose}?limit=1");
-            var response = await GetWithHeadersAsync(url, _authHeaders);
+            await ExecuteWithRetryAsync<HttpStatusCode>(
+                async () =>
+                {
+                    var response = await GetWithHeadersAsync(
+                        BuildAbsoluteUrl($"{NocturneRemoteConstants.SensorGlucose}?limit=1"),
+                        _authHeaders,
+                        cancellationToken);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync();
-                _logger.LogError(
-                    "[{ConnectorSource}] Auth check returned HTTP {StatusCode}: {Body}",
-                    ConnectorSource,
-                    (int)response.StatusCode,
-                    body);
-                TrackFailedRequest($"Auth check failed: HTTP {(int)response.StatusCode}");
-                return false;
-            }
+                    answered = response.StatusCode;
 
-            TrackSuccessfulRequest();
-            _logger.LogInformation(
-                "[{ConnectorSource}] Successfully authenticated with remote Nocturne instance at {Url}",
-                ConnectorSource,
-                _resolvedBaseUrl);
-            return true;
+                    if (!response.IsSuccessStatusCode)
+                        throw new HttpRequestException(
+                            $"HTTP {(int)response.StatusCode} {response.StatusCode}: " +
+                            await ReadFailureBodyAsync(response, config, cancellationToken),
+                            null,
+                            response.StatusCode);
+
+                    return response.StatusCode;
+                },
+                _retryDelayStrategy,
+                maxRetries: 1,
+                operationName: "auth check",
+                cancellationToken: cancellationToken);
         }
-        catch (Exception ex)
+        catch (HttpRequestException)
         {
-            TrackFailedRequest($"Authentication failed: {ex.Message}");
-            _logger.LogError(ex,
-                "[{ConnectorSource}] Failed to connect to remote Nocturne instance at {Url}",
-                ConnectorSource,
-                _resolvedBaseUrl);
-            return false;
+            // A status the retry loop re-threw; `answered` holds it.
         }
+        // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
+        // the caller's own token means the run was withdrawn, and a withdrawn run has no outcome to
+        // report; the rest is the remote falling silent.
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return UnansweredResult();
+        }
+
+        if (answered != HttpStatusCode.Unauthorized)
+            return null;
+
+        _logger.LogError(
+            "[{ConnectorSource}] The remote Nocturne instance at {Url} rejected the connector's credential",
+            ConnectorSource,
+            _resolvedBaseUrl);
+        return AuthenticationFailedResult();
     }
 
-    public override async Task<SyncResult> SyncDataAsync(
-        NocturneRemoteConnectorConfiguration config,
-        CancellationToken cancellationToken = default,
-        DateTime? since = null,
-        ISyncProgressReporter? progressReporter = null)
+    /// <summary>
+    ///     The result of a run whose remote accepted the connection and then said nothing. Carries
+    ///     the same two fields as
+    ///     <see cref="BaseConnectorService{TConfig}.AuthenticationFailedResult"/> and for the same
+    ///     reasons, but must not borrow its wording: the credential is not what failed.
+    /// </summary>
+    private SyncResult UnansweredResult()
     {
-        // Prime _config with the per-tenant config before base calls AuthenticateAsync(),
-        // which delegates to AuthenticateWithConfigAsync(_config).
-        _config = config;
-        return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
-    }
+        var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer";
+        var now = DateTimeOffset.UtcNow;
 
-    protected override Task<bool> EnsureAuthenticatedAsync(
-        NocturneRemoteConnectorConfiguration config,
-        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config);
+        _logger.LogError("[{ConnectorSource}] {Detail}", ConnectorSource, unanswered);
+
+        return new SyncResult
+        {
+            Success = false,
+            StartTime = now,
+            EndTime = now,
+            Message = unanswered,
+            Errors = { unanswered },
+        };
+    }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         NocturneRemoteConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
+        // Both entry points converge here, and this is the only one of them holding the run's own
+        // configuration — the background one authenticates through the parameterless overload above,
+        // which has none.
+        if (await AuthenticateWithConfigAsync(config, cancellationToken) is { } refused)
+            return refused;
+
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
         if (!request.DataTypes.Any())

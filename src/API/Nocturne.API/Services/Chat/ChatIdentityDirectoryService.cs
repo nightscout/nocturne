@@ -26,6 +26,12 @@ namespace Nocturne.API.Services.Chat;
 /// (<c>IsDefault = true</c>). Subsequent calls to <see cref="SetDefaultAsync"/> clear the
 /// previous default and set the new one atomically inside a user-initiated transaction wrapped
 /// by the Npgsql retry execution strategy, enabling safe replay on transient failures.
+/// <see cref="RevokeAsync"/> closes the same loop: a platform user left holding a single link has
+/// no choice to make, so that survivor becomes the default — the same unambiguous call the
+/// first-link rule makes, and what stops deleting the default from leaving none. Two or more
+/// survivors is a real choice between tenants, which the bot asks the user to make rather than
+/// guessing for them. That promotion is unscoped because one link per tenant per platform user
+/// puts every survivor in a different tenant from the revoked link.
 /// </para>
 /// <para>
 /// Each method opens its own <see cref="Microsoft.EntityFrameworkCore.DbContext"/> from the
@@ -59,29 +65,14 @@ public sealed class ChatIdentityDirectoryService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Resolves a single directory entry by platform user and optional label, falling back to the default link.</summary>
-    public async Task<ChatIdentityDirectoryEntry?> GetByPlatformAndUserAsync(
-        string platform, string platformUserId, string? labelArg, CancellationToken ct)
-    {
-        var candidates = await GetCandidatesAsync(platform, platformUserId, ct);
-        if (candidates.Count == 0)
-        {
-            return null;
-        }
-
-        if (labelArg is not null)
-        {
-            return candidates.FirstOrDefault(c => c.Label == labelArg);
-        }
-
-        if (candidates.Count == 1)
-        {
-            return candidates[0];
-        }
-
-        var defaults = candidates.Where(c => c.IsDefault).ToList();
-        return defaults.Count == 1 ? defaults[0] : null;
-    }
+    /// <summary>
+    /// Returns the active entry a bare bot invocation resolves to for a platform user, or
+    /// <c>null</c> when that platform user has no default. The entry may belong to any tenant.
+    /// </summary>
+    public async Task<ChatIdentityDirectoryEntry?> GetDefaultAsync(
+        string platform, string platformUserId, CancellationToken ct)
+        => (await GetCandidatesAsync(platform, platformUserId, ct))
+            .FirstOrDefault(d => d.IsDefault);
 
     /// <summary>Returns all active directory entries for a tenant.</summary>
     public async Task<IReadOnlyList<ChatIdentityDirectoryEntry>> GetByTenantAsync(
@@ -261,7 +252,10 @@ public sealed class ChatIdentityDirectoryService(
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Permanently deletes a directory link.</summary>
+    /// <summary>
+    /// Permanently deletes a directory link, promoting the platform user's sole surviving link to
+    /// default.
+    /// </summary>
     /// <param name="linkId">The directory entry to delete.</param>
     /// <param name="tenantScope">Tenant the entry must belong to, or <c>null</c> for a cross-tenant caller.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -269,9 +263,29 @@ public sealed class ChatIdentityDirectoryService(
     public async Task<int> RevokeAsync(Guid linkId, Guid? tenantScope, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        return await db.ChatIdentityDirectory
+        var target = await db.ChatIdentityDirectory.AsNoTracking()
+            .Where(ScopedToId(linkId, tenantScope))
+            .FirstOrDefaultAsync(ct);
+        if (target is null)
+        {
+            return 0;
+        }
+
+        var deleted = await db.ChatIdentityDirectory
             .Where(ScopedToId(linkId, tenantScope))
             .ExecuteDeleteAsync(ct);
+        if (deleted == 0)
+        {
+            return deleted;
+        }
+
+        var survivors = await GetCandidatesAsync(target.Platform, target.PlatformUserId, ct);
+        if (survivors is [{ IsDefault: false } survivor])
+        {
+            await SetDefaultAsync(survivor.Id, tenantScope: null, ct);
+        }
+
+        return deleted;
     }
 
     /// <summary>

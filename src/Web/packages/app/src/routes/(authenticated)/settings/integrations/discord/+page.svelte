@@ -141,7 +141,7 @@
 		<Card.Header>
 			<Card.Title>Linked accounts</Card.Title>
 			<Card.Description>
-				Discord accounts linked to <strong>this Nocturne instance</strong>. Each one can be
+				Discord accounts linked to <strong>this Nocturne account</strong>. Each one can be
 				queried from Discord with <code>/bg &lt;label&gt;</code>.
 			</Card.Description>
 		</Card.Header>
@@ -206,6 +206,12 @@
 												· Discord <code>{link.platformUserId}</code>
 											{/if}
 										</div>
+										{#if !link.isDefault && link.defaultLabel}
+											<div class="text-xs text-muted-foreground truncate">
+												<code>/bg</code> without a label goes to <code>{link.defaultLabel}</code> on
+												another Nocturne account.
+											</div>
+										{/if}
 									</div>
 								</div>
 								<div class="flex gap-1 shrink-0">

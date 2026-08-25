@@ -38,6 +38,11 @@ public sealed class ChatIdentityService(
         Guid tenantId, CancellationToken ct)
         => directory.GetByTenantAsync(tenantId, ct);
 
+    /// <inheritdoc cref="ChatIdentityDirectoryService.GetDefaultAsync"/>
+    public Task<ChatIdentityDirectoryEntry?> GetDefaultAsync(
+        string platform, string platformUserId, CancellationToken ct)
+        => directory.GetDefaultAsync(platform, platformUserId, ct);
+
     /// <summary>Consumes a pending link token and creates a directory entry linking the chat platform user to the tenant.</summary>
     public async Task<ChatIdentityDirectoryEntry> ClaimPendingLinkAsync(
         Guid tenantId, Guid userId, string token, CancellationToken ct)

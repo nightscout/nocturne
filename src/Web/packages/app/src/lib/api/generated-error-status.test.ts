@@ -11,7 +11,9 @@ import { remoteErrorMessage } from "./remote-error";
 import { TotpSetupFailure } from "$api-clients";
 import {
   describeTotpSetupError,
+  describeTotpSetupStartError,
   TOTP_SETUP_FALLBACK,
+  TOTP_SETUP_START_FALLBACK,
 } from "../components/account/totp-errors";
 
 /**
@@ -285,5 +287,32 @@ describe("a refused authenticator setup", () => {
 
     expect(describeAsThePageDoes(crossed)).toBe(TOTP_SETUP_FALLBACK);
     expect(TOTP_SETUP_FALLBACK.trim()).not.toBe("");
+  });
+});
+
+describe("an authenticator setup that was refused before it started", () => {
+  it("says which primary factor to add rather than naming a server error", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    // What the endpoint sent before it declared a 400 response type.
+    expect(describeTotpSetupStartError(crossed)).not.toContain("error occurred");
+    expect(describeTotpSetupStartError(crossed)).toContain("passkey");
+  });
+
+  it("does not tell someone to check a code they were never asked for", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    expect(describeTotpSetupStartError(crossed)).not.toBe(TOTP_SETUP_FALLBACK);
+  });
+
+  it("falls back on its own wording, not the verify step's", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeTotpSetupStartError(crossed)).toBe(TOTP_SETUP_START_FALLBACK);
+    expect(TOTP_SETUP_START_FALLBACK.trim()).not.toBe("");
   });
 });

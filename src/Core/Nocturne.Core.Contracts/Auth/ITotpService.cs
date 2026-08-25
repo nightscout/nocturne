@@ -75,8 +75,8 @@ public record TotpLoginResult(Guid SubjectId, string Username, string DisplayNam
 public record TotpCredentialInfo(Guid Id, string? Label, DateTime CreatedAt, DateTime? LastUsedAt);
 
 /// <summary>
-/// Why a TOTP setup attempt was refused. The wording belongs to whichever client is asking, so
-/// the service names the check that refused and nothing else.
+/// Why enrolling an authenticator was refused, at either end of the flow. The wording belongs to
+/// whichever client is asking, so the server names the check that refused and nothing else.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TotpSetupFailure>))]
 public enum TotpSetupFailure
@@ -89,10 +89,23 @@ public enum TotpSetupFailure
 
     /// <summary>The challenge token was readable but past its expiry.</summary>
     ChallengeExpired,
+
+    /// <summary>
+    /// No passkey or linked provider is configured, so TOTP would be the only factor. Raised when
+    /// setup starts, not when it completes.
+    /// </summary>
+    NoPrimaryFactor,
+
+    /// <summary>
+    /// The session names a subject the store no longer holds. Raised when setup starts, not when
+    /// it completes.
+    /// </summary>
+    SubjectNotFound,
 }
 
 /// <summary>
-/// Thrown when <see cref="ITotpService.CompleteSetupAsync"/> refuses an attempt.
+/// Thrown when <see cref="ITotpService.CompleteSetupAsync"/> refuses an attempt. It carries only
+/// the failures that completing can raise, not the ones that refuse setup before it starts.
 /// <see cref="Failure"/> is the whole answer; the message is for logs.
 /// </summary>
 public class TotpSetupException : Exception
