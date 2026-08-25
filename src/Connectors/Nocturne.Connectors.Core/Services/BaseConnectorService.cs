@@ -144,6 +144,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         try
         {
             var result = await body();
+            StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
         }
@@ -165,6 +166,28 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ReportSyncMessageAsync(
             success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
             null, cancellationToken, errorMessage);
+
+    /// <summary>
+    ///     Gives a failed run that recorded only <see cref="SyncResult.Errors"/> a
+    ///     <see cref="SyncResult.Message"/>, standing in the failure that started it.
+    /// </summary>
+    /// <remarks>
+    ///     The tenant's sync card headlines <see cref="SyncResult.Message"/> and lists the errors
+    ///     beneath it, so a failure that recorded no message reads as unexplained with its reason
+    ///     buried in the list. Owned here because every connector's failure paths converge on this
+    ///     wrapper, unlike the per-type catch blocks that raise most of them: those sit in each
+    ///     connector separately and can hold no shared rule. A message an inner path chose stands,
+    ///     because <see cref="AuthenticationFailedResult"/> and <see cref="RecordFailure"/> both
+    ///     summarise what the raw error text only implies; as in the latter, the first recorded
+    ///     failure names the run.
+    /// </remarks>
+    private static void StandInFailureMessage(SyncResult result)
+    {
+        if (result.Success || result.Errors.Count == 0) return;
+
+        if (string.IsNullOrWhiteSpace(result.Message))
+            result.Message = result.Errors[0];
+    }
 
     private static string? FailureMessage(SyncResult result)
     {
