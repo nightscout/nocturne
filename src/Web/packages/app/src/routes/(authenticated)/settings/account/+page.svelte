@@ -48,6 +48,10 @@
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import {
+    describeTotpSetupError,
+    describeTotpSetupStartError,
+  } from "$lib/components/account/totp-errors";
   import { page } from "$app/state";
   import { copyToClipboard } from "$lib/utils";
 
@@ -284,7 +288,7 @@
 
       showTotpSetup = true;
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to start authenticator setup.");
+      errorMessage = describeTotpSetupStartError(err);
     } finally {
       totpSetupLoading = false;
     }
@@ -311,7 +315,7 @@
       successMessage = "Authenticator app added successfully.";
       clearMessages();
     } catch (err) {
-      totpSetupError = describeSubmitError(err, "Verification failed. Check the code and try again.");
+      totpSetupError = describeTotpSetupError(err);
     } finally {
       totpSetupLoading = false;
     }

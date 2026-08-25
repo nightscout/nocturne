@@ -40,6 +40,13 @@ public class CompressionLowController : ControllerBase
     private readonly ICompressionLowDetectionService _detectionService;
 
     /// <summary>
+    /// What accepting or dismissing tells the reader when the suggestion has already been acted on
+    /// or removed. The service says which id and which state, which is of no use to them.
+    /// </summary>
+    private const string SuggestionUnavailable =
+        "That suggestion is no longer waiting for a decision. Refresh the page to see the current list.";
+
+    /// <summary>
     /// Initializes a new instance of <see cref="CompressionLowController"/>.
     /// </summary>
     /// <param name="compressionLowService">Service for suggestion CRUD and accept/dismiss operations.</param>
@@ -106,9 +113,9 @@ public class CompressionLowController : ControllerBase
                 id, request.StartMills, request.EndMills, cancellationToken);
             return Ok(stateSpan);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            return Problem(detail: SuggestionUnavailable, statusCode: 400);
         }
     }
 
@@ -130,9 +137,9 @@ public class CompressionLowController : ControllerBase
             await _compressionLowService.DismissSuggestionAsync(id, cancellationToken);
             return NoContent();
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            return Problem(detail: SuggestionUnavailable, statusCode: 400);
         }
     }
 

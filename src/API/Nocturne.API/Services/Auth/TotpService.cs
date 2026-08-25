@@ -73,7 +73,7 @@ public class TotpService : ITotpService
 
         if (!TotpHelper.TryVerify(payload.Secret, code, lastUsedStep: null, out var setupStep))
         {
-            throw new InvalidOperationException("Invalid TOTP code. Please try again.");
+            throw new TotpSetupException(TotpSetupFailure.InvalidCode);
         }
 
         var entity = new TotpCredentialEntity
@@ -315,15 +315,15 @@ public class TotpService : ITotpService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to decrypt TOTP challenge token");
-            throw new InvalidOperationException("Invalid or tampered challenge token.", ex);
+            throw new TotpSetupException(TotpSetupFailure.ChallengeUnreadable, ex);
         }
 
         var payload = JsonSerializer.Deserialize<TotpChallengePayload>(json)
-            ?? throw new InvalidOperationException("Failed to deserialize challenge token payload.");
+            ?? throw new TotpSetupException(TotpSetupFailure.ChallengeUnreadable);
 
         if (payload.ExpiresAt < DateTime.UtcNow)
         {
-            throw new InvalidOperationException("Challenge token has expired. Please restart the setup flow.");
+            throw new TotpSetupException(TotpSetupFailure.ChallengeExpired);
         }
 
         return payload;

@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -57,8 +58,7 @@ public interface IHubTokenAuthorizer
 public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtService _jwtService;
-    private readonly IOAuthTokenRevocationCache _revocationCache;
-    private readonly IOAuthGrantService _grantService;
+    private readonly IJwtCredentialValidator _credentialValidator;
     private readonly IAuthorizationService _authorizationService;
     private readonly ITenantMemberService _memberService;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
@@ -68,8 +68,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 
     public HubTokenAuthorizer(
         IJwtService jwtService,
-        IOAuthTokenRevocationCache revocationCache,
-        IOAuthGrantService grantService,
+        IJwtCredentialValidator credentialValidator,
         IAuthorizationService authorizationService,
         ITenantMemberService memberService,
         IDbContextFactory<NocturneDbContext> dbContextFactory,
@@ -78,8 +77,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         ILogger<HubTokenAuthorizer> logger)
     {
         _jwtService = jwtService;
-        _revocationCache = revocationCache;
-        _grantService = grantService;
+        _credentialValidator = credentialValidator;
         _authorizationService = authorizationService;
         _memberService = memberService;
         _dbContextFactory = dbContextFactory;
@@ -152,14 +150,15 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
     private async Task<HubAuthorization?> AuthorizeJwtAsync(
         string token, Guid connectionTenantId, string requiredScope)
     {
-        var validation = _jwtService.ValidateAccessToken(token);
-        if (!validation.IsValid || validation.Claims is null)
+        var validation = await _credentialValidator.ValidateAsync(token);
+        if (!validation.IsValid)
         {
-            _logger.LogDebug("Hub JWT validation failed: {Error}", validation.Error);
+            _logger.LogDebug(
+                "Hub token refused ({Rejection}): {Error}", validation.Rejection, validation.Error);
             return null;
         }
 
-        var claims = validation.Claims;
+        var claims = validation.Claims!;
 
         // Unlike the HTTP handler, an unpinned (null-tenant) JWT is rejected outright: the hub
         // group is tenant-scoped and there is no per-request middleware to re-check access.
@@ -168,21 +167,6 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             _logger.LogWarning(
                 "Hub JWT tenant mismatch: token tenant {TokenTenant}, connection tenant {ConnectionTenant}",
                 claims.TenantId, connectionTenantId);
-            return null;
-        }
-
-        if (!string.IsNullOrEmpty(claims.JwtId)
-            && await _revocationCache.IsRevokedAsync(claims.JwtId))
-        {
-            _logger.LogDebug("Hub JWT has been revoked (jti: {Jti})", claims.JwtId);
-            return null;
-        }
-
-        // A grant revocation reaches outstanding access tokens through the grant id they carry.
-        if (claims.GrantId.HasValue
-            && await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, connectionTenantId))
-        {
-            _logger.LogDebug("Hub JWT's grant has been revoked (grant: {GrantId})", claims.GrantId);
             return null;
         }
 

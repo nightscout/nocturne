@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -42,19 +43,16 @@ public class OverviewHub : Hub
 
     private readonly ILogger<OverviewHub> _logger;
     private readonly ITenantOverviewService _overviewService;
-    private readonly IJwtService _jwtService;
-    private readonly IOAuthTokenRevocationCache _revocationCache;
+    private readonly IJwtCredentialValidator _credentialValidator;
 
     public OverviewHub(
         ILogger<OverviewHub> logger,
         ITenantOverviewService overviewService,
-        IJwtService jwtService,
-        IOAuthTokenRevocationCache revocationCache)
+        IJwtCredentialValidator credentialValidator)
     {
         _logger = logger;
         _overviewService = overviewService;
-        _jwtService = jwtService;
-        _revocationCache = revocationCache;
+        _credentialValidator = credentialValidator;
     }
 
     /// <summary>
@@ -110,20 +108,16 @@ public class OverviewHub : Hub
                         + "the connection request, or send an OAuth JWT.");
                 }
 
-                var validation = _jwtService.ValidateAccessToken(request.Token);
-                if (!validation.IsValid || validation.Claims is null)
+                var validation = await _credentialValidator.ValidateAsync(request.Token);
+                if (!validation.IsValid)
                 {
-                    _logger.LogDebug("Overview hub JWT validation failed: {Error}", validation.Error);
+                    _logger.LogDebug(
+                        "Overview hub token refused ({Rejection}): {Error}",
+                        validation.Rejection, validation.Error);
                     return OverviewAuthorizeResponse.Failed("Invalid token.");
                 }
 
-                var claims = validation.Claims;
-                if (!string.IsNullOrEmpty(claims.JwtId)
-                    && await _revocationCache.IsRevokedAsync(claims.JwtId))
-                {
-                    _logger.LogDebug("Overview hub JWT has been revoked (jti: {Jti})", claims.JwtId);
-                    return OverviewAuthorizeResponse.Failed("Invalid token.");
-                }
+                var claims = validation.Claims!;
 
                 // A tenant-pinned JWT is only valid on the tenant that issued it
                 // (HubTokenAuthorizer enforces the pin strictly); accepting it here would

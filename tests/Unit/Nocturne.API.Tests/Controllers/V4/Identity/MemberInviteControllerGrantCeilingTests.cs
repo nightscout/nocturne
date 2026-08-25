@@ -146,17 +146,13 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     }
 
     /// <summary>
-    /// Asserts the refusal the granter actually reads. openapi-remote-codegen 0.2.0 resolves a
-    /// ProblemDetails to <c>title</c> before <c>detail</c>, so a reason carried only in the detail
-    /// reaches the members page as the literal "Bad Request" or "Forbidden" — asserting the title is
-    /// what makes the reason testable.
+    /// Asserts the refusal the granter actually reads, rather than the status phrase.
     /// </summary>
     private static void ShouldRefuse(IActionResult result, int statusCode, string reason)
     {
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(statusCode);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be(reason);
         details.Detail.Should().Be(reason);
     }
 

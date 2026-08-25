@@ -137,6 +137,16 @@
   }
 </script>
 
+<!--
+  A failed sync is usually a partial one, so this total is the only thing that says how much of the
+  run still landed.
+-->
+{#snippet syncedTotal(items: SyncResult["itemsSynced"])}
+  {#if items}
+    ({Object.values(items).reduce((a, b) => (a || 0) + (b || 0), 0)} items)
+  {/if}
+{/snippet}
+
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md">
     {#if selectedConnector}
@@ -393,12 +403,11 @@
                 {#if granularSyncResult.success}
                   <CheckCircle class="inline h-3 w-3 mr-1" />
                   Sync initiated successfully
-                  {#if granularSyncResult.itemsSynced}
-                    ({Object.values(granularSyncResult.itemsSynced || {}).reduce((a, b) => (a || 0) + (b || 0), 0)} items)
-                  {/if}
+                  {@render syncedTotal(granularSyncResult.itemsSynced)}
                 {:else}
                   <AlertCircle class="inline h-3 w-3 mr-1" />
                   {granularSyncResult.message || "Sync failed"}
+                  {@render syncedTotal(granularSyncResult.itemsSynced)}
                 {/if}
               </div>
             {/if}

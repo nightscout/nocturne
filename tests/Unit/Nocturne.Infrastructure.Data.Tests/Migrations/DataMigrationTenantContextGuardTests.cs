@@ -54,10 +54,10 @@ public class DataMigrationTenantContextGuardTests
     [Fact]
     public void TheGuardCanSeeMigrationsAndTenantScopedTables()
     {
-        // A path or reflection regression would empty both sets and make the guard above pass
-        // vacuously.
+        // Either set going empty makes the guard above pass vacuously. A named table catches the
+        // narrower regression too: a set that still holds most tables but has quietly dropped some.
         MigrationSourceFiles.All().Should().NotBeEmpty();
-        MigrationSourceFiles.TenantScopedTableNames().Should().NotBeEmpty();
+        MigrationSourceFiles.TenantScopedTableNames().Should().Contain("sensor_glucose");
     }
 
     [Fact]

@@ -81,6 +81,15 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
+    /// The 400 for a refused enrolment. <c>detail</c> carries the <see cref="TotpSetupFailure"/>
+    /// value rather than a sentence: the generated remote wrapper forwards <c>detail</c> and drops
+    /// the rest of the body, so it is the only channel to the browser, and the wording is the web
+    /// app's to choose.
+    /// </summary>
+    private ObjectResult Refused(TotpSetupFailure failure)
+        => Problem(detail: failure.ToString(), statusCode: 400, title: "Bad Request");
+
+    /// <summary>
     /// Generate TOTP setup data including provisioning URI and secret.
     /// </summary>
     /// <returns>A <see cref="TotpSetupResponse"/> containing the provisioning URI, base32 secret, and challenge token.</returns>
@@ -90,12 +99,13 @@ public class TotpController : ControllerBase
     /// <see cref="VerifySetup"/> along with a valid 6-digit code to complete setup.
     /// </remarks>
     /// <response code="200">TOTP setup data generated.</response>
-    /// <response code="400">No primary factor configured, or user account not found.</response>
+    /// <response code="400">Setup refused; <c>detail</c> is a <c>TotpSetupFailure</c> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("setup")]
     [DenyDemoSubject]
     [RemoteCommand]
     [ProducesResponseType(typeof(TotpSetupResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<TotpSetupResponse>> Setup()
     {
@@ -105,19 +115,13 @@ public class TotpController : ControllerBase
 
         var subject = await _subjectService.GetSubjectByIdAsync(auth.SubjectId.Value);
         if (subject == null)
-            return Problem(detail: "User account not found", statusCode: 400, title: "Bad Request");
+            return Refused(TotpSetupFailure.SubjectNotFound);
 
         // TOTP is a second factor; require at least one primary factor (passkey or OIDC link)
         // so a user cannot end up with only TOTP configured.
         var primaryFactorCount = await _subjectService.CountPrimaryAuthFactorsAsync(auth.SubjectId.Value);
         if (primaryFactorCount < 1)
-        {
-            return BadRequest(new
-            {
-                error = "no_primary_factor",
-                message = "Configure a passkey or linked sign-in method before enabling TOTP",
-            });
-        }
+            return Refused(TotpSetupFailure.NoPrimaryFactor);
 
         var result = await _totpService.GenerateSetupAsync(auth.SubjectId.Value, subject.Name);
 
@@ -134,9 +138,9 @@ public class TotpController : ControllerBase
     /// </summary>
     /// <param name="request">A <see cref="TotpVerifySetupRequest"/> containing the 6-digit code, label, and challenge token.</param>
     /// <returns>A <see cref="TotpVerifySetupResponse"/> with the new credential ID on success.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the challenge token is invalid or the code does not match.</exception>
+    /// <exception cref="TotpSetupException">Thrown when the challenge token is invalid or the code does not match.</exception>
     /// <response code="200">TOTP setup verified and credential created.</response>
-    /// <response code="400">Invalid code or challenge token.</response>
+    /// <response code="400">Invalid code or challenge token; <c>detail</c> is a <c>TotpSetupFailure</c> value.</response>
     /// <response code="401">Not authenticated.</response>
     [HttpPost("verify-setup")]
     [DenyDemoSubject]
@@ -160,9 +164,9 @@ public class TotpController : ControllerBase
                 Success = true,
             });
         }
-        catch (InvalidOperationException ex)
+        catch (TotpSetupException ex)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            return Refused(ex.Failure);
         }
     }
 

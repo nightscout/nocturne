@@ -33,18 +33,22 @@ export default {
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state
-    // references) and 409 (resource conflict, e.g. referencing rules on
-    // delete) with the server's response body so the FE can show a useful
+    // references) and 409 (resource conflict, e.g. revoking an already-redeemed
+    // alert invite) with the server's response body so the FE can show a useful
     // message to the user. Falls through to a 500 with the extracted message
     // so the real error is still visible in dev.
+    //
+    // The status is read off the thrown value, so an error body that declares no
+    // `status` field of its own — `ReferencingRulesResponse`,
+    // `PredictionErrorResponse` — never reaches those arms.
     //
     // 429 and 404 are forwarded too, and with a fixed reason rather than the
     // extracted message: the rate limiter's body declares no typed schema, so
     // NSwag supplies its own "status code was not expected" text, and a missing
-    // resource is answered with either an empty body (`NotFound()`) or an
-    // RFC-7807 body whose `title` is the status phrase — so the extracted
-    // message is boilerplate either way, while the status is what tells a caller
-    // "already gone"/"you were throttled" from "this failed".
+    // resource is answered with either an empty body (`NotFound()`) or a `detail`
+    // that echoes back the id it was handed ("Body weight record with ID … not
+    // found") — neither is copy to put in front of a user, while the status is
+    // what tells a caller "already gone"/"you were throttled" from "this failed".
     // `describeSubmitError` and `remoteErrorMessage` resolve the wording from
     // the status.
     //
@@ -54,15 +58,19 @@ export default {
     // renders an error page only for a failed load, so a dialog still gets to
     // show its own "already gone" wording.
     //
-    // NSwag throws ProblemDetails directly (not wrapped in ApiException) for
-    // responses that declare a typed error schema, so the title/detail/errors
-    // fields live on `err` itself — not on `err.body` or `err.response`.
+    // NSwag throws the parsed error body itself (not wrapped in ApiException) for
+    // a response that declares a typed schema, so an RFC-7807 body arrives as
+    // `err`: `detail` carries the reason and `title` only the status phrase,
+    // which is why `detail` is read first. Without a typed schema NSwag throws an
+    // ApiException whose `message` is its own boilerplate and whose body is left
+    // unparsed, so that message is the last resort. `err.body.message` belongs to
+    // an `HttpError` — the only other thing this catch can see, thrown by an
+    // invalidated query's refresh.
     on500: (functionName: string) =>
       `const e = err as any;\n` +
-      `    const body = e?.body ?? e?.response;\n` +
-      `    const errors = body?.errors ?? e?.errors;\n` +
+      `    const errors = e?.errors;\n` +
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
-      `    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;\n` +
+      `    const message = flat ?? e?.body?.message ?? e?.detail ?? e?.title ?? e?.message;\n` +
       `    if (status === 429) throw error(429, 'Too many requests');\n` +
       `    if (status === 404) throw error(404, 'Not found');\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +

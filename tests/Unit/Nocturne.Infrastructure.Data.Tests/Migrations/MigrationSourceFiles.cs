@@ -1,6 +1,5 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection;
 using System.Text.RegularExpressions;
+using Nocturne.Infrastructure.Data.Security;
 using Match = System.Text.RegularExpressions.Match;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
@@ -90,14 +89,20 @@ internal static class MigrationSourceFiles
         return new string(blanked);
     }
 
-    /// <summary>Table names of every <see cref="ITenantScoped"/> entity, lowercased.</summary>
-    public static IReadOnlySet<string> TenantScopedTableNames() =>
-        typeof(ITenantScoped).Assembly.GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
-            .Select(t => t.GetCustomAttribute<TableAttribute>()?.Name)
-            .Where(n => n is not null)
-            .Select(n => n!.ToLowerInvariant())
+    /// <summary>
+    /// <see cref="ShareRlsPolicy.TenantScopedTableNames"/> as a lowercased set, for comparison
+    /// against table names lifted out of SQL by <see cref="BareTableName"/>.
+    /// </summary>
+    public static IReadOnlySet<string> TenantScopedTableNames() => ScopedTables.Value;
+
+    private static readonly Lazy<IReadOnlySet<string>> ScopedTables = new(() =>
+    {
+        using var context = OfflineDbContext.Create();
+
+        return ShareRlsPolicy.TenantScopedTableNames(context.Model)
+            .Select(n => n.ToLowerInvariant())
             .ToHashSet(StringComparer.Ordinal);
+    });
 
     private static readonly Regex TimestampPrefixed = new(@"^\d{14}_", RegexOptions.Compiled);
 

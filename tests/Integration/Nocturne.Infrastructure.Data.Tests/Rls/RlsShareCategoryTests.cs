@@ -1,8 +1,6 @@
-using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
@@ -175,7 +173,7 @@ public class RlsShareCategoryTests
                 policied[reader.GetString(0)] = (reader.GetBoolean(1), reader.GetChar(2), reader.GetString(3));
         }
 
-        foreach (var table in TenantScopedTableNames())
+        foreach (var table in _fx.TenantScopedTableNames)
         {
             policied.Should().ContainKey(table,
                 $"the reconciler must apply '{ShareRlsPolicy.PolicyName}' to every tenant-scoped table");
@@ -314,12 +312,4 @@ public class RlsShareCategoryTests
         p.Value = value;
         cmd.Parameters.Add(p);
     }
-
-    private static IEnumerable<string> TenantScopedTableNames() =>
-        typeof(ITenantScoped).Assembly.GetTypes()
-            .Where(t => typeof(ITenantScoped).IsAssignableFrom(t) && t is { IsAbstract: false, IsInterface: false })
-            .Select(t => Attribute.GetCustomAttribute(t, typeof(TableAttribute)) as TableAttribute)
-            .Where(a => a is not null)
-            .Select(a => a!.Name)
-            .Distinct(StringComparer.Ordinal);
 }

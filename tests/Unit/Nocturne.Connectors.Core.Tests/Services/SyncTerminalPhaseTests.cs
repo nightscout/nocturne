@@ -9,10 +9,11 @@ using Xunit;
 namespace Nocturne.Connectors.Core.Tests.Services;
 
 /// <summary>
-///     Covers the terminal progress message every sync ends with. A run that never reports a
-///     terminal <see cref="SyncPhase"/> leaves the tenant's connector stuck on "syncing" until the
-///     page is reloaded, so the outcome is reported by the shared run wrapper rather than left to
-///     each connector.
+///     Covers what the shared run wrapper says about a finished sync: the terminal progress message
+///     every run ends with, and the failure message the tenant's sync card headlines. A run that
+///     never reports a terminal <see cref="SyncPhase"/> leaves the tenant's connector stuck on
+///     "syncing" until the page is reloaded, and one that reports no message headlines as an
+///     unexplained failure — so both are owned by the wrapper rather than left to each connector.
 /// </summary>
 public class SyncTerminalPhaseTests
 {
@@ -279,6 +280,101 @@ public class SyncTerminalPhaseTests
         // Assert
         service.AuthenticateCalls.Should().Be(1);
         service.EnsureAuthenticatedCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task FailedSyncRecordingOnlyErrors_HeadlinesTheFirstOne()
+    {
+        // Arrange: the shape a per-type catch block leaves behind — the type that failed is in the
+        // errors and nothing has named the run.
+        var (reporter, _) = BuildReporter();
+
+        // Act
+        var result = await RunAsync(result =>
+        {
+            result.Success = false;
+            result.Errors.Add("Failed to sync Boluses: upstream refused the request");
+            result.Errors.Add("Failed to sync Notes: upstream refused the request");
+            return Task.CompletedTask;
+        }, reporter.Object);
+
+        // Assert
+        result.Message.Should().Be("Failed to sync Boluses: upstream refused the request",
+            "the card headlines the message, so leaving it empty hides which type failed behind a "
+            + "generic fallback");
+    }
+
+    [Fact]
+    public async Task FailedSync_KeepsTheMessageTheRunAlreadyChose()
+    {
+        // Arrange: a summary an inner path chose says more than the raw error text does
+        var (reporter, _) = BuildReporter();
+
+        // Act
+        var result = await RunAsync(result =>
+        {
+            result.Success = false;
+            result.Message = "Sync failed while fetching data";
+            result.Errors.Add("Chunk 2/5 failed (2026-01-08 to 2026-01-15)");
+            return Task.CompletedTask;
+        }, reporter.Object);
+
+        // Assert
+        result.Message.Should().Be("Sync failed while fetching data");
+    }
+
+    [Fact]
+    public async Task AuthenticationFailure_KeepsItsOwnSummary()
+    {
+        // Arrange: the authentication result carries both halves already, and its message is the
+        // one the tenant can act on — not the source-qualified detail meant for the error list.
+        var (reporter, _) = BuildReporter();
+        var service = new TestConnectorService(_ => Task.CompletedTask) { AuthenticationSucceeds = false };
+
+        // Act
+        var result = await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            new TestConfig(),
+            CancellationToken.None,
+            reporter.Object);
+
+        // Assert
+        result.Message.Should().Be("Authentication failed");
+    }
+
+    [Fact]
+    public async Task BackgroundSyncThatThrew_HeadlinesTheExceptionItSwallowed()
+    {
+        // Arrange: unlike the requested-range entry point, the background one converts an escaped
+        // exception into an errors-only result of its own, which no connector code can name.
+        var (reporter, _) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new InvalidOperationException("upstream went away"));
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("upstream went away");
+    }
+
+    [Fact]
+    public async Task SuccessfulSyncCarryingAnError_IsNotHeadlinedAsAFailure()
+    {
+        // Arrange: the card falls back to its own success line when the message is empty, so a
+        // run that stayed green must not have an error text stood in for it.
+        var (reporter, _) = BuildReporter();
+
+        // Act
+        var result = await RunAsync(result =>
+        {
+            result.Errors.Add("Failed to sync Notes: upstream refused the request");
+            return Task.CompletedTask;
+        }, reporter.Object);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.Should().BeEmpty();
     }
 
     [Fact]

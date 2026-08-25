@@ -14,7 +14,7 @@
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
-    "generate-remote-functions": "npx openapi-remote-codegen",
+    "generate-remote-functions": "openapi-remote-codegen",
     "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas && pnpm run generate-remote-functions",
     "translations:stage": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --no-skip-worktree && git add src/Web/locales/",
     "hide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example | xargs git update-index --skip-worktree",
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@typescript/native-preview": "7.0.0-dev.20260513.1",
+    "openapi-remote-codegen": "0.5.0",
     "prettier": "^3.7.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",

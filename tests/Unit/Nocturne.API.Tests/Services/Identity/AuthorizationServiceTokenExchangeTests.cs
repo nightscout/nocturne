@@ -77,7 +77,11 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         _connection.Dispose();
     }
 
-    private void SeedGrant(string token, DateTime? revokedAt = null, List<string>? scopes = null)
+    private void SeedGrant(
+        string token,
+        DateTime? revokedAt = null,
+        List<string>? scopes = null,
+        DateTime? expiresAt = null)
     {
         _dbContext.OAuthGrants.Add(new OAuthGrantEntity
         {
@@ -89,6 +93,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             Scopes = scopes ?? ["glucose.read", "treatments.readwrite"],
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,
+            ExpiresAt = expiresAt,
         });
         _dbContext.SaveChanges();
     }
@@ -222,5 +227,36 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal("legacy.jwt.token", result!.Token);
         Assert.Equal("aaps-uploader", result.Sub);
+    }
+
+    /// <summary>
+    /// The exchange restated the "usable grant" predicate and left the expiry term out, so a grant
+    /// the bearer handler and both hubs refused could still be traded here for a fresh one-hour
+    /// JWT — outliving its own expiry by the lifetime of whatever it minted.
+    /// </summary>
+    [Fact]
+    public async Task Expired_direct_grant_is_not_exchangeable()
+    {
+        const string token = "noc_expired";
+        SeedGrant(token, expiresAt: DateTime.UtcNow.AddMinutes(-1));
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        result.Should().BeNull("an expired grant must not mint a token that outlives it");
+    }
+
+    [Fact]
+    public async Task Direct_grant_expiring_in_the_future_is_still_exchangeable()
+    {
+        const string token = "noc_live";
+        SeedGrant(token, expiresAt: DateTime.UtcNow.AddHours(1));
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        result.Should().NotBeNull("an unexpired grant is still usable");
     }
 }

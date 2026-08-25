@@ -181,7 +181,6 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be("Cannot remove the last owner of a tenant");
         details.Detail.Should().Be("Cannot remove the last owner of a tenant");
     }
 
@@ -395,9 +394,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
     /// <summary>
     /// The service reports a refused grant — and an out-of-range expiry — as
-    /// <see cref="ArgumentException"/>. The reason has to reach the creator, and the generated
-    /// client resolves a ProblemDetails to <c>title</c> before <c>detail</c>, so carrying it only
-    /// in the detail would render the branch's own reported symptom: a bare failure message.
+    /// <see cref="ArgumentException"/>, and the reason has to reach the creator rather than a bare
+    /// failure message.
     /// </summary>
     [Fact]
     public async Task CreateInvite_surfacesTheServiceRefusalReason()
@@ -415,7 +413,6 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be("One or more role IDs do not belong to this tenant.");
         details.Detail.Should().Be("One or more role IDs do not belong to this tenant.");
     }
 
@@ -588,8 +585,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     /// <para>
     /// 400, like the acceptance refusal: the generated client passes a 400 ProblemDetails through
     /// to the join page, where the reason is shown; other 4xx statuses collapse to the generic
-    /// message. The reason is asserted on the title because openapi-remote-codegen 0.2.0 resolves a
-    /// ProblemDetails to <c>title</c> before <c>detail</c>.
+    /// message.
     /// </para>
     /// </summary>
     [Theory]
@@ -616,7 +612,6 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be(expectedReason);
         details.Detail.Should().Be(expectedReason);
 
         var body = JsonSerializer.Serialize(problem.Value);
@@ -665,10 +660,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     /// <summary>
-    /// The reason is written for the invitee, and openapi-remote-codegen 0.2.0 resolves a
-    /// ProblemDetails to <c>title</c> before <c>detail</c> — so a reason carried only in the detail
-    /// reaches them as the literal "Bad Request". Asserting the title is what makes the reason the
-    /// invitee actually reads testable.
+    /// The refusal reason is written for the invitee, so it is the reason and not the status
+    /// phrase that has to survive the trip to the join page.
     /// </summary>
     [Fact]
     public async Task AcceptInvite_surfacesTheRefusalReason()
@@ -685,7 +678,6 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
-        details.Title.Should().Be("You are already a member of this tenant.");
         details.Detail.Should().Be("You are already a member of this tenant.");
     }
 

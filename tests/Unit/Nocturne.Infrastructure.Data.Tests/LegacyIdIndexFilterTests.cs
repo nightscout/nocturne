@@ -49,11 +49,7 @@ public class LegacyIdIndexFilterTests
                 "a soft-deleted row must drop out of the index so a system-swept legacy id stays re-importable");
     }
 
-    private static NocturneDbContext CreateContext() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql("Host=localhost;Database=nocturne;Username=test;Password=test")
-            .Options)
-        { TenantId = Guid.NewGuid() };
+    private static NocturneDbContext CreateContext() => OfflineDbContext.Create();
 
     /// <summary>
     /// Both facts pass vacuously if discovery drifts, so the count is asserted here rather than

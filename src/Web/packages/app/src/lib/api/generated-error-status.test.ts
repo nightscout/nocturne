@@ -8,6 +8,13 @@ import {
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
+import { TotpSetupFailure } from "$api-clients";
+import {
+  describeTotpSetupError,
+  describeTotpSetupStartError,
+  TOTP_SETUP_FALLBACK,
+  TOTP_SETUP_START_FALLBACK,
+} from "../components/account/totp-errors";
 
 /**
  * What a failed API call looks like by the time a page sees it.
@@ -71,16 +78,29 @@ function nswagApiException(
 
 /**
  * An RFC-7807 body, which NSwag throws as the parsed object itself when the
- * operation declares a typed error response. `title` is the status phrase, so
- * the only thing here a caller can act on is the status.
+ * operation declares a typed error response. `title` is the status phrase;
+ * `detail` is the sentence saying what went wrong.
  */
-function problemDetails(status: number, detail: string) {
+function problemDetails(status: number, detail: string, title = "Not Found") {
   return {
     type: `https://tools.ietf.org/html/rfc9110#status.${status}`,
-    title: "Not Found",
+    title,
     status,
     detail,
   };
+}
+
+/**
+ * A SvelteKit `HttpError`, which is what the refresh of an invalidated query
+ * throws from inside the same `try` as the client call. Its reason lives on
+ * `body.message` and nowhere else.
+ */
+function refusal(status: number, message: string): unknown {
+  try {
+    error(status, message);
+  } catch (thrown) {
+    return thrown;
+  }
 }
 
 const RATE_LIMIT_BODY = JSON.stringify({
@@ -158,6 +178,50 @@ describe("the status a generated remote function lets through", () => {
     ).toBe(MISSING_ITEM_ERROR);
   });
 
+  it("keeps a 404 detail that echoes back an id out of what it forwards", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(404, "Body weight record with ID 3f2a not found")
+    );
+
+    expect(JSON.stringify(crossed)).not.toContain("3f2a");
+  });
+
+  it("says why a conflict happened rather than saying 'Conflict'", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(409, "Cannot revoke an already-redeemed invite", "Conflict")
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(describeSubmitError(crossed, "Couldn't revoke the invite.")).toBe(
+      "Cannot revoke an already-redeemed invite"
+    );
+  });
+
+  it("names the field a validation failure came from, not the summary above it", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "One or more validation errors occurred.",
+        "Bad Request"
+      ),
+      errors: { ids: ["The ids field is required."] },
+    });
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "The ids field is required."
+    );
+  });
+
+  it("forwards the message when an invalidated query's refresh is what failed", async () => {
+    const crossed = await crossTheBoundary(
+      refusal(409, "Another device changed this entry.")
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Another device changed this entry."
+    );
+  });
+
   it("still flattens a status it does not forward", async () => {
     const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
 
@@ -165,5 +229,90 @@ describe("the status a generated remote function lets through", () => {
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
+  });
+});
+
+/** The settings page calls this with no fallback of its own, so the default is what ships. */
+const describeAsThePageDoes = (err: unknown) => describeTotpSetupError(err);
+
+async function wordingFor(detail: string): Promise<string> {
+  return describeAsThePageDoes(
+    await crossTheBoundary(problemDetails(400, detail, "Bad Request"))
+  );
+}
+
+describe("a refused authenticator setup", () => {
+  it("turns each failure the server can raise into its own wording", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(wordingFor)
+    );
+
+    expect(wordings).not.toContain(TOTP_SETUP_FALLBACK);
+    expect(new Set(wordings).size).toBe(Object.values(TotpSetupFailure).length);
+  });
+
+  it("names the expiry rather than the generic refusal", async () => {
+    expect(await wordingFor(TotpSetupFailure.ChallengeExpired)).toContain(
+      "took too long"
+    );
+  });
+
+  it("shows no failure value to the user", async () => {
+    const wordings = await Promise.all(
+      Object.values(TotpSetupFailure).map(wordingFor)
+    );
+
+    for (const failure of Object.values(TotpSetupFailure)) {
+      expect(wordings.join(" ")).not.toContain(failure);
+    }
+  });
+
+  it("falls back rather than showing a failure this build does not know", async () => {
+    expect(await wordingFor("SomethingAddedLater")).toBe(TOTP_SETUP_FALLBACK);
+  });
+
+  /**
+   * `Object.prototype` answers to these; a lookup that walked the chain would hand
+   * back a function where the page expects a sentence.
+   */
+  it.each(["toString", "constructor", "hasOwnProperty"])(
+    "does not mistake %s for a failure it has copy for",
+    async (inherited) => {
+      expect(await wordingFor(inherited)).toBe(TOTP_SETUP_FALLBACK);
+    }
+  );
+
+  it("still says something when the request failed for another reason", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeAsThePageDoes(crossed)).toBe(TOTP_SETUP_FALLBACK);
+    expect(TOTP_SETUP_FALLBACK.trim()).not.toBe("");
+  });
+});
+
+describe("an authenticator setup that was refused before it started", () => {
+  it("says which primary factor to add rather than naming a server error", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    // What the endpoint sent before it declared a 400 response type.
+    expect(describeTotpSetupStartError(crossed)).not.toContain("error occurred");
+    expect(describeTotpSetupStartError(crossed)).toContain("passkey");
+  });
+
+  it("does not tell someone to check a code they were never asked for", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, TotpSetupFailure.NoPrimaryFactor, "Bad Request")
+    );
+
+    expect(describeTotpSetupStartError(crossed)).not.toBe(TOTP_SETUP_FALLBACK);
+  });
+
+  it("falls back on its own wording, not the verify step's", async () => {
+    const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
+
+    expect(describeTotpSetupStartError(crossed)).toBe(TOTP_SETUP_START_FALLBACK);
+    expect(TOTP_SETUP_START_FALLBACK.trim()).not.toBe("");
   });
 });

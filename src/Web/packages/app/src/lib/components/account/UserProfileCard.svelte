@@ -39,6 +39,7 @@
   const authStore = getAuthStore();
 
   let fileInput: HTMLInputElement | undefined;
+  let avatarForm: HTMLFormElement | undefined;
   let isUploading = $state(false);
   let isDeleting = $state(false);
   let avatarError = $state<string | null>(null);
@@ -67,25 +68,10 @@
     fileInput?.click();
   }
 
-  /** Handle file selection and upload */
-  async function handleFileSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    isUploading = true;
-    avatarError = null;
-
-    try {
-      const result = await uploadAvatar(file) as { avatarUrl: string };
-      localAvatarUrl = result.avatarUrl;
-      authStore.updateAvatarUrl(result.avatarUrl);
-    } catch (err) {
-      avatarError = describeSubmitError(err, "Failed to upload avatar");
-    } finally {
-      isUploading = false;
-      if (fileInput) fileInput.value = "";
-    }
+  /** Submit the picked file; upload is a form remote, so files transport natively */
+  function handleFileSelect() {
+    if (!fileInput?.files?.length) return;
+    avatarForm?.requestSubmit();
   }
 
   /** Delete the current avatar */
@@ -149,13 +135,41 @@
             <Trash2 class="h-3 w-3" />
           </button>
         {/if}
-        <input
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          class="hidden"
-          bind:this={fileInput}
-          onchange={handleFileSelect}
-        />
+        <form
+          class="contents"
+          enctype="multipart/form-data"
+          bind:this={avatarForm}
+          {...uploadAvatar.enhance(async ({ submit }) => {
+            isUploading = true;
+            avatarError = null;
+            try {
+              await submit();
+              const result = uploadAvatar.result as
+                | { avatarUrl: string }
+                | undefined;
+              // A redirect (e.g. expired session -> login) resolves submit()
+              // without a result; the navigation is already underway.
+              if (result) {
+                localAvatarUrl = result.avatarUrl;
+                authStore.updateAvatarUrl(result.avatarUrl);
+              }
+            } catch (err) {
+              avatarError = describeSubmitError(err, "Failed to upload avatar");
+            } finally {
+              isUploading = false;
+              if (fileInput) fileInput.value = "";
+            }
+          })}
+        >
+          <input
+            type="file"
+            name="file"
+            accept="image/png,image/jpeg,image/webp"
+            class="hidden"
+            bind:this={fileInput}
+            onchange={handleFileSelect}
+          />
+        </form>
       </div>
       <div class="space-y-1 flex-1">
         <Card.Title class="text-xl">{user.name}</Card.Title>

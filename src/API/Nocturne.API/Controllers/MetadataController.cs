@@ -266,6 +266,27 @@ public class MetadataController : ControllerBase
         );
     }
 
+    /// <summary>
+    /// Get TOTP setup failure codes metadata
+    /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
+    /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
+    /// </summary>
+    /// <returns>TOTP setup failure codes metadata</returns>
+    [HttpGet("totp-setup-failures")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(TotpSetupFailuresMetadata), 200)]
+    public ActionResult<TotpSetupFailuresMetadata> GetTotpSetupFailures()
+    {
+        return Ok(
+            new TotpSetupFailuresMetadata
+            {
+                AvailableFailures = Enum.GetValues<TotpSetupFailure>(),
+                Description = "Reasons a TOTP setup attempt can be refused",
+            }
+        );
+    }
+
     private static WidgetDefinition[] GetAllWidgetDefinitions() =>
     [
         // Top widgets (widget grid above the chart)
@@ -664,6 +685,22 @@ public class AuthErrorCodesMetadata
 
     /// <summary>
     /// Description of the auth error codes
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Metadata about TOTP setup failure codes for NSwag generation
+/// </summary>
+public class TotpSetupFailuresMetadata
+{
+    /// <summary>
+    /// Array of all reasons a TOTP setup attempt can be refused
+    /// </summary>
+    public TotpSetupFailure[] AvailableFailures { get; set; } = [];
+
+    /// <summary>
+    /// Description of the TOTP setup failure codes
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }

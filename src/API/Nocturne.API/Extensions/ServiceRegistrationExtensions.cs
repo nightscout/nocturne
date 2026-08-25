@@ -281,6 +281,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IOAuthClientService, OAuthClientService>();
         services.AddSingleton<RedirectUriValidator>();
         services.AddScoped<IOAuthGrantService, OAuthGrantService>();
+        services.AddScoped<IJwtCredentialValidator, JwtCredentialValidator>();
         services.AddScoped<IOAuthTokenService, OAuthTokenService>();
         services.AddScoped<IOAuthDeviceCodeService, OAuthDeviceCodeService>();
         services.AddScoped<IMemberInviteService, MemberInviteService>();

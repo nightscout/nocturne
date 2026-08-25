@@ -16,6 +16,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -52,10 +53,17 @@ public class HubTokenAuthorizerTests
             .BuildServiceProvider()
             .GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
+    // The real validator, not a stub: these tests are this path's coverage for the shared credential
+    // chain, and stubbing it would hide the grant and revocation links behind a mock.
+    private JwtCredentialValidator CreateCredentialValidator() => new(
+        _jwtService.Object,
+        _grantService.Object,
+        _revocationCache.Object,
+        NullLogger<JwtCredentialValidator>.Instance);
+
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
         _jwtService.Object,
-        _revocationCache.Object,
-        _grantService.Object,
+        CreateCredentialValidator(),
         _authorizationService.Object,
         _memberService.Object,
         _dbContextFactory,
