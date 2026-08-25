@@ -31,6 +31,20 @@ describe("SyncResultCard", () => {
     await expect.element(page.getByText("12 boluses")).toBeVisible();
   });
 
+  it("badges a type the failed sync checked and found empty", async () => {
+    render(SyncResultCard, {
+      syncResult: makeResult({
+        success: false,
+        message: "Failed to sync Notes: the source refused the request",
+        errors: ["Failed to sync Notes: the source refused the request"],
+        itemsSynced: { Glucose: 0 },
+      }),
+      displayName: "Nightscout",
+    });
+
+    await expect.element(page.getByText("0 glucose")).toBeVisible();
+  });
+
   it("headlines the reason the sync reported rather than its own fallback", async () => {
     render(SyncResultCard, {
       syncResult: makeResult({

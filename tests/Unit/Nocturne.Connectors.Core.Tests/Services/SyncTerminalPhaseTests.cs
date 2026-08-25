@@ -343,6 +343,22 @@ public class SyncTerminalPhaseTests
     }
 
     [Fact]
+    public async Task BackgroundSyncThatThrew_HeadlinesTheExceptionItSwallowed()
+    {
+        // Arrange: unlike the requested-range entry point, the background one converts an escaped
+        // exception into an errors-only result of its own, which no connector code can name.
+        var (reporter, _) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new InvalidOperationException("upstream went away"));
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("upstream went away");
+    }
+
+    [Fact]
     public async Task SuccessfulSyncCarryingAnError_IsNotHeadlinedAsAFailure()
     {
         // Arrange: the card falls back to its own success line when the message is empty, so a

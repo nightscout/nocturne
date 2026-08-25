@@ -172,14 +172,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     <see cref="SyncResult.Message"/>, standing in the failure that started it.
     /// </summary>
     /// <remarks>
-    ///     The tenant's sync card headlines <see cref="SyncResult.Message"/> and lists the errors
-    ///     beneath it, so a failure that recorded no message reads as unexplained with its reason
-    ///     buried in the list. Owned here because every connector's failure paths converge on this
-    ///     wrapper, unlike the per-type catch blocks that raise most of them: those sit in each
-    ///     connector separately and can hold no shared rule. A message an inner path chose stands,
-    ///     because <see cref="AuthenticationFailedResult"/> and <see cref="RecordFailure"/> both
-    ///     summarise what the raw error text only implies; as in the latter, the first recorded
-    ///     failure names the run.
+    ///     The manual-sync dialog shows <see cref="SyncResult.Message"/> and nothing else about a
+    ///     failure — not <see cref="SyncResult.Errors"/> — so a run that recorded its reason only in
+    ///     the errors puts that reason out of the tenant's reach entirely. Owned here because every
+    ///     connector's failure paths converge on this wrapper, unlike the per-type catch blocks that
+    ///     raise most of them: those sit in each connector separately and can hold no shared rule.
+    ///     A message an inner path chose stands, because <see cref="AuthenticationFailedResult"/>
+    ///     and <see cref="RecordFailure"/> both summarise what the raw error text only implies; as
+    ///     in the latter, the first recorded failure names the run.
     /// </remarks>
     private static void StandInFailureMessage(SyncResult result)
     {

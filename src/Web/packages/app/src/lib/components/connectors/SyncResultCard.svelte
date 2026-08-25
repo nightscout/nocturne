@@ -19,9 +19,8 @@
 </script>
 
 <!--
-  Rendered on both outcomes. A failed sync is usually a partial one — the connectors record a count
-  per type they reached and fail the run for the type they did not — so on a failure these counts
-  are the only thing that says how much of the run still landed.
+  A count of zero still earns a badge: connectors record one per type they reached, so an absent
+  key means the type went unchecked where a zero means it was checked and held nothing.
 -->
 {#snippet syncedCounts(items: SyncResult["itemsSynced"])}
   {#if items}
