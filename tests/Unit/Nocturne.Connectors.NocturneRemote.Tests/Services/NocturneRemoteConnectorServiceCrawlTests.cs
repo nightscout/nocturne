@@ -206,10 +206,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
     /// <summary>
     /// A type the tenant switched off is never crawled, so a remote that rejects its endpoint cannot
-    /// mark the connector red while everything the tenant enabled synced. Activity rather than
-    /// glucose, because the auth probe reads the glucose endpoint and fails the whole run before the
-    /// per-type gate is reached — see
-    /// <see cref="SyncDataAsync_WhenTheGlucoseEndpointIsBroken_FailsBeforeAnyTypeIsConsidered"/>.
+    /// mark the connector red while everything the tenant enabled synced.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_WhenASwitchedOffTypesEndpointIsBroken_ReportsSuccess()
@@ -233,36 +230,6 @@ public class NocturneRemoteConnectorServiceCrawlTests
         });
         handler.Requests.Should().NotContain(url => url.Contains(NocturneRemoteConstants.Activity),
             "a switched-off type is not crawled at all, which is why its endpoint cannot fail the run");
-    }
-
-    /// <summary>
-    /// Characterises a limitation this change does not remove, so it is not mistaken for a property
-    /// the connector has. <c>AuthenticateWithConfigAsync</c> probes the sensor-glucose endpoint on
-    /// every run whatever the tenant enabled, and a rejected probe fails the run before any type is
-    /// considered. So a remote whose glucose endpoint alone is broken — or a grant without
-    /// <c>glucose.read</c> — costs the tenant every other type too, and is reported as a credential
-    /// problem. Per-type scoping begins after this gate, not before it.
-    /// </summary>
-    [Fact]
-    public async Task SyncDataAsync_WhenTheGlucoseEndpointIsBroken_FailsBeforeAnyTypeIsConsidered()
-    {
-        var handler = new RemoteFakeHandler()
-            .Break(NocturneRemoteConstants.SensorGlucose, HttpStatusCode.BadGateway)
-            .Serve(NocturneRemoteConstants.Boluses,
-                RemoteFakeHandler.BolusPage(total: 1, "2026-01-03T09:00:00Z"));
-        var fixture = new ServiceFixture(handler, config: NewConfig(syncGlucose: false));
-
-        var result = await fixture.Service.SyncDataAsync(
-            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
-            fixture.Config,
-            CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Message.Should().Be("Authentication failed");
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be($"Authentication failed for {DataSources.NocturneRemoteConnector}");
-        handler.Requests.Should().NotContain(url => url.Contains(NocturneRemoteConstants.Boluses),
-            "the probe fails the run before the enabled types are reached");
     }
 
     /// <summary>
@@ -436,14 +403,11 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
-    /// The tenant's configured attempt budget governs, not the frozen startup defaults. Only the
-    /// background entry point primes the field the defaults live in, so a manual sync or a cursor
-    /// reset — the long full-history re-pull where the budget matters most — would otherwise run on
-    /// whatever the deployment shipped. A budget of three would reach the third scripted response
-    /// and complete the crawl.
+    /// The attempt budget the run was handed governs. A budget of three would reach the third
+    /// scripted response and complete the crawl; one stops at the 502.
     /// </summary>
     [Fact]
-    public async Task SyncDataAsync_SpendsTheTenantsRetryBudget_NotTheStartupDefaults()
+    public async Task SyncDataAsync_SpendsTheBudgetTheRunWasHanded()
     {
         var handler = new RemoteFakeHandler()
             .Serve(NocturneRemoteConstants.SensorGlucose,
@@ -457,14 +421,13 @@ public class NocturneRemoteConnectorServiceCrawlTests
             fixture.Config,
             CancellationToken.None);
 
-        result.Success.Should().BeFalse(
-            $"the tenant allowed one attempt, not the {StartupDefaultRetryAttempts} the defaults carry");
+        result.Success.Should().BeFalse("the run was allowed one attempt");
         result.ItemsSynced.Should().BeEmpty();
     }
 
-    /// <summary>The tenant's page size governs for the same reason, and on the same paths.</summary>
+    /// <summary>The page size the run was handed governs for the same reason, and on the same paths.</summary>
     [Fact]
-    public async Task SyncDataAsync_UsesTheTenantsPageSize_NotTheStartupDefaults()
+    public async Task SyncDataAsync_UsesThePageSizeTheRunWasHanded()
     {
         var handler = new RemoteFakeHandler();
         var fixture = new ServiceFixture(handler);
@@ -475,8 +438,124 @@ public class NocturneRemoteConnectorServiceCrawlTests
             CancellationToken.None);
 
         handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should()
-            .Contain($"limit={RemoteFakeHandler.PageSize}")
-            .And.NotContain($"limit={StartupDefaultPageSize}");
+            .Contain($"limit={RemoteFakeHandler.PageSize}");
+    }
+
+    /// <summary>
+    /// One service instance serves both entry points in turn, and each run must be crawled with the
+    /// configuration that run was handed. Holding it on the service instead — a cached copy the
+    /// background entry point alone assigns — leaves a manual "sync now" pulling the previous run's
+    /// pages with the previous run's credential, and the pagination loop terminating against a page
+    /// size the request never asked for.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAManualRunFollowsABackgroundRun_CrawlsWithTheManualRunsConfiguration()
+    {
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler);
+
+        await fixture.Service.SyncDataAsync(fixture.Config, CancellationToken.None);
+
+        var manual = NewConfig();
+        manual.MaxCount = ManualRunPageSize;
+        manual.Token = ManualRunToken;
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            manual,
+            CancellationToken.None);
+
+        handler.LastCrawlOf(NocturneRemoteConstants.SensorGlucose).Should()
+            .Contain($"limit={ManualRunPageSize}");
+        handler.Tokens.Last().Should().Be($"Bearer {ManualRunToken}");
+    }
+
+    /// <summary>
+    /// The credential check reads the sensor-glucose endpoint, so a remote that is merely unwell
+    /// there must not be reported as a rejected credential: the tenant would be sent to re-authorize
+    /// a grant that was never the problem, and would lose every other type with it. A 403 is the same
+    /// answer by a different route — a grant scoped to treatments only, which is a configuration the
+    /// remote supports.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task SyncDataAsync_WhenTheProbedEndpointRefusesButTheTypeIsSwitchedOff_ReportsSuccess(
+        HttpStatusCode refusal)
+    {
+        var handler = new RemoteFakeHandler()
+            .Break(NocturneRemoteConstants.SensorGlucose, refusal)
+            .Serve(NocturneRemoteConstants.Boluses,
+                RemoteFakeHandler.BolusPage(total: 1, "2026-01-03T09:00:00Z"));
+        var fixture = new ServiceFixture(handler, config: NewConfig(syncGlucose: false));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue("no type the tenant enabled failed to sync");
+        result.Errors.Should().BeEmpty();
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Boluses] = 1,
+        });
+    }
+
+    /// <summary>
+    /// And when the tenant did enable the type, the refusal is still that type's rather than the
+    /// run's: the crawl reaches the same endpoint under the tenant's retry budget and reports what it
+    /// found, leaving every other type synced.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheProbedEndpointIsUnwell_CostsOnlyTheTypeThatReadsIt()
+    {
+        var handler = new RemoteFakeHandler()
+            .Break(NocturneRemoteConstants.SensorGlucose, HttpStatusCode.BadGateway)
+            .Serve(NocturneRemoteConstants.Boluses,
+                RemoteFakeHandler.BolusPage(total: 1, "2026-01-03T09:00:00Z"));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().StartWith($"Failed to sync {SyncDataType.Glucose}");
+        result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
+        {
+            [SyncDataType.Boluses] = 1,
+        });
+        fixture.PublishedBoluses.Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// The one answer that is the connector's own to report. A credential the remote rejects will be
+    /// rejected by every crawl too, so the run ends at the check rather than repeating the rejection
+    /// once per type, and the tenant is told the thing they can act on.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteRejectsTheCredential_FailsBeforeAnyTypeIsCrawled()
+    {
+        var handler = new RemoteFakeHandler()
+            .Break(NocturneRemoteConstants.SensorGlucose, HttpStatusCode.Unauthorized)
+            .Serve(NocturneRemoteConstants.Boluses,
+                RemoteFakeHandler.BolusPage(total: 1, "2026-01-03T09:00:00Z"));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Authentication failed");
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Be($"Authentication failed for {DataSources.NocturneRemoteConnector}");
+        handler.Requests.Should().NotContain(url => url.Contains(NocturneRemoteConstants.Boluses),
+            "a rejected credential fails the run before the enabled types are reached");
     }
 
     /// <summary>
@@ -561,11 +640,14 @@ public class NocturneRemoteConnectorServiceCrawlTests
             .Which.Should().NotContain(config.Token).And.Contain("HTTP 502 BadGateway");
     }
 
-    /// <summary>Page size and budget carried by the frozen startup defaults, never by a tenant.</summary>
-    private const int StartupDefaultPageSize = 500;
+    /// <summary>
+    /// Page size and credential belonging to a second run only, so a run crawled with the first
+    /// run's configuration cannot answer to them.
+    /// </summary>
+    private const int ManualRunPageSize = 7;
 
-    /// <inheritdoc cref="StartupDefaultPageSize"/>
-    private const int StartupDefaultRetryAttempts = 3;
+    /// <inheritdoc cref="ManualRunPageSize"/>
+    private const string ManualRunToken = "manual-run-token";
 
     private static NocturneRemoteConnectorConfiguration NewConfig(
         bool syncGlucose = true,
@@ -629,23 +711,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
             publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
 
-            // Deliberately NOT the tenant's config. Production conflates the two — the frozen
-            // startup defaults are what the field holds on the manual path — so aliasing them here
-            // would hide every place the tenant's own value is meant to be read.
-            var registration = new Mock<IConnectorRegistration<NocturneRemoteConnectorConfiguration>>();
-            registration.Setup(r => r.Defaults).Returns(new NocturneRemoteConnectorConfiguration
-            {
-                Url = RemoteFakeHandler.BaseUrl,
-                Token = "startup-defaults-token",
-                MaxCount = StartupDefaultPageSize,
-                MaxRetryAttempts = StartupDefaultRetryAttempts,
-            });
-
             Service = new NocturneRemoteConnectorService(
                 new HttpClient(handler),
                 Mock.Of<IConnectorServerResolver<NocturneRemoteConnectorConfiguration>>(),
                 NullLogger<NocturneRemoteConnectorService>.Instance,
-                registration.Object,
                 Mock.Of<IRetryDelayStrategy>(),
                 publisher.Object);
         }
@@ -657,10 +726,10 @@ public class NocturneRemoteConnectorServiceCrawlTests
     /// </summary>
     /// <remarks>
     /// <see cref="Break"/> models an endpoint that is down and answers every request to it — the
-    /// auth probe included, because the probe reads the sensor-glucose endpoint like any other
-    /// caller. <see cref="Serve"/> models the responses to successive pages of a working endpoint,
-    /// which the probe is deliberately not served from: it asks for one record before the crawl
-    /// starts, so letting it consume the crawl's first page would misdescribe every script.
+    /// auth check included, because it reads the sensor-glucose endpoint like any other caller.
+    /// <see cref="Serve"/> models the responses to successive pages of a working endpoint, which the
+    /// auth check is deliberately not served from: it asks for one record before the crawl starts,
+    /// so letting it consume the crawl's first page would misdescribe every script.
     /// </remarks>
     private sealed class RemoteFakeHandler : HttpMessageHandler
     {
@@ -676,15 +745,26 @@ public class NocturneRemoteConnectorServiceCrawlTests
         /// <summary>Every request made, so a test can assert on the range each crawl asked for.</summary>
         internal List<string> Requests { get; } = [];
 
+        /// <summary>
+        /// The Authorization header each request carried, positionally aligned with
+        /// <see cref="Requests"/>.
+        /// </summary>
+        internal List<string?> Tokens { get; } = [];
+
         internal RemoteFakeHandler Serve(string path, params HttpResponseMessage[] responses)
         {
             _pages[path] = new Queue<HttpResponseMessage>(responses);
             return this;
         }
 
-        /// <summary>The first crawl request made to <paramref name="path"/>, excluding the auth probe.</summary>
-        internal string CrawlOf(string path) =>
-            Requests.First(u => u.Contains(path, StringComparison.Ordinal)
+        /// <summary>The first crawl request made to <paramref name="path"/>, excluding the auth check.</summary>
+        internal string CrawlOf(string path) => Crawls(path).First();
+
+        /// <inheritdoc cref="CrawlOf"/>
+        internal string LastCrawlOf(string path) => Crawls(path).Last();
+
+        private IEnumerable<string> Crawls(string path) =>
+            Requests.Where(u => u.Contains(path, StringComparison.Ordinal)
                                 && u.Contains("offset=", StringComparison.Ordinal));
 
         internal RemoteFakeHandler Break(string path, HttpStatusCode status)
@@ -720,11 +800,14 @@ public class NocturneRemoteConnectorServiceCrawlTests
         {
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(request.RequestUri.ToString());
+            Tokens.Add(request.Headers.TryGetValues("Authorization", out var authorization)
+                ? authorization.FirstOrDefault()
+                : null);
 
             if (_broken.TryGetValue(path, out var status))
                 return Task.FromResult(Status(status));
 
-            if (IsAuthProbe(request))
+            if (IsAuthCheck(request))
                 return Task.FromResult(GlucosePage(total: 0));
 
             if (_pages.TryGetValue(path, out var queue) && queue.Count > 0)
@@ -736,7 +819,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
                     : GlucosePage(total: 0));
         }
 
-        private static bool IsAuthProbe(HttpRequestMessage request) =>
+        private static bool IsAuthCheck(HttpRequestMessage request) =>
             request.RequestUri!.AbsolutePath == NocturneRemoteConstants.SensorGlucose
             && !request.RequestUri.Query.Contains("offset=", StringComparison.Ordinal);
     }

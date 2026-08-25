@@ -13,16 +13,13 @@ namespace Nocturne.API.Tests.Services.Connectors;
 
 public class NocturneRemoteBackgroundSyncAuthTests
 {
-    private static NocturneRemoteConnectorService CreateService(
-        HttpMessageHandler handler,
-        NocturneRemoteConnectorConfiguration startupDefaults)
+    private static NocturneRemoteConnectorService CreateService(HttpMessageHandler handler)
     {
         var httpClient = new HttpClient(handler);
         return new NocturneRemoteConnectorService(
             httpClient,
             new ConnectorServerResolver<NocturneRemoteConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NocturneRemoteConnectorService>>(),
-            new ConnectorRegistration<NocturneRemoteConnectorConfiguration>(startupDefaults, "NocturneRemote"),
             Mock.Of<IRetryDelayStrategy>(),
             publisher: null);
     }
@@ -52,10 +49,8 @@ public class NocturneRemoteBackgroundSyncAuthTests
         });
 
     [Fact]
-    public async Task BackgroundSync_UsesTenantConfigUrl_NotStartupDefaults()
+    public async Task BackgroundSync_UsesTheTenantConfigUrl()
     {
-        var startupDefaults = new NocturneRemoteConnectorConfiguration();
-
         var tenantConfig = new NocturneRemoteConnectorConfiguration
         {
             Url = "https://remote.nocturne.example.com",
@@ -64,7 +59,7 @@ public class NocturneRemoteBackgroundSyncAuthTests
             SyncIntervalMinutes = 5,
         };
 
-        var service = CreateService(RespondOkJson(), startupDefaults);
+        var service = CreateService(RespondOkJson());
 
         var result = await service.SyncDataAsync(tenantConfig, CancellationToken.None, since: null);
 
@@ -75,10 +70,9 @@ public class NocturneRemoteBackgroundSyncAuthTests
     [Fact]
     public async Task BackgroundSync_WithEmptyTenantUrl_ReturnsFailure_NotException()
     {
-        var startupDefaults = new NocturneRemoteConnectorConfiguration();
         var tenantConfig = new NocturneRemoteConnectorConfiguration { Enabled = true, SyncIntervalMinutes = 5 };
 
-        var service = CreateService(RespondOkJson(), startupDefaults);
+        var service = CreateService(RespondOkJson());
 
         var act = async () => await service.SyncDataAsync(tenantConfig, CancellationToken.None, since: null);
 
@@ -103,7 +97,7 @@ public class NocturneRemoteBackgroundSyncAuthTests
             {
                 Content = new StringContent("unauthorized")
             });
-        var service = CreateService(handler, new NocturneRemoteConnectorConfiguration());
+        var service = CreateService(handler);
         var config = new NocturneRemoteConnectorConfiguration
         {
             Url = "https://remote.nocturne.example.com",
