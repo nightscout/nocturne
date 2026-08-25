@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,7 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Subject = Nocturne.Core.Models.Authorization.Subject;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
 
@@ -75,6 +77,80 @@ public class TotpControllerSetupFailureTests
         problem.Status.Should().Be(400);
         problem.Detail.Should().Be(failure.ToString(),
             "the web app matches this against the generated TotpSetupFailure enum");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Setup_WithNoPrimaryFactor_AnswersWithTheFailureValue()
+    {
+        _subjectService
+            .Setup(s => s.GetSubjectByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new Subject { Id = Guid.CreateVersion7(), Name = "rhys" });
+        _subjectService
+            .Setup(s => s.CountPrimaryAuthFactorsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(0);
+
+        var result = await CreateController().Setup();
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>(
+                "an anonymous body carries no detail, so nothing reaches the browser").Subject;
+
+        problem.Status.Should().Be(400);
+        problem.Detail.Should().Be(nameof(TotpSetupFailure.NoPrimaryFactor));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Setup_WhenTheSessionNamesNoSubject_AnswersWithTheFailureValue()
+    {
+        _subjectService
+            .Setup(s => s.GetSubjectByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Subject?)null);
+
+        var result = await CreateController().Setup();
+
+        var problem = (ProblemDetails)((ObjectResult)result.Result!).Value!;
+
+        problem.Status.Should().Be(400);
+        problem.Detail.Should().Be(nameof(TotpSetupFailure.SubjectNotFound));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Setup_WithAPrimaryFactor_IsNotRefused()
+    {
+        _subjectService
+            .Setup(s => s.GetSubjectByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new Subject { Id = Guid.CreateVersion7(), Name = "rhys" });
+        _subjectService
+            .Setup(s => s.CountPrimaryAuthFactorsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(1);
+        _totpService
+            .Setup(s => s.GenerateSetupAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .ReturnsAsync(new TotpSetupResult("otpauth://totp/x", "BASE32", "challenge"));
+
+        var result = await CreateController().Setup();
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// A 400 the endpoint does not declare is not parsed by the generated client, which throws its
+    /// own "An unexpected server error occurred." instead — so the body would never be read no
+    /// matter what the controller put in it. Nothing else in CI regenerates the client to notice.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(TotpController.Setup))]
+    [InlineData(nameof(TotpController.VerifySetup))]
+    [Trait("Category", "Unit")]
+    public void RefusableEndpoints_DeclareTheirBadRequestBody(string action)
+    {
+        typeof(TotpController).GetMethod(action)!
+            .GetCustomAttributes<ProducesResponseTypeAttribute>()
+            .Should().Contain(
+                a => a.StatusCode == 400 && a.Type == typeof(ProblemDetails),
+                "an undeclared 400 reaches the user as NSwag boilerplate");
     }
 
     /// <summary>
