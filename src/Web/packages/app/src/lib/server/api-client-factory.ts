@@ -24,6 +24,7 @@ export interface ServerHttpClientOptions {
   refreshToken?: string;
   guestSessionToken?: string;
   platformAccessToken?: string;
+  recoverySessionToken?: string;
   hashedInstanceKey?: string | null;
   extraHeaders?: Record<string, string>;
   responseCookies?: CookieSetter;
@@ -83,6 +84,11 @@ export function createServerHttpClient(
       if (options?.platformAccessToken) {
         cookies.push(
           `${AUTH_COOKIE_NAMES.platformAccess}=${options.platformAccessToken}`
+        );
+      }
+      if (options?.recoverySessionToken) {
+        cookies.push(
+          `${AUTH_COOKIE_NAMES.recoverySession}=${options.recoverySessionToken}`
         );
       }
       if (cookies.length > 0) {

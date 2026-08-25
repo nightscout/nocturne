@@ -124,7 +124,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Basic glucose statistics including mean, median, percentiles, etc.</returns>
     [HttpPost("basic-stats")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<BasicGlucoseStats> CalculateBasicStats([FromBody] double[] values)
     {
         try
@@ -145,7 +145,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Comprehensive glycemic variability metrics</returns>
     [HttpPost("glycemic-variability")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<GlycemicVariability> CalculateGlycemicVariability(
         [FromBody] GlycemicVariabilityRequest request
     )
@@ -171,7 +171,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Time in range metrics including percentages, durations, and episodes</returns>
     [HttpPost("time-in-range")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<TimeInRangeMetrics> CalculateTimeInRange(
@@ -199,7 +199,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Collection of distribution data points</returns>
     [HttpPost("glucose-distribution")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<DistributionDataPoint>> CalculateGlucoseDistribution(
         [FromBody] GlucoseDistributionRequest request
@@ -226,7 +226,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
@@ -251,7 +251,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Treatment summary with totals and counts</returns>
     [HttpPost("treatment-summary")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<TreatmentSummary> CalculateTreatmentSummary(
         [FromBody] TreatmentSummaryRequest request
     )
@@ -277,7 +277,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Overall averages or null if no data</returns>
     [HttpPost("overall-averages")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<OverallAverages> CalculateOverallAverages(
         [FromBody] DayData[] dailyDataPoints
     )
@@ -304,7 +304,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Comprehensive glucose analytics</returns>
     [HttpPost("comprehensive-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<GlucoseAnalytics> AnalyzeGlucoseData(
         [FromBody] GlucoseAnalyticsRequest request
@@ -333,7 +333,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Extended glucose analytics with modern clinical metrics</returns>
     [HttpPost("extended-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<ExtendedGlucoseAnalytics> AnalyzeGlucoseDataExtended(
         [FromBody] ExtendedGlucoseAnalyticsRequest request
@@ -368,7 +368,7 @@ public class StatisticsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The extended analytics and time-of-day averaged stats for the window.</returns>
     [HttpGet("range-analytics")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
@@ -509,7 +509,7 @@ public class StatisticsController : ControllerBase
     /// <param name="meanGlucose">Mean glucose in mg/dL</param>
     /// <returns>GMI with value and interpretation</returns>
     [HttpGet("gmi/{meanGlucose:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<GlucoseManagementIndicator> CalculateGMI(double meanGlucose)
     {
         try
@@ -530,7 +530,7 @@ public class StatisticsController : ControllerBase
     /// <returns>GRI with score, zone, and interpretation</returns>
     [HttpPost("gri")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<GlycemicRiskIndex> CalculateGRI([FromBody] TimeInRangeMetrics timeInRange)
     {
         try
@@ -551,7 +551,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Clinical target assessment with actionable insights</returns>
     [HttpPost("clinical-assessment")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<ClinicalTargetAssessment> AssessAgainstTargets(
         [FromBody] ClinicalAssessmentRequest request
     )
@@ -577,7 +577,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Data sufficiency assessment</returns>
     [HttpPost("data-sufficiency")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<DataSufficiencyAssessment> AssessDataSufficiency(
         [FromBody] DataSufficiencyRequest request
     )
@@ -603,7 +603,7 @@ public class StatisticsController : ControllerBase
     /// <param name="population">Population type (Type1Adult, Type2Adult, Elderly, Pregnancy, etc.)</param>
     /// <returns>Clinical targets for the specified population</returns>
     [HttpGet("clinical-targets/{population}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<ClinicalTargets> GetClinicalTargets(DiabetesPopulation population)
     {
         try
@@ -623,7 +623,7 @@ public class StatisticsController : ControllerBase
     /// <param name="averageGlucose">Average glucose in mg/dL</param>
     /// <returns>Estimated A1C percentage</returns>
     [HttpGet("estimated-a1c/{averageGlucose:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> CalculateEstimatedA1C(double averageGlucose)
     {
         try
@@ -643,7 +643,7 @@ public class StatisticsController : ControllerBase
     /// <param name="mgdl">Glucose value in mg/dL</param>
     /// <returns>Glucose value in mmol/L</returns>
     [HttpGet("convert/mgdl-to-mmol/{mgdl:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> MgdlToMMOL(double mgdl)
     {
         try
@@ -663,7 +663,7 @@ public class StatisticsController : ControllerBase
     /// <param name="mmol">Glucose value in mmol/L</param>
     /// <returns>Glucose value in mg/dL</returns>
     [HttpGet("convert/mmol-to-mgdl/{mmol:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<double> MmolToMGDL(double mmol)
     {
         try
@@ -683,7 +683,7 @@ public class StatisticsController : ControllerBase
     /// <param name="value">Insulin value</param>
     /// <returns>Formatted insulin string</returns>
     [HttpGet("format/insulin/{value:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<string> FormatInsulinDisplay(double value)
     {
         try
@@ -703,7 +703,7 @@ public class StatisticsController : ControllerBase
     /// <param name="value">Carb value</param>
     /// <returns>Formatted carb string</returns>
     [HttpGet("format/carb/{value:double}")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<string> FormatCarbDisplay(double value)
     {
         try
@@ -724,7 +724,7 @@ public class StatisticsController : ControllerBase
     /// <returns>True if treatment data is valid</returns>
     [HttpPost("validate/treatment")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<bool> ValidateTreatmentData([FromBody] Treatment treatment)
     {
         try
@@ -745,7 +745,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Cleaned collection of treatments</returns>
     [HttpPost("clean/treatments")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     public ActionResult<IEnumerable<Treatment>> CleanTreatmentData(
         [FromBody] Treatment[] treatments
     )
@@ -777,7 +777,7 @@ public class StatisticsController : ControllerBase
     /// (e.g., 1-day periods cannot require 14 days of data).
     /// </remarks>
     [HttpGet("periods")]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<MultiPeriodStatistics>> GetMultiPeriodStatistics(
         CancellationToken cancellationToken = default
@@ -999,7 +999,7 @@ public class StatisticsController : ControllerBase
     /// <returns>Site change impact analysis with averaged glucose patterns</returns>
     [HttpPost("site-change-impact")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<SiteChangeImpactAnalysis> CalculateSiteChangeImpact(
         [FromBody] SiteChangeImpactRequest request
@@ -1029,7 +1029,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Daily basal/bolus ratio breakdown with averages</returns>
     [HttpGet("daily-basal-bolus-ratios")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
         [FromQuery] DateTime startDate,
@@ -1080,7 +1080,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">Inclusive end of the date range.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     [HttpGet("punch-card")]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
         [FromQuery] DateTime startDate,
@@ -1292,7 +1292,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Comprehensive insulin delivery statistics</returns>
     [HttpGet("insulin-delivery-stats")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
         [FromQuery] DateTime startDate,
@@ -1350,7 +1350,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period</param>
     /// <returns>Comprehensive basal analysis with stats, temp basal info, and hourly percentiles</returns>
     [HttpGet("basal-analysis")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
         [FromQuery] DateTime? startDate = null,
@@ -1428,7 +1428,7 @@ public class StatisticsController : ControllerBase
     /// <param name="endDate">End date of the analysis period (UTC)</param>
     /// <returns>24 hourly averages plus the number of days with data</returns>
     [HttpGet("hourly-insulin-delivery")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<HourlyInsulinDeliveryResponse>> GetHourlyInsulinDelivery(
         [FromQuery] DateTime? startDate = null,
@@ -1517,7 +1517,7 @@ public class StatisticsController : ControllerBase
     /// Target range is optional; the method continues without it if the repository throws.
     /// </remarks>
     [HttpGet("aid-system-metrics")]
-    [RequireScope(OAuthScopes.ReportsRead)]
+    [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<AidSystemMetrics>> GetAidSystemMetrics(
         [FromQuery] DateTime startDate,

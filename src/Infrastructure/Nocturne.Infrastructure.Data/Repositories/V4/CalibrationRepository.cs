@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -69,9 +70,8 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.Calibrations
-            .Where(e => e.DataSource == source || (e.DataSource == null && e.Device == source))
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.Calibrations.FromSource(source), AuditContext, $"data_source={source}", ct);
     }
 
     /// <summary>
@@ -91,6 +91,6 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }
 }

@@ -84,11 +84,11 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     public string? RequiredWriteScope(Activity activity)
     {
         if (IsHeartRate(activity))
-            return OAuthScopes.HeartRateReadWrite;
+            return Scope.HeartRateReadWrite;
         if (IsStepCount(activity))
-            return OAuthScopes.StepCountReadWrite;
+            return Scope.StepCountReadWrite;
         if (ActivityStateSpanMapper.IsSleepType(activity.Type))
-            return OAuthScopes.SleepReadWrite;
+            return Scope.SleepReadWrite;
         return null;
     }
 
@@ -97,7 +97,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// <see cref="RequiredWriteScope"/> so the read gate and the storage destination cannot drift
     /// apart. A regular activity reads under <c>treatments.read</c>, which is the scope the legacy
     /// activity read plane has always required for StateSpan-backed activities. A dedicated
-    /// destination with no read counterpart falls back to <see cref="OAuthScopes.FullAccess"/>,
+    /// destination with no read counterpart falls back to <see cref="Scope.FullAccess"/>,
     /// which only an admin grant holds.
     /// </summary>
     /// <param name="activity">The activity to classify.</param>
@@ -105,9 +105,9 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     {
         var writeScope = RequiredWriteScope(activity);
         if (writeScope is null)
-            return OAuthScopes.TreatmentsRead;
+            return Scope.TreatmentsRead;
 
-        return OAuthScopes.ImpliedReadScope(writeScope) ?? OAuthScopes.FullAccess;
+        return Scope.ImpliedReadScope(writeScope) ?? Scope.FullAccess;
     }
 
     /// <inheritdoc/>

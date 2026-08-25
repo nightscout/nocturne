@@ -149,7 +149,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var publicMember = members.Single(m => m.Subject!.IsSystemSubject);
         publicMember.LimitTo24Hours.Should().BeFalse();
         publicMember.DirectPermissions.Should().BeEquivalentTo(
-            TenantPermissions.PublicShareScopes,
+            Scope.PublicShareScopes,
             "the share link shows every shareable category, and nothing beyond that vocabulary");
         publicMember.MemberRoles.Should().BeEmpty(
             "the Public subject must not hold the demo member's write and administration atoms");
@@ -181,7 +181,7 @@ public class DemoTenantServiceResetTests : IDisposable
                 .Select(m => m.Id)
                 .SingleAsync();
             var adminRoleId = await db.TenantRoles
-                .Where(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin)
+                .Where(r => r.TenantId == tenantId && r.Slug == RoleSeeds.Admin)
                 .Select(r => r.Id)
                 .SingleAsync();
 
@@ -208,7 +208,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
             publicMember.MemberRoles.Should().BeEmpty(
                 "provisioning rewrites the Public grant from source, so a stale admin role must go");
-            publicMember.DirectPermissions.Should().BeEquivalentTo(TenantPermissions.PublicShareScopes);
+            publicMember.DirectPermissions.Should().BeEquivalentTo(Scope.PublicShareScopes);
         }
     }
 
@@ -458,7 +458,7 @@ public class DemoTenantServiceResetTests : IDisposable
         await using var db = new NocturneDbContext(_dbOptions);
 
         var roles = new Dictionary<string, Guid>();
-        foreach (var (slug, permissions) in TenantPermissions.SeedRolePermissions)
+        foreach (var (slug, permissions) in RoleSeeds.Permissions)
         {
             var roleId = Guid.CreateVersion7();
             roles[slug] = roleId;
@@ -466,7 +466,7 @@ public class DemoTenantServiceResetTests : IDisposable
             {
                 Id = roleId,
                 TenantId = tenantId,
-                Name = TenantPermissions.SeedRoleNames[slug],
+                Name = RoleSeeds.DisplayNames[slug],
                 Slug = slug,
                 Permissions = new List<string>(permissions),
                 IsSystem = true,
@@ -502,7 +502,7 @@ public class DemoTenantServiceResetTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantMemberId = publicMemberId,
-            TenantRoleId = roles[TenantPermissions.SeedRoles.Admin],
+            TenantRoleId = roles[RoleSeeds.Admin],
             SysCreatedAt = DateTime.UtcNow,
         });
 

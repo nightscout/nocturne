@@ -215,7 +215,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.CarbIntakes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, ct);
+            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>

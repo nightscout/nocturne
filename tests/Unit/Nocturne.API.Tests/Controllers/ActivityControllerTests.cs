@@ -44,8 +44,8 @@ public class ActivityControllerTests
         // Tests that exercise a dedicated category override this per record.
         _mockActivityDecomposer
             .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
-            .Returns(OAuthScopes.TreatmentsRead);
-        GrantScopes(OAuthScopes.TreatmentsRead);
+            .Returns(Scope.TreatmentsRead);
+        GrantScopes(Scope.TreatmentsRead);
     }
 
     /// <summary>Populates the request's granted scopes, as the auth middleware does at runtime.</summary>
@@ -59,7 +59,7 @@ public class ActivityControllerTests
     private void ClassifyReadScopesByType(Dictionary<string, string> typeToReadScope) =>
         _mockActivityDecomposer
             .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
-            .Returns((Activity a) => typeToReadScope.GetValueOrDefault(a.Type ?? "", OAuthScopes.TreatmentsRead));
+            .Returns((Activity a) => typeToReadScope.GetValueOrDefault(a.Type ?? "", Scope.TreatmentsRead));
 
     [Fact]
     public async Task GetActivities_WhenActivitiesExist_ShouldReturnActivities()
@@ -223,12 +223,12 @@ public class ActivityControllerTests
         };
         ClassifyReadScopesByType(new()
         {
-            ["HeartRate"] = OAuthScopes.HeartRateRead,
-            ["StepCount"] = OAuthScopes.StepCountRead,
-            ["Sleep"] = OAuthScopes.SleepRead,
-            ["Exercise"] = OAuthScopes.TreatmentsRead,
+            ["HeartRate"] = Scope.HeartRateRead,
+            ["StepCount"] = Scope.StepCountRead,
+            ["Sleep"] = Scope.SleepRead,
+            ["Exercise"] = Scope.TreatmentsRead,
         });
-        GrantScopes(OAuthScopes.HeartRateRead);
+        GrantScopes(Scope.HeartRateRead);
         _mockActivityService
             .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
@@ -251,12 +251,12 @@ public class ActivityControllerTests
         };
         ClassifyReadScopesByType(new()
         {
-            ["HeartRate"] = OAuthScopes.HeartRateRead,
-            ["StepCount"] = OAuthScopes.StepCountRead,
-            ["Sleep"] = OAuthScopes.SleepRead,
-            ["Exercise"] = OAuthScopes.TreatmentsRead,
+            ["HeartRate"] = Scope.HeartRateRead,
+            ["StepCount"] = Scope.StepCountRead,
+            ["Sleep"] = Scope.SleepRead,
+            ["Exercise"] = Scope.TreatmentsRead,
         });
-        GrantScopes(OAuthScopes.TreatmentsRead);
+        GrantScopes(Scope.TreatmentsRead);
         _mockActivityService
             .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
             .ReturnsAsync(merged);
@@ -275,8 +275,8 @@ public class ActivityControllerTests
     public async Task GetActivity_RecordInUnheldCategory_ReturnsNotFound()
     {
         var activityId = "hr-1";
-        ClassifyReadScopesByType(new() { ["HeartRate"] = OAuthScopes.HeartRateRead });
-        GrantScopes(OAuthScopes.TreatmentsRead);
+        ClassifyReadScopesByType(new() { ["HeartRate"] = Scope.HeartRateRead });
+        GrantScopes(Scope.TreatmentsRead);
         _mockActivityService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = activityId, Type = "HeartRate", Mills = 1 });
@@ -291,8 +291,8 @@ public class ActivityControllerTests
     {
         var activityId = "hr-1";
         var record = new Activity { Id = activityId, Type = "HeartRate", Mills = 1 };
-        ClassifyReadScopesByType(new() { ["HeartRate"] = OAuthScopes.HeartRateRead });
-        GrantScopes(OAuthScopes.HeartRateRead);
+        ClassifyReadScopesByType(new() { ["HeartRate"] = Scope.HeartRateRead });
+        GrantScopes(Scope.HeartRateRead);
         _mockActivityService
             .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(record);
@@ -352,10 +352,10 @@ public class ActivityControllerTests
     {
         // A caller holding only treatments.readwrite (enough to pass the endpoint's RequireScope)
         // must still be blocked from writing sleep data through the merged activity endpoint.
-        GrantScopes(OAuthScopes.TreatmentsReadWrite);
+        GrantScopes(Scope.TreatmentsReadWrite);
         _mockActivityDecomposer
             .Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
-            .Returns(OAuthScopes.SleepReadWrite);
+            .Returns(Scope.SleepReadWrite);
 
         var jsonElement = JsonSerializer.SerializeToElement(
             new Activity { Type = "sleep", Duration = 480 });
@@ -372,10 +372,10 @@ public class ActivityControllerTests
     [Fact]
     public async Task CreateActivities_SleepRecordWithSleepScope_Proceeds()
     {
-        GrantScopes(OAuthScopes.SleepReadWrite);
+        GrantScopes(Scope.SleepReadWrite);
         _mockActivityDecomposer
             .Setup(d => d.RequiredWriteScope(It.IsAny<Activity>()))
-            .Returns(OAuthScopes.SleepReadWrite);
+            .Returns(Scope.SleepReadWrite);
         _mockActivityService
             .Setup(x => x.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Activity> { new() { Id = "s1", Type = "sleep" } });
@@ -397,13 +397,13 @@ public class ActivityControllerTests
         // The id addresses an existing sleep session; even an exercise-typed payload edits sleep
         // data, so a caller lacking sleep.readwrite must be blocked on the existing-record branch.
         const string id = "sleep-session-1";
-        GrantScopes(OAuthScopes.TreatmentsReadWrite);
+        GrantScopes(Scope.TreatmentsReadWrite);
         _mockActivityService
             .Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
         _mockActivityDecomposer
             .Setup(d => d.RequiredWriteScope(It.Is<Activity>(a => a.Type == "sleep")))
-            .Returns(OAuthScopes.SleepReadWrite);
+            .Returns(Scope.SleepReadWrite);
 
         var result = await _controller.UpdateActivity(
             id, new Activity { Type = "exercise" }, CancellationToken.None);

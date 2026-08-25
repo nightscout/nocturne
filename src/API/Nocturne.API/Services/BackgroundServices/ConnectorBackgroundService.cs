@@ -427,8 +427,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
         else
         {
+            // Distinct because the same message repeats per chunk; see
+            // ConnectorConfigurationEntity.LastErrorMessageMaxLength.
             var errorMessage = result.Errors.Count > 0
-                ? string.Join("; ", result.Errors)
+                ? string.Join("; ", result.Errors.Distinct(StringComparer.Ordinal))
                 : !string.IsNullOrWhiteSpace(result.Message)
                     ? result.Message
                     : "Sync failed";

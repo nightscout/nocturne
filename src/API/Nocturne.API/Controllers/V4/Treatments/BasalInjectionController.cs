@@ -36,7 +36,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="UpdateBasalInjectionRequest"/>
 [ApiController]
 [Route("api/v4/insulin/basal-injections")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class BasalInjectionController(
     IBasalInjectionRepository repo,
@@ -48,7 +48,7 @@ public class BasalInjectionController(
 
     /// <inheritdoc/>
     /// <remarks>Basal injections are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
-    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
     public override async Task<ActionResult<BasalInjection>> Create(

@@ -295,7 +295,7 @@
             {/if}
           </div>
           <input type="hidden" name="b:isCurrent" value="on" />
-          {#each deviceList.createForm.fields.allIssues() as issue}
+          {#each deviceList.createForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -589,7 +589,7 @@
             />
           </div>
 
-          {#each activeForm.fields.allIssues() as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>

@@ -180,7 +180,7 @@
     {
       id: "subject",
       accessorFn: (row) =>
-        row.subjectName ?? row.apiSecretHashPrefix ?? "anonymous",
+        row.subjectName ?? row.credentialFingerprint ?? "anonymous",
       header: ({ column }) =>
         renderSnippet(sortableHeaderSnippet as any, {
           column,
@@ -188,7 +188,7 @@
         }),
       cell: ({ row }) =>
         row.original.subjectName ??
-        row.original.apiSecretHashPrefix ??
+        row.original.credentialFingerprint ??
         "anonymous",
     },
     // Endpoint column
@@ -309,7 +309,7 @@
       if (r.subjectId) values.push(r.subjectId);
       if (r.ipAddress) values.push(r.ipAddress);
       if (r.authType) values.push(r.authType);
-      if (r.apiSecretHashPrefix) values.push(r.apiSecretHashPrefix);
+      if (r.credentialFingerprint) values.push(r.credentialFingerprint);
       if (r.statusCode !== undefined) values.push(String(r.statusCode));
 
       return values.join(" ").toLowerCase().includes(search);
@@ -417,12 +417,10 @@
         <p>{row.authType}</p>
       </div>
     {/if}
-    {#if row.apiSecretHashPrefix}
+    {#if row.credentialFingerprint}
       <div>
-        <span class="font-medium text-muted-foreground"
-          >API Secret Prefix</span
-        >
-        <p class="font-mono text-xs">{row.apiSecretHashPrefix}...</p>
+        <span class="font-medium text-muted-foreground">Credential</span>
+        <p class="font-mono text-xs">{row.credentialFingerprint}</p>
       </div>
     {/if}
     {#if row.queryParameters}
@@ -444,7 +442,7 @@
         </div>
       {/if}
     {/if}
-    {#if !row.authType && !row.apiSecretHashPrefix && !row.queryParameters}
+    {#if !row.authType && !row.credentialFingerprint && !row.queryParameters}
       <p class="text-muted-foreground">No additional details available.</p>
     {/if}
   </div>

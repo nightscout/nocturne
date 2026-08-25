@@ -23,7 +23,7 @@ public class TenantOverviewServiceTests
 
     /// <summary>Token scopes equivalent to a session/full-access token.</summary>
     private static readonly IReadOnlySet<string> FullTokenScopes =
-        new HashSet<string> { OAuthScopes.FullAccess };
+        new HashSet<string> { Scope.FullAccess };
 
     // ---- threshold resolution ----
 
@@ -182,15 +182,15 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        SeedMembership(options, subjectId, "included", [TenantPermissions.GlucoseRead]);
-        SeedMembership(options, subjectId, "superuser", [TenantPermissions.Superuser]);
-        SeedMembership(options, subjectId, "readwrite", [TenantPermissions.GlucoseReadWrite]);
+        SeedMembership(options, subjectId, "included", [Scope.GlucoseRead]);
+        SeedMembership(options, subjectId, "superuser", [Scope.FullAccess]);
+        SeedMembership(options, subjectId, "readwrite", [Scope.GlucoseReadWrite]);
         SeedMembership(options, subjectId, "direct-only", rolePermissions: null,
-            directPermissions: [TenantPermissions.GlucoseRead]);
-        SeedMembership(options, subjectId, "no-glucose", [TenantPermissions.TreatmentsRead]);
-        SeedMembership(options, subjectId, "revoked", [TenantPermissions.GlucoseRead], revoked: true);
-        SeedMembership(options, subjectId, "inactive", [TenantPermissions.GlucoseRead], tenantActive: false);
-        SeedMembership(options, Guid.NewGuid(), "other-subject", [TenantPermissions.GlucoseRead]);
+            directPermissions: [Scope.GlucoseRead]);
+        SeedMembership(options, subjectId, "no-glucose", [Scope.TreatmentsRead]);
+        SeedMembership(options, subjectId, "revoked", [Scope.GlucoseRead], revoked: true);
+        SeedMembership(options, subjectId, "inactive", [Scope.GlucoseRead], tenantActive: false);
+        SeedMembership(options, Guid.NewGuid(), "other-subject", [Scope.GlucoseRead]);
 
         var service = NewService(options);
         var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
@@ -209,8 +209,8 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        SeedMembership(options, subjectId, "member-tenant", [TenantPermissions.GlucoseRead]);
-        SeedMembership(options, subjectId, "owner-tenant", [TenantPermissions.Superuser]);
+        SeedMembership(options, subjectId, "member-tenant", [Scope.GlucoseRead]);
+        SeedMembership(options, subjectId, "owner-tenant", [Scope.FullAccess]);
 
         var service = NewService(options);
 
@@ -219,7 +219,7 @@ public class TenantOverviewServiceTests
         // membership used to bypass the intersection here, so an owner's narrowly-scoped
         // third-party token still saw every tenant in the picker.
         var narrow = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { OAuthScopes.TreatmentsRead }, AuthType.OAuthAccessToken);
+            subjectId, new HashSet<string> { Scope.TreatmentsRead }, AuthType.OAuthAccessToken);
         narrow.Tenants.Should().BeEmpty();
 
         // An empty scope set on a delegated credential grants nothing.
@@ -241,13 +241,13 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        SeedMembership(options, subjectId, "member-tenant", [TenantPermissions.GlucoseRead]);
+        SeedMembership(options, subjectId, "member-tenant", [Scope.GlucoseRead]);
         SeedMembership(options, subjectId, "admin-tenant",
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
-        SeedMembership(options, subjectId, "owner-tenant", [TenantPermissions.Superuser]);
-        SeedMembership(options, subjectId, "no-glucose", [TenantPermissions.TreatmentsRead]);
+            RoleSeeds.Permissions[RoleSeeds.Admin]);
+        SeedMembership(options, subjectId, "owner-tenant", [Scope.FullAccess]);
+        SeedMembership(options, subjectId, "no-glucose", [Scope.TreatmentsRead]);
         SeedMembership(options, subjectId, "denied",
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+            RoleSeeds.Permissions[RoleSeeds.Denied]);
 
         var service = NewService(options);
 
@@ -274,13 +274,13 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        SeedMembership(options, subjectId, "member-tenant", [TenantPermissions.GlucoseRead]);
-        SeedMembership(options, subjectId, "owner-tenant", [TenantPermissions.Superuser]);
+        SeedMembership(options, subjectId, "member-tenant", [Scope.GlucoseRead]);
+        SeedMembership(options, subjectId, "owner-tenant", [Scope.FullAccess]);
 
         var service = NewService(options);
 
         var narrow = await service.GetGlucoseReadTenantsAsync(
-            subjectId, new HashSet<string> { OAuthScopes.TreatmentsRead }, AuthType.OAuthAccessToken);
+            subjectId, new HashSet<string> { Scope.TreatmentsRead }, AuthType.OAuthAccessToken);
         narrow.Should().BeEmpty();
 
         var empty = await service.GetGlucoseReadTenantsAsync(
@@ -298,12 +298,12 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        SeedMembership(options, subjectId, "member-tenant", [TenantPermissions.GlucoseRead]);
+        SeedMembership(options, subjectId, "member-tenant", [Scope.GlucoseRead]);
         SeedMembership(options, subjectId, "admin-tenant",
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
-        SeedMembership(options, subjectId, "no-glucose", [TenantPermissions.TreatmentsRead]);
+            RoleSeeds.Permissions[RoleSeeds.Admin]);
+        SeedMembership(options, subjectId, "no-glucose", [Scope.TreatmentsRead]);
         SeedMembership(options, subjectId, "denied",
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+            RoleSeeds.Permissions[RoleSeeds.Denied]);
 
         var service = NewService(options);
 
@@ -321,21 +321,21 @@ public class TenantOverviewServiceTests
     {
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
-        SeedMembership(options, subjectId, "owner-tenant", [TenantPermissions.Superuser]);
+        SeedMembership(options, subjectId, "owner-tenant", [Scope.FullAccess]);
 
         var service = NewService(options);
 
         // Unscoped credential: membership is the whole authority, so "*" reaches the caller.
         var session = await service.GetGlucoseReadTenantsAsync(
             subjectId, new HashSet<string>(), AuthType.SessionCookie);
-        session.Single().AllowedScopes.Should().Contain(TenantPermissions.Superuser);
+        session.Single().AllowedScopes.Should().Contain(Scope.FullAccess);
 
         // Delegated credential: the consented scope list is a ceiling the "*" membership
         // must not widen past.
         var delegated = await service.GetGlucoseReadTenantsAsync(
-            subjectId, new HashSet<string> { OAuthScopes.GlucoseRead }, AuthType.OAuthAccessToken);
-        delegated.Single().AllowedScopes.Should().NotContain(TenantPermissions.Superuser);
-        delegated.Single().AllowedScopes.Should().Contain(OAuthScopes.GlucoseRead);
+            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken);
+        delegated.Single().AllowedScopes.Should().NotContain(Scope.FullAccess);
+        delegated.Single().AllowedScopes.Should().Contain(Scope.GlucoseRead);
     }
 
     [Fact]
@@ -344,11 +344,11 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
         SeedMembership(options, subjectId, "family",
-            [TenantPermissions.GlucoseRead, TenantPermissions.AlertsRead]);
+            [Scope.GlucoseRead, Scope.AlertsRead]);
 
         var service = NewService(options);
         var response = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { OAuthScopes.GlucoseRead }, AuthType.OAuthAccessToken);
+            subjectId, new HashSet<string> { Scope.GlucoseRead }, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.ActiveAlertCount.Should().BeNull();
@@ -362,7 +362,7 @@ public class TenantOverviewServiceTests
     {
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
-        var tenantId = SeedMembership(options, subjectId, "family", [TenantPermissions.GlucoseRead]);
+        var tenantId = SeedMembership(options, subjectId, "family", [Scope.GlucoseRead]);
         SeedActiveExcursion(options, tenantId, AlertRuleSeverity.Warning);
 
         var service = NewService(options);
@@ -382,7 +382,7 @@ public class TenantOverviewServiceTests
         var options = NewOptions();
 
         var tenantId = SeedMembership(options, subjectId, "family",
-            [TenantPermissions.GlucoseRead, TenantPermissions.AlertsRead]);
+            [Scope.GlucoseRead, Scope.AlertsRead]);
 
         // One active excursion (warning) + one ended (critical, must not count).
         using (var db = new NocturneDbContext(options) { TenantId = tenantId })
@@ -453,8 +453,8 @@ public class TenantOverviewServiceTests
         var options = NewOptions();
 
         var tenantA = SeedMembership(options, subjectId, "tenant-a",
-            [TenantPermissions.GlucoseRead, TenantPermissions.AlertsRead]);
-        var tenantB = SeedMembership(options, Guid.NewGuid(), "tenant-b", [TenantPermissions.GlucoseRead]);
+            [Scope.GlucoseRead, Scope.AlertsRead]);
+        var tenantB = SeedMembership(options, Guid.NewGuid(), "tenant-b", [Scope.GlucoseRead]);
 
         // Tenant B: an active critical excursion and a threshold rule that would move UrgentLow.
         SeedActiveExcursion(options, tenantB, AlertRuleSeverity.Critical,
@@ -477,8 +477,8 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
 
-        var okTenant = SeedMembership(options, subjectId, "ok-tenant", [TenantPermissions.GlucoseRead]);
-        var badTenant = SeedMembership(options, subjectId, "bad-tenant", [TenantPermissions.GlucoseRead]);
+        var okTenant = SeedMembership(options, subjectId, "ok-tenant", [Scope.GlucoseRead]);
+        var badTenant = SeedMembership(options, subjectId, "bad-tenant", [Scope.GlucoseRead]);
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest, failingTenantId: badTenant);
@@ -504,7 +504,7 @@ public class TenantOverviewServiceTests
     {
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
-        var tenantId = SeedMembership(options, subjectId, "family", [TenantPermissions.GlucoseRead]);
+        var tenantId = SeedMembership(options, subjectId, "family", [Scope.GlucoseRead]);
 
         using (var db = new NocturneDbContext(options) { TenantId = tenantId })
         {

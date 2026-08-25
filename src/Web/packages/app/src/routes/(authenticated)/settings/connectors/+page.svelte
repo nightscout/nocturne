@@ -62,6 +62,7 @@
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { copyToClipboard } from "$lib/utils";
+  import { createTerminalRunTracker } from "./terminal-run-tracker";
 
   const isPlatformAdmin = $derived((page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false);
 
@@ -128,12 +129,9 @@
     return entries.find((p) => p.phase === "Syncing") ?? entries.at(-1) ?? null;
   });
 
+  const terminalRuns = createTerminalRunTracker();
   $effect(() => {
-    const progress = syncProgressByConnector;
-    const hasCompleted = Object.values(progress).some(
-      (p) => p.phase === "Completed" || p.phase === "Failed"
-    );
-    if (hasCompleted) {
+    if (terminalRuns.hasNewlyFinishedRun(syncProgressByConnector)) {
       connectorStatusesQuery.refresh();
     }
   });

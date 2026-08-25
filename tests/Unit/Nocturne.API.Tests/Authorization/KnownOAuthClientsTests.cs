@@ -51,7 +51,7 @@ public class KnownOAuthClientsTests
 
             foreach (var scope in entry.TypicalScopes)
             {
-                OAuthScopes.IsValid(scope).Should().BeTrue($"'{scope}' in {entry.DisplayName} must be a valid scope");
+                Scope.IsValid(scope).Should().BeTrue($"'{scope}' in {entry.DisplayName} must be a valid scope");
             }
         }
     }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
@@ -685,9 +686,10 @@ public class DataOverviewService : IDataOverviewService
         // Bucket readings into TIR zones
         var totalCount = glucoseReadings.Count;
         var veryLowCount = glucoseReadings.Count(v => v < 54);
-        var lowCount = glucoseReadings.Count(v => v >= 54 && v < 70);
-        var targetCount = glucoseReadings.Count(v => v >= 70 && v <= 180);
-        var highCount = glucoseReadings.Count(v => v > 180 && v <= 250);
+        var lowCount = glucoseReadings.Count(v => v >= 54 && v < GlucoseConstants.TargetBottomMgdl);
+        var targetCount = glucoseReadings.Count(
+            v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl);
+        var highCount = glucoseReadings.Count(v => v > GlucoseConstants.TargetTopMgdl && v <= 250);
         var veryHighCount = glucoseReadings.Count(v => v > 250);
 
         var percentages = new TimeInRangePercentages
@@ -934,7 +936,8 @@ public class DataOverviewService : IDataOverviewService
             {
                 var readings = g.ToList();
                 var total = readings.Count;
-                var inRange = readings.Count(r => r.Mgdl >= 70 && r.Mgdl <= 180);
+                var inRange = readings.Count(
+                    r => r.Mgdl >= GlucoseConstants.TargetBottomMgdl && r.Mgdl <= GlucoseConstants.TargetTopMgdl);
                 return new
                 {
                     Date = g.Key,

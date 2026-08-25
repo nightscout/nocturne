@@ -523,6 +523,53 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         after.Should().BeNull();
     }
 
+    [Fact]
+    public async Task RevokeAsync_promotes_the_sole_survivor_when_the_default_is_deleted()
+    {
+        var tenantA = NewTenant();
+        var a = await _service.CreateLinkAsync(Platform, UserA, tenantA, NewSubject(), "lily", "Lily", default);
+        var b = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+        var elsewhere = await _service.CreateLinkAsync(Platform, UserB, NewTenant(), NewSubject(), "rose", "Rose", default);
+        a.IsDefault.Should().BeTrue();
+        b.IsDefault.Should().BeFalse();
+
+        await _service.RevokeAsync(a.Id, tenantScope: tenantA, ct: default);
+
+        var bAfter = await _service.GetByIdAsync(b.Id, tenantScope: null, ct: default);
+        bAfter!.IsDefault.Should().BeTrue(
+            "the survivor is in another tenant than the revoked link, so a tenant-scoped promotion would miss it");
+        var elsewhereAfter = await _service.GetByIdAsync(elsewhere.Id, tenantScope: null, ct: default);
+        elsewhereAfter!.IsDefault.Should().BeTrue("another chat account's links are not survivors of this one");
+    }
+
+    [Fact]
+    public async Task RevokeAsync_promotes_the_sole_survivor_of_an_account_that_held_no_default()
+    {
+        InsertLink(UserA, NewTenant(), "lily", isDefault: false);
+        InsertLink(UserA, NewTenant(), "oliver", isDefault: false);
+        var before = await _service.GetCandidatesAsync(Platform, UserA, default);
+
+        await _service.RevokeAsync(before.Single(d => d.Label == "lily").Id, tenantScope: null, ct: default);
+
+        var survivors = await _service.GetCandidatesAsync(Platform, UserA, default);
+        survivors.Should().ContainSingle().Which.IsDefault.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RevokeAsync_leaves_no_default_when_more_than_one_link_survives()
+    {
+        var tenantA = NewTenant();
+        var a = await _service.CreateLinkAsync(Platform, UserA, tenantA, NewSubject(), "lily", "Lily", default);
+        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "rose", "Rose", default);
+
+        await _service.RevokeAsync(a.Id, tenantScope: tenantA, ct: default);
+
+        var survivors = await _service.GetCandidatesAsync(Platform, UserA, default);
+        survivors.Should().HaveCount(2);
+        survivors.Should().OnlyContain(d => !d.IsDefault, "choosing between two tenants belongs to the user");
+    }
+
     // ---- GetByTenantAsync ----
 
     [Fact]
@@ -538,61 +585,31 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         result[0].TenantId.Should().Be(t1);
     }
 
-    // ---- GetByPlatformAndUserAsync ----
+    // ---- GetDefaultAsync ----
 
     [Fact]
-    public async Task GetByPlatformAndUserAsync_returns_exact_match_when_label_provided()
+    public async Task GetDefaultAsync_returns_the_holder_from_whichever_tenant_holds_it()
     {
-        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
-        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+        var a = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
+        var b = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+        await _service.SetDefaultAsync(b.Id, tenantScope: null, ct: default);
+        await _service.CreateLinkAsync(Platform, UserB, NewTenant(), NewSubject(), "rose", "Rose", default);
 
-        var result = await _service.GetByPlatformAndUserAsync(Platform, UserA, "oliver", default);
+        var result = await _service.GetDefaultAsync(Platform, UserA, default);
+
         result.Should().NotBeNull();
-        result!.Label.Should().Be("oliver");
+        result!.Id.Should().Be(b.Id);
+        result.TenantId.Should().NotBe(a.TenantId);
     }
 
     [Fact]
-    public async Task GetByPlatformAndUserAsync_returns_default_when_label_null_and_multiple_exist()
+    public async Task GetDefaultAsync_returns_null_when_no_link_holds_the_default()
     {
-        var a = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
-        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
+        InsertLink(UserA, NewTenant(), "lily", isDefault: false);
+        await _service.CreateLinkAsync(Platform, UserB, NewTenant(), NewSubject(), "rose", "Rose", default);
 
-        var result = await _service.GetByPlatformAndUserAsync(Platform, UserA, null, default);
-        result.Should().NotBeNull();
-        result!.Id.Should().Be(a.Id);
-    }
+        var result = await _service.GetDefaultAsync(Platform, UserA, default);
 
-    [Fact]
-    public async Task GetByPlatformAndUserAsync_returns_single_when_only_one_exists()
-    {
-        var a = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
-        // Force IsDefault=false to simulate "no default"
-        using (var db = _factory.CreateDbContext())
-        {
-            var entity = await db.ChatIdentityDirectory.FirstAsync(d => d.Id == a.Id);
-            entity.IsDefault = false;
-            await db.SaveChangesAsync();
-        }
-
-        var result = await _service.GetByPlatformAndUserAsync(Platform, UserA, null, default);
-        result.Should().NotBeNull();
-        result!.Id.Should().Be(a.Id);
-    }
-
-    [Fact]
-    public async Task GetByPlatformAndUserAsync_returns_null_when_label_null_and_ambiguous()
-    {
-        var a = await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "lily", "Lily", default);
-        await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
-        // Clear default flag without setting another
-        using (var db = _factory.CreateDbContext())
-        {
-            var entity = await db.ChatIdentityDirectory.FirstAsync(d => d.Id == a.Id);
-            entity.IsDefault = false;
-            await db.SaveChangesAsync();
-        }
-
-        var result = await _service.GetByPlatformAndUserAsync(Platform, UserA, null, default);
         result.Should().BeNull();
     }
 

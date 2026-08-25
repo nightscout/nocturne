@@ -11,9 +11,11 @@ const settings: TenantAlertSettingsResponse = {
   dndScheduleEnabled: false,
 } as TenantAlertSettingsResponse;
 
+let updateImpl: () => Promise<TenantAlertSettingsResponse>;
+
 vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
   get: () => ({ current: settings }),
-  update: () => Promise.resolve(settings),
+  update: () => updateImpl(),
 }));
 
 import DndPage from "./+page.svelte";
@@ -24,6 +26,7 @@ const accessDenied = () => page.getByText("Access Denied");
 describe("alerts/dnd page", () => {
   beforeEach(() => {
     pageState.data = {};
+    updateImpl = () => Promise.resolve(settings);
   });
 
   it("shows the access-denied card for a member without alerts.readwrite", async () => {
@@ -45,5 +48,42 @@ describe("alerts/dnd page", () => {
       .element(page.getByText("Do Not Disturb is currently"))
       .toBeVisible();
     await expect.element(accessDenied()).not.toBeInTheDocument();
+  });
+
+  it("shows the server's reason when the save is refused", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    // A rejected generated remote function is SvelteKit's `HttpError`: a plain
+    // `{ status, body }` with no `Error` in its prototype chain.
+    updateImpl = () =>
+      Promise.reject({
+        status: 400,
+        body: { message: "The schedule must end after it starts." },
+      });
+
+    render(DndPage, {});
+    await saveButton().click();
+
+    await expect
+      .element(page.getByText("The schedule must end after it starts."))
+      .toBeVisible();
+  });
+
+  it("keeps a server fault behind the page's own wording", async () => {
+    pageState.data = { effectivePermissions: ["alerts.readwrite"] };
+    updateImpl = () =>
+      Promise.reject({
+        status: 500,
+        body: { message: "npgsql: connection reset" },
+      });
+
+    render(DndPage, {});
+    await saveButton().click();
+
+    await expect
+      .element(page.getByText("Failed to save DND settings"))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("npgsql: connection reset"))
+      .not.toBeInTheDocument();
   });
 });

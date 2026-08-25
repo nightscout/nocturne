@@ -19,6 +19,7 @@ import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
+import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import { STATIC_ASSET_PREFIXES, isPublicRoute } from "$lib/server/public-routes";
 import {
@@ -353,9 +354,11 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const refreshToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
   const guestSessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
   const platformAccessToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
+  const recoverySessionToken = onShareHost ? undefined : event.cookies.get(AUTH_COOKIE_NAMES.recoverySession);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
+    ...clientAddressHeaders(event),
   };
 
   // Forward the original Host for tenant resolution behind reverse proxies.
@@ -379,6 +382,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     refreshToken,
     guestSessionToken,
     platformAccessToken,
+    recoverySessionToken,
     extraHeaders,
     responseCookies: event.cookies,
     rawSetCookies: event.locals.rawSetCookies,

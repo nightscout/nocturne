@@ -22,12 +22,12 @@ namespace Nocturne.API.Controllers.Authentication;
 /// (<see cref="DirectGrantTokenHandler.ComputeSha256Hex"/>); the plaintext is returned once at
 /// creation and cannot be retrieved again.
 ///
-/// Scopes are validated and normalized via <see cref="OAuthScopes.Normalize"/> before storage.
+/// Scopes are validated and normalized via <see cref="Scope.Normalize"/> before storage.
 /// All mutations are audit-logged through <see cref="IAuthAuditService"/>.
 /// </remarks>
 /// <seealso cref="DirectGrantTokenHandler"/>
 /// <seealso cref="IDirectGrantService"/>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 [ApiController]
 [Route("api/auth/direct-grants")]
 [Tags("Authentication")]
@@ -68,7 +68,7 @@ public class DirectGrantController : ControllerBase
         }
 
         var result = await _directGrantService.CreateAsync(
-            _dbContext, auth.SubjectId.Value, request.Label, request.Scopes,
+            _dbContext, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
@@ -159,6 +159,7 @@ public class CreateDirectGrantResponse
     public string Label { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
 }
 
 /// <summary>
@@ -171,6 +172,12 @@ public class DirectGrantDto
     public string Label { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// When the grant stops authenticating. Null means it never does.
+    /// </summary>
+    public DateTime? ExpiresAt { get; set; }
+
     public DateTime? LastUsedAt { get; set; }
 
     /// <summary>

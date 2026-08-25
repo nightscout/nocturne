@@ -17,7 +17,7 @@ public static class ShareRlsPolicy
     /// <summary>Name of the RESTRICTIVE FOR SELECT policy applied to every tenant-scoped table.</summary>
     public const string PolicyName = "share_category_read";
 
-    // Table and scope identifiers come from the model and OAuthScopes constants, never user
+    // Table and scope identifiers come from the model and Scope constants, never user
     // input; the patterns are belt-and-suspenders so a malformed identifier fails closed
     // (throws) rather than being interpolated into DDL.
     private static readonly Regex TableNamePattern = new("^[a-z_][a-z0-9_]*$", RegexOptions.Compiled);

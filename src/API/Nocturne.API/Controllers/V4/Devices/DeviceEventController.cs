@@ -36,7 +36,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="DeviceAgeController"/>
 [ApiController]
 [Route("api/v4/observations/device-events")]
-[RequireScope(OAuthScopes.DevicesRead)]
+[RequireScope(Scope.DevicesRead)]
 [Produces("application/json")]
 public class DeviceEventController(
     IDeviceEventRepository repo,
@@ -50,7 +50,7 @@ public class DeviceEventController(
     /// the <c>devices.read</c> share category, so they follow devices rather than the treatments
     /// category their legacy event types came from.
     /// </remarks>
-    public override string WriteScope => OAuthScopes.DevicesReadWrite;
+    public override string WriteScope => Scope.DevicesReadWrite;
 
     /// <summary>
     /// Lists device events. Adds an optional <c>patientDeviceId</c> query filter on top of the base list

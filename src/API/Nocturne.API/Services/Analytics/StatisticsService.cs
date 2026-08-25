@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Nocturne.API.Services.Profiles.Resolvers;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -1178,8 +1179,8 @@ public class StatisticsService : IStatisticsService
             return 0;
         }
 
-        const double targetLow = 70;
-        const double targetHigh = 180;
+        const double targetLow = GlucoseConstants.TargetBottomMgdl;
+        const double targetHigh = GlucoseConstants.TargetTopMgdl;
 
         var inRangeCount = valuesList.Count(val => val >= targetLow && val <= targetHigh);
         var percentTimeInRange = (double)inRangeCount / valuesList.Count;
@@ -2578,7 +2579,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Glucose value in mmol/L</returns>
     public double MgdlToMMOL(double mgdl)
     {
-        return Math.Round((mgdl / 18.01559) * 10) / 10;
+        return Math.Round((mgdl / GlucoseConstants.MgdlPerMmol) * 10) / 10;
     }
 
     /// <summary>
@@ -2588,7 +2589,7 @@ public class StatisticsService : IStatisticsService
     /// <returns>Glucose value in mg/dL</returns>
     public double MmolToMGDL(double mmol)
     {
-        return Math.Round(mmol * 18.01559);
+        return Math.Round(mmol * GlucoseConstants.MgdlPerMmol);
     }
 
     /// <summary>
@@ -2934,9 +2935,9 @@ public class StatisticsService : IStatisticsService
 
             // Calculate time in range
             var tirBefore =
-                (double)beforeValues.Count(v => v >= 70 && v <= 180) / beforeValues.Count * 100;
+                (double)beforeValues.Count(v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl) / beforeValues.Count * 100;
             var tirAfter =
-                (double)afterValues.Count(v => v >= 70 && v <= 180) / afterValues.Count * 100;
+                (double)afterValues.Count(v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl) / afterValues.Count * 100;
 
             // Calculate CV (coefficient of variation)
             var stdDevBefore = Math.Sqrt(

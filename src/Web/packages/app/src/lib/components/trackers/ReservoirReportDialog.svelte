@@ -8,6 +8,7 @@
   import { Droplet } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { create as createReservoirReport } from "$api/generated/reservoirReports.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   type ReportKind = "Reading" | "Fill";
 
@@ -70,7 +71,7 @@
       onReported?.();
     } catch (err) {
       console.error("Failed to report reservoir value:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to record reservoir value");
+      toast.error(describeSubmitError(err, "Failed to record reservoir value"));
     } finally {
       isSubmitting = false;
     }

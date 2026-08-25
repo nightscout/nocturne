@@ -8,13 +8,14 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import ReportsSkeleton from "./ReportsSkeleton.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { Snippet } from "svelte";
 
   interface Props {
     /** Whether the resource is loading */
     loading: boolean;
-    /** Error object or message, if any */
-    error: Error | string | null | undefined;
+    /** Error object, message, or rejected remote-function value, if any */
+    error: unknown;
     /** Whether there is cached data to show (prevents skeleton flash) */
     hasData?: boolean;
     /** Whether a new value is loading while the previous one is still shown */
@@ -50,7 +51,9 @@
     error
       ? error instanceof Error
         ? error.message
-        : String(error)
+        : typeof error === "string"
+          ? error
+          : remoteErrorMessage(error, "Something went wrong. Please try again.")
       : null
   );
 

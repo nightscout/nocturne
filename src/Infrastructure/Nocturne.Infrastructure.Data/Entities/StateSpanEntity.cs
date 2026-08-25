@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StateSpan
 /// </summary>
 [Table("state_spans")]
-public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped
+public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, ISoftDeletable
 {
     /// <summary>
     /// Identifier of the tenant this state span belongs to
@@ -78,6 +78,14 @@ public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped
     /// </summary>
     [Column("superseded_by_id")]
     public Guid? SupersededById { get; set; }
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [AuditIgnored]
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 
     /// <summary>
     /// System tracking: when record was created

@@ -155,7 +155,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.DeviceEvents.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, ct);
+            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>

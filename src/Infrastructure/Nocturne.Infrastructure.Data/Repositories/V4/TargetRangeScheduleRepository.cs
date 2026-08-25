@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -90,9 +91,9 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx
-            .TargetRangeSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix))
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.TargetRangeSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
+            AuditContext, $"legacy_id_prefix={prefix}", ct);
     }
 
     /// <summary>

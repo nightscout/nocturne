@@ -3,8 +3,9 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
-/// Complete UI settings configuration that can be served to frontend clients.
-/// This model aggregates all settings pages data - devices, algorithm, features, notifications, and services.
+/// Complete UI settings configuration that can be served to frontend clients. It aggregates the
+/// settings pages listed in <see cref="UISettingsSections"/>, each of which is separately
+/// addressable and separately persisted.
 /// In demo mode, these are generated from demo configuration; in production, they come from the database.
 /// Note: Therapy settings are managed via Nightscout Profiles (/api/v1/profile).
 /// </summary>
@@ -236,6 +237,13 @@ public class FeatureSettings
     [JsonPropertyName("widgets")]
     public List<WidgetConfig> Widgets { get; set; } = GetDefaultWidgets();
 
+    /// <summary>
+    /// Legacy Nightscout plugin toggles, carried for schema compatibility and empty by default.
+    /// Unlike <see cref="Widgets"/> this gates nothing: the dashboard's status pills appear when the
+    /// data behind them arrives, and the tracker pill row is gated by
+    /// <see cref="TrackerPillsSettings.Enabled"/>. Defaults here would ship every tenant a stored
+    /// list nothing reads.
+    /// </summary>
     [JsonPropertyName("plugins")]
     public Dictionary<string, PluginSettings> Plugins { get; set; } = new();
 

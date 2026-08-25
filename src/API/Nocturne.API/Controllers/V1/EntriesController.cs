@@ -64,12 +64,18 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: the current
+    /// reading is the most staleness-sensitive value the API serves. The <c>Last-Modified</c> /
+    /// <c>If-Modified-Since</c> handling below still answers a conditional poll with a 304, so
+    /// revalidating callers pay no body.
+    /// </remarks>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/entries/current")]
-    [ResponseCache(Duration = 60, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetCurrentEntry(
         CancellationToken cancellationToken = default
     )
@@ -163,7 +169,7 @@ public class EntriesController : ControllerBase
     [NightscoutEndpoint("/api/v1/entries/{spec}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetEntry(
         string spec,
         CancellationToken cancellationToken = default
@@ -297,12 +303,18 @@ public class EntriesController : ControllerBase
     /// <param name="dateString">ISO date string for date filtering</param>
     /// <param name="format">Output format (json, csv, tsv, txt)</param>
     /// <returns>Array of entries matching the criteria</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: a reading or
+    /// correction that has just landed must not be missing from the next poll. The
+    /// <c>Last-Modified</c> / <c>If-Modified-Since</c> handling below still answers a conditional
+    /// poll with a 304, so revalidating callers pay no body.
+    /// </remarks>
     [HttpGet]
     [NightscoutEndpoint("/api/v1/entries")]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" }, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult> GetEntries(
         [FromQuery] string? find = null,
         [FromQuery] int? count = null,
@@ -528,7 +540,7 @@ public class EntriesController : ControllerBase
     /// <returns>Created entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -816,7 +828,7 @@ public class EntriesController : ControllerBase
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -905,7 +917,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of deletion</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -994,7 +1006,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of bulk deletion</returns>
     [HttpDelete]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -1075,7 +1087,7 @@ public class EntriesController : ControllerBase
     /// <returns>Async processing response with correlation ID and status URL</returns>
     [HttpPost("async")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/async")]
     [ProducesResponseType(typeof(AsyncProcessingResponse), 202)]
     [ProducesResponseType(typeof(object), 400)]

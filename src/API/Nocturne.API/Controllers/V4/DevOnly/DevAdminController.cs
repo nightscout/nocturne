@@ -1000,7 +1000,7 @@ public class DevAdminController : ControllerBase
         // 4. Owner membership with full permissions
         await _db.PinTenantAsync(tenant.Id, ct);
         var ownerRole = await _db.TenantRoles
-            .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == TenantPermissions.SeedRoles.Owner)
+            .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == RoleSeeds.Owner)
             .FirstAsync(ct);
 
         await _tenantService.AddMemberAsync(

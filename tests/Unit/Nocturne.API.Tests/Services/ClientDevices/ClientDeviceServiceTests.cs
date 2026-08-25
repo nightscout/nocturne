@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Services.ClientDevices;
 public class ClientDeviceServiceTests
 {
     private static readonly IReadOnlySet<string> FullDeviceScopes =
-        new HashSet<string> { OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate };
+        new HashSet<string> { Scope.DeviceNotify, Scope.DeviceActuate };
 
     private static ClientDeviceService CreateService(NocturneDbContext ctx)
         => new(ctx, NullLogger<ClientDeviceService>.Instance);
@@ -82,7 +82,7 @@ public class ClientDeviceServiceTests
     {
         using var ctx = CreateContext();
         var svc = CreateService(ctx);
-        var notifyOnly = new HashSet<string> { OAuthScopes.DeviceNotify };
+        var notifyOnly = new HashSet<string> { Scope.DeviceNotify };
 
         var dto = await svc.RegisterAsync(Guid.NewGuid(), new RegisterDeviceRequest
         {

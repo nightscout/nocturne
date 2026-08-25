@@ -236,14 +236,7 @@ public class SessionCookieHandler : IAuthHandler
     /// <summary>
     /// Get client IP address
     /// </summary>
-    private static string? GetClientIpAddress(HttpContext context)
-    {
-        var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-        return context.Connection.RemoteIpAddress?.ToString();
-    }
+    private static string? GetClientIpAddress(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString();
 
 }

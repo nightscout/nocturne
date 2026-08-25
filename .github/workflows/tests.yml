@@ -33,6 +33,40 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # No job here builds nocturne.sln — CI runs named projects only (see Test below) — so this
+      # is the only thing gating solution membership, and it has to hold in both directions.
+      # scripts/Shared is the deliberate omission: scripts/ consumes it through `#:project`.
+      - name: Solution and project tree agree
+        run: |
+          tracked=$(git -c core.quotePath=false ls-files '*.csproj' | sort)
+          listed=$(dotnet sln nocturne.sln list | { grep -E '\.csproj[[:space:]]*$' || true; } | sed 's|\\|/|g; s|[[:space:]]*$||' | sort)
+          if [ -z "$tracked" ] || [ -z "$listed" ]; then
+            echo "Nothing to compare: git found $(printf '%s' "$tracked" | grep -c .) csproj, nocturne.sln listed $(printf '%s' "$listed" | grep -c .)"
+            exit 1
+          fi
+          absent=$(comm -23 <(echo "$tracked") <(echo "$listed") | { grep -vx 'scripts/Shared/Shared.csproj' || true; })
+          dangling=$(comm -13 <(echo "$tracked") <(echo "$listed"))
+          if [ -n "$absent" ]; then
+            echo "Missing from nocturne.sln:"
+            echo "$absent"
+          fi
+          if [ -n "$dangling" ]; then
+            echo "Listed in nocturne.sln but not a tracked file:"
+            echo "$dangling"
+          fi
+          [ -z "$absent$dangling" ]
+
+      # Entering Nocturne.E2E.Tests starts the whole Aspire stack, so it must stay uncollected
+      # unless RunE2E is set; a csproj edit that re-arms it would wedge every unfiltered run.
+      - name: E2E suite stays opt-in
+        run: |
+          collected=$(dotnet msbuild tests/E2E/Nocturne.E2E.Tests/Nocturne.E2E.Tests.csproj \
+            -getProperty:IsTestProject -p:GenerateNSwagClient=false)
+          if [ "$collected" != "false" ]; then
+            echo "IsTestProject is '$collected', expected 'false' without -p:RunE2E=true"
+            exit 1
+          fi
+
       - name: Test
         run: |
           # Build per-project to avoid Windows-only projects (Desktop, Widgets)
@@ -40,7 +74,7 @@ jobs:
             csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
             [ -z "$csproj" ] && continue
             dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=Performance&Category!=E2E" \
+              --filter "Category!=Integration&Category!=E2E" \
               --logger "trx;LogFileName=unit.trx" \
               -p:GenerateNSwagClient=false \
               || exit 1
@@ -198,7 +232,7 @@ jobs:
       - name: Integration tests (Infrastructure.Data — RLS + DataProtection)
         run: |
           dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
-            --filter "Category!=Performance&Category!=E2E" \
+            --filter "Category!=E2E" \
             --logger "trx;LogFileName=integration-db.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1

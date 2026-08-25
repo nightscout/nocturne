@@ -28,7 +28,7 @@ public class AuditContextMiddleware
             mutableContext.AuthType = authContext?.AuthType.ToString();
             mutableContext.TokenId = authContext?.TokenId;
             mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();
-            mutableContext.CorrelationId = httpContext.TraceIdentifier;
+            mutableContext.TraceId = httpContext.TraceIdentifier;
             mutableContext.Endpoint = $"{httpContext.Request.Method} {httpContext.Request.Path}";
         }
 

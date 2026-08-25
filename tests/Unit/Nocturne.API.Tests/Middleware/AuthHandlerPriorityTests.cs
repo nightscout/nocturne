@@ -17,6 +17,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Tests.Middleware;
 
@@ -110,7 +111,7 @@ public class AuthHandlerPriorityTests
         var httpContext = new DefaultHttpContext();
         await middleware.InvokeAsync(httpContext);
 
-        var authContext = httpContext.Items["AuthContext"] as AuthContext;
+        var authContext = httpContext.GetAuthContext();
         authContext.Should().NotBeNull();
         authContext!.SubjectName.Should().Be("real-user",
             "the handler with lower priority number (SessionCookie=50) should win " +
@@ -156,7 +157,7 @@ public class AuthHandlerPriorityTests
         var httpContext = new DefaultHttpContext();
         await middleware.InvokeAsync(httpContext);
 
-        var authContext = httpContext.Items["AuthContext"] as AuthContext;
+        var authContext = httpContext.GetAuthContext();
         authContext.Should().NotBeNull();
         authContext!.SubjectName.Should().Be("instance-service",
             "when the session cookie handler skips, the instance key handler should authenticate");
@@ -201,7 +202,7 @@ public class AuthHandlerPriorityTests
         var httpContext = new DefaultHttpContext();
         await middleware.InvokeAsync(httpContext);
 
-        var authContext = httpContext.Items["AuthContext"] as AuthContext;
+        var authContext = httpContext.GetAuthContext();
         authContext.Should().NotBeNull();
         authContext!.IsAuthenticated.Should().BeFalse(
             "when a handler explicitly fails (not skip), the chain should stop " +

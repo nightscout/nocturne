@@ -10,6 +10,7 @@
     Loader2,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     list as listClockFaces,
     create as createClockFace,
@@ -164,7 +165,7 @@
         <Card.Root class="border-destructive">
           <Card.Content class="py-8 text-center space-y-3">
             <p class="text-destructive">
-              {error instanceof Error ? error.message : "Failed to load clock faces"}
+              {remoteErrorMessage(error, "Failed to load clock faces")}
             </p>
             <Button variant="outline" onclick={reset}>Retry</Button>
           </Card.Content>

@@ -9,7 +9,7 @@
 //! ownership is coordinated with the glucose poll via shared state so the two don't fight over the
 //! icon and the normal tile is restored when the last flashing excursion clears.
 
-use crate::glucose_poll::CurrentBg;
+use crate::glucose_poll::{CurrentBg, MGDL_PER_MMOL};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -20,16 +20,12 @@ use tauri::{AppHandle, Manager};
 pub const TRAY_ID: &str = "nocturne-companion";
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
-/// Attention-tile fill for the flash "on" frame — a high-contrast alert red drawn behind the value.
-const COLOR_ATTENTION: (u8, u8, u8) = (0xE0, 0x53, 0x3D);
-
 /// Flash pulse cadence: the icon alternates between the normal tile and the attention tile every
 /// this many milliseconds while flashing is active.
 const FLASH_INTERVAL_MS: u64 = 600;
 
 /// Display unit. mmol/L is the default (1 dp); switch to "mg/dL" (0 dp) by changing this constant.
 const TRAY_UNIT: &str = "mmol/L";
-const MMOL_PER_MGDL: f64 = 18.0182;
 
 /// Segoe UI Bold — present on every Win11 install. Read at runtime; never bundled/committed.
 const FONT_PATH: &str = r"C:\Windows\Fonts\segoeuib.ttf";
@@ -39,14 +35,18 @@ const ICON_SIZE: u32 = 32;
 const ICON_RADIUS: f32 = 6.0;
 
 /// Glucose status thresholds (mg/dL). A 3-state model (Low / InRange / High) to match the
-/// taskbar mod, not the web's 5-state. Kept aligned with the `@nocturne/ui` glucose palette.
+/// taskbar mod, not the web's 5-state. Must equal `GlucoseConstants.TargetBottomMgdl` and
+/// `GlucoseConstants.TargetTopMgdl`; `GlucoseMirrorTests` fails if they do not.
 const LOW_THRESHOLD_MGDL: f64 = 70.0;
 const HIGH_THRESHOLD_MGDL: f64 = 180.0;
 
-/// Status-tile fill colors as (R, G, B). Mirrors the mod defaults / `@nocturne/ui` palette.
+/// Status-tile fill colors as (R, G, B). Must equal `GlucoseConstants.StatusPalette`;
+/// `GlucoseMirrorTests` fails if they do not.
 const COLOR_IN_RANGE: (u8, u8, u8) = (0x36, 0xC7, 0x6A);
 const COLOR_HIGH: (u8, u8, u8) = (0xE6, 0xB8, 0x00);
 const COLOR_LOW: (u8, u8, u8) = (0xE0, 0x53, 0x3D);
+/// Attention-tile fill for the flash "on" frame: the alert red a low is already drawn in.
+const COLOR_ATTENTION: (u8, u8, u8) = COLOR_LOW;
 /// No-data (`--`) state.
 const COLOR_NO_DATA: (u8, u8, u8) = (0x6B, 0x72, 0x80);
 const COLOR_FG: (u8, u8, u8) = (0xFF, 0xFF, 0xFF);
@@ -107,11 +107,16 @@ fn to_display(sgv_mgdl: f64) -> String {
     if TRAY_UNIT == "mg/dL" {
         format!("{:.0}", sgv_mgdl.round())
     } else {
-        format!("{:.1}", sgv_mgdl / MMOL_PER_MGDL)
+        format!("{:.1}", sgv_mgdl / MGDL_PER_MMOL)
     }
 }
 
-/// Dexcom-style direction string to an arrow glyph for the tooltip.
+/// Shown for a reading whose trend we cannot draw: an unknown trend must not read as a stable one.
+const UNKNOWN_DIRECTION_GLYPH: &str = "?";
+
+/// Dexcom-style direction string to an arrow glyph for the tooltip. No direction at all stays
+/// blank; a direction we cannot draw ("None", "NotComputable", an unrecognised vendor value)
+/// gets [`UNKNOWN_DIRECTION_GLYPH`].
 fn direction_arrow(direction: Option<&str>) -> &'static str {
     match direction.unwrap_or("") {
         "DoubleUp" => "\u{2191}\u{2191}",
@@ -121,7 +126,8 @@ fn direction_arrow(direction: Option<&str>) -> &'static str {
         "FortyFiveDown" => "\u{2198}",
         "SingleDown" => "\u{2193}",
         "DoubleDown" => "\u{2193}\u{2193}",
-        _ => "",
+        "" => "",
+        _ => UNKNOWN_DIRECTION_GLYPH,
     }
 }
 
@@ -538,8 +544,14 @@ mod tests {
     fn direction_maps_to_arrow() {
         assert_eq!(direction_arrow(Some("Flat")), "\u{2192}");
         assert_eq!(direction_arrow(Some("SingleUp")), "\u{2191}");
-        assert_eq!(direction_arrow(Some("Bogus")), "");
         assert_eq!(direction_arrow(None), "");
+    }
+
+    #[test]
+    fn unknown_direction_is_not_an_arrow() {
+        for direction in ["None", "NotComputable", "Bogus"] {
+            assert_eq!(direction_arrow(Some(direction)), "?");
+        }
     }
 
     #[test]
@@ -561,10 +573,6 @@ mod tests {
         assert_eq!(status_color(GlucoseStatus::Low), COLOR_LOW);
         assert_eq!(status_color(GlucoseStatus::InRange), COLOR_IN_RANGE);
         assert_eq!(status_color(GlucoseStatus::High), COLOR_HIGH);
-        // Palette matches the mod defaults / @nocturne/ui glucose palette.
-        assert_eq!(COLOR_IN_RANGE, (0x36, 0xC7, 0x6A));
-        assert_eq!(COLOR_HIGH, (0xE6, 0xB8, 0x00));
-        assert_eq!(COLOR_LOW, (0xE0, 0x53, 0x3D));
     }
 
     #[test]
@@ -575,9 +583,9 @@ mod tests {
         assert_eq!(buf[3], 0);
         // Center pixel is filled at full alpha with the tile color.
         let mid = ((ICON_SIZE / 2 * ICON_SIZE + ICON_SIZE / 2) * 4) as usize;
-        assert_eq!(buf[mid], 0x36);
-        assert_eq!(buf[mid + 1], 0xC7);
-        assert_eq!(buf[mid + 2], 0x6A);
+        assert_eq!(buf[mid], COLOR_IN_RANGE.0);
+        assert_eq!(buf[mid + 1], COLOR_IN_RANGE.1);
+        assert_eq!(buf[mid + 2], COLOR_IN_RANGE.2);
         assert_eq!(buf[mid + 3], 255);
     }
 

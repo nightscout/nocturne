@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
@@ -16,16 +17,16 @@ namespace Nocturne.API.Services.Analytics;
 /// <c>ConcurrencyDetector</c> rejects parallel operations on a single
 /// context with <c>InvalidOperationException</c>. Threshold resolution
 /// mirrors <c>ProfileLoadStage</c>: very-low/very-high are fixed, low/high
-/// come from the active profile at the requested end time, with 70/180
-/// fallbacks when no therapy settings exist yet.
+/// come from the active profile at the requested end time, falling back to
+/// the consensus in-range band when no therapy settings exist yet.
 /// </remarks>
 public sealed class ActogramReportService : IActogramReportService
 {
     // Match ProfileLoadStage so the actogram and dashboard agree on band edges.
     private const double DefaultVeryLow = 54;
     private const double DefaultVeryHigh = 250;
-    private const double DefaultLow = 70;
-    private const double DefaultHigh = 180;
+    private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
+    private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
 
     // Sleep spans are sparse (≤ a few per day). Cap is generous but bounded.
     private const int SleepSpanLimit = 10000;

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using Nocturne.Core.Models.Authorization;
+// Microsoft.OpenApi also defines a Scope type; alias ours so the reference cannot drift.
+using AuthScope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.OpenApi;
 
@@ -33,7 +35,7 @@ public sealed class SecurityRequirementOperationTransformer : IOpenApiOperationT
             operation.Security.Add(new OpenApiSecurityRequirement
             {
                 [new OpenApiSecuritySchemeReference(SecuritySchemeDefinitions.OAuth2, document)] =
-                    [OAuthScopes.FullAccess],
+                    [AuthScope.FullAccess],
             });
             operation.Security.Add(new OpenApiSecurityRequirement
             {

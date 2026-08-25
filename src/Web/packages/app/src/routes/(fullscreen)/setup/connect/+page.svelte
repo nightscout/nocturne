@@ -7,6 +7,7 @@
     getActiveDataSources,
     getServicesOverview,
   } from "$api/generated/services.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     UploaderApp,
     UploaderSetupResponse,
@@ -110,7 +111,7 @@
           uploaderApps={[]}
           dataSources={[]}
           isLoading={false}
-          loadError={error instanceof Error ? error.message : "Failed to load data sources"}
+          loadError={remoteErrorMessage(error, "Failed to load data sources")}
           onSelectConnector={() => {}}
           onSelectUploader={() => {}}
           onSkip={handleSkip}

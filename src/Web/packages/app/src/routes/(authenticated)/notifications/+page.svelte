@@ -24,6 +24,7 @@
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     CompletionReason,
     type TrackerInstanceDto,
@@ -317,7 +318,7 @@
               <div class="py-6 text-center">
                 <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
                 <p class="text-destructive">
-                  {error instanceof Error ? error.message : "Failed to load notification data"}
+                  {remoteErrorMessage(error, "Failed to load notification data")}
                 </p>
                 <Button variant="outline" class="mt-4" onclick={reset}>Retry</Button>
               </div>

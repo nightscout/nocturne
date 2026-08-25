@@ -108,9 +108,9 @@ describe("transformStats", () => {
 
 		expect(result[0].median).toBe(10.0);
 		expect(result[0].percentiles!.p10).toBe(3.9);
-		expect(result[0].percentiles!.p25).toBe(5.6);
+		expect(result[0].percentiles!.p25).toBe(5.5);
 		expect(result[0].percentiles!.p75).toBe(11.1);
-		expect(result[0].percentiles!.p90).toBe(16.7);
+		expect(result[0].percentiles!.p90).toBe(16.6);
 	});
 
 	it("defaults missing median to 0", () => {

@@ -83,7 +83,7 @@ public class RetrospectiveController : ControllerBase
     /// <response code="500">If there was an internal server error</response>
     [HttpGet("at")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(RetrospectiveDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -218,7 +218,7 @@ public class RetrospectiveController : ControllerBase
     /// <response code="500">If there was an internal server error</response>
     [HttpGet("timeline")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(RetrospectiveTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -345,7 +345,7 @@ public class RetrospectiveController : ControllerBase
     /// <returns>Basal rate timeline for the day</returns>
     [HttpGet("basal-timeline")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(BasalTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

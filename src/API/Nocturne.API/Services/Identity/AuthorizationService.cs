@@ -9,7 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using AuthRole = Nocturne.Core.Models.Authorization.Role;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
-using OAuthGrantTypes = Nocturne.Infrastructure.Data.Entities.OAuthGrantTypes;
+using OAuthGrantTypes = Nocturne.Core.Models.Authorization.OAuthGrantTypes;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -153,9 +153,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
 
         var grant = await _dbContext.OAuthGrants
             .AsNoTracking()
-            .Where(g => g.TokenHash == tokenHash
-                     && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null)
+            .Where(g => g.TokenHash == tokenHash)
+            .Where(DirectGrantTokenHandler.IsLiveDirectGrant(DateTime.UtcNow))
             .FirstOrDefaultAsync();
 
         if (grant == null)

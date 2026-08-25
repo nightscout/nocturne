@@ -51,10 +51,10 @@ public class ActivityService : IActivityService
     private static readonly IReadOnlySet<string> CountableCategories = new HashSet<string>(
         StringComparer.Ordinal)
     {
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     };
 
     /// <summary>
@@ -604,27 +604,27 @@ public class ActivityService : IActivityService
             var countSleep = string.IsNullOrEmpty(find) || ActivityStateSpanMapper.IsSleepType(find);
 
             var pending = new Dictionary<string, Task<long>>(StringComparer.Ordinal);
-            if (categories.Contains(OAuthScopes.TreatmentsRead))
-                pending[OAuthScopes.TreatmentsRead] = CountOf(_stateSpanService.GetActivitiesAsync(
+            if (categories.Contains(Scope.TreatmentsRead))
+                pending[Scope.TreatmentsRead] = CountOf(_stateSpanService.GetActivitiesAsync(
                     type: find,
                     count: int.MaxValue,
                     skip: 0,
                     cancellationToken: cancellationToken));
 
-            if (categories.Contains(OAuthScopes.HeartRateRead))
-                pending[OAuthScopes.HeartRateRead] = CountOf(_heartRateService.GetHeartRatesAsync(
+            if (categories.Contains(Scope.HeartRateRead))
+                pending[Scope.HeartRateRead] = CountOf(_heartRateService.GetHeartRatesAsync(
                     count: int.MaxValue,
                     skip: 0,
                     cancellationToken: cancellationToken));
 
-            if (categories.Contains(OAuthScopes.StepCountRead))
-                pending[OAuthScopes.StepCountRead] = CountOf(_stepCountService.GetStepCountsAsync(
+            if (categories.Contains(Scope.StepCountRead))
+                pending[Scope.StepCountRead] = CountOf(_stepCountService.GetStepCountsAsync(
                     count: int.MaxValue,
                     skip: 0,
                     cancellationToken: cancellationToken));
 
-            if (categories.Contains(OAuthScopes.SleepRead))
-                pending[OAuthScopes.SleepRead] = countSleep
+            if (categories.Contains(Scope.SleepRead))
+                pending[Scope.SleepRead] = countSleep
                     ? Widen(_sleepService.CountSessionsAsync(cancellationToken: cancellationToken))
                     : Task.FromResult(0L);
 

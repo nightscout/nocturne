@@ -118,7 +118,7 @@ public class PlatformAdminBootstrapService
 
             var ownerSubjectId = await db.TenantMembers
                 .Where(tm => tm.TenantId == tenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == TenantPermissions.SeedRoles.Owner))
+                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
                 .Select(tm => tm.SubjectId)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -174,7 +174,7 @@ public class PlatformAdminBootstrapService
             .AnyAsync(
                 tm => tm.TenantId == tenantIds[0]
                     && tm.SubjectId == subjectId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == TenantPermissions.SeedRoles.Owner),
+                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner),
                 cancellationToken);
 
         if (!isTenantOwner)

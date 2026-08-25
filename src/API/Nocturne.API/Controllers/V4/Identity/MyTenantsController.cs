@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
@@ -46,7 +47,7 @@ public class MyTenantsController : ControllerBase
     [ProducesResponseType(typeof(List<TenantDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyTenants(CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -60,7 +61,7 @@ public class MyTenantsController : ControllerBase
     [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<TenantOverviewResponse>> GetOverview(CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -71,7 +72,7 @@ public class MyTenantsController : ControllerBase
         // handling: they never reach membership resolution there, so stand in a full-access grant.
         IReadOnlySet<string> tokenScopes =
             authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess
-                ? new HashSet<string> { OAuthScopes.FullAccess }
+                ? new HashSet<string> { Scope.FullAccess }
                 : HttpContext.GetGrantedScopes();
 
         var overview = await _overviewService.GetOverviewAsync(
@@ -91,7 +92,7 @@ public class MyTenantsController : ControllerBase
         if (!_config.AllowSelfServiceCreation)
             return Forbid();
 
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -108,9 +109,14 @@ public class MyTenantsController : ControllerBase
     /// <inheritdoc cref="ITenantService.ValidateSlugAsync"/>
     [HttpGet("validate-slug")]
     [AllowAnonymous]
+    [AnonymousUntilSetupComplete]
+    [DenyDemoSubject]
     [AllowDuringSetup]
+    [EnableRateLimiting("name-availability")]
     [RemoteQuery]
     [ProducesResponseType(typeof(SlugValidationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ValidateSlug([FromQuery] string slug, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(slug))

@@ -129,6 +129,12 @@ public static class GlookoConstants
     /// </summary>
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(24);
 
+    /// <summary>
+    ///     Width of one fetch window. A sync request's range is sliced into chunks this wide, each
+    ///     fetched and published on its own.
+    /// </summary>
+    public static readonly TimeSpan SyncChunkSize = TimeSpan.FromDays(14);
+
     // -- Device information (sent during sign-in) -----------------------------
 
     /// <summary>

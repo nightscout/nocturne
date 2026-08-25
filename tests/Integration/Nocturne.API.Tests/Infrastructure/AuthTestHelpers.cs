@@ -141,8 +141,8 @@ public static class AuthTestHelpers
             cmd.Parameters.AddWithValue("id", grantId);
             cmd.Parameters.AddWithValue("tenantId", tenantId);
             cmd.Parameters.AddWithValue("subjectId", subjectId);
-            cmd.Parameters.AddWithValue("grantType", OAuthScopes.GrantTypeDirect);
-            cmd.Parameters.AddWithValue("scopes", new[] { OAuthScopes.FullAccess });
+            cmd.Parameters.AddWithValue("grantType", OAuthGrantTypes.Direct);
+            cmd.Parameters.AddWithValue("scopes", new[] { Scope.FullAccess });
             cmd.Parameters.AddWithValue("legacySecretHash", apiSecret.ToLowerInvariant());
             await cmd.ExecuteNonQueryAsync();
         }

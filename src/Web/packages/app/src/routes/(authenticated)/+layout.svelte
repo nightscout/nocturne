@@ -3,6 +3,7 @@
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { onMount, onDestroy } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
@@ -227,7 +228,7 @@
           {@render children()}
 
           {#snippet failed(e, reset)}
-            {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'An unexpected error occurred'}
+            {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : remoteErrorMessage(e, 'An unexpected error occurred')}
             {@const stack = dev && e instanceof Error ? e.stack : undefined}
             <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>

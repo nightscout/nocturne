@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Npgsql;
 using Xunit;
@@ -33,7 +32,7 @@ public class RlsEnforcementTests
     [Fact]
     public async Task AllTenantScopedTables_HaveRlsEnabledAndForcedAndPolicied()
     {
-        var tenantScopedTables = TenantScopedTableNames().ToArray();
+        var tenantScopedTables = _fx.TenantScopedTableNames.ToArray();
         tenantScopedTables.Should().NotBeEmpty(
             "the EF model should declare at least one ITenantScoped entity");
 
@@ -147,18 +146,6 @@ public class RlsEnforcementTests
         reader.GetString(0).Should().Be("nocturne_app");
         reader.GetBoolean(1).Should().BeFalse("nocturne_app must not be a superuser");
         reader.GetBoolean(2).Should().BeFalse("nocturne_app must not have BYPASSRLS");
-    }
-
-    private static IEnumerable<string> TenantScopedTableNames()
-    {
-        return typeof(ITenantScoped).Assembly
-            .GetTypes()
-            .Where(t => typeof(ITenantScoped).IsAssignableFrom(t) && t is { IsAbstract: false, IsInterface: false })
-            .Select(t => (System.ComponentModel.DataAnnotations.Schema.TableAttribute?)
-                Attribute.GetCustomAttribute(t, typeof(System.ComponentModel.DataAnnotations.Schema.TableAttribute)))
-            .Where(attr => attr is not null)
-            .Select(attr => attr!.Name)
-            .Distinct(StringComparer.Ordinal);
     }
 
     private async Task SeedRowAsync(Guid tenantId)

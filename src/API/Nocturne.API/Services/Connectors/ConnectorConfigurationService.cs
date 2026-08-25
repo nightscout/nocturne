@@ -42,23 +42,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
-    private static readonly Dictionary<string, SyncDataType> SyncPropertyToDataType =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SyncGlucose"] = SyncDataType.Glucose,
-            ["SyncManualBG"] = SyncDataType.ManualBG,
-            ["SyncBoluses"] = SyncDataType.Boluses,
-            ["SyncCarbIntake"] = SyncDataType.CarbIntake,
-            ["SyncBolusCalculations"] = SyncDataType.BolusCalculations,
-            ["SyncNotes"] = SyncDataType.Notes,
-            ["SyncDeviceEvents"] = SyncDataType.DeviceEvents,
-            ["SyncStateSpans"] = SyncDataType.StateSpans,
-            ["SyncProfiles"] = SyncDataType.Profiles,
-            ["SyncDeviceStatus"] = SyncDataType.DeviceStatus,
-            ["SyncActivity"] = SyncDataType.Activity,
-            ["SyncFood"] = SyncDataType.Food,
-        };
-
     public ConnectorConfigurationService(
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
@@ -329,7 +312,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return;
         }
 
-        var normalizedScopes = OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToList();
+        var normalizedScopes = Scope.Normalize([Scope.HealthReadWrite]).ToList();
 
         var grant = new OAuthGrantEntity
         {
@@ -655,11 +638,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 continue;
 
             // Skip sync toggle properties for data types this connector doesn't support
-            if (SyncPropertyToDataType.TryGetValue(property.Name, out var requiredDataType))
-            {
-                if (!supportedDataTypes.Contains(requiredDataType))
-                    continue;
-            }
+            if (ConnectorSyncToggles.ByPropertyKey.TryGetValue(connectorPropAttr.Key, out var gatedDataType)
+                && !supportedDataTypes.Contains(gatedDataType))
+                continue;
 
             var propName = ToCamelCase(connectorPropAttr.GetKeyName());
 
@@ -760,11 +741,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 continue;
 
             // Skip sync toggle properties for data types this connector doesn't support
-            if (SyncPropertyToDataType.TryGetValue(property.Name, out var requiredDataType))
-            {
-                if (!supportedDataTypes.Contains(requiredDataType))
-                    continue;
-            }
+            if (ConnectorSyncToggles.ByPropertyKey.TryGetValue(connectorPropAttr.Key, out var gatedDataType)
+                && !supportedDataTypes.Contains(gatedDataType))
+                continue;
 
             object? value = null;
             try
@@ -972,7 +951,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             if (lastErrorMessage == string.Empty)
                 config.LastErrorMessage = null; // Explicit clear
             else
-                config.LastErrorMessage = lastErrorMessage;
+                config.LastErrorMessage = FitErrorMessageToColumn(lastErrorMessage);
         }
 
         if (lastErrorAt.HasValue)
@@ -995,5 +974,25 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             connectorName,
             config.IsHealthy
         );
+    }
+
+    /// <summary>
+    ///     Fits a health error message to
+    ///     <see cref="ConnectorConfigurationEntity.LastErrorMessageMaxLength"/>, marking the cut so a
+    ///     reader can tell the message is incomplete.
+    /// </summary>
+    private static string FitErrorMessageToColumn(string message)
+    {
+        const string marker = "... (truncated)";
+        const int max = ConnectorConfigurationEntity.LastErrorMessageMaxLength;
+
+        if (message.Length <= max)
+            return message;
+
+        var cut = max - marker.Length;
+        if (char.IsHighSurrogate(message[cut - 1]))
+            cut--;
+
+        return string.Concat(message.AsSpan(0, cut), marker);
     }
 }

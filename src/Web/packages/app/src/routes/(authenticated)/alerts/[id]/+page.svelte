@@ -10,6 +10,7 @@
     deleteRule,
     testFire,
   } from "$api/generated/alertRules.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
   import type { HistoryExcursionResponse } from "$api-clients";
@@ -151,7 +152,7 @@
         savedBody = buildBody(state);
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
     } finally {
       saving = false;
     }
@@ -166,7 +167,7 @@
       await deleteRule(ruleId);
       await goto("/alerts");
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to delete the alert rule. Please try again.");
     } finally {
       deleting = false;
     }
@@ -180,7 +181,7 @@
     try {
       await testFire(ruleId);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeSubmitError(e, "Failed to send a test alert. Please try again.");
     } finally {
       testingSaved = false;
     }

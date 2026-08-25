@@ -80,6 +80,32 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadRecordInfoAsync_StateSpan_ReturnsCriteriaAndDeletedFlag()
+    {
+        var live = Guid.CreateVersion7();
+        var gone = Guid.CreateVersion7();
+        var start = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(new StateSpanEntity
+        {
+            Id = live, TenantId = TestTenantId, Category = nameof(StateSpanCategory.Exercise),
+            State = "Running", StartTimestamp = start
+        });
+        _context.StateSpans.Add(new StateSpanEntity
+        {
+            Id = gone, TenantId = TestTenantId, Category = nameof(StateSpanCategory.Exercise),
+            State = "Running", StartTimestamp = start, DeletedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        var info = await _service.LoadRecordInfoForTestAsync(RecordType.StateSpan, new HashSet<Guid> { live, gone });
+
+        info[live].Criteria.Category.Should().Be(StateSpanCategory.Exercise);
+        info[live].Criteria.State.Should().Be("Running");
+        info[live].IsDeleted.Should().BeFalse();
+        info[gone].IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task LoadRecordInfoAsync_DoesNotTrackLoadedEntities()
     {
         // Regression guard: the reconcile/match read paths must use AsNoTracking. On large

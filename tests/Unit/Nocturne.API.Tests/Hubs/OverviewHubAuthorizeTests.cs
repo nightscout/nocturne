@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -37,21 +38,34 @@ public class OverviewHubAuthorizeTests
     private static GlucoseReadTenant Tenant(Guid id) =>
         new(
             new TenantEntity { Id = id, Slug = id.ToString("N")[..8], DisplayName = "T", IsActive = true },
-            new HashSet<string> { TenantPermissions.GlucoseRead });
+            new HashSet<string> { Scope.GlucoseRead });
 
     private static (OverviewHub hub,
         Mock<IGroupManager> groups,
         Mock<ITenantOverviewService> overview,
         Mock<IJwtService> jwt,
         Mock<IOAuthTokenRevocationCache> revocation,
+        Mock<IOAuthGrantService> grants,
         DefaultHttpContext httpContext) CreateHub()
     {
         var overview = new Mock<ITenantOverviewService>();
         var jwt = new Mock<IJwtService>();
         var revocation = new Mock<IOAuthTokenRevocationCache>();
+        var grants = new Mock<IOAuthGrantService>();
+
+        // The real validator, not a stub: these tests are the coverage for the hub's credential
+        // chain, and stubbing it would stop them seeing the grant-revocation check the hub used to
+        // skip. Unrevoked is the default so existing cases read unchanged.
+        grants
+            .Setup(g => g.IsGrantRevokedAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(false);
+
+        var validator = new JwtCredentialValidator(
+            jwt.Object, grants.Object, revocation.Object,
+            NullLogger<JwtCredentialValidator>.Instance);
 
         var hub = new OverviewHub(
-            NullLogger<OverviewHub>.Instance, overview.Object, jwt.Object, revocation.Object);
+            NullLogger<OverviewHub>.Instance, overview.Object, validator);
 
         var httpContext = new DefaultHttpContext();
 
@@ -67,7 +81,7 @@ public class OverviewHubAuthorizeTests
 
         hub.Context = callerContext.Object;
         hub.Groups = groups.Object;
-        return (hub, groups, overview, jwt, revocation, httpContext);
+        return (hub, groups, overview, jwt, revocation, grants, httpContext);
     }
 
     private static JwtValidationResult ValidJwt(
@@ -85,14 +99,14 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_session_authcontext_joins_per_tenant_overview_groups()
     {
-        var (hub, groups, overview, _, _, httpContext) = CreateHub();
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
             SubjectId = Subject,
             AuthType = AuthType.SessionCookie,
         };
-        var grantedScopes = new HashSet<string> { OAuthScopes.GlucoseRead };
+        var grantedScopes = new HashSet<string> { Scope.GlucoseRead };
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)grantedScopes;
 
         overview
@@ -121,7 +135,7 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_session_authcontext_passes_the_credential_type_to_the_seam()
     {
-        var (hub, _, overview, _, _, httpContext) = CreateHub();
+        var (hub, _, overview, _, _, _, httpContext) = CreateHub();
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -145,9 +159,9 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_jwt_payload_passes_the_oauth_credential_type_to_the_seam()
     {
-        var (hub, _, overview, jwt, revocation, _) = CreateHub();
+        var (hub, _, overview, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -168,9 +182,9 @@ public class OverviewHubAuthorizeTests
         // The seam treats these as the credential's ceiling, so they have to arrive expanded the way
         // every other JWT-claims consumer expands them: the health.read alias becomes the concrete
         // scopes it stands for, and an unrecognized scope is dropped.
-        var (hub, _, overview, jwt, revocation, _) = CreateHub();
+        var (hub, _, overview, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.HealthRead, "not.a.scope"));
+            .Returns(ValidJwt(Subject, Scope.HealthRead, "not.a.scope"));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -182,8 +196,8 @@ public class OverviewHubAuthorizeTests
             o => o.GetGlucoseReadTenantsAsync(
                 Subject,
                 It.Is<IReadOnlySet<string>>(s =>
-                    s.IsSupersetOf(OAuthScopes.HealthReadExpansion)
-                    && !s.Contains(OAuthScopes.HealthRead)
+                    s.IsSupersetOf(Scope.HealthReadExpansion)
+                    && !s.Contains(Scope.HealthRead)
                     && !s.Contains("not.a.scope")),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
@@ -202,7 +216,7 @@ public class OverviewHubAuthorizeTests
     [InlineData(AuthType.InstanceKey)]
     public async Task Authorize_with_tenant_bound_credential_type_is_rejected(AuthType authType)
     {
-        var (hub, groups, overview, _, _, httpContext) = CreateHub();
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -210,7 +224,7 @@ public class OverviewHubAuthorizeTests
             AuthType = authType,
         };
         httpContext.Items["GrantedScopes"] =
-            (IReadOnlySet<string>)new HashSet<string> { OAuthScopes.FullAccess };
+            (IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess };
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { Tenant(TenantA), Tenant(TenantB) });
@@ -238,7 +252,7 @@ public class OverviewHubAuthorizeTests
         // A member browsing a tenant subdomain has a resolved TenantContext on the upgrade
         // request; the guard keys on the credential type, not on a resolved tenant, so their
         // ordinary session still opens the cross-tenant overview.
-        var (hub, groups, overview, _, _, httpContext) = CreateHub();
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
         httpContext.Items["TenantContext"] =
             new TenantContext(TenantA, "tenant-a", "Tenant A", true, false);
         httpContext.Items["AuthContext"] = new AuthContext
@@ -263,9 +277,9 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_valid_jwt_joins_groups_using_subject_and_scopes_from_claims()
     {
-        var (hub, groups, overview, jwt, revocation, _) = CreateHub();
+        var (hub, groups, overview, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
         overview
             .Setup(o => o.GetGlucoseReadTenantsAsync(Subject, It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(), It.IsAny<CancellationToken>()))
@@ -281,7 +295,7 @@ public class OverviewHubAuthorizeTests
         overview.Verify(
             o => o.GetGlucoseReadTenantsAsync(
                 Subject,
-                It.Is<IReadOnlySet<string>>(s => s.Contains(OAuthScopes.GlucoseRead)),
+                It.Is<IReadOnlySet<string>>(s => s.Contains(Scope.GlucoseRead)),
                 It.IsAny<AuthType>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -289,9 +303,9 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_revoked_jwt_is_rejected()
     {
-        var (hub, groups, _, jwt, revocation, _) = CreateHub();
+        var (hub, groups, _, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Subject, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Subject, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(true);
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });
@@ -305,7 +319,7 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_invalid_jwt_is_rejected()
     {
-        var (hub, groups, _, jwt, _, _) = CreateHub();
+        var (hub, groups, _, jwt, _, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
             .Returns(JwtValidationResult.Failure("expired", JwtValidationError.Expired));
 
@@ -320,7 +334,7 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_opaque_token_is_rejected_without_jwt_validation()
     {
-        var (hub, groups, _, jwt, _, _) = CreateHub();
+        var (hub, groups, _, jwt, _, _, _) = CreateHub();
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = "opaque-legacy-token" });
 
@@ -335,7 +349,7 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_without_session_or_token_is_rejected()
     {
-        var (hub, groups, _, _, _, _) = CreateHub();
+        var (hub, groups, _, _, _, _, _) = CreateHub();
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest());
 
@@ -348,7 +362,7 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_no_qualifying_tenants_succeeds_with_empty_list_and_no_groups()
     {
-        var (hub, groups, overview, jwt, revocation, _) = CreateHub();
+        var (hub, groups, overview, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
             .Returns(ValidJwt(Subject /* no glucose scope */));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
@@ -368,8 +382,8 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_tenant_pinned_jwt_is_rejected()
     {
-        var (hub, groups, overview, jwt, revocation, _) = CreateHub();
-        var validation = ValidJwt(Subject, OAuthScopes.GlucoseRead);
+        var (hub, groups, overview, jwt, revocation, _, _) = CreateHub();
+        var validation = ValidJwt(Subject, Scope.GlucoseRead);
         validation.Claims!.TenantId = TenantA;
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken)).Returns(validation);
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
@@ -390,7 +404,7 @@ public class OverviewHubAuthorizeTests
     public async Task Authorize_with_unauthenticated_authcontext_carrying_subject_is_rejected()
     {
         // The public-share pseudo-context shape: IsAuthenticated = false but a non-null SubjectId.
-        var (hub, groups, overview, _, _, httpContext) = CreateHub();
+        var (hub, groups, overview, _, _, _, httpContext) = CreateHub();
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = false,
@@ -412,9 +426,9 @@ public class OverviewHubAuthorizeTests
     [Fact]
     public async Task Authorize_with_jwt_lacking_subject_is_rejected()
     {
-        var (hub, groups, _, jwt, revocation, _) = CreateHub();
+        var (hub, groups, _, jwt, revocation, _, _) = CreateHub();
         jwt.Setup(j => j.ValidateAccessToken(JwtShapedToken))
-            .Returns(ValidJwt(Guid.Empty, OAuthScopes.GlucoseRead));
+            .Returns(ValidJwt(Guid.Empty, Scope.GlucoseRead));
         revocation.Setup(r => r.IsRevokedAsync("jti-1")).ReturnsAsync(false);
 
         var result = await hub.Authorize(new OverviewAuthorizeRequest { Token = JwtShapedToken });

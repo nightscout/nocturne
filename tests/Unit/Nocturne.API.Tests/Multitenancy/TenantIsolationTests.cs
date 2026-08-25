@@ -899,7 +899,7 @@ public class TenantIsolationTests
             mockCallerContext.Object,
             new Nocturne.API.Hubs.HubAuthorization(
                 tenantContext.TenantId,
-                new HashSet<string> { Nocturne.Core.Models.Authorization.OAuthScopes.FullAccess },
+                new HashSet<string> { Nocturne.Core.Models.Authorization.Scope.FullAccess },
                 Nocturne.API.Hubs.HubCredentialKind.Subject,
                 Guid.NewGuid()));
 

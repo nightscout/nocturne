@@ -42,23 +42,23 @@ public static class RealtimeCategories
     /// to at all (fail-closed), so a new category must be classified here to become reachable.
     /// </summary>
     /// <remarks>
-    /// The vocabulary is the OAuth read scopes in <see cref="OAuthScopes"/>. It is not the same set as
+    /// The vocabulary is the OAuth read scopes in <see cref="Scope"/>. It is not the same set as
     /// <see cref="ShareDataCategories.GoverningScopes"/>, which covers only the share-reachable
-    /// categories — <c>profiles</c>/<c>therapy</c> here answer to <see cref="OAuthScopes.TherapyRead"/>,
+    /// categories — <c>profiles</c>/<c>therapy</c> here answer to <see cref="Scope.TherapyRead"/>,
     /// which no share link can hold. <c>care</c> and <c>treatments</c> are the treatment family, so
-    /// they answer to <see cref="OAuthScopes.TreatmentsRead"/> as a whole even though a BG check inside
+    /// they answer to <see cref="Scope.TreatmentsRead"/> as a whole even though a BG check inside
     /// <c>care</c> is governed by glucose.read for share links.
     /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> GoverningScopes =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [Entries] = OAuthScopes.GlucoseRead,
-            [Treatments] = OAuthScopes.TreatmentsRead,
-            [DeviceStatus] = OAuthScopes.DevicesRead,
-            [Profiles] = OAuthScopes.TherapyRead,
-            [Glucose] = OAuthScopes.GlucoseRead,
-            [Care] = OAuthScopes.TreatmentsRead,
-            [Device] = OAuthScopes.DevicesRead,
-            [Therapy] = OAuthScopes.TherapyRead,
+            [Entries] = Scope.GlucoseRead,
+            [Treatments] = Scope.TreatmentsRead,
+            [DeviceStatus] = Scope.DevicesRead,
+            [Profiles] = Scope.TherapyRead,
+            [Glucose] = Scope.GlucoseRead,
+            [Care] = Scope.TreatmentsRead,
+            [Device] = Scope.DevicesRead,
+            [Therapy] = Scope.TherapyRead,
         };
 }

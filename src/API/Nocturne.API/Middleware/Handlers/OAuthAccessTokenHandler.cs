@@ -1,6 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -78,67 +80,30 @@ public class OAuthAccessTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        // Validate using IJwtService (uses the correct Jwt:SecretKey, issuer, audience)
         using var scope = _scopeFactory.CreateScope();
-        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
+        var credentialValidator = scope.ServiceProvider.GetRequiredService<IJwtCredentialValidator>();
+        var validationResult = await credentialValidator.ValidateAsync(token);
 
-        var validationResult = jwtService.ValidateAccessToken(token);
-
-        if (!validationResult.IsValid || validationResult.Claims is null)
+        if (!validationResult.IsValid)
         {
             _logger.LogDebug(
-                "OAuth access token validation failed: {Error}",
-                validationResult.Error
-            );
+                "OAuth access token refused ({Rejection}): {Error}",
+                validationResult.Rejection, validationResult.Error);
             return AuthResult.Failure(validationResult.Error ?? "Invalid OAuth access token");
         }
 
-        var claims = validationResult.Claims;
+        var claims = validationResult.Claims!;
 
         // Enforce tenant pin: reject tokens issued for a different tenant
         if (claims.TenantId.HasValue)
         {
-            var tenantCtx = context.Items["TenantContext"] as TenantContext;
+            var tenantCtx = context.GetTenantContext();
             if (tenantCtx is null || tenantCtx.TenantId != claims.TenantId.Value)
             {
                 _logger.LogWarning(
                     "OAuth access token tenant mismatch: token tenant {TokenTenant}, request tenant {RequestTenant}",
                     claims.TenantId, tenantCtx?.TenantId);
                 return AuthResult.Failure("Token is not valid for this tenant");
-            }
-        }
-
-        // Reject tokens whose grant has been revoked. Access tokens are stateless, so a
-        // "Disconnect" on a connected app can only reach them through the grant id they carry.
-        if (claims.GrantId.HasValue)
-        {
-            if (!claims.TenantId.HasValue)
-            {
-                // Grant-bound tokens are always minted with their grant's tenant pin; one without
-                // a pin cannot have its grant checked, so it is not accepted.
-                _logger.LogWarning(
-                    "OAuth access token carries grant {GrantId} without a tenant pin", claims.GrantId);
-                return AuthResult.Failure("Token has been revoked");
-            }
-
-            var grantService = scope.ServiceProvider.GetRequiredService<IOAuthGrantService>();
-            if (await grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
-            {
-                _logger.LogDebug(
-                    "OAuth access token's grant has been revoked (grant: {GrantId})", claims.GrantId);
-                return AuthResult.Failure("Token has been revoked");
-            }
-        }
-
-        // Check revocation cache
-        if (!string.IsNullOrEmpty(claims.JwtId))
-        {
-            var revocationCache =
-                scope.ServiceProvider.GetRequiredService<IOAuthTokenRevocationCache>();
-            if (await revocationCache.IsRevokedAsync(claims.JwtId))
-            {
-                _logger.LogDebug("OAuth access token has been revoked (jti: {Jti})", claims.JwtId);
-                return AuthResult.Failure("Token has been revoked");
             }
         }
 

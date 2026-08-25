@@ -83,7 +83,10 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleLongConverter))]
     public long DateMills
     {
-        get => _dateMills;
+        // Nightscout emits "date" and "mills" with the same value on every entry it returns, and
+        // AAPS reads "date" alone with no fallback to either sibling. An entry that reached us with
+        // only "mills" set would otherwise serialise as date: 0 and land in AAPS at the epoch.
+        get => _dateMills != 0 ? _dateMills : Mills;
         set => _dateMills = value;
     }
     private long _dateMills;
@@ -207,34 +210,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets the direction as a strongly-typed enum value
     /// </summary>
     [JsonIgnore]
-    public Models.Direction DirectionEnum => ParseDirection(Direction);
-
-    /// <summary>
-    /// Parse direction string to enum - handles legacy string values
-    /// </summary>
-    private static Models.Direction ParseDirection(string? directionString)
-    {
-        if (string.IsNullOrEmpty(directionString))
-            return Models.Direction.NONE;
-
-        return directionString switch
-        {
-            "NONE" => Models.Direction.NONE,
-            "TripleUp" => Models.Direction.TripleUp,
-            "DoubleUp" => Models.Direction.DoubleUp,
-            "SingleUp" => Models.Direction.SingleUp,
-            "FortyFiveUp" => Models.Direction.FortyFiveUp,
-            "Flat" => Models.Direction.Flat,
-            "FortyFiveDown" => Models.Direction.FortyFiveDown,
-            "SingleDown" => Models.Direction.SingleDown,
-            "DoubleDown" => Models.Direction.DoubleDown,
-            "TripleDown" => Models.Direction.TripleDown,
-            "NOT COMPUTABLE" => Models.Direction.NotComputable,
-            "RATE OUT OF RANGE" => Models.Direction.RateOutOfRange,
-            "CGM ERROR" => Models.Direction.CgmError,
-            _ => Models.Direction.NONE,
-        };
-    }
+    public Models.Direction DirectionEnum => DirectionExtensions.Parse(Direction);
 
     /// <summary>
     /// Gets or sets the entry type (e.g., "sgv", "cal", "mbg")

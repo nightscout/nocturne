@@ -65,7 +65,7 @@ public class MemberInviteService : IMemberInviteService
 
         var granter = granterPermissions as IReadOnlyCollection<string> ?? granterPermissions.ToList();
 
-        var directViolation = TenantPermissions.ValidateGrant(directPermissions, granter);
+        var directViolation = Scope.ValidateGrant(directPermissions, granter);
         if (directViolation != null)
             throw new ArgumentException(directViolation.Description);
 

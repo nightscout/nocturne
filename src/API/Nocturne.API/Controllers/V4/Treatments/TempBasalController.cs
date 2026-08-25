@@ -36,9 +36,13 @@ public class TempBasalController(
     /// <summary>
     /// Lists temp basal spans, newest-first by default.
     /// </summary>
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-started
+    /// or just-cancelled span must not be invisible until a cached list body expires.
+    /// </remarks>
     [HttpGet]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
+    [RequireScope(Scope.TreatmentsRead)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<TempBasal>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<TempBasal>>> GetAll(
@@ -64,7 +68,7 @@ public class TempBasalController(
     /// Returns a single temp basal span by ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(TempBasal), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TempBasal>> GetById(Guid id, CancellationToken ct = default)
@@ -89,7 +93,7 @@ public class TempBasalController(
     /// persisted. The response contains every record written or truncated, in processing order.
     /// </remarks>
     [HttpPost]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(TempBasal[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TempBasal[]>> CreateTempBasals(

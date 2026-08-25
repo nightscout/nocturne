@@ -197,7 +197,7 @@ public partial class CareLinkConnectController : ControllerBase
     /// </summary>
     [HttpPost("desktop-token")]
     [RemoteCommand]
-    [RequireScope(TenantPermissions.TenantSettings)]
+    [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(CareLinkDesktopTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public ActionResult<CareLinkDesktopTokenResponse> DesktopToken()
@@ -241,14 +241,14 @@ public partial class CareLinkConnectController : ControllerBase
     /// <summary>
     /// Whether the caller may sign a CareLink account into this tenant. The flow stores a refresh
     /// token as the connector secret and writes the signed-in account into the connector
-    /// configuration, so it takes the same <see cref="TenantPermissions.TenantSettings"/> as the
+    /// configuration, so it takes the same <see cref="Scope.TenantSettings"/> as the
     /// rest of the connector configuration surface — or a desktop link token, whose scope resolves
     /// to nothing (see <see cref="DesktopTokenScope"/>) so no scope gate can admit it, and which
     /// <see cref="DesktopToken"/> mints only for a caller that already held the permission.
     /// </summary>
     private bool CanConfigureConnectors() =>
-        TenantPermissions.HasPermission(
-            HttpContext.GetGrantedScopes(), TenantPermissions.TenantSettings)
+        Scope.Satisfies(
+            HttpContext.GetGrantedScopes(), Scope.TenantSettings)
         || HttpContext.GetAuthContext()?.Scopes.Contains(DesktopTokenScope) == true;
 
     /// <summary>

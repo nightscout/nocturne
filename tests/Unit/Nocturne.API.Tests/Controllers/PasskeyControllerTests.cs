@@ -190,7 +190,14 @@ public class PasskeyControllerTests : IDisposable
         };
 
     /// <summary>Presents a recovery-session cookie that the JWT service accepts for this subject.</summary>
-    private void GiveRecoverySession(Guid subjectId, params string[] permissions)
+    private void GiveRecoverySession(Guid subjectId, params string[] permissions) =>
+        GiveRecoveryCookie(subjectId, ["auth:recovery:enrol"], permissions);
+
+    /// <summary>
+    /// Presents a cookie carrying whatever claim shape the caller names, so a token that is not a
+    /// recovery session can be put where one is expected.
+    /// </summary>
+    private void GiveRecoveryCookie(Guid subjectId, string[] scopes, string[] permissions)
     {
         const string token = "recovery-token";
         _controller.ControllerContext.HttpContext.Request.Headers.Cookie =
@@ -200,6 +207,7 @@ public class PasskeyControllerTests : IDisposable
             .Returns(JwtValidationResult.Success(new JwtClaims
             {
                 SubjectId = subjectId,
+                Scopes = [.. scopes],
                 Permissions = [.. permissions],
             }));
     }
@@ -353,6 +361,23 @@ public class PasskeyControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterOptions_WithAPasskeyManageTokenThatIsNotARecoverySession_IsRefused()
+    {
+        // Spending a recovery code is what buys an enrolment. A token that merely carries the same
+        // permission — anything a future mint site emits — is not that proof.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoveryCookie(subjectId, scopes: [], permissions: ["passkey:manage"]);
+
+        var result = await _controller.RegisterOptions(
+            new PasskeyRegisterOptionsRequest { Username = "owner" });
+
+        Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task RegisterComplete_WithARecoverySession_BindsToTheCookieSubject()
     {
         var subjectId = await SeedMemberAsync("owner", withPasskey: true);
@@ -373,6 +398,29 @@ public class PasskeyControllerTests : IDisposable
             s => s.CompleteRegistrationAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WithARecoverySession_SpendsTheCookie()
+    {
+        // One recovery code buys one enrolment: the credential exists now, so the cookie that
+        // authorized it must not authorize a second.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+
+        await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
+
+        var setCookie = _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
+            .Single(header => header!.StartsWith(".Nocturne.RecoverySession=", StringComparison.Ordinal));
+        setCookie.Should().Contain("expires=Thu, 01 Jan 1970");
     }
 
     [Fact]

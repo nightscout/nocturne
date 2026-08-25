@@ -71,7 +71,7 @@ public class HubAuthorizationFilterTests
 
     /// <summary>A member credential on the connection's own tenant carrying <paramref name="scopes"/>.</summary>
     private static HubAuthorization Member(params string[] scopes) => new(
-        Tenant, OAuthScopes.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid());
 
     /// <summary>
     /// A share-style credential — a guest link — carrying <paramref name="scopes"/>.
@@ -82,7 +82,7 @@ public class HubAuthorizationFilterTests
     /// the refusal must hold on the kind alone, not on the subject id happening to be absent.
     /// </remarks>
     private static HubAuthorization Guest(params string[] scopes) => new(
-        Tenant, OAuthScopes.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid());
 
     private static async Task<bool> InvokeAsync(HubInvocationContext invocation)
     {
@@ -120,12 +120,12 @@ public class HubAuthorizationFilterTests
     {
         // ConfigurationChangeEvent names the member who made each change, and connector
         // configuration is tenant administration with no narrower scope in the vocabulary.
-        var readOnly = Member(OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.GlucoseRead, Scope.AlertsRead);
 
         var attempt = Attempt(typeof(ConfigHub), nameof(ConfigHub.SubscribeAll), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.FullAccess));
+            .Where(e => e.Message.Contains(Scope.FullAccess));
     }
 
     [Theory]
@@ -142,7 +142,7 @@ public class HubAuthorizationFilterTests
     [MemberData(nameof(GatedMethods))]
     public async Task Full_access_connection_is_allowed(Type hubType, string methodName)
     {
-        var authorization = Member(OAuthScopes.FullAccess);
+        var authorization = Member(Scope.FullAccess);
 
         var reached = await InvokeAsync(CreateInvocation(hubType, methodName, authorization));
 
@@ -153,35 +153,35 @@ public class HubAuthorizationFilterTests
     public async Task Authorized_connection_without_the_declared_scope_is_denied()
     {
         // A read-only credential must not be able to silence alarms.
-        var readOnly = Member(OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.GlucoseRead, Scope.AlertsRead);
 
         var attempt = Attempt(typeof(AlarmHub), nameof(AlarmHub.Ack), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
     }
 
     [Fact]
     public async Task LoadRetro_requires_glucose_read()
     {
-        var therapyOnly = Member(OAuthScopes.TherapyRead);
+        var therapyOnly = Member(Scope.TherapyRead);
 
         var attempt = Attempt(typeof(DataHub), nameof(DataHub.LoadRetro), therapyOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.GlucoseRead));
+            .Where(e => e.Message.Contains(Scope.GlucoseRead));
     }
 
     [Fact]
     public async Task Home_assistant_acknowledge_requires_alerts_readwrite()
     {
-        var readOnly = Member(OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.AlertsRead);
 
         var attempt = Attempt(
             typeof(HomeAssistantHub), nameof(HomeAssistantHub.Acknowledge), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public class HubAuthorizationFilterTests
     {
         // Full access on purpose: the refusal must not depend on the guest scope set happening to
         // exclude alerts.read, because a grant update can widen a guest link's scopes.
-        var attempt = Attempt(hubType, methodName, Guest(OAuthScopes.FullAccess));
+        var attempt = Attempt(hubType, methodName, Guest(Scope.FullAccess));
 
         await attempt.Should().ThrowAsync<HubException>()
             .Where(e => e.Message.Contains("requires a credential belonging to the tenant"));
@@ -253,10 +253,10 @@ public class HubAuthorizationFilterTests
         // subscribe.
         foreach (var authorization in new[]
                  {
-                     Member(OAuthScopes.FullAccess),
+                     Member(Scope.FullAccess),
                      new HubAuthorization(
                          Tenant,
-                         OAuthScopes.Normalize([OAuthScopes.FullAccess]),
+                         Scope.Normalize([Scope.FullAccess]),
                          HubCredentialKind.Infrastructure,
                          SubjectId: null),
                  })

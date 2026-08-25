@@ -15,6 +15,7 @@
     getJobStatus as getDeduplicationJobStatus,
     cancelJob as cancelDeduplicationJob,
   } from "$api/generated/deduplications.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { DeduplicationJobStatus } from "$lib/api/generated/nocturne-api-client";
 
   let { open = $bindable(false), isDeduplicating = $bindable(false) } = $props<{ open: boolean, isDeduplicating?: boolean }>();
@@ -46,7 +47,7 @@
         deduplicationStartTime = null;
       }
     } catch (e) {
-      deduplicationError = e instanceof Error ? e.message : "Failed to start deduplication";
+      deduplicationError = describeSubmitError(e, "Failed to start deduplication");
       isDeduplicating = false;
       deduplicationStartTime = null;
     }

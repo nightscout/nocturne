@@ -25,6 +25,7 @@
     getConnectorCapabilities,
     getConnectorDataSummary,
   } from "$lib/api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -270,7 +271,7 @@
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to save configuration",
+        text: describeSubmitError(e, "Failed to save configuration"),
       };
       throw e;
     }
@@ -296,7 +297,7 @@
     } catch (e) {
       saveMessage = {
         type: "error",
-        text: e instanceof Error ? e.message : "Failed to update connector state",
+        text: describeSubmitError(e, "Failed to update connector state"),
       };
     }
 

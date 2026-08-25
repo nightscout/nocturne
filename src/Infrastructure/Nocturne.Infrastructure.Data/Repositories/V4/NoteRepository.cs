@@ -149,8 +149,9 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
+            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>

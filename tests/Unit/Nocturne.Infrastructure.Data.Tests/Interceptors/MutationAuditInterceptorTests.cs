@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
-using System.Linq.Expressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -77,19 +76,13 @@ public class TestNocturneDbContext : NocturneDbContext
         // (set_config / current_setting) which don't work with SQLite.
         modelBuilder.Entity<TestAuditableEntity>(e =>
         {
-            e.HasQueryFilter(null as LambdaExpression);
+            e.ClearQueryFilters();
             e.Property(x => x.DeletedAt).IsRequired(false);
         });
 
-        modelBuilder.Entity<TestSensorGlucoseEntity>(e =>
-        {
-            e.HasQueryFilter(null as LambdaExpression);
-        });
+        modelBuilder.Entity<TestSensorGlucoseEntity>(e => e.ClearQueryFilters());
 
-        modelBuilder.Entity<TestNonAuditableEntity>(e =>
-        {
-            e.HasQueryFilter(null as LambdaExpression);
-        });
+        modelBuilder.Entity<TestNonAuditableEntity>(e => e.ClearQueryFilters());
     }
 }
 
@@ -165,7 +158,7 @@ public class MutationAuditInterceptorTests : IDisposable
         public string? AuthType { get; init; }
         public string? IpAddress { get; init; }
         public Guid? TokenId { get; init; }
-        public string? CorrelationId { get; init; }
+        public string? TraceId { get; init; }
         public string? Endpoint { get; init; }
         public bool IsSystem { get; init; }
     }

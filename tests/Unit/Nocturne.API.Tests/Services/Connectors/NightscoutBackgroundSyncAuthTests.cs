@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Gluroo.Configurations;
 using Nocturne.Connectors.Gluroo.Services;
@@ -105,6 +106,71 @@ public class NightscoutBackgroundSyncAuthTests
 
         result.Should().NotBeNull();
         result.Success.Should().BeTrue("auth should succeed when tenant config URL is provided");
+    }
+
+    /// <summary>
+    ///     The terminal progress message belongs to the shared run wrapper. Nightscout authenticates
+    ///     on the requested-range entry point, and a rejected credential returns before any data is
+    ///     fetched — the run still has to hand the tenant exactly one terminal message, or the
+    ///     connector's badge stays on "syncing" until the page is reloaded.
+    /// </summary>
+    [Theory]
+    [InlineData("secret", SyncPhase.Completed)]
+    [InlineData("", SyncPhase.Failed)]
+    public async Task Nightscout_RequestedSync_ReportsExactlyOneTerminalMessage(
+        string apiSecret, SyncPhase expectedPhase)
+    {
+        var service = CreateNightscoutService(RespondOkJson(), new NightscoutConnectorConfiguration());
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://tenant.nightscout.example.com",
+            ApiSecret = apiSecret,
+        };
+        var (reporter, reported) = BuildReporter();
+
+        await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose], From = DateTime.UtcNow.AddHours(-1) },
+            config, CancellationToken.None, reporter.Object);
+
+        reported.Where(e => e.Phase != SyncPhase.Syncing)
+            .Should().ContainSingle().Which.Phase.Should().Be(expectedPhase);
+    }
+
+    /// <summary>
+    ///     Gluroo inherits <see cref="NightscoutConnectorServiceBase{TConfig}"/> whole, so the same
+    ///     auth guard applies — asserted directly rather than inferred.
+    /// </summary>
+    [Theory]
+    [InlineData("gluroo-secret", SyncPhase.Completed)]
+    [InlineData("", SyncPhase.Failed)]
+    public async Task Gluroo_RequestedSync_ReportsExactlyOneTerminalMessage(
+        string apiSecret, SyncPhase expectedPhase)
+    {
+        var service = CreateGlurooService(RespondOkJson(), new GlurooConnectorConfiguration());
+        var config = new GlurooConnectorConfiguration
+        {
+            Url = "https://app.gluroo.com",
+            ApiSecret = apiSecret,
+        };
+        var (reporter, reported) = BuildReporter();
+
+        await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose], From = DateTime.UtcNow.AddHours(-1) },
+            config, CancellationToken.None, reporter.Object);
+
+        reported.Where(e => e.Phase != SyncPhase.Syncing)
+            .Should().ContainSingle().Which.Phase.Should().Be(expectedPhase);
+    }
+
+    private static (Mock<ISyncProgressReporter> Reporter, List<SyncProgressEvent> Reported) BuildReporter()
+    {
+        var reported = new List<SyncProgressEvent>();
+        var reporter = new Mock<ISyncProgressReporter>();
+        reporter
+            .Setup(r => r.ReportProgressAsync(It.IsAny<SyncProgressEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<SyncProgressEvent, CancellationToken>((e, _) => reported.Add(e))
+            .Returns(Task.CompletedTask);
+        return (reporter, reported);
     }
 
     private sealed class FuncHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

@@ -14,7 +14,7 @@
   } from "lucide-svelte";
   import { OidcProviderType } from "$api";
   import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
-  import { errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorMessage } from "$lib/forms/submit-error";
 
   const OIDC_SCOPES = "openid profile email";
 
@@ -152,7 +152,7 @@
     } catch (err: unknown) {
       testResult = {
         success: false,
-        error: err instanceof Error ? err.message : "Test failed",
+        error: describeSubmitError(err, "Test failed"),
       };
     } finally {
       testingProvider = false;

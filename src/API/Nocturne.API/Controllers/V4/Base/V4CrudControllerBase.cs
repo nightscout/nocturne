@@ -37,7 +37,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     where TRepository : IV4Repository<TModel>
 {
     /// <summary>
-    /// The OAuth readwrite scope for this controller's data category (see <see cref="OAuthScopes"/>),
+    /// The OAuth readwrite scope for this controller's data category (see <see cref="Scope"/>),
     /// required by every write action. Abstract so a new V4 CRUD controller cannot ship without
     /// declaring one: the class-level <c>[Authorize]</c> is satisfied by read-only credentials
     /// (guest links, follower and public-share grants), which must not be able to write.

@@ -331,19 +331,11 @@ Enhanced health check system with better diagnostics:
 ```bash
 # Run cache-specific tests
 dotnet test --filter "Category=Cache"
-
-# Run performance benchmarks
-dotnet test --filter "Category=Performance"
 ```
 
-### Performance Benchmarks
-
-The system includes comprehensive performance tests:
-
-- **Cache Retrieval Performance**: Validates sub-10ms targets
-- **Hit Rate Performance**: Ensures >80% hit rates
-- **Throughput Testing**: Concurrent operation handling
-- **Memory Usage**: Resource consumption analysis
+`tests/Unit/Nocturne.Infrastructure.Cache.Tests` covers hit rate over a seeded access pattern and
+concurrent read-modify-write. The sub-10ms retrieval target above is a production goal, not a test
+assertion: a wall-clock budget on a shared runner measures the runner.
 
 ## Monitoring & Observability
 

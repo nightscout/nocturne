@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Data.Sqlite;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -26,6 +28,9 @@ public class ApiKeyHandlerTests : IDisposable
 
     private readonly Guid _testTenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
+
+    private static readonly DateTime Now = new(2026, 8, 17, 12, 0, 0, DateTimeKind.Utc);
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(Now, TimeSpan.Zero));
 
     public ApiKeyHandlerTests()
     {
@@ -63,7 +68,7 @@ public class ApiKeyHandlerTests : IDisposable
             .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = _testTenantId });
 
         var logger = new Mock<ILogger<ApiKeyHandler>>();
-        _handler = new ApiKeyHandler(_dbContextFactory.Object, logger.Object);
+        _handler = new ApiKeyHandler(_dbContextFactory.Object, _clock, logger.Object);
     }
 
     public void Dispose()
@@ -136,6 +141,58 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.Equal(AuthType.ApiKey, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
         Assert.Contains("glucose.read", result.AuthContext.Scopes);
+    }
+
+    /// <summary>
+    /// The read-access trail records which API secret read PHI. The stored hash is what the lookup
+    /// above matches on, so neither it nor a prefix of it may be what gets recorded.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_IdentifiesTheCredentialWithoutExposingItsStoredHash()
+    {
+        var firstToken = "noc_firstapikey12345";
+        var secondToken = "noc_secondapikey12345";
+        var firstHash = DirectGrantTokenHandler.ComputeSha256Hex(firstToken);
+        var secondHash = DirectGrantTokenHandler.ComputeSha256Hex(secondToken);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            foreach (var hash in new[] { firstHash, secondHash })
+            {
+                ctx.OAuthGrants.Add(new OAuthGrantEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    SubjectId = _subjectId,
+                    TenantId = _testTenantId,
+                    GrantType = OAuthGrantTypes.Direct,
+                    TokenHash = hash,
+                    Scopes = ["glucose.read"],
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+            await ctx.SaveChangesAsync();
+        }
+
+        var first = await AuthenticateWithSecretAsync(firstToken);
+        var second = await AuthenticateWithSecretAsync(secondToken);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotEqual(first, second);
+        Assert.DoesNotContain(first!, firstHash);
+        Assert.NotEqual(firstHash[..first!.Length], first);
+        Assert.Equal(AuditFingerprint.Of(AuditFingerprint.ApiSecretDomain, firstHash), first);
+    }
+
+    private async Task<string?> AuthenticateWithSecretAsync(string secret)
+    {
+        var context = CreateHttpContext();
+        context.Request.Headers["api-secret"] = secret;
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        return result.AuthContext!.CredentialFingerprint;
     }
 
     [Fact]
@@ -373,6 +430,109 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.NotNull(result.AuthContext);
         Assert.Equal(AuthType.ApiKey, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiringOneTickFromNow_ReturnsSuccess()
+    {
+        var token = await SeedTokenGrantAsync("noc_expiringkey001", Now.AddTicks(1));
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiringExactlyNow_ReturnsFailure()
+    {
+        var token = await SeedTokenGrantAsync("noc_expiringkey002", Now);
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(token));
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.ShouldSkip);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantExpiredOneTickAgo_ReturnsFailure()
+    {
+        var token = await SeedTokenGrantAsync("noc_expiringkey003", Now.AddTicks(-1));
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(token));
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.ShouldSkip);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_LegacySecretGrantExpiredOneTickAgo_ReturnsFailure()
+    {
+        var sha1Hash = HashUtils.Sha1Hex("expiredlegacysecret");
+        await SeedGrantAsync(tokenHash: null, legacySecretHash: sha1Hash, expiresAt: Now.AddTicks(-1));
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(sha1Hash));
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.ShouldSkip);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_LegacySecretGrantExpiringOneTickFromNow_ReturnsSuccess()
+    {
+        var sha1Hash = HashUtils.Sha1Hex("livelegacysecret");
+        await SeedGrantAsync(tokenHash: null, legacySecretHash: sha1Hash, expiresAt: Now.AddTicks(1));
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(sha1Hash));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_GrantWithNoExpiry_ReturnsSuccessYearsAfterCreation()
+    {
+        var token = await SeedTokenGrantAsync(
+            "noc_openendedkey001", expiresAt: null, createdAt: Now.AddYears(-5));
+
+        var result = await _handler.AuthenticateAsync(ApiSecretContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+    }
+
+    private async Task<string> SeedTokenGrantAsync(
+        string token, DateTime? expiresAt, DateTime? createdAt = null)
+    {
+        await SeedGrantAsync(
+            DirectGrantTokenHandler.ComputeSha256Hex(token), null, expiresAt, createdAt);
+        return token;
+    }
+
+    private async Task SeedGrantAsync(
+        string? tokenHash, string? legacySecretHash, DateTime? expiresAt, DateTime? createdAt = null)
+    {
+        await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId };
+        ctx.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _subjectId,
+            TenantId = _testTenantId,
+            GrantType = OAuthGrantTypes.Direct,
+            TokenHash = tokenHash,
+            LegacySecretHash = legacySecretHash,
+            Scopes = ["glucose.read"],
+            CreatedAt = createdAt ?? Now,
+            ExpiresAt = expiresAt,
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    private DefaultHttpContext ApiSecretContext(string apiSecret)
+    {
+        var context = CreateHttpContext();
+        context.Request.Headers["api-secret"] = apiSecret;
+        return context;
     }
 
     [Fact]

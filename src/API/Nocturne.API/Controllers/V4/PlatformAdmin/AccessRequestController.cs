@@ -102,7 +102,7 @@ public class AccessRequestController(
             // Find owners by looking at members with the owner role slug
             var ownerIds = await dbContext.TenantMembers
                 .Where(tm => tm.TenantId == tenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
+                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner))
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);
 
@@ -142,7 +142,7 @@ public class AccessRequestController(
         {
             var ownerIds = await dbContext.TenantMembers
                 .Where(tm => tm.TenantId == denyTenantContext.TenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
+                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner))
                 .Select(tm => tm.SubjectId)
                 .ToListAsync(ct);
 

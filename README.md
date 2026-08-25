@@ -131,6 +131,17 @@ cp .env.example .env
 docker compose up -d
 ```
 
+### Behind a CDN
+
+The bundled Caddy is the hop that decides which address Nocturne records in audit rows and counts
+rate limits against, and by default that is whoever connected to it. Behind a CDN that is the CDN's
+edge, so every visitor sharing a point of presence shares one bucket. Set `TRUSTED_PROXIES` to the
+CDN's published ranges (Cloudflare's are at <https://www.cloudflare.com/ips/>) and Caddy will take
+the visitor's address from `CF-Connecting-IP`, or from the last entry of `X-Forwarded-For` that no
+declared proxy vouched for — but only from those ranges, so nobody else can claim to be someone
+they aren't. This works for any CDN, not just Cloudflare. Leave it alone if no CDN is in front, and
+never set it empty: an empty value is a Caddy startup error, not a way to turn the feature off.
+
 The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed. It runs in label-only mode and every service in the bundle carries `com.centurylinklabs.watchtower.enable=true`, so it only ever updates Nocturne's own containers — anything else on the same Docker host is left alone.
 
 ### First-run setup
@@ -197,11 +208,14 @@ For bring-your-own PostgreSQL (not using the bundled container), run `docs/postg
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run every collected test (the opt-in E2E suite stays out)
 dotnet test
 
 # Run unit tests only
-dotnet test --filter "Category!=Integration&Category!=Performance"
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+
+# Run the end-to-end suite (stands up the whole Aspire stack)
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Run with coverage
 dotnet test --collect:"XPlat Code Coverage"

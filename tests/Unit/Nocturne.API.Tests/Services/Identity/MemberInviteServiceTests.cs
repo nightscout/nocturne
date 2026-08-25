@@ -30,7 +30,7 @@ public class MemberInviteServiceTests : IDisposable
     private Guid _followerRoleId;
 
     /// <summary>Granter permissions of a tenant owner: satisfies any grant the invite can carry.</summary>
-    private static readonly string[] OwnerPermissions = [TenantPermissions.Superuser];
+    private static readonly string[] OwnerPermissions = [Scope.FullAccess];
 
     private const string FakeToken = "fake-random-token-abc123";
     private const string FakeTokenHash = "hashed-fake-token";
@@ -105,7 +105,7 @@ public class MemberInviteServiceTests : IDisposable
             TenantId = _tenantId,
             Name = "Follower",
             Slug = "follower",
-            Permissions = [TenantPermissions.GlucoseRead, TenantPermissions.ReportsRead],
+            Permissions = [Scope.GlucoseRead, Scope.ReportsRead],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -163,13 +163,13 @@ public class MemberInviteServiceTests : IDisposable
             _creatorSubjectId,
             OwnerPermissions,
             [],
-            directPermissions: [TenantPermissions.GlucoseRead]);
+            directPermissions: [Scope.GlucoseRead]);
 
         result.Token.Should().Be(FakeToken);
 
         var entity = await _dbContext.MemberInvites.FirstOrDefaultAsync();
         entity.Should().NotBeNull();
-        entity!.DirectPermissions.Should().Contain(TenantPermissions.GlucoseRead);
+        entity!.DirectPermissions.Should().Contain(Scope.GlucoseRead);
     }
 
     [Fact]
@@ -178,9 +178,9 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite, TenantPermissions.MembersManage],
+            [Scope.MembersInvite, Scope.MembersManage],
             [],
-            directPermissions: [TenantPermissions.Superuser]);
+            directPermissions: [Scope.FullAccess]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*Cannot grant '*'*");
@@ -194,9 +194,9 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead],
+            [Scope.MembersInvite, Scope.GlucoseRead],
             [],
-            directPermissions: [TenantPermissions.TreatmentsReadWrite]);
+            directPermissions: [Scope.TreatmentsReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*treatments.readwrite*");
@@ -224,7 +224,7 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
-            [TenantPermissions.MembersInvite],
+            [Scope.MembersInvite],
             [_followerRoleId]);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -514,7 +514,7 @@ public class MemberInviteServiceTests : IDisposable
             CreatedBySubjectId = _creatorSubjectId,
             TokenHash = "hash-minted-for-the-other-tenant",
             RoleIds = [],
-            DirectPermissions = [TenantPermissions.GlucoseRead],
+            DirectPermissions = [Scope.GlucoseRead],
             ExpiresAt = DateTime.UtcNow.AddDays(7),
         });
         await _dbContext.SaveChangesAsync();

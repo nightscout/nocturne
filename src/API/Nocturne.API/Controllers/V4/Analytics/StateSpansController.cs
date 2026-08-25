@@ -25,9 +25,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <c>/illness</c>, <c>/travel</c>, <c>/activities</c>) are thin wrappers that pre-filter
 /// <see cref="IStateSpanService.GetStateSpansAsync"/> by <see cref="StateSpanCategory"/>.
 ///
-/// The main <c>GET /</c> endpoint is annotated with <c>RemoteQueryAttribute</c>
-/// and cached for 120 seconds. Create, update, and delete use
-/// <c>RemoteCommandAttribute</c> with cache invalidation hints.
+/// The main <c>GET /</c> endpoint is annotated with <c>RemoteQueryAttribute</c>. Create, update,
+/// and delete use <c>RemoteCommandAttribute</c> with cache invalidation hints.
 /// </remarks>
 /// <seealso cref="IStateSpanService"/>
 /// <seealso cref="StateSpan"/>
@@ -58,9 +57,15 @@ public class StateSpansController : ControllerBase
     /// <summary>
     /// Query all state spans with optional filtering
     /// </summary>
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a temporary
+    /// target, override, or data-exclusion window the caller just set must not be invisible until a
+    /// cached list body expires — and an exclusion window decides whether readings count towards
+    /// analytics, so a stale one silently changes reported statistics.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 120, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(PaginatedResponse<StateSpan>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedResponse<StateSpan>>> GetStateSpans(

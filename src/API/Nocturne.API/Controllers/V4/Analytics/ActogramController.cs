@@ -49,10 +49,10 @@ public class ActogramController : ControllerBase
     [HttpGet]
     [RemoteQuery]
     [RequireScope(
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
+        Scope.GlucoseRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead)]
     [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(ActogramReportData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

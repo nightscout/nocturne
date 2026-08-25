@@ -419,6 +419,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
 
+                    b.Property<string>("Secret")
+                        .HasMaxLength(1536)
+                        .HasColumnType("character varying(1536)")
+                        .HasColumnName("secret");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
@@ -587,10 +592,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("CorrelationId")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("correlation_id");
+                    b.Property<string>("ActorCredential")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("actor_credential");
+
+                    b.Property<Guid?>("ActorSubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_subject_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -632,6 +641,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("success");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("correlation_id");
+
                     b.Property<string>("UserAgent")
                         .HasColumnType("text")
                         .HasColumnName("user_agent");
@@ -653,9 +671,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SubjectId")
                         .HasDatabaseName("ix_auth_audit_log_subject_id");
 
+                    b.HasIndex("ActorCredential", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_auth_audit_log_actor_credential_created");
+
+                    b.HasIndex("ActorSubjectId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_auth_audit_log_actor_subject_created");
+
                     b.HasIndex("SubjectId", "CreatedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_auth_audit_log_subject_created");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_auth_audit_log_tenant_created");
 
                     b.ToTable("auth_audit_log");
                 });
@@ -1507,12 +1537,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("body_match");
 
-                    b.Property<string>("CorrelationId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("correlation_id");
-
                     b.Property<int>("CriticalDiscrepancyCount")
                         .HasColumnType("integer")
                         .HasColumnName("critical_discrepancy_count");
@@ -1598,14 +1622,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("total_processing_time_ms");
 
+                    b.Property<string>("TraceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("correlation_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AnalysisTimestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_discrepancy_analyses_timestamp");
-
-                    b.HasIndex("CorrelationId")
-                        .HasDatabaseName("ix_discrepancy_analyses_correlation_id");
 
                     b.HasIndex("OverallMatch")
                         .HasDatabaseName("ix_discrepancy_analyses_overall_match");
@@ -1614,6 +1641,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_discrepancy_analyses_request_path");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TraceId")
+                        .HasDatabaseName("ix_discrepancy_analyses_correlation_id");
 
                     b.HasIndex("RequestPath", "AnalysisTimestamp")
                         .IsDescending(false, true)
@@ -2466,8 +2496,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
                         .HasColumnName("action");
 
                     b.Property<string>("AuthType")
@@ -2478,11 +2508,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<string>("ChangesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("changes");
-
-                    b.Property<string>("CorrelationId")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -2495,7 +2520,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("endpoint");
 
-                    b.Property<Guid>("EntityId")
+                    b.Property<Guid?>("EntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("entity_id");
 
@@ -2527,9 +2552,14 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("token_id");
 
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("correlation_id");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CorrelationId")
+                    b.HasIndex("TraceId")
                         .HasDatabaseName("ix_mutation_audit_log_correlation")
                         .HasFilter("correlation_id IS NOT NULL");
 
@@ -3202,26 +3232,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("ApiSecretHashPrefix")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasColumnName("api_secret_hash_prefix");
-
                     b.Property<string>("AuthType")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("auth_type");
-
-                    b.Property<string>("CorrelationId")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("CredentialFingerprint")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("credential_fingerprint");
 
                     b.Property<string>("Endpoint")
                         .IsRequired()
@@ -3268,13 +3293,18 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("token_id");
 
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("correlation_id");
+
                     b.Property<string>("UserAgent")
                         .HasColumnType("text")
                         .HasColumnName("user_agent");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CorrelationId")
+                    b.HasIndex("TraceId")
                         .HasDatabaseName("ix_read_access_log_correlation")
                         .HasFilter("correlation_id IS NOT NULL");
 
@@ -3841,6 +3871,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
 
                     b.Property<DateTime?>("EndTimestamp")
                         .HasColumnType("timestamp with time zone")
@@ -5472,10 +5512,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeviceId");
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("ix_aps_snapshots_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_aps_snapshots_legacy_id");
+                    b.HasIndex("DeviceId");
 
                     b.HasIndex("PatientDeviceId");
 
@@ -5485,6 +5525,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_aps_snapshots_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_aps_snapshots_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -6195,14 +6240,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_calibrations_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_calibrations_legacy_id");
-
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_calibrations_tenant_id");
 
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_calibrations_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calibrations_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("calibrations");
                 });
@@ -6727,18 +6775,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_meter_glucose_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_meter_glucose_legacy_id");
-
                     b.HasIndex("PatientDeviceId")
                         .HasDatabaseName("ix_meter_glucose_patient_device_id")
                         .HasFilter("patient_device_id IS NOT NULL");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_meter_glucose_tenant_id");
 
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_meter_glucose_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_meter_glucose_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("meter_glucose");
                 });
@@ -7260,10 +7311,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeviceId");
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("ix_pump_snapshots_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_pump_snapshots_legacy_id");
+                    b.HasIndex("DeviceId");
 
                     b.HasIndex("PatientDeviceId");
 
@@ -7273,6 +7324,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_pump_snapshots_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pump_snapshots_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -8040,10 +8096,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeviceId");
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("ix_uploader_snapshots_correlation_id");
 
-                    b.HasIndex("LegacyId")
-                        .HasDatabaseName("ix_uploader_snapshots_legacy_id");
+                    b.HasIndex("DeviceId");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("IX_uploader_snapshots_tenant_id");
@@ -8051,6 +8107,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_uploader_snapshots_timestamp");
+
+                    b.HasIndex("TenantId", "LegacyId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_uploader_snapshots_tenant_legacy_id")
+                        .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
@@ -8213,6 +8274,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.AuthAuditLogEntity", b =>
                 {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ActorSubjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.RefreshTokenEntity", "RefreshToken")
                         .WithMany()
                         .HasForeignKey("RefreshTokenId")

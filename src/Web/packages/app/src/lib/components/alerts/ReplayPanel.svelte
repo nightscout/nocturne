@@ -25,6 +25,7 @@
     replayDryRun,
   } from "$api/generated/alertReplays.generated.remote";
   import { getRules } from "$api/generated/alertRules.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     AlertReplayEventKind,
     type AlertReplayResult,
@@ -326,10 +327,7 @@
       leafLog = new LeafTransitionLog(result?.leafTransitionsByRule ?? {});
       factLog = new FactSnapshotLog(result?.factTimelines ?? {});
     } catch (err) {
-      runError =
-        err instanceof Error
-          ? err.message
-          : "Failed to run replay. Please try again.";
+      runError = describeSubmitError(err, "Failed to run replay. Please try again.");
     } finally {
       running = false;
     }

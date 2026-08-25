@@ -188,7 +188,7 @@
           <div>
             <p class="font-medium">Failed to load alerts</p>
             <p class="text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : "Unknown error"}
+              {remoteErrorMessage(error, "Unknown error")}
             </p>
           </div>
         </CardContent>

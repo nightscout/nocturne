@@ -15,7 +15,12 @@
     setupOwnerOidc,
     validateSetupUsername,
   } from "../setup.remote";
-  import { FormError, FormField, useAvailability } from "$lib/forms";
+  import {
+    describeSubmitError,
+    FormError,
+    FormField,
+    useAvailability,
+  } from "$lib/forms";
   import {
     describePasskeyError,
     parseCeremonyOptions,
@@ -62,7 +67,7 @@
   );
 
   const canSubmit = $derived(
-    displayName.trim().length > 0 && availability.valid,
+    displayName.trim().length > 0 && availability.submittable,
   );
 
   // ── OIDC login ───────────────────────────────────────────────────
@@ -85,8 +90,10 @@
       window.location.href = result.authorizationUrl ?? "/setup";
     } catch (err) {
       console.error("Starting the external sign-in failed:", err);
-      oidcError =
-        "We couldn't start sign-in with that provider. Please try again.";
+      oidcError = describeSubmitError(
+        err,
+        "We couldn't start sign-in with that provider. Please try again.",
+      );
       isRedirecting = false;
       selectedProvider = null;
     }

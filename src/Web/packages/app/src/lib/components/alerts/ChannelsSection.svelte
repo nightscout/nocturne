@@ -10,7 +10,7 @@
   import { ChannelType, AlertRuleSeverity } from "$api-clients";
   import type { ChannelStatusEntry, DeviceCapabilityCatalog } from "$api-clients";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
-  import type { ChannelDef } from "./types";
+  import { applyChannelDestination, type ChannelDef } from "./types";
   import {
     CHANNEL_META,
     destinationError,
@@ -176,7 +176,7 @@
                     : undefined}
                 value={ch.destination}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                  channels[i].destination = e.currentTarget.value;
+                  applyChannelDestination(channels[i], e.currentTarget.value);
                 }}
               />
               {#if error}
@@ -191,6 +191,46 @@
             </div>
           {:else if opt?.destinationHelper}
             <p class="text-xs text-muted-foreground">{opt.destinationHelper}</p>
+          {/if}
+          {#if ch.channelType === ChannelType.Webhook}
+            <div class="space-y-1.5">
+              <Label class="text-xs" for="channel-secret-{i}">Signing secret (optional)</Label>
+              <div class="flex items-center gap-2">
+                <Input
+                  id="channel-secret-{i}"
+                  type="password"
+                  autocomplete="off"
+                  class="h-8 text-sm"
+                  placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
+                  aria-describedby="channel-secret-helper-{i}"
+                  value={ch.secret ?? ""}
+                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                    channels[i].secret = e.currentTarget.value;
+                  }}
+                />
+                {#if ch.hasSecret}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 shrink-0 text-xs"
+                    onclick={() => {
+                      channels[i].hasSecret = false;
+                      channels[i].secret = "";
+                    }}
+                  >
+                    Remove
+                  </Button>
+                {/if}
+              </div>
+              <p id="channel-secret-helper-{i}" class="text-xs text-muted-foreground">
+                Set this to have Nocturne sign each request with an
+                <code>X-Nocturne-Signature</code> header your receiver can verify. Leave blank if
+                your receiver does not check signatures.{#if ch.hasSecret}
+                  Changing the URL above does not carry the saved secret over — enter it again.
+                {/if}
+              </p>
+            </div>
           {/if}
           <div class="space-y-1.5">
             <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>

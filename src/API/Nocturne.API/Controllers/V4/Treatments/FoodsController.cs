@@ -41,7 +41,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <c>GetFavorites</c> deliberately departs from the <see cref="AuthContext.EffectiveSubjectId"/>
 /// convention, which would serve a guest the data owner's favorites. That choice is unresolved:
 /// a default guest link holds <c>health.read</c>, which
-/// <see cref="OAuthScopes.Normalize"/> expands to include <c>food.read</c>, so the scope gate does
+/// <see cref="Scope.Normalize"/> expands to include <c>food.read</c>, so the scope gate does
 /// not settle it either way.
 ///
 /// <b>Attribution count</b> (<c>/{foodId}/attribution-count</c>) — reports how many carb intake
@@ -68,7 +68,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <c>food.readwrite</c>; the per-subject favorites list is the same category. The per-action
     /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
     /// </summary>
-    public string WriteScope => OAuthScopes.FoodReadWrite;
+    public string WriteScope => Scope.FoodReadWrite;
 
     private readonly NocturneDbContext _context;
     private readonly IUserFoodFavoriteService _favoriteService;

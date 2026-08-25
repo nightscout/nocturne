@@ -99,7 +99,8 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     public DateTime? DismissedAt { get; set; }
 
     /// <summary>
-    /// When this grant expires. Only used for guest grants (creation + 48h).
+    /// When this grant expires; null means it never does. Guest grants are always given one
+    /// (creation + 48h); direct grants carry one only when the caller asked for it.
     /// </summary>
     [Column("expires_at")]
     public DateTime? ExpiresAt { get; set; }
@@ -191,22 +192,4 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
     /// </summary>
     public ICollection<OAuthRefreshTokenEntity> RefreshTokens { get; set; } =
         new List<OAuthRefreshTokenEntity>();
-}
-
-/// <summary>
-/// Grant type constants. References OAuthScopes for the canonical values.
-/// </summary>
-public static class OAuthGrantTypes
-{
-    /// <summary>Third-party application grant.</summary>
-    public const string App = OAuthScopes.GrantTypeApp;
-
-    /// <summary>User-to-user follower/caregiver sharing grant.</summary>
-    public const string Follower = OAuthScopes.GrantTypeFollower;
-
-    /// <summary>Direct token grant (API key style, no OAuth client).</summary>
-    public const string Direct = OAuthScopes.GrantTypeDirect;
-
-    /// <summary>Guest grant: temporary read-only access link.</summary>
-    public const string Guest = OAuthScopes.GrantTypeGuest;
 }

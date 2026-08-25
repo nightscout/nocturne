@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -14,14 +15,17 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
+    private readonly IAuditContext _auditContext;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceStatusExtrasRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    public DeviceStatusExtrasRepository(ITenantDbContextFactory contextFactory)
+    /// <param name="auditContext">The audit context for tracking mutations.</param>
+    public DeviceStatusExtrasRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext)
     {
         _contextFactory = contextFactory;
+        _auditContext = auditContext;
     }
 
     /// <summary>
@@ -68,9 +72,9 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     public async Task<int> DeleteByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.DeviceStatusExtras
-            .Where(e => e.CorrelationId == correlationId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.DeviceStatusExtras.Where(e => e.CorrelationId == correlationId),
+            _auditContext, $"correlation_id={correlationId}", ct);
     }
 
     /// <inheritdoc />

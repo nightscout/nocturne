@@ -40,11 +40,11 @@ public class AlertReplayReadScopeTests
 
     /// <summary>The maximum a guest link can hold that is not the alerts category.</summary>
     private static string[] GuestScopesWithoutAlerts() =>
-        OAuthScopes.Normalize([OAuthScopes.HealthRead, OAuthScopes.TherapyRead, OAuthScopes.ReportsRead]).ToArray();
+        Scope.Normalize([Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead]).ToArray();
 
     private static string[] ViewerScopes() =>
-        OAuthScopes.NormalizeMemberPermissions(
-            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer]).ToArray();
+        Scope.NormalizeMemberPermissions(
+            RoleSeeds.Permissions[RoleSeeds.Viewer]).ToArray();
 
     // ── admission ─────────────────────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ public class AlertReplayReadScopeTests
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
     public void ViewerRole_IsRefused(string action)
     {
-        ViewerScopes().Should().NotContain(OAuthScopes.AlertsRead);
+        ViewerScopes().Should().NotContain(Scope.AlertsRead);
 
         Evaluate(action, authenticated: true, ViewerScopes())
             .Should().BeOfType<ForbidResult>("a Viewer holds no alerts scope");
@@ -69,8 +69,8 @@ public class AlertReplayReadScopeTests
     }
 
     /// <summary>
-    /// A public share is anonymous, and <see cref="OAuthScopes.AlertsRead"/> is outside
-    /// <see cref="TenantPermissions.PublicShareScopes"/>, so no share can hold it however the
+    /// A public share is anonymous, and <see cref="Scope.AlertsRead"/> is outside
+    /// <see cref="Scope.PublicShareScopes"/>, so no share can hold it however the
     /// owner configures the link. Requiring the single alerts scope is therefore not the
     /// share-breaking <c>requireAll</c> shape — a share was never admitted here to begin with.
     /// </summary>
@@ -79,9 +79,9 @@ public class AlertReplayReadScopeTests
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
     public void AnonymousShareLink_IsRefused(string action)
     {
-        TenantPermissions.PublicShareScopes.Should().NotContain(TenantPermissions.AlertsRead);
+        Scope.PublicShareScopes.Should().NotContain(Scope.AlertsRead);
 
-        Evaluate(action, authenticated: false, [.. TenantPermissions.PublicShareScopes])
+        Evaluate(action, authenticated: false, [.. Scope.PublicShareScopes])
             .Should().BeOfType<ForbidResult>();
     }
 
@@ -90,9 +90,9 @@ public class AlertReplayReadScopeTests
     [InlineData(nameof(AlertReplayController.ReplayDryRun))]
     public void AlertsGrant_IsAdmitted(string action)
     {
-        Evaluate(action, authenticated: true, [OAuthScopes.AlertsRead]).Should().BeNull();
-        Evaluate(action, authenticated: true, [OAuthScopes.AlertsReadWrite]).Should().BeNull();
-        Evaluate(action, authenticated: true, [OAuthScopes.FullAccess]).Should().BeNull();
+        Evaluate(action, authenticated: true, [Scope.AlertsRead]).Should().BeNull();
+        Evaluate(action, authenticated: true, [Scope.AlertsReadWrite]).Should().BeNull();
+        Evaluate(action, authenticated: true, [Scope.FullAccess]).Should().BeNull();
     }
 
     /// <summary>
@@ -100,14 +100,14 @@ public class AlertReplayReadScopeTests
     /// simulator, or the gate has broken the surface it protects.
     /// </summary>
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Owner)]
-    [InlineData(TenantPermissions.SeedRoles.Admin)]
-    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
-    [InlineData(TenantPermissions.SeedRoles.Clinician)]
+    [InlineData(RoleSeeds.Owner)]
+    [InlineData(RoleSeeds.Admin)]
+    [InlineData(RoleSeeds.Caretaker)]
+    [InlineData(RoleSeeds.Clinician)]
     public void AlertHoldingSeedRoles_KeepReachingReplay(string role)
     {
-        var scopes = OAuthScopes.NormalizeMemberPermissions(
-            TenantPermissions.SeedRolePermissions[role]).ToArray();
+        var scopes = Scope.NormalizeMemberPermissions(
+            RoleSeeds.Permissions[role]).ToArray();
 
         Evaluate(nameof(AlertReplayController.Replay), authenticated: true, scopes).Should().BeNull();
     }
@@ -118,7 +118,7 @@ public class AlertReplayReadScopeTests
     public void Redact_AlertsOnlyGrant_DropsEveryFactTimeline()
     {
         var result = AlertReplayReadScopeGuard.Redact(
-            OneTimelinePerCategory(), Granted(OAuthScopes.AlertsRead));
+            OneTimelinePerCategory(), Granted(Scope.AlertsRead));
 
         result.FactTimelines.Should().BeEmpty();
     }
@@ -127,7 +127,7 @@ public class AlertReplayReadScopeTests
     public void Redact_GlucoseGrant_KeepsOnlyTheGlucoseFacts()
     {
         var result = AlertReplayReadScopeGuard.Redact(
-            OneTimelinePerCategory(), Granted(OAuthScopes.AlertsRead, OAuthScopes.GlucoseRead));
+            OneTimelinePerCategory(), Granted(Scope.AlertsRead, Scope.GlucoseRead));
 
         result.FactTimelines.Keys.Should().BeEquivalentTo(["latest_glucose"]);
     }
@@ -136,7 +136,7 @@ public class AlertReplayReadScopeTests
     public void Redact_ReadWriteGrant_SatisfiesTheReadCategory()
     {
         var result = AlertReplayReadScopeGuard.Redact(
-            OneTimelinePerCategory(), Granted(OAuthScopes.TreatmentsReadWrite));
+            OneTimelinePerCategory(), Granted(Scope.TreatmentsReadWrite));
 
         result.FactTimelines.Keys.Should().BeEquivalentTo(["iob"]);
     }
@@ -145,7 +145,7 @@ public class AlertReplayReadScopeTests
     public void Redact_FullAccess_KeepsEveryFactTimeline()
     {
         var result = AlertReplayReadScopeGuard.Redact(
-            OneTimelinePerCategory(), Granted(OAuthScopes.FullAccess));
+            OneTimelinePerCategory(), Granted(Scope.FullAccess));
 
         result.FactTimelines.Should().HaveCount(3);
     }
@@ -161,7 +161,7 @@ public class AlertReplayReadScopeTests
             },
         };
 
-        AlertReplayReadScopeGuard.Redact(withStray, Granted(OAuthScopes.FullAccess))
+        AlertReplayReadScopeGuard.Redact(withStray, Granted(Scope.FullAccess))
             .FactTimelines.Should().BeEmpty("a fact with no declared category must fail closed");
     }
 
@@ -208,7 +208,7 @@ public class AlertReplayReadScopeTests
             .ReturnsAsync(OneTimelinePerCategory());
 
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = Granted(OAuthScopes.AlertsRead, OAuthScopes.DevicesRead);
+        httpContext.Items["GrantedScopes"] = Granted(Scope.AlertsRead, Scope.DevicesRead);
 
         var controller = new AlertReplayController(service.Object)
         {

@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -19,13 +21,42 @@ public class StateSpanRepositoryTests : IDisposable
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
 
+    /// <summary>
+    /// The one audit context both the repository and the interceptor read, so flipping
+    /// <see cref="StubAuditContext.IsSystem"/> switches a delete between user-initiated and
+    /// system sweep the way <c>SystemAuditScope</c> does in the connector pipeline.
+    /// </summary>
+    private readonly StubAuditContext _auditContext = new()
+    {
+        SubjectId = Guid.Parse("00000000-0000-0000-0000-0000000000aa"),
+        SubjectName = "tester",
+        AuthType = "SessionCookie",
+    };
+
     public StateSpanRepositoryTests()
     {
-        _context = TestDbContextFactory.CreateInMemoryContext();
+        var httpContextAccessor = new Mock<IHttpContextAccessor>();
+        httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
+
+        _context = TestDbContextFactory.CreateInMemoryContext(
+            interceptors: new MutationAuditInterceptor(httpContextAccessor.Object));
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        _context.AuditContext = _auditContext;
         _mockDedup = new Mock<IDeduplicationService>();
         _repository = new StateSpanRepository(
-            _context, _mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
+            _context, _mockDedup.Object, _auditContext, NullLogger<StateSpanRepository>.Instance);
+    }
+
+    private sealed class StubAuditContext : IAuditContext
+    {
+        public Guid? SubjectId { get; init; }
+        public string? SubjectName { get; init; }
+        public string? AuthType { get; init; }
+        public string? IpAddress { get; init; }
+        public Guid? TokenId { get; init; }
+        public string? TraceId { get; init; }
+        public string? Endpoint { get; init; }
+        public bool IsSystem { get; set; }
     }
 
     public void Dispose()
@@ -511,6 +542,115 @@ public class StateSpanRepositoryTests : IDisposable
             StateSpanCategory.Exercise, state: null, at: end, CancellationToken.None);
 
         result.Should().BeNull();
+    }
+
+    // --- Soft-delete re-creation guard ---
+
+    private static StateSpan ConnectorSpan() => new()
+    {
+        Category = StateSpanCategory.Exercise,
+        State = "Running",
+        StartTimestamp = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc),
+        EndTimestamp = new DateTime(2026, 3, 1, 10, 0, 0, DateTimeKind.Utc),
+        Source = "glooko-connector",
+        OriginalId = "glooko-exercise-1"
+    };
+
+    /// <summary>Primary keys of every row carrying <paramref name="originalId"/>, deleted included.</summary>
+    private Task<List<StateSpanEntity>> RowsForAsync(string originalId) =>
+        _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.OriginalId == originalId)
+            .ToListAsync();
+
+    [Fact]
+    public async Task UserDeletedSpan_IsNotRecreatedByTheNextConnectorSync()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        var deleted = await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+        deleted.Should().BeTrue();
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Exercise))
+            .Should().BeEmpty("the delete must survive the next sync");
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().ContainSingle("the resync must not insert a second row")
+            .Which.Id.Should().Be(originalRowId);
+        rows[0].DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SystemSweptSpan_IsRecreatedByTheNextConnectorSync()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        var originalRowId = (await RowsForAsync("glooko-exercise-1")).Single().Id;
+
+        _auditContext.IsSystem = true;
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+        _auditContext.IsSystem = false;
+
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+
+        (await _repository.GetStateSpansAsync(category: StateSpanCategory.Exercise))
+            .Should().ContainSingle("a system sweep leaves the span re-importable");
+
+        var rows = await RowsForAsync("glooko-exercise-1");
+        rows.Should().HaveCount(2, "the swept row stays in place for audit continuity");
+        rows.Should().ContainSingle(r => r.Id == originalRowId && r.DeletedAt != null);
+        rows.Should().ContainSingle(r => r.Id != originalRowId && r.DeletedAt == null);
+    }
+
+    [Fact]
+    public async Task DeleteActivityStateSpanAsync_SoftDeletes_AndBlocksRecreation()
+    {
+        var activity = new StateSpan
+        {
+            Category = StateSpanCategory.Illness,
+            State = "Flu",
+            StartTimestamp = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc),
+            Source = "glooko-connector",
+            OriginalId = "glooko-illness-1",
+        };
+        await _repository.UpsertActivityAsStateSpanAsync(activity);
+        var originalRowId = (await RowsForAsync("glooko-illness-1")).Single().Id;
+
+        (await _repository.DeleteActivityStateSpanAsync("glooko-illness-1")).Should().BeTrue();
+
+        (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty();
+
+        await _repository.UpsertActivityAsStateSpanAsync(activity);
+
+        (await _repository.GetActivityStateSpansAsync()).Should().BeEmpty(
+            "a user-deleted activity must not come back on the next sync");
+        (await RowsForAsync("glooko-illness-1"))
+            .Should().ContainSingle().Which.Id.Should().Be(originalRowId);
+    }
+
+    [Fact]
+    public async Task DeletedSpan_IsHiddenFromReadsAndCounts()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        await _repository.DeleteStateSpanAsync("glooko-exercise-1");
+
+        (await _repository.GetStateSpanByIdAsync("glooko-exercise-1")).Should().BeNull();
+        (await _repository.CountStateSpansAsync(category: StateSpanCategory.Exercise)).Should().Be(0);
+        (await _repository.GetActiveAtAsync(
+            StateSpanCategory.Exercise, state: null,
+            at: new DateTime(2026, 3, 1, 9, 30, 0, DateTimeKind.Utc))).Should().BeNull();
+        (await _repository.GetByCategories([StateSpanCategory.Exercise]))[StateSpanCategory.Exercise]
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeletedSpan_DoesNotBlockASecondDelete_ButReportsNotFound()
+    {
+        await _repository.UpsertStateSpanAsync(ConnectorSpan());
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeTrue();
+
+        (await _repository.DeleteStateSpanAsync("glooko-exercise-1")).Should().BeFalse();
     }
 
     [Fact]

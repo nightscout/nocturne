@@ -137,7 +137,7 @@ public class HubCredentialKindTests
     {
         var (hub, groups) = CreateHub(new HubAuthorization(
             Tenant,
-            OAuthScopes.Normalize([OAuthScopes.FullAccess]),
+            Scope.Normalize([Scope.FullAccess]),
             HubCredentialKind.Infrastructure,
             SubjectId: null));
 
@@ -248,7 +248,7 @@ public class HubCredentialKindTests
     }
 
     private static HubAuthorization Authorization(HubCredentialKind kind) => new(
-        Tenant, OAuthScopes.Normalize([OAuthScopes.GlucoseRead]), kind, Subject);
+        Tenant, Scope.Normalize([Scope.GlucoseRead]), kind, Subject);
 
     private static string Group(string name) => TenantAwareHub.FormatTenantGroup(Tenant.ToString(), name);
 

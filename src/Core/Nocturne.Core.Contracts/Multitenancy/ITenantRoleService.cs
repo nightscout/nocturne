@@ -58,7 +58,7 @@ public interface ITenantRoleService
     /// <param name="roleIds">The roles being conferred. An empty set is valid.</param>
     /// <param name="granterScopes">
     /// The caller's resolved scopes. Passed rather than read so a background or service caller has
-    /// to name the authority it is acting on. <see cref="TenantPermissions"/> atoms are a subset of
+    /// to name the authority it is acting on. <see cref="Scope"/> atoms are a subset of
     /// the member-grantable scope vocabulary, so a resolved scope set is a valid granter set.
     /// </param>
     /// <param name="ct">A cancellation token.</param>

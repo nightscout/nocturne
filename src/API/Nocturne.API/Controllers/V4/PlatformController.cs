@@ -7,6 +7,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4;
 
@@ -44,7 +45,7 @@ public class PlatformController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetTenants(CancellationToken ct)
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
@@ -68,7 +69,7 @@ public class PlatformController : ControllerBase
         if (!_config.AllowSelfServiceCreation)
             return Forbid();
 
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         if (authContext?.SubjectId == null)
             return Unauthorized();
 

@@ -23,7 +23,7 @@ public interface IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default
     );
@@ -121,7 +121,7 @@ public class OAuthGrantInfo
     public Guid SubjectId { get; set; }
 
     /// <summary>Grant type: "app" for standard OAuth apps, "follower" for follower access.</summary>
-    public string GrantType { get; set; } = OAuthScopes.GrantTypeApp;
+    public string GrantType { get; set; } = OAuthGrantTypes.App;
 
     /// <summary>OAuth scopes granted.</summary>
     public List<string> Scopes { get; set; } = new();

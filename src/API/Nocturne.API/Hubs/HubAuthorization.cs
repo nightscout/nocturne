@@ -71,7 +71,7 @@ public sealed record HubAuthorization(
     Guid? SubjectId)
 {
     /// <summary>Whether the credential satisfies <paramref name="scope"/>.</summary>
-    public bool Satisfies(string scope) => OAuthScopes.SatisfiesScope(Scopes, scope);
+    public bool Satisfies(string scope) => Scope.Satisfies(Scopes, scope);
 
     /// <summary>
     /// Whether the credential may join a group carrying the whole tenant's live payloads rather than
@@ -137,7 +137,7 @@ public sealed class HubAuthenticationMethodAttribute : Attribute;
 /// the connection's <see cref="HubAuthorization.Scopes"/>. A method without it still requires an
 /// authorized connection; declare a scope on any method that reads or changes tenant data.
 /// </summary>
-/// <param name="scope">The required scope, from <see cref="OAuthScopes"/>.</param>
+/// <param name="scope">The required scope, from <see cref="Scope"/>.</param>
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class HubScopeAttribute(string scope) : Attribute
 {

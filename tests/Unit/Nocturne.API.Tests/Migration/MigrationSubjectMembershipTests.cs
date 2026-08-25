@@ -169,18 +169,18 @@ public class MigrationSubjectMembershipTests
         // is what lets it write treatments back. Asserted exclusively: the risk in translating a
         // legacy grant is granting more than the source did, which a containment check would miss.
         member!.DirectPermissions.Should().BeEquivalentTo([
-            TenantPermissions.GlucoseRead,
-            TenantPermissions.TreatmentsRead,
-            TenantPermissions.TreatmentsReadWrite,
-            TenantPermissions.DevicesRead,
-            TenantPermissions.TherapyRead,
-            TenantPermissions.FoodRead,
-            TenantPermissions.AlertsRead,
-            TenantPermissions.ReportsRead,
-            TenantPermissions.IdentityRead,
-            TenantPermissions.HeartRateRead,
-            TenantPermissions.StepCountRead,
-            TenantPermissions.SleepRead,
+            Scope.GlucoseRead,
+            Scope.TreatmentsRead,
+            Scope.TreatmentsReadWrite,
+            Scope.DevicesRead,
+            Scope.TherapyRead,
+            Scope.FoodRead,
+            Scope.AlertsRead,
+            Scope.ReportsRead,
+            Scope.IdentityRead,
+            Scope.HeartRateRead,
+            Scope.StepCountRead,
+            Scope.SleepRead,
         ]);
     }
 
@@ -201,9 +201,9 @@ public class MigrationSubjectMembershipTests
             AuthType.LegacyAccessToken,
             new HashSet<string>());
 
-        resolved.Should().Contain([OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite]);
+        resolved.Should().Contain([Scope.GlucoseRead, Scope.TreatmentsReadWrite]);
         resolved.Should().NotContain([
-            OAuthScopes.FullAccess, TenantPermissions.MembersManage, TenantPermissions.SharingManage]);
+            Scope.FullAccess, Scope.MembersManage, Scope.SharingManage]);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class MigrationSubjectMembershipTests
         var member = await MemberForAsync(db, tenantId, "Boss");
 
         // Stored as the bare atom rather than the expansion, so the grant tracks the scope list.
-        member!.DirectPermissions.Should().Equal(TenantPermissions.Superuser);
+        member!.DirectPermissions.Should().Equal(Scope.FullAccess);
     }
 
     [Fact]
@@ -263,8 +263,8 @@ public class MigrationSubjectMembershipTests
 
         var member = await MemberForAsync(db, tenantId, "Reader");
 
-        member!.DirectPermissions.Should().NotContain(TenantPermissions.Superuser);
-        member.DirectPermissions.Should().Contain(TenantPermissions.TreatmentsReadWrite);
+        member!.DirectPermissions.Should().NotContain(Scope.FullAccess);
+        member.DirectPermissions.Should().Contain(Scope.TreatmentsReadWrite);
     }
 
     [Fact]

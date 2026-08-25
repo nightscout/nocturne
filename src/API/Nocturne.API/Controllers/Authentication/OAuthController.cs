@@ -37,7 +37,7 @@ namespace Nocturne.API.Controllers.Authentication;
 ///   <item><description>RFC 7591 Dynamic Client Registration via <c>POST /oauth/register</c>.</description></item>
 /// </list>
 ///
-/// Scopes are validated via <see cref="OAuthScopes.IsValid"/> and normalized via <see cref="OAuthScopes.Normalize"/>.
+/// Scopes are validated via <see cref="Scope.IsValid"/> and normalized via <see cref="Scope.Normalize"/>.
 /// </remarks>
 /// <seealso cref="IOAuthClientService"/>
 /// <seealso cref="IOAuthGrantService"/>
@@ -130,7 +130,7 @@ public class OAuthController : ControllerBase
 
         // Validate scopes
         var requestedScopes = scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var invalidScopes = requestedScopes.Where(s => !OAuthScopes.IsValid(s)).ToList();
+        var invalidScopes = requestedScopes.Where(s => !Scope.IsValid(s)).ToList();
         if (invalidScopes.Count > 0)
         {
             return BadRequest(new OAuthError
@@ -189,14 +189,14 @@ public class OAuthController : ControllerBase
         }
 
         // Normalize the requested scopes
-        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+        var normalizedScopes = Scope.Normalize(requestedScopes);
 
         // Check if an active grant exists with sufficient scopes
         var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId.Value);
         if (existingGrant != null)
         {
             var existingSet = new HashSet<string>(existingGrant.Scopes);
-            var allSatisfied = normalizedScopes.All(s => OAuthScopes.SatisfiesScope(existingSet, s));
+            var allSatisfied = normalizedScopes.All(s => Scope.Satisfies(existingSet, s));
 
             if (allSatisfied)
             {
@@ -285,7 +285,7 @@ public class OAuthController : ControllerBase
 
         // Validate scopes
         var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var normalizedScopes = OAuthScopes.Normalize(scopes);
+        var normalizedScopes = Scope.Normalize(scopes);
 
         if (normalizedScopes.Count == 0)
         {
@@ -302,10 +302,10 @@ public class OAuthController : ControllerBase
         // superuser by way of their own browser. The ceiling is the caller's resolved scopes on
         // this tenant, which MemberScopeMiddleware has already narrowed to their membership.
         var approverScopes = HttpContext.GetGrantedScopes();
-        if (!OAuthScopes.SatisfiesScope(approverScopes, OAuthScopes.FullAccess))
+        if (!Scope.Satisfies(approverScopes, Scope.FullAccess))
         {
             normalizedScopes = normalizedScopes
-                .Where(scope => OAuthScopes.SatisfiesScope(approverScopes, scope))
+                .Where(scope => Scope.Satisfies(approverScopes, scope))
                 .ToHashSet();
 
             if (normalizedScopes.Count == 0)
@@ -456,7 +456,7 @@ public class OAuthController : ControllerBase
     )
     {
         var requestedScopes = scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var invalidScopes = requestedScopes.Where(s => !OAuthScopes.IsValid(s)).ToList();
+        var invalidScopes = requestedScopes.Where(s => !Scope.IsValid(s)).ToList();
         if (invalidScopes.Count > 0)
         {
             return BadRequest(new OAuthError
@@ -487,7 +487,7 @@ public class OAuthController : ControllerBase
         }
 
         // Normalize scopes
-        var normalizedScopes = OAuthScopes.Normalize(requestedScopes);
+        var normalizedScopes = Scope.Normalize(requestedScopes);
 
         // Create device code pair
         var result = await _deviceCodeService.CreateDeviceCodeAsync(client_id, normalizedScopes);
@@ -891,7 +891,7 @@ public class OAuthController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            // OAuthScopes.ValidateGrantScopes rejects a scope outside the vocabulary, and a scope
+            // Scope.ValidateGrantScopes rejects a scope outside the vocabulary, and a scope
             // wider than the grant type may hold — a guest link is capped at read.
             return BadRequest(new OAuthError
             {

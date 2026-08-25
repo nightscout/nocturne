@@ -4,27 +4,39 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
-/// Soft-delete dedup helper for V4 bulk-create paths. Blocking is decided from the
+/// Soft-delete dedup helpers for the re-import guard. Blocking is decided from the
 /// <c>deleted_by_user</c> flag carried on each soft-deletable row (maintained by the
 /// audit interceptor and the bulk-delete helpers), so it is a single index seek with
-/// no audit-log scan or per-entity group-by.
+/// no audit-log scan or per-entity group-by. The rule itself is
+/// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
 /// </summary>
 public static class SoftDeleteDedupExtensions
 {
+    private const string DeletedByUserProperty = "DeletedByUser";
+
     /// <summary>
-    /// Returns the subset of <paramref name="legacyIds"/> that must be skipped on
-    /// bulk insert. A legacy_id is blocking if either:
-    ///   - an active row exists with that legacy_id, or
-    ///   - a soft-deleted row exists whose latest delete was user-initiated
-    ///     (its <c>deleted_by_user</c> flag is set).
-    /// Soft-deleted rows deleted by a system sweep (<c>deleted_by_user = false</c>),
-    /// and rows with no row at all (already hard-deleted / never existed), do NOT
-    /// block. Resync produces a fresh row with a new <c>Id</c>; the prior soft-deleted
-    /// row is left in place for audit continuity.
+    /// Narrows <paramref name="source"/> to the rows whose external identity must not be
+    /// re-created: an active row, or a soft-deleted row whose latest delete was
+    /// user-initiated (its <c>deleted_by_user</c> flag is set). A row swept by the system
+    /// (<c>deleted_by_user = false</c>), and an identity with no row at all, do NOT block —
+    /// resync produces a fresh row with a new <c>Id</c> and the prior soft-deleted row is
+    /// left in place for audit continuity.
     ///
     /// Depends on connector-pipeline sweep deletes being wrapped in
     /// <c>SystemAuditScope</c> at the call site so their delete carries no auth
     /// context (<c>deleted_by_user = false</c>).
+    ///
+    /// <paramref name="source"/> must have the soft-delete query filter lifted
+    /// (<c>IgnoreQueryFilters</c>) with its tenant predicate re-applied, or no soft-deleted
+    /// row can reach the predicate.
+    /// </summary>
+    public static IQueryable<TEntity> WhereBlocksRecreation<TEntity>(this IQueryable<TEntity> source)
+        where TEntity : class, ISoftDeletable
+        => source.Where(e => e.DeletedAt == null || EF.Property<bool>(e, DeletedByUserProperty));
+
+    /// <summary>
+    /// Returns the subset of <paramref name="legacyIds"/> that must be skipped on bulk
+    /// insert, per <see cref="WhereBlocksRecreation{TEntity}"/>.
     /// </summary>
     public static async Task<HashSet<string>> GetBlockingLegacyIdsAsync<TEntity>(
         this NocturneDbContext ctx,
@@ -35,36 +47,21 @@ public static class SoftDeleteDedupExtensions
         if (legacyIds.Count == 0)
             return new HashSet<string>();
 
-        var existing = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
+        var blocking = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
             .Where(e => e.TenantId == ctx.TenantId
                      && e.LegacyId != null
                      && legacyIds.Contains(e.LegacyId))
-            .Select(e => new
-            {
-                e.LegacyId,
-                e.DeletedAt,
-                DeletedByUser = EF.Property<bool>(e, "DeletedByUser")
-            })
+            .WhereBlocksRecreation()
+            .Select(e => e.LegacyId!)
             .ToListAsync(ct);
 
-        var blocking = new HashSet<string>();
-        foreach (var row in existing)
-        {
-            // Active rows always block; a soft-deleted row blocks only when its latest
-            // delete was user-initiated (system-sweep deletes stay re-creatable on resync).
-            if (row.DeletedAt == null || row.DeletedByUser)
-                blocking.Add(row.LegacyId!);
-        }
-
-        return blocking;
+        return blocking.ToHashSet();
     }
 
     /// <summary>
     /// Sibling of <see cref="GetBlockingLegacyIdsAsync{TEntity}"/> for entities keyed
     /// by <c>CorrelationId</c> (Guid) instead of <c>LegacyId</c> (string). Currently
-    /// used by <c>DeviceStatusExtrasEntity</c> only. Same discrimination semantics
-    /// otherwise — active rows always block, soft-deleted rows block iff their latest
-    /// delete was user-initiated (<c>deleted_by_user</c> is set).
+    /// used by <c>DeviceStatusExtrasEntity</c> only.
     /// </summary>
     public static async Task<HashSet<Guid>> GetBlockingCorrelationIdsAsync(
         this NocturneDbContext ctx,
@@ -74,24 +71,13 @@ public static class SoftDeleteDedupExtensions
         if (correlationIds.Count == 0)
             return new HashSet<Guid>();
 
-        var existing = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+        var blocking = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
             .Where(e => e.TenantId == ctx.TenantId
                      && correlationIds.Contains(e.CorrelationId))
-            .Select(e => new
-            {
-                e.CorrelationId,
-                e.DeletedAt,
-                DeletedByUser = EF.Property<bool>(e, "DeletedByUser")
-            })
+            .WhereBlocksRecreation()
+            .Select(e => e.CorrelationId)
             .ToListAsync(ct);
 
-        var blocking = new HashSet<Guid>();
-        foreach (var row in existing)
-        {
-            if (row.DeletedAt == null || row.DeletedByUser)
-                blocking.Add(row.CorrelationId);
-        }
-
-        return blocking;
+        return blocking.ToHashSet();
     }
 }

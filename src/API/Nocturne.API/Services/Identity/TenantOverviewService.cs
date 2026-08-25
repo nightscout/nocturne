@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -48,16 +49,16 @@ public class TenantOverviewService : ITenantOverviewService
         var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
 
         var defaults = new TenantOverviewThresholds(
-            UrgentLow: _configuration.GetValue("Thresholds:BgLow", 55),
-            Low: _configuration.GetValue("Thresholds:BgTargetBottom", 80),
-            High: _configuration.GetValue("Thresholds:BgTargetTop", 180),
-            UrgentHigh: _configuration.GetValue("Thresholds:BgHigh", 260));
+            UrgentLow: _configuration.GetValue("Thresholds:BgLow", ApplicationConstants.Web.Thresholds.BgLow),
+            Low: _configuration.GetValue("Thresholds:BgTargetBottom", ApplicationConstants.Web.Thresholds.BgTargetBottom),
+            High: _configuration.GetValue("Thresholds:BgTargetTop", ApplicationConstants.Web.Thresholds.BgTargetTop),
+            UrgentHigh: _configuration.GetValue("Thresholds:BgHigh", ApplicationConstants.Web.Thresholds.BgHigh));
         var staleAfter = TimeSpan.FromMinutes(_configuration.GetValue("Overview:StaleAfterMinutes", 25));
 
         var items = new List<TenantOverviewItem>();
         foreach (var (tenant, allowed) in glucoseReadTenants)
         {
-            var includeAlerts = TenantPermissions.HasPermission(allowed, TenantPermissions.AlertsRead);
+            var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
 
             try
             {
@@ -97,7 +98,7 @@ public class TenantOverviewService : ITenantOverviewService
             if (tenant is null || !tenant.IsActive) continue;
 
             var allowed = ResolveAllowedScopes(membership, tokenScopes, authType);
-            if (!TenantPermissions.HasPermission(allowed, TenantPermissions.GlucoseRead)) continue;
+            if (!Scope.Satisfies(allowed, Scope.GlucoseRead)) continue;
 
             result.Add(new GlucoseReadTenant(tenant, allowed));
         }

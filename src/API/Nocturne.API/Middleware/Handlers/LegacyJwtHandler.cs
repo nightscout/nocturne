@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -87,7 +88,7 @@ public class LegacyJwtHandler : IAuthHandler
         // Enforce tenant pin: reject tokens issued for a different tenant
         if (claims.TenantId.HasValue)
         {
-            var tenantCtx = context.Items["TenantContext"] as TenantContext;
+            var tenantCtx = context.GetTenantContext();
             if (tenantCtx is null || tenantCtx.TenantId != claims.TenantId.Value)
             {
                 _logger.LogWarning(

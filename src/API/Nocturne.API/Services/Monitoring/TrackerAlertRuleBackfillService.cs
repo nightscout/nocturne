@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 
@@ -21,6 +22,8 @@ namespace Nocturne.API.Services.Monitoring;
 /// <seealso cref="TrackerAlertRuleSyncService"/>
 public sealed class TrackerAlertRuleBackfillService : BackgroundService
 {
+    internal const string AuditEndpoint = "service:tracker-alert-rule-backfill";
+
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TrackerAlertRuleBackfillService> _logger;
 
@@ -80,6 +83,12 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
                 var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
                 tenantAccessor.SetTenant(new TenantContext(
                     tenantId, slug ?? string.Empty, displayName ?? string.Empty, true, IsDemo: false));
+
+                // Attribute the backfill's rule writes to the service rather than to whoever last
+                // held the scope's audit context.
+                using var systemScope = SystemAuditScope.PushForScope(
+                    tenantScope.ServiceProvider, AuditEndpoint);
+
                 var sync = tenantScope.ServiceProvider.GetRequiredService<ITrackerAlertRuleSyncService>();
 
                 foreach (var definitionId in definitionIds)

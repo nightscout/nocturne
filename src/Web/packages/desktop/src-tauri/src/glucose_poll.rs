@@ -13,6 +13,11 @@ use serde::Deserialize;
 // has no prediction engine — the field just comes back empty.
 const SUMMARY_HOURS: u32 = 3;
 
+/// Milligrams per decilitre in one millimole per litre of glucose, for consumers rendering a
+/// display unit. Must equal `GlucoseConstants.MgdlPerMmol`, or the companion and the server
+/// disagree about which side of a rounding boundary a reading falls on.
+pub const MGDL_PER_MMOL: f64 = 18.0182;
+
 /// The latest reading, parsed from the summary for the tray icon and the readout. `sgv`/`delta`
 /// are mg/dL; display-unit conversion is the consumer's job.
 #[derive(Clone, Debug, serde::Serialize)]

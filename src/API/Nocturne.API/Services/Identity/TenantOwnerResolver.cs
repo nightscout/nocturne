@@ -29,7 +29,7 @@ public class TenantOwnerResolver : ITenantOwnerResolver
 
         var ownerSubjectId = await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.TenantId == tenantId
-                && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
+                && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == RoleSeeds.Owner))
             .Select(tm => tm.SubjectId)
             .FirstOrDefaultAsync(cancellationToken);
 

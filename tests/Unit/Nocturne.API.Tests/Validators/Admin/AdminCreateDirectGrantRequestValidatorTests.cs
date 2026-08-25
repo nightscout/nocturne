@@ -14,7 +14,7 @@ public class AdminCreateDirectGrantRequestValidatorTests
     {
         SubjectId = Guid.CreateVersion7(),
         Label = "Partner Integration",
-        Scopes = [OAuthScopes.GlucoseRead],
+        Scopes = [Scope.GlucoseRead],
     };
 
     [Fact]
@@ -43,10 +43,19 @@ public class AdminCreateDirectGrantRequestValidatorTests
     }
 
     [Fact]
-    public void Set_expiry_fails()
+    public void Future_expiry_passes()
     {
         var request = ValidRequest();
         request.ExpiresAt = DateTime.UtcNow.AddDays(1);
+        var result = _validator.TestValidate(request);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Past_expiry_fails_via_shared_rules()
+    {
+        var request = ValidRequest();
+        request.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
         var result = _validator.TestValidate(request);
         result.ShouldHaveValidationErrorFor(x => x.ExpiresAt);
     }

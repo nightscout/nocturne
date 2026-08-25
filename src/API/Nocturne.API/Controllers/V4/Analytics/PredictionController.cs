@@ -58,7 +58,7 @@ public class PredictionController : ControllerBase
     /// <returns>Glucose predictions including IOB, UAM, COB, and zero-temp curves</returns>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
@@ -100,7 +100,7 @@ public class PredictionController : ControllerBase
     /// <returns>Status of the prediction service including configured source</returns>
     [HttpGet("status")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(PredictionStatusResponse), 200)]
     public ActionResult<PredictionStatusResponse> GetStatus()
     {
@@ -130,7 +130,7 @@ public class PredictionController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("profile-snapshot")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
     [ProducesResponseType(typeof(PredictionErrorResponse), 500)]

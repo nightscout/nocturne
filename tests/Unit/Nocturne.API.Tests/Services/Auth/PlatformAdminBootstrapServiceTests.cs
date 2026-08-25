@@ -143,11 +143,11 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     /// <summary>Seeds a tenant whose sole member holds the owner role, and returns that subject's id.</summary>
     private async Task<Guid> AddTenantWithOwnerAsync(string slug, DateTime createdAt) =>
-        await AddTenantAsync(slug, createdAt, TenantPermissions.SeedRoles.Owner);
+        await AddTenantAsync(slug, createdAt, RoleSeeds.Owner);
 
     /// <summary>Seeds a tenant whose sole member holds a non-owner role, and returns that subject's id.</summary>
     private async Task<Guid> AddTenantWithoutOwnerAsync(string slug, DateTime createdAt) =>
-        await AddTenantAsync(slug, createdAt, TenantPermissions.SeedRoles.Viewer);
+        await AddTenantAsync(slug, createdAt, RoleSeeds.Viewer);
 
     private async Task<Guid> AddTenantAsync(string slug, DateTime createdAt, string roleSlug)
     {

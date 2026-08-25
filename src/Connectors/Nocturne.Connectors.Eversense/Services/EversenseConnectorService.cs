@@ -77,13 +77,11 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         EversenseConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
+        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
         if (!enabledTypes.Contains(SyncDataType.Glucose))
         {
             result.EndTime = DateTimeOffset.UtcNow;
@@ -156,23 +154,16 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 return result;
             }
 
-            var success = await PublishSensorGlucoseDataAsync([sg], config, cancellationToken);
-            result.ItemsSynced[SyncDataType.Glucose] = 1;
-            result.LastEntryTimes[SyncDataType.Glucose] = sg.Timestamp;
+            // Debug, not Information: the shared publish log runs at Information and a glucose
+            // value is health data, so the reading stays out of the default-level sink.
+            _logger.LogDebug(
+                "[{ConnectorSource}] Publishing reading {Mgdl} mg/dL at {Timestamp:O}",
+                ConnectorSource,
+                sg.Mgdl,
+                sg.Timestamp);
 
-            if (!success)
-            {
-                result.Success = false;
-                result.Errors.Add("SensorGlucose publish failed");
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Synced 1 SensorGlucose record ({Mgdl} mg/dL at {Timestamp})",
-                    ConnectorSource,
-                    sg.Mgdl,
-                    sg.Timestamp);
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
+                [sg], PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
         {

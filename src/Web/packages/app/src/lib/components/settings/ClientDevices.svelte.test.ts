@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 // Mock the generated remote functions before importing the component.
 // The component calls getDevices()/getCapabilityCatalog() as reactive queries
@@ -18,16 +19,8 @@ const catalogCurrent = {
 };
 
 vi.mock("$lib/api/generated/clientDevices.generated.remote", () => ({
-  getDevices: () => ({
-    get current() {
-      return devicesCurrent;
-    },
-  }),
-  getCapabilityCatalog: () => ({
-    get current() {
-      return catalogCurrent;
-    },
-  }),
+  getDevices: () => remoteQuery(() => devicesCurrent),
+  getCapabilityCatalog: () => remoteQuery(() => catalogCurrent),
   rename: (...args: unknown[]) => rename(...args),
   revoke: (...args: unknown[]) => revoke(...args),
 }));

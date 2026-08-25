@@ -42,21 +42,21 @@ public class ActivityWriteScopeGuardTests
     [Fact]
     public void FindMissingScope_SleepRecordWithoutScope_ReturnsSleepScope()
     {
-        var decomposer = Decomposer(new() { ["s"] = OAuthScopes.SleepReadWrite });
+        var decomposer = Decomposer(new() { ["s"] = Scope.SleepReadWrite });
 
         var missing = ActivityWriteScopeGuard.FindMissingScope(
-            [Activity("s")], decomposer, Granted(OAuthScopes.GlucoseReadWrite));
+            [Activity("s")], decomposer, Granted(Scope.GlucoseReadWrite));
 
-        missing.Should().Be(OAuthScopes.SleepReadWrite);
+        missing.Should().Be(Scope.SleepReadWrite);
     }
 
     [Fact]
     public void FindMissingScope_SleepRecordWithScope_ReturnsNull()
     {
-        var decomposer = Decomposer(new() { ["s"] = OAuthScopes.SleepReadWrite });
+        var decomposer = Decomposer(new() { ["s"] = Scope.SleepReadWrite });
 
         var missing = ActivityWriteScopeGuard.FindMissingScope(
-            [Activity("s")], decomposer, Granted(OAuthScopes.SleepReadWrite));
+            [Activity("s")], decomposer, Granted(Scope.SleepReadWrite));
 
         missing.Should().BeNull();
     }
@@ -66,13 +66,13 @@ public class ActivityWriteScopeGuardTests
     {
         var decomposer = Decomposer(new()
         {
-            ["hr"] = OAuthScopes.HeartRateReadWrite,
-            ["sc"] = OAuthScopes.StepCountReadWrite,
-            ["s"] = OAuthScopes.SleepReadWrite,
+            ["hr"] = Scope.HeartRateReadWrite,
+            ["sc"] = Scope.StepCountReadWrite,
+            ["s"] = Scope.SleepReadWrite,
         });
 
         var missing = ActivityWriteScopeGuard.FindMissingScope(
-            [Activity("hr"), Activity("sc"), Activity("s")], decomposer, Granted(OAuthScopes.FullAccess));
+            [Activity("hr"), Activity("sc"), Activity("s")], decomposer, Granted(Scope.FullAccess));
 
         missing.Should().BeNull();
     }
@@ -83,13 +83,13 @@ public class ActivityWriteScopeGuardTests
         // Caller can write steps but not sleep; the sleep record in the batch is the gap.
         var decomposer = Decomposer(new()
         {
-            ["sc"] = OAuthScopes.StepCountReadWrite,
-            ["s"] = OAuthScopes.SleepReadWrite,
+            ["sc"] = Scope.StepCountReadWrite,
+            ["s"] = Scope.SleepReadWrite,
         });
 
         var missing = ActivityWriteScopeGuard.FindMissingScope(
-            [Activity("sc"), Activity("s")], decomposer, Granted(OAuthScopes.StepCountReadWrite));
+            [Activity("sc"), Activity("s")], decomposer, Granted(Scope.StepCountReadWrite));
 
-        missing.Should().Be(OAuthScopes.SleepReadWrite);
+        missing.Should().Be(Scope.SleepReadWrite);
     }
 }

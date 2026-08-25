@@ -49,6 +49,7 @@ public class DemoSubjectGatedEndpointsTests
 
         // Accumulating an external identity on the shared subject.
         { typeof(OidcController), nameof(OidcController.Link) },
+        { typeof(OidcController), nameof(OidcController.LinkCallback) },
         { typeof(OidcController), nameof(OidcController.GetLinkedIdentities) },
         { typeof(OidcController), nameof(OidcController.UnlinkIdentity) },
 
@@ -96,9 +97,7 @@ public class DemoSubjectGatedEndpointsTests
 
         // Sign-in factors on the shared subject. Enrolling binds a visitor's own authenticator to
         // the account every other visitor uses; listing shows them each other's credential labels;
-        // revoking and regenerating destroy factors and recovery codes they did not create. The
-        // enrolment pair is [AllowAnonymous] for the recovery flow, so the coverage sweep — which
-        // reads bare [Authorize] as the surface — cannot see it; these entries are the only guard.
+        // revoking and regenerating destroy factors and recovery codes they did not create.
         { typeof(PasskeyController), nameof(PasskeyController.RegisterOptions) },
         { typeof(PasskeyController), nameof(PasskeyController.RegisterComplete) },
         { typeof(PasskeyController), nameof(PasskeyController.ListCredentials) },

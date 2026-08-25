@@ -50,8 +50,8 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
             Id = _ownerRoleId,
             TenantId = _tenantId,
             Name = "Owner",
-            Slug = TenantPermissions.SeedRoles.Owner,
-            Permissions = [TenantPermissions.Superuser],
+            Slug = RoleSeeds.Owner,
+            Permissions = [Scope.FullAccess],
             IsSystem = true,
         });
         db.SaveChanges();

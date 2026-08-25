@@ -498,7 +498,8 @@ public class SubjectService : ISubjectService
         );
 
         await _auditService.LogAsync(AuthAuditEventType.RoleAssigned, subjectId, success: true,
-            detailsJson: JsonSerializer.Serialize(new { role = roleName, assigned_by = assignedBy }));
+            detailsJson: JsonSerializer.Serialize(new { role = roleName }),
+            actor: assignedBy is null ? null : new AuthAuditActor(assignedBy, null));
 
         return true;
     }

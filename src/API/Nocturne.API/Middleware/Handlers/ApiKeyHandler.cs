@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -21,13 +23,16 @@ public class ApiKeyHandler : IAuthHandler
     public string Name => "ApiKeyHandler";
 
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApiKeyHandler> _logger;
 
     public ApiKeyHandler(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
+        TimeProvider timeProvider,
         ILogger<ApiKeyHandler> logger)
     {
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -51,7 +56,7 @@ public class ApiKeyHandler : IAuthHandler
             return AuthResult.Skip();
 
         // 3. Resolve tenant context
-        if (context.Items["TenantContext"] is not TenantContext tenantCtx)
+        if (context.GetTenantContext() is not { } tenantCtx)
         {
             _logger.LogWarning("API key provided but no tenant context resolved");
             return AuthResult.Failure("API key requires a resolved tenant");
@@ -79,30 +84,14 @@ public class ApiKeyHandler : IAuthHandler
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
         dbContext.TenantId = tenantCtx.TenantId;
 
-        OAuthGrantEntity? grant;
+        var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
+            dbContext.OAuthGrants.AsNoTracking(),
+            tenantCtx.TenantId,
+            _timeProvider.GetUtcNow().UtcDateTime);
 
-        if (tokenHash != null)
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.TokenHash == tokenHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
-        else
-        {
-            grant = await dbContext.OAuthGrants
-                .AsNoTracking()
-                .IgnoreQueryFilters()
-                .Where(g => g.LegacySecretHash == legacySecretHash
-                         && g.TenantId == tenantCtx.TenantId
-                         && g.GrantType == OAuthGrantTypes.Direct
-                         && g.RevokedAt == null)
-                .FirstOrDefaultAsync();
-        }
+        var grant = tokenHash != null
+            ? await activeGrants.FirstOrDefaultAsync(g => g.TokenHash == tokenHash)
+            : await activeGrants.FirstOrDefaultAsync(g => g.LegacySecretHash == legacySecretHash);
 
         if (grant == null)
         {
@@ -127,15 +116,6 @@ public class ApiKeyHandler : IAuthHandler
             }
         }
 
-        // Store hash prefix for read-access audit logging (distinguishes API key readers)
-        var hashSource = grant.TokenHash ?? grant.LegacySecretHash;
-        if (hashSource is { Length: > 0 })
-        {
-            context.Items["ApiSecretHashPrefix"] = hashSource.Length >= 8
-                ? hashSource[..8]
-                : hashSource;
-        }
-
         _logger.LogDebug("API key authentication successful for grant {GrantId}, subject {SubjectId}",
             grant.Id, grant.SubjectId);
 
@@ -146,6 +126,8 @@ public class ApiKeyHandler : IAuthHandler
             SubjectId = grant.SubjectId,
             Scopes = grant.Scopes,
             TokenId = grant.Id,
+            CredentialFingerprint = AuditFingerprint.Of(
+                AuditFingerprint.ApiSecretDomain, grant.TokenHash ?? grant.LegacySecretHash),
         });
     }
 

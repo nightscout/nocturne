@@ -28,10 +28,10 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     /// scope of its own: the record is patient clinical configuration, written from the Patient
     /// Record settings form together with the therapy settings, so it is gated on
     /// <c>therapy.readwrite</c>. The <c>health.readwrite</c> alias cannot be required —
-    /// <see cref="OAuthScopes.Normalize"/> expands it into per-category scopes, so no granted set
+    /// <see cref="Scope.Normalize"/> expands it into per-category scopes, so no granted set
     /// ever contains it.
     /// </summary>
-    public string WriteScope => OAuthScopes.TherapyReadWrite;
+    public string WriteScope => Scope.TherapyReadWrite;
 
     private readonly IBodyWeightService _bodyWeightService;
     private readonly ILogger<BodyWeightController> _logger;

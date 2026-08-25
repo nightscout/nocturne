@@ -108,7 +108,7 @@ public partial class TenantRoleService(
         if (entity is null)
             return null;
 
-        if (entity.Slug == TenantPermissions.SeedRoles.Owner)
+        if (entity.Slug == RoleSeeds.Owner)
             throw new InvalidOperationException("Cannot modify the owner role.");
 
         entity.Name = name;
@@ -140,7 +140,7 @@ public partial class TenantRoleService(
         if (role is null)
             return new DeleteRoleResult(false, "role_not_found", "The specified role does not exist.");
 
-        if (role.Slug == TenantPermissions.SeedRoles.Owner)
+        if (role.Slug == RoleSeeds.Owner)
             return new DeleteRoleResult(false, "owner_role_protected", "The owner role cannot be deleted.");
 
         // Check if any member would lose all permissions
@@ -202,12 +202,12 @@ public partial class TenantRoleService(
 
         var now = DateTime.UtcNow;
 
-        foreach (var (slug, permissions) in TenantPermissions.SeedRolePermissions)
+        foreach (var (slug, permissions) in RoleSeeds.Permissions)
         {
             if (existingSlugs.Contains(slug))
                 continue;
 
-            var name = TenantPermissions.SeedRoleNames[slug];
+            var name = RoleSeeds.DisplayNames[slug];
             seedContext.TenantRoles.Add(new TenantRoleEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -248,7 +248,7 @@ public partial class TenantRoleService(
                 false, RoleGrantValidation.ForeignRole, "One or more role IDs do not belong to this tenant.");
         }
 
-        var exceeded = TenantPermissions.ValidateGrant(
+        var exceeded = Scope.ValidateGrant(
             permissionSets.SelectMany(permissions => permissions), granterScopes);
 
         return exceeded is null

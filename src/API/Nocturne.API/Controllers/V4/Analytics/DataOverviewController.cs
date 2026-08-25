@@ -16,7 +16,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// to reduce database load when the heatmap re-renders.
 /// <para>
 /// Every response is an aggregate — record counts, daily averages, monthly GRI — so the whole
-/// controller sits behind <see cref="OAuthScopes.ReportsRead"/> rather than the read scope of each
+/// controller sits behind <see cref="Scope.ReportsRead"/> rather than the read scope of each
 /// category it counts, matching <c>StatisticsController</c>. Public shares are narrowed further by
 /// per-category share RLS.
 /// </para>
@@ -29,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("Analytics")]
 [Route("api/v4/year-overview")]
 [Produces("application/json")]
-[RequireScope(OAuthScopes.ReportsRead)]
+[RequireScope(Scope.ReportsRead)]
 [ClientPropertyName("dataOverview")]
 public class DataOverviewController : ControllerBase
 {

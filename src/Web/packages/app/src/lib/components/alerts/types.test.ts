@@ -5,6 +5,7 @@ import {
 	nodeFromApi,
 	nodeToApi,
 	parseRule,
+	applyChannelDestination,
 	buildBody,
 	parseChannelMetadata,
 	validateChannels,
@@ -265,6 +266,76 @@ describe("parseRule", () => {
 		expect(state.clientConfig.snooze.defaultMinutes).toBe(15);
 	});
 
+});
+
+describe("applyChannelDestination", () => {
+	function webhookChannel(over: Partial<ChannelDef> = {}): ChannelDef {
+		return {
+			channelType: ChannelType.Webhook,
+			destination: "https://receiver.example.com/hook",
+			destinationLabel: "",
+			...over,
+		};
+	}
+
+	it("stops reporting a saved secret once the destination is edited", () => {
+		const channel = webhookChannel({ hasSecret: true });
+		applyChannelDestination(channel, "https://elsewhere.example.com/hook");
+		expect(channel.hasSecret).toBe(false);
+		expect(channel.destination).toBe("https://elsewhere.example.com/hook");
+	});
+
+	it("keeps reporting a saved secret while the destination is unchanged", () => {
+		const channel = webhookChannel({ hasSecret: true });
+		applyChannelDestination(channel, channel.destination);
+		expect(channel.hasSecret).toBe(true);
+	});
+
+	it("leaves the indicator alone when a replacement secret has been typed", () => {
+		const channel = webhookChannel({ hasSecret: true, secret: "typed" });
+		applyChannelDestination(channel, "https://elsewhere.example.com/hook");
+		expect(channel.hasSecret).toBe(true);
+	});
+
+	it("sends no secret for the new destination after the URL is edited", () => {
+		const state = parseRule(null);
+		state.channels = [webhookChannel({ hasSecret: true })];
+		applyChannelDestination(state.channels[0], "https://elsewhere.example.com/hook");
+		expect(
+			(buildBody(state).channels[0] as { secret?: string }).secret
+		).toBe("");
+	});
+});
+
+describe("buildBody webhook secret", () => {
+	function webhookState(over: Partial<ChannelDef>) {
+		const state = parseRule(null);
+		state.channels = [
+			{
+				channelType: ChannelType.Webhook,
+				destination: "https://receiver.example.com/hook",
+				destinationLabel: "",
+				...over,
+			},
+		];
+		return state;
+	}
+
+	function sentSecret(over: Partial<ChannelDef>) {
+		return (buildBody(webhookState(over)).channels[0] as { secret?: string }).secret;
+	}
+
+	it("omits the secret when the channel already has one, so the save keeps it", () => {
+		expect(sentSecret({ hasSecret: true })).toBeUndefined();
+	});
+
+	it("sends an empty secret once the editor has removed the stored one", () => {
+		expect(sentSecret({ hasSecret: false })).toBe("");
+	});
+
+	it("sends a typed secret over the stored one", () => {
+		expect(sentSecret({ hasSecret: true, secret: "typed" })).toBe("typed");
+	});
 });
 
 describe("buildBody", () => {

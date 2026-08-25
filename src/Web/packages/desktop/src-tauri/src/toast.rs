@@ -14,6 +14,7 @@
 //! so a fresh token is resolved when the button is clicked.
 
 use crate::client_devices::DeviceActionIntent;
+use crate::glucose_poll::MGDL_PER_MMOL;
 use crate::signalr::InAppNotification;
 use tauri_winrt_notification::{Duration, Scenario, Toast};
 
@@ -23,7 +24,6 @@ const APP_ID: &str = Toast::POWERSHELL_APP_ID;
 
 /// Button action argument recognised by the activation handler.
 const ACK_ACTION: &str = "acknowledge";
-const MMOL_PER_MGDL: f64 = 18.0182;
 
 /// Who an ack from this toast is attributed to server-side (`acknowledgedBy`).
 const ACK_BY: &str = "desktop-companion";
@@ -159,7 +159,7 @@ fn body_line(intent: &DeviceActionIntent) -> String {
         _ => "Alert",
     };
     match intent.glucose_value {
-        Some(mgdl) => format!("{severity} \u{00b7} {:.1} mmol/L", mgdl / MMOL_PER_MGDL),
+        Some(mgdl) => format!("{severity} \u{00b7} {:.1} mmol/L", mgdl / MGDL_PER_MMOL),
         None => severity.to_string(),
     }
 }

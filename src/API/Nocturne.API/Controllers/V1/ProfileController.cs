@@ -52,7 +52,7 @@ public class ProfileController : ControllerBase
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfiles(
         [FromQuery] int count = 10,
         CancellationToken cancellationToken = default
@@ -135,7 +135,7 @@ public class ProfileController : ControllerBase
     [HttpGet("/api/v1/profiles")]
     [NightscoutEndpoint("/api/v1/profiles")]
     [ProducesResponseType(typeof(Profile[]), 200)]
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfileHistory(
         [FromQuery] int count = 10,
         CancellationToken cancellationToken = default
@@ -178,7 +178,7 @@ public class ProfileController : ControllerBase
     /// <returns>Created profiles with assigned IDs as an array</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(400)]
@@ -252,7 +252,7 @@ public class ProfileController : ControllerBase
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(Profile[]), 200)] // Empty array when no profile
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult> GetCurrentProfile(
         CancellationToken cancellationToken = default
     )
@@ -315,7 +315,7 @@ public class ProfileController : ControllerBase
     [NightscoutEndpoint("/api/v1/profile/{spec}")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(typeof(Profile[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.TherapyRead)]
+    [RequireScope(Scope.TherapyRead)]
     public async Task<ActionResult<Profile[]>> GetProfile(
         string spec,
         CancellationToken cancellationToken = default

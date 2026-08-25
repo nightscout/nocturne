@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -446,8 +447,8 @@ public class PropertiesService : IPropertiesService
             // Get settings for thresholds (use defaults if not available)
             var settings = new Dictionary<string, object>
             {
-                ["bgTargetTop"] = 180,
-                ["bgTargetBottom"] = 80,
+                ["bgTargetTop"] = ApplicationConstants.Web.Thresholds.BgTargetTop,
+                ["bgTargetBottom"] = ApplicationConstants.Web.Thresholds.BgTargetBottom,
                 ["alarmHigh"] = true,
                 ["alarmLow"] = true,
             };

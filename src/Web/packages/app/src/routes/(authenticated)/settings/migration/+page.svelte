@@ -30,6 +30,7 @@
     Info,
   } from "lucide-svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,
@@ -171,7 +172,7 @@
       pollingActive = false;
       await loadData();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to cancel migration";
+      error = describeSubmitError(err, "Failed to cancel migration");
     } finally {
       cancellingMigration = false;
     }

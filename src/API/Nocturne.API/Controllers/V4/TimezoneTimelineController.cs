@@ -31,7 +31,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     /// who may request the re-correction, not what the connector may write. The class-level
     /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
     /// </summary>
-    public string WriteScope => OAuthScopes.TherapyReadWrite;
+    public string WriteScope => Scope.TherapyReadWrite;
 
     private const string GlookoConnectorId = "glooko";
 

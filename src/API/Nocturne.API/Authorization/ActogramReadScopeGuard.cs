@@ -21,10 +21,10 @@ internal static class ActogramReadScopeGuard
     /// </summary>
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.GlucoseRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.GlucoseRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     ];
 
     /// <summary>
@@ -37,19 +37,19 @@ internal static class ActogramReadScopeGuard
         IReadOnlySet<string> grantedScopes)
     {
         // Thresholds are the band edges of the glucose series, so they leave with it.
-        if (!OAuthScopes.SatisfiesScope(grantedScopes, OAuthScopes.GlucoseRead))
+        if (!Scope.Satisfies(grantedScopes, Scope.GlucoseRead))
         {
             data.Glucose = [];
             data.Thresholds = new ChartThresholdsDto();
         }
 
-        if (!OAuthScopes.SatisfiesScope(grantedScopes, OAuthScopes.HeartRateRead))
+        if (!Scope.Satisfies(grantedScopes, Scope.HeartRateRead))
             data.HeartRates = [];
 
-        if (!OAuthScopes.SatisfiesScope(grantedScopes, OAuthScopes.StepCountRead))
+        if (!Scope.Satisfies(grantedScopes, Scope.StepCountRead))
             data.StepCounts = [];
 
-        if (!OAuthScopes.SatisfiesScope(grantedScopes, OAuthScopes.SleepRead))
+        if (!Scope.Satisfies(grantedScopes, Scope.SleepRead))
             data.SleepSpans = [];
 
         return data;

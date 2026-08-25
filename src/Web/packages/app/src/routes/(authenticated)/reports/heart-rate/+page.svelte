@@ -38,7 +38,12 @@
     { errorTitle: "Error Loading Heart Rate Report" }
   );
 
-  const days = $derived(buildDayRange(paddedRangeMillis.from, paddedRangeMillis.to));
+  const days = $derived(
+    buildDayRange(
+      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
+      reportsParams.dateRangeMillis.to
+    ).reverse()
+  );
 
   // HR data as ActogramPoints
   const hrPoints = $derived(
@@ -183,7 +188,7 @@
           thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}
-          initialOffset={ACTOGRAM_PADDING_DAYS}
+          initialOffset={0}
         >
           {#snippet tooltipValue({ point })}
             {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}

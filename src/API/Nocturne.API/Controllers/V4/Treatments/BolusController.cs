@@ -16,8 +16,6 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>.
 /// </summary>
 /// <remarks>
-/// The <c>GET /</c> list endpoint is cached for 90 seconds (varying by all query string parameters).
-///
 /// On update, immutable fields (<see cref="Bolus.BolusType"/>, <see cref="Bolus.Kind"/>,
 /// <see cref="Bolus.LegacyId"/>, <see cref="Bolus.CreatedAt"/>, <see cref="Bolus.PumpRecordId"/>,
 /// <see cref="Bolus.DeviceId"/>, and <see cref="Bolus.AdditionalProperties"/>) are preserved from the
@@ -32,7 +30,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class BolusController(
     IBolusRepository repo,
@@ -43,11 +41,14 @@ public class BolusController(
 {
     /// <inheritdoc/>
     /// <remarks>Boluses are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
-    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
-    /// <remarks>Response is cached for 90 seconds, varying by all query parameters.</remarks>
-    [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
+    /// <remarks>
+    /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-entered
+    /// bolus must not be invisible until a cached list body expires.
+    /// </remarks>
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public override Task<ActionResult<PaginatedResponse<Bolus>>> GetAll(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int limit = 100, [FromQuery] int offset = 0,

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -33,6 +35,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     public string Name => "DirectGrantTokenHandler";
 
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<DirectGrantTokenHandler> _logger;
 
     /// <summary>
@@ -40,9 +43,11 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// </summary>
     public DirectGrantTokenHandler(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
+        TimeProvider timeProvider,
         ILogger<DirectGrantTokenHandler> logger)
     {
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -62,13 +67,14 @@ public class DirectGrantTokenHandler : IAuthHandler
         }
 
         // Direct grants are tenant-scoped — only match grants for the resolved tenant
-        var tenantCtx = context.Items["TenantContext"] as TenantContext;
+        var tenantCtx = context.GetTenantContext();
         if (tenantCtx is null)
         {
             return AuthResult.Skip();
         }
 
-        var grant = await FindActiveGrantAsync(_dbContextFactory, token, tenantCtx.TenantId);
+        var grant = await FindActiveGrantAsync(
+            _dbContextFactory, token, tenantCtx.TenantId, _timeProvider.GetUtcNow().UtcDateTime);
 
         if (grant == null)
         {
@@ -109,11 +115,13 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <param name="dbContextFactory">Factory for the tenant-pinned context.</param>
     /// <param name="token">The presented token, <c>noc_</c>-prefixed.</param>
     /// <param name="tenantId">The tenant the grant must belong to.</param>
+    /// <param name="now">The instant the grant must be active at.</param>
     /// <param name="ct">Cancellation token.</param>
     internal static async Task<OAuthGrantEntity?> FindActiveGrantAsync(
         IDbContextFactory<NocturneDbContext> dbContextFactory,
         string token,
         Guid tenantId,
+        DateTime now,
         CancellationToken ct = default)
     {
         var tokenHash = ComputeSha256Hex(token);
@@ -121,15 +129,43 @@ public class DirectGrantTokenHandler : IAuthHandler
         await using var dbContext = await dbContextFactory.CreateDbContextAsync(ct);
         dbContext.TenantId = tenantId;
 
-        return await dbContext.OAuthGrants
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(g => g.TokenHash == tokenHash
-                     && g.TenantId == tenantId
-                     && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null)
-            .FirstOrDefaultAsync(ct);
+        return await ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now)
+            .FirstOrDefaultAsync(g => g.TokenHash == tokenHash, ct);
     }
+
+    /// <summary>
+    /// Narrows <paramref name="grants"/> to the direct grants on <paramref name="tenantId"/> that
+    /// authenticate at <paramref name="now"/>: not revoked, and either open-ended or short of their
+    /// <c>ExpiresAt</c>. The expiry instant itself does not authenticate, matching
+    /// <see cref="Services.Auth.GuestLinkService"/>.
+    /// </summary>
+    /// <remarks>
+    /// Query filters are ignored here for the reason given on <see cref="FindActiveGrantAsync"/>.
+    /// </remarks>
+    internal static IQueryable<OAuthGrantEntity> ActiveDirectGrants(
+        IQueryable<OAuthGrantEntity> grants, Guid tenantId, DateTime now)
+    {
+        return grants
+            .IgnoreQueryFilters()
+            .Where(g => g.TenantId == tenantId)
+            .Where(IsLiveDirectGrant(now));
+    }
+
+    /// <summary>
+    /// What makes a direct grant usable, independent of how the caller scopes it to a tenant.
+    /// </summary>
+    /// <remarks>
+    /// Shared with the <c>/api/v2/authorization/request/{token}</c> exchange, which scopes by the
+    /// global query filter rather than an explicit tenant id and so cannot reuse
+    /// <see cref="ActiveDirectGrants"/> wholesale. It previously restated the predicate and omitted
+    /// the expiry term, so a grant this handler and the hubs both refused could still be exchanged
+    /// for a one-hour JWT.
+    /// </remarks>
+    /// <param name="now">The instant to judge expiry against.</param>
+    internal static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
+        g => g.GrantType == OAuthGrantTypes.Direct
+             && g.RevokedAt == null
+             && (g.ExpiresAt == null || g.ExpiresAt > now);
 
     /// <summary>
     /// Extracts a direct grant token from the request. Accepts the <c>Authorization: Bearer</c>

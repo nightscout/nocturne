@@ -302,6 +302,51 @@ public class ConnectorBackgroundServiceTests
             "Expected the specific error messages from SyncResult.Errors to be passed to UpdateHealthStateAsync");
     }
 
+    /// <summary>
+    /// A repeated error must reach the health message once, and two errors that differ only in case
+    /// are different errors; see <c>ConnectorConfigurationEntity.LastErrorMessageMaxLength</c>.
+    /// </summary>
+    [Fact]
+    public async Task FailedSync_WithRepeatedErrors_JoinsEachDistinctMessageOnceCaseSensitively()
+    {
+        var (cleanup, connStr) = CreateSqliteDb();
+        using var _ = cleanup;
+
+        var syncResult = new SyncResult
+        {
+            Success = false,
+            Message = "Fallback message",
+            Errors =
+            [
+                .. Enumerable.Repeat("StateSpans publish failed", 20),
+                .. Enumerable.Repeat("statespans publish failed", 20),
+            ]
+        };
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        configServiceMock.Verify(
+            x => x.UpdateHealthStateAsync(
+                "TestConnector",
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                "StateSpans publish failed; statespans publish failed",
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "identical chunk errors collapse to one entry, but a case difference is a different error");
+    }
+
     [Fact]
     public async Task FailedSync_WithNoErrors_FallsBackToMessage()
     {

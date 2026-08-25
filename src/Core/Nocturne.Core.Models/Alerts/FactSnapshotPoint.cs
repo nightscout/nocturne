@@ -31,7 +31,7 @@ public sealed class ReplayFactAttribute : Attribute
     public string Key { get; }
 
     /// <summary>
-    /// The <see cref="Authorization.OAuthScopes"/> read scope governing the data the fact is
+    /// The <see cref="Authorization.Scope"/> read scope governing the data the fact is
     /// derived from, matching the category its source tables sit under in
     /// <see cref="Authorization.ShareDataCategories"/>. Constructor-required so a new fact cannot
     /// reach the wire without a category decision.

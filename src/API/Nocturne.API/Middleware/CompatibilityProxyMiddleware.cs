@@ -141,16 +141,16 @@ public class CompatibilityProxyMiddleware
                 };
 
                 // Compare
-                var correlationId = Guid.NewGuid().ToString();
+                var traceId = Guid.NewGuid().ToString();
                 var comparisonResult = await comparisonService.CompareResponsesAsync(
-                    nightscoutResponse, nocturneResponse, correlationId, path);
+                    nightscoutResponse, nocturneResponse, traceId, path);
 
                 // Build the proxy response wrapper for persistence
                 var proxyResponse = new CompatibilityProxyResponse
                 {
                     NightscoutResponse = nightscoutResponse,
                     NocturneResponse = nocturneResponse,
-                    CorrelationId = correlationId,
+                    TraceId = traceId,
                     ComparisonResult = comparisonResult,
                     SelectionReason = "Nocturne is the primary responder",
                     SelectedResponse = nocturneResponse,

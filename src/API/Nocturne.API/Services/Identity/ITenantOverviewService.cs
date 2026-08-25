@@ -27,7 +27,7 @@ public interface ITenantOverviewService
     /// (revoked ones are excluded by the global query filter) whose scopes, as resolved by
     /// <see cref="MemberScopeResolver"/> from <paramref name="authType"/> and
     /// <paramref name="tokenScopes"/>, satisfy
-    /// <see cref="TenantPermissions.GlucoseRead"/>. This is the authorization core shared by
+    /// <see cref="Scope.GlucoseRead"/>. This is the authorization core shared by
     /// <see cref="GetOverviewAsync"/> and the overview hub.
     /// </summary>
     Task<IReadOnlyList<GlucoseReadTenant>> GetGlucoseReadTenantsAsync(

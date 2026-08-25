@@ -32,8 +32,8 @@ public class ActivityControllerScopeTests
     public async Task CreateActivities_DeniesARecordWhoseCategoryScopeIsMissing()
     {
         var (controller, service) = Build(
-            requiredScope: OAuthScopes.HeartRateReadWrite,
-            grantedScopes: [OAuthScopes.TreatmentsReadWrite]);
+            requiredScope: Scope.HeartRateReadWrite,
+            grantedScopes: [Scope.TreatmentsReadWrite]);
 
         var result = await controller.CreateActivities(
             [new UpsertActivityRequest { Mills = 1, Type = HeartRateRecordType }]);
@@ -48,8 +48,8 @@ public class ActivityControllerScopeTests
     public async Task CreateActivities_AllowsARecordWhoseCategoryScopeIsHeld()
     {
         var (controller, service) = Build(
-            requiredScope: OAuthScopes.HeartRateReadWrite,
-            grantedScopes: [OAuthScopes.HeartRateReadWrite]);
+            requiredScope: Scope.HeartRateReadWrite,
+            grantedScopes: [Scope.HeartRateReadWrite]);
         service.Setup(s => s.CreateActivitiesAsync(It.IsAny<List<Activity>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
@@ -79,7 +79,7 @@ public class ActivityControllerScopeTests
     [Fact]
     public async Task GetActivities_DropsRecordsWhoseCategoryScopeIsMissing()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
         StubPage(service, OneRecordPerCategory());
         StubCounts(service);
 
@@ -91,13 +91,13 @@ public class ActivityControllerScopeTests
     [Fact]
     public async Task GetActivities_TotalsOnlyTheCategoriesTheCallerHolds()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
         StubPage(service, OneRecordPerCategory());
         StubCounts(service);
 
         var result = await controller.GetActivities();
 
-        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[OAuthScopes.HeartRateRead]);
+        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[Scope.HeartRateRead]);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public class ActivityControllerScopeTests
     [Fact]
     public async Task GetActivities_AsksTheCountForNoCategoryTheCallerLacks()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
         StubPage(service, OneRecordPerCategory());
         StubCounts(service);
 
@@ -124,7 +124,7 @@ public class ActivityControllerScopeTests
         service.Verify(
             s => s.CountActivitiesByCategoryAsync(
                 It.Is<IReadOnlySet<string>>(asked =>
-                    asked.SetEquals(new[] { OAuthScopes.HeartRateRead })),
+                    asked.SetEquals(new[] { Scope.HeartRateRead })),
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -138,20 +138,20 @@ public class ActivityControllerScopeTests
     [Fact]
     public async Task GetActivities_TotalsTheHeldCategoriesEvenWhenThePageShowsNoneOfThem()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
         StubPage(service, [ActivityWithId("sleep"), ActivityWithId("regular")]);
         StubCounts(service);
 
         var result = await controller.GetActivities(offset: 20);
 
         Payload(result).Data.Should().BeEmpty();
-        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[OAuthScopes.HeartRateRead]);
+        Payload(result).Pagination.Total.Should().Be((int)CategoryCounts[Scope.HeartRateRead]);
     }
 
     [Fact]
     public async Task GetActivity_HidesARecordWhoseCategoryScopeIsMissing()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.HeartRateRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.HeartRateRead]);
         service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
             .ReturnsAsync(ActivityWithId("sleep"));
 
@@ -163,7 +163,7 @@ public class ActivityControllerScopeTests
     [Fact]
     public async Task GetActivity_ReturnsARecordWhoseCategoryScopeIsHeld()
     {
-        var (controller, service) = BuildRead(grantedScopes: [OAuthScopes.SleepRead]);
+        var (controller, service) = BuildRead(grantedScopes: [Scope.SleepRead]);
         service.Setup(s => s.GetActivityByIdAsync("sleep", It.IsAny<CancellationToken>()))
             .ReturnsAsync(ActivityWithId("sleep"));
 
@@ -227,18 +227,18 @@ public class ActivityControllerScopeTests
     /// <summary>Distinct per-category counts, so a total names the categories that produced it.</summary>
     private static readonly Dictionary<string, long> CategoryCounts = new()
     {
-        [OAuthScopes.HeartRateRead] = 71,
-        [OAuthScopes.StepCountRead] = 13,
-        [OAuthScopes.SleepRead] = 5,
-        [OAuthScopes.TreatmentsRead] = 11,
+        [Scope.HeartRateRead] = 71,
+        [Scope.StepCountRead] = 13,
+        [Scope.SleepRead] = 5,
+        [Scope.TreatmentsRead] = 11,
     };
 
     private static readonly Dictionary<string, string> CategoryScopes = new()
     {
-        ["hr"] = OAuthScopes.HeartRateRead,
-        ["sc"] = OAuthScopes.StepCountRead,
-        ["sleep"] = OAuthScopes.SleepRead,
-        ["regular"] = OAuthScopes.TreatmentsRead,
+        ["hr"] = Scope.HeartRateRead,
+        ["sc"] = Scope.StepCountRead,
+        ["sleep"] = Scope.SleepRead,
+        ["regular"] = Scope.TreatmentsRead,
     };
 
     private static (ActivityController Controller, Mock<IActivityService> Service) BuildRead(

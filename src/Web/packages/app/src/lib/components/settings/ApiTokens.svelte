@@ -23,6 +23,7 @@
     create as createGrant,
     revoke as revokeGrant,
   } from "$lib/api/generated/directGrants.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { DirectGrantDto } from "$api";
   import { copyToClipboard } from "$lib/utils";
 
@@ -115,8 +116,7 @@
       createdToken = data.token ?? null;
       await loadGrants();
     } catch (err) {
-      errorMessage =
-        err instanceof Error ? err.message : "Failed to create token.";
+      errorMessage = describeSubmitError(err, "Failed to create token.");
       showCreateDialog = false;
     } finally {
       isCreating = false;

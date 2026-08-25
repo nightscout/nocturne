@@ -10,17 +10,17 @@ namespace Nocturne.API.Attributes;
 /// Composes with the existing <see cref="RequirePermissionAttribute"/>; both can be used
 /// on the same endpoint. This attribute checks the resolved scopes on
 /// the <see cref="AuthContext"/> (populated by <see cref="Middleware.AuthenticationMiddleware"/>
-/// from either OAuth tokens or translated legacy permissions via <see cref="OAuthScopes"/>).
+/// from either OAuth tokens or translated legacy permissions via <see cref="Scope"/>).
 /// </summary>
 /// <remarks>
-/// Scope satisfaction is evaluated by <see cref="OAuthScopes.SatisfiesScope"/> which supports
+/// Scope satisfaction is evaluated by <see cref="Scope.Satisfies"/> which supports
 /// hierarchical scope matching (e.g., <c>read</c> satisfies <c>read:entries</c>).
 /// The granted scopes are further refined by <see cref="Middleware.MemberScopeMiddleware"/>
 /// based on the user's tenant membership roles.
 /// <para>
 /// A read requirement is decided on the resolved scope set alone, so it admits the anonymous
 /// public-share principal, whose scopes are narrowed to
-/// <see cref="TenantPermissions.PublicShareScopes"/>. A requirement naming anything other than
+/// <see cref="Scope.PublicShareScopes"/>. A requirement naming anything other than
 /// read also requires an authenticated caller, so no anonymous principal can pass a write gate
 /// however its scopes are resolved. An empty scope set is rejected either way.
 /// </para>
@@ -28,7 +28,7 @@ namespace Nocturne.API.Attributes;
 /// <seealso cref="RequirePermissionAttribute"/>
 /// <seealso cref="Middleware.AuthenticationMiddleware"/>
 /// <seealso cref="Middleware.MemberScopeMiddleware"/>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequireScopeAttribute : Attribute, IAuthorizationFilter
 {
@@ -82,7 +82,7 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
         // An unauthenticated caller is eligible only for a read requirement. A public share link
         // ({token}.share.{baseDomain}) is deliberately IsAuthenticated: false, yet
         // AuthenticationMiddleware resolves its Public subject down to
-        // TenantPermissions.PublicShareScopes and publishes them here, so requiring authentication
+        // Scope.PublicShareScopes and publishes them here, so requiring authentication
         // outright would 401 every share.
         //
         // Restricting it to read requirements keeps "an unauthenticated principal can never pass a
@@ -108,8 +108,8 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
         }
 
         var hasSufficientScope = _requireAll
-            ? _requiredScopes.All(s => OAuthScopes.SatisfiesScope(grantedScopes, s))
-            : _requiredScopes.Any(s => OAuthScopes.SatisfiesScope(grantedScopes, s));
+            ? _requiredScopes.All(s => Scope.Satisfies(grantedScopes, s))
+            : _requiredScopes.Any(s => Scope.Satisfies(grantedScopes, s));
 
         if (!hasSufficientScope)
         {

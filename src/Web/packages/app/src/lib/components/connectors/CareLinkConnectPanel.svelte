@@ -9,6 +9,7 @@
     complete as completeCareLinkConnect,
     desktopToken as mintDesktopLinkCode,
   } from "$lib/api/generated/careLinkConnects.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
     CardContent,
@@ -80,7 +81,7 @@
       // Open Medtronic's login in a new tab; the user signs in + solves the captcha there.
       window.open(res.authorizeUrl, "_blank", "noopener");
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not start CareLink sign-in.";
+      error = describeSubmitError(e, "Could not start CareLink sign-in.");
     } finally {
       busy = false;
     }
@@ -103,7 +104,7 @@
       phase = "done";
       onConnected?.({ server: region, username: res.username, country: res.country });
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not complete CareLink sign-in.";
+      error = describeSubmitError(e, "Could not complete CareLink sign-in.");
     } finally {
       busy = false;
     }
@@ -131,7 +132,7 @@
       desktopLinkCode = res.linkCode ?? null;
       desktopExpiresMinutes = Math.max(1, Math.round((res.expiresInSeconds ?? 600) / 60));
     } catch (e) {
-      error = e instanceof Error ? e.message : "Could not create a link code.";
+      error = describeSubmitError(e, "Could not create a link code.");
     } finally {
       busy = false;
     }

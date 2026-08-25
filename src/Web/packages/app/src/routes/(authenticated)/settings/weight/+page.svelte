@@ -6,6 +6,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Weight, Plus, Trash2, Loader2 } from "lucide-svelte";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { BodyWeight } from "$api";
 
   // create/deleteBodyWeight declare a GetBodyWeights invalidation, but it refreshes
@@ -46,7 +47,7 @@
       newWeightKg = "";
       newDate = "";
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to add entry";
+      errorMessage = describeSubmitError(e, "Failed to add entry");
     } finally {
       saving = false;
     }
@@ -60,7 +61,7 @@
       await bw.deleteBodyWeight(entry.id);
       await weightsQuery.refresh();
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to delete entry";
+      errorMessage = describeSubmitError(e, "Failed to delete entry");
     }
   }
 </script>

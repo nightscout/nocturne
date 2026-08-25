@@ -36,6 +36,6 @@ public class RealtimeCategoriesTests
     public void EveryGoverningScope_IsARealReadScope()
     {
         RealtimeCategories.GoverningScopes.Values.Distinct()
-            .Should().BeSubsetOf(OAuthScopes.AllScopes);
+            .Should().BeSubsetOf(Scope.AllScopes);
     }
 }

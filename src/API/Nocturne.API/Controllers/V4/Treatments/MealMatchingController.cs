@@ -116,7 +116,7 @@ public class MealMatchingController : ControllerBase
     /// carb breakdown is a COB input.
     /// </remarks>
     [HttpPost("accept")]
-    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -164,7 +164,7 @@ public class MealMatchingController : ControllerBase
     /// category while <see cref="AcceptMatch"/> is gated on treatments.
     /// </remarks>
     [HttpPost("dismiss")]
-    [RequireScope(OAuthScopes.FoodReadWrite)]
+    [RequireScope(Scope.FoodReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DismissMatch([FromBody] DismissMatchRequest request)

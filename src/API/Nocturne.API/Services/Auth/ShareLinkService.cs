@@ -33,7 +33,7 @@ public interface IShareLinkService
 
     /// <summary>
     /// Replace the data categories anonymous viewers can see. <paramref name="scopes"/> must be a
-    /// subset of <see cref="TenantPermissions.PublicShareScopes"/>; an empty list leaves the link
+    /// subset of <see cref="Scope.PublicShareScopes"/>; an empty list leaves the link
     /// live but shares nothing. Any role grant on the Public subject is dropped so these scopes are
     /// authoritative.
     /// </summary>
@@ -99,7 +99,7 @@ public sealed class ShareLinkService : IShareLinkService
         // swaps the token — the owner's chosen scopes and window are preserved.
         if (!wasEnabled)
         {
-            member.DirectPermissions = [.. TenantPermissions.DefaultPublicShareScopes];
+            member.DirectPermissions = [.. Scope.DefaultPublicShareScopes];
             member.LimitTo24Hours = true;
         }
 
@@ -163,7 +163,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     public async Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default)
     {
-        var invalid = scopes.Where(s => !TenantPermissions.PublicShareScopes.Contains(s)).ToList();
+        var invalid = scopes.Where(s => !Scope.PublicShareScopes.Contains(s)).ToList();
         if (invalid.Count > 0)
             throw new ArgumentException($"Invalid public share scopes: {string.Join(", ", invalid)}", nameof(scopes));
 
@@ -231,7 +231,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// The public-shareable read scopes the Public subject currently resolves to — the union of any
-    /// role-granted permissions and direct permissions, narrowed to <see cref="TenantPermissions.PublicShareScopes"/>.
+    /// role-granted permissions and direct permissions, narrowed to <see cref="Scope.PublicShareScopes"/>.
     /// Requires <see cref="TenantMemberEntity.MemberRoles"/> (with their roles) to be loaded.
     /// </summary>
     private static List<string> ComputeScopes(TenantMemberEntity? member)
@@ -245,7 +245,7 @@ public sealed class ShareLinkService : IShareLinkService
 
         return rolePermissions
             .Concat(directPermissions)
-            .Where(TenantPermissions.PublicShareScopes.Contains)
+            .Where(Scope.PublicShareScopes.Contains)
             .Distinct()
             .ToList();
     }

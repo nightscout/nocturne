@@ -107,7 +107,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
                 AuthType = auditContext?.AuthType,
                 IpAddress = auditContext?.IpAddress,
                 TokenId = auditContext?.TokenId,
-                CorrelationId = auditContext?.CorrelationId,
+                TraceId = auditContext?.TraceId,
                 Endpoint = auditContext?.Endpoint,
                 CreatedAt = now
             };

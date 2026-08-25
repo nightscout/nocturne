@@ -39,7 +39,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// writes on <c>alerts.readwrite</c>. The per-action <c>[Authorize]</c> alone is satisfied by
     /// read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
     /// </summary>
-    public string WriteScope => OAuthScopes.AlertsReadWrite;
+    public string WriteScope => Scope.AlertsReadWrite;
 
     private readonly ITrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;

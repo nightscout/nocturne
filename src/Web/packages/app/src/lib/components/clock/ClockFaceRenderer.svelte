@@ -10,7 +10,7 @@
   import { isUnwiredElementType } from "$lib/clock-builder/types";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
   import { formatClockTime } from "$lib/components/clock/clock-time";
-  import { ArrowUp } from "lucide-svelte";
+  import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
@@ -118,25 +118,6 @@
     if (bg > 250) return resolveCssVar("--glucose-very-high");
     if (bg > 180) return resolveCssVar("--glucose-high");
     return resolveCssVar("--glucose-in-range");
-  }
-
-  // Get rotation degrees for Lucide arrow based on direction
-  function getDirectionRotation(dir: string): number {
-    const rotations: Record<string, number> = {
-      DoubleUp: 0,
-      SingleUp: 0,
-      FortyFiveUp: 45,
-      Flat: 90,
-      FortyFiveDown: 135,
-      SingleDown: 180,
-      DoubleDown: 180,
-    };
-    return rotations[dir] ?? 90;
-  }
-
-  // Check if direction is double arrow
-  function isDoubleArrow(dir: string): boolean {
-    return dir === "DoubleUp" || dir === "DoubleDown";
   }
 
   // Tracker definitions (skipped on the anonymous public clock — see loadTrackerDefinitions)
@@ -517,23 +498,13 @@
                 </div>
               {/if}
             {:else if element.type === "arrow"}
-              <!-- Arrow element using Lucide icon with rotation -->
               {@const size = (element.size || 25) * scale}
-              {@const rotation = getDirectionRotation(direction)}
-              {@const isDouble = isDoubleArrow(direction)}
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center"
                 style="color: {getElementColor(element.style)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
               >
-                {#if isDouble}
-                  <ArrowUp
-                    style="width: {size}px; height: {size}px; transform: rotate({rotation}deg); margin-right: -{size * 0.3}px;"
-                  />
-                {/if}
-                <ArrowUp
-                  style="width: {size}px; height: {size}px; transform: rotate({rotation}deg);"
-                />
+                <TrendArrow {direction} {size} />
               </div>
             {:else if element.type === "tracker"}
               <!-- Tracker element with icon and time remaining -->

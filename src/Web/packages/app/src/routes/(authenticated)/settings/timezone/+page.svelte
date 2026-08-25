@@ -6,6 +6,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Globe, Plus, Trash2, Loader2, RefreshCw } from "lucide-svelte";
   import * as tz from "$api/generated/timezoneTimelines.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { TimezoneTimelineEntry } from "$api";
 
   const timelineQuery = tz.getTimeline();
@@ -52,7 +53,7 @@
       await tz.upsert({ effectiveFrom: toWallClockIso(newDate), timezone: newZone });
       newDate = "";
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to add entry";
+      errorMessage = describeSubmitError(e, "Failed to add entry");
     } finally {
       saving = false;
     }
@@ -65,7 +66,7 @@
     try {
       await tz.remove(entry.id);
     } catch (e) {
-      errorMessage = (e as { message?: string })?.message ?? "Failed to delete entry";
+      errorMessage = describeSubmitError(e, "Failed to delete entry");
     }
   }
 
@@ -76,7 +77,7 @@
       const result = await tz.recorrect({});
       recorrectMessage = result.message ?? (result.success ? "Re-import started." : "Re-import failed.");
     } catch (e) {
-      recorrectMessage = (e as { message?: string })?.message ?? "Re-import failed.";
+      recorrectMessage = describeSubmitError(e, "Re-import failed.");
     } finally {
       recorrecting = false;
     }

@@ -29,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </para>
 /// <para>
 /// Opening and clearing a window both decide whether alerts are delivered, so they require
-/// <see cref="OAuthScopes.AlertsReadWrite"/>; the class-level <c>[Authorize]</c> alone is satisfied
+/// <see cref="Scope.AlertsReadWrite"/>; the class-level <c>[Authorize]</c> alone is satisfied
 /// by read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
 /// </para>
 /// </remarks>
@@ -76,7 +76,7 @@ public class DndWindowsController : ControllerBase
     /// scope so at most one is ever active per scope.
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActive"])]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
@@ -182,7 +182,7 @@ public class DndWindowsController : ControllerBase
     /// or by supersede) is returned unchanged so a retry never rewrites the audit timestamp.
     /// </summary>
     [HttpPost("{id:guid}/clear")]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActive"])]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
