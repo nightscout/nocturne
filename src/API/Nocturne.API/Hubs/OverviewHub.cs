@@ -75,7 +75,7 @@ public class OverviewHub : Hub
             AuthType authType;
 
             var httpContext = Context.GetHttpContext();
-            var authContext = httpContext?.Items["AuthContext"] as AuthContext;
+            var authContext = httpContext?.Items[AuthContextKeys.AuthContext] as AuthContext;
 
             if (authContext is { IsAuthenticated: true, SubjectId: not null })
             {

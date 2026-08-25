@@ -106,7 +106,7 @@ public class DemoSessionController : ControllerBase
     {
         // The share host serves the anonymous read-only view and never honors
         // credentials; minting a session there would hand out more than the link grants.
-        if (HttpContext.Items["ShareAccess"] is true)
+        if (HttpContext.IsShareAccess())
             return null;
 
         var tenant = _tenantAccessor.Context;

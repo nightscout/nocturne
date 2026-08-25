@@ -6,6 +6,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -55,7 +56,7 @@ public class ApiKeyHandler : IAuthHandler
             return AuthResult.Skip();
 
         // 3. Resolve tenant context
-        if (context.Items["TenantContext"] is not TenantContext tenantCtx)
+        if (context.GetTenantContext() is not { } tenantCtx)
         {
             _logger.LogWarning("API key provided but no tenant context resolved");
             return AuthResult.Failure("API key requires a resolved tenant");

@@ -183,7 +183,7 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
         auth.IsPlatformAdmin.Should().BeFalse();
 
         harness.Context.GetGrantedScopes().Should().BeEmpty();
-        (harness.Context.Items["PermissionTrie"] as PermissionTrie)!.IsEmpty.Should().BeTrue();
+        (harness.Context.GetPermissionTrie())!.IsEmpty.Should().BeTrue();
 
         harness.Context.User.Claims.Should().NotContain(
             c => c.Type == "permission" || c.Type == ClaimTypes.Role,

@@ -5,6 +5,7 @@ using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -35,7 +36,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> GetShareLink(CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct));
@@ -51,7 +52,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> RotateShareLink(CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.RotateAsync(_tenantAccessor.TenantId, ct));
@@ -64,7 +65,7 @@ public class ShareLinkController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<ShareLinkDto>> DisableShareLink(CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.DisableAsync(_tenantAccessor.TenantId, ct));
@@ -78,7 +79,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkFullHistory(
         [FromBody] SetShareFullHistoryRequest request, CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         return Ok(await _shareLinkService.SetFullHistoryAsync(_tenantAccessor.TenantId, request.FullHistory, ct));
@@ -97,7 +98,7 @@ public class ShareLinkController : ControllerBase
     public async Task<ActionResult<ShareLinkDto>> SetShareLinkScopes(
         [FromBody] SetShareScopesRequest request, CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         try
@@ -112,11 +113,6 @@ public class ShareLinkController : ControllerBase
         }
     }
 
-    private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        return grantedScopes != null && Scope.Satisfies(grantedScopes, permission);
-    }
 }
 
 public record SetShareFullHistoryRequest(bool FullHistory);

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Net.Http.Headers;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Filters;
 
@@ -30,7 +31,7 @@ public class TenantCacheVaryFilter : IAsyncResultFilter
     {
         var httpContext = context.HttpContext;
 
-        if (httpContext.Items["TenantContext"] is TenantContext)
+        if (httpContext.GetTenantContext() is not null)
         {
             var cacheControl = httpContext.Response.Headers.CacheControl.ToString();
             if (cacheControl.Contains("public", StringComparison.OrdinalIgnoreCase))

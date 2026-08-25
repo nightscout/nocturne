@@ -18,6 +18,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Tests.Controllers.V4.Demo;
 
@@ -249,7 +250,7 @@ public class DemoSessionControllerTests : IDisposable
 
         var httpContext = new DefaultHttpContext();
         if (shareAccess)
-            httpContext.Items["ShareAccess"] = true;
+            httpContext.SetShareAccess();
 
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 

@@ -68,7 +68,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateInvite([FromBody] CreateMemberInviteRequest request)
     {
-        if (!HasPermission(Scope.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var subjectId = HttpContext.GetSubjectId();
@@ -79,7 +79,7 @@ public class MemberInviteController : ControllerBase
         // clamped member minting an unclamped invite would widen past their own ceiling by
         // handing the wider access to someone else. Lifting an existing member's clamp already
         // requires members.manage and is refused for self-edits.
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var limitTo24Hours = request.LimitTo24Hours || authContext?.LimitTo24Hours == true;
 
         try
@@ -111,7 +111,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListInvites()
     {
-        if (!HasPermission(Scope.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var invites = await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId);
@@ -126,7 +126,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvite(Guid inviteId)
     {
-        if (!HasPermission(Scope.MembersInvite))
+        if (!HttpContext.HasScope(Scope.MembersInvite))
             return Forbid();
 
         var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, _tenantAccessor.TenantId);
@@ -146,7 +146,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveMember(Guid subjectId, CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
@@ -202,7 +202,7 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Ok(invite);
 
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var authContext = HttpContext.GetAuthContext();
         var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
 
         return Ok(invite with { Viewer = new InviteViewer(subjectId, authContext?.SubjectName, isMember) });
@@ -292,7 +292,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -359,7 +359,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -425,7 +425,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetEffectivePermissions(Guid id, CancellationToken ct)
     {
-        if (!HasPermission(Scope.SharingManage))
+        if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -454,7 +454,7 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
-        if (!HasPermission(Scope.MembersManage))
+        if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
@@ -481,8 +481,6 @@ public class MemberInviteController : ControllerBase
         return NoContent();
     }
 
-    private bool HasPermission(string permission)
-        => Scope.Satisfies(HttpContext.GetGrantedScopes(), permission);
 
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";

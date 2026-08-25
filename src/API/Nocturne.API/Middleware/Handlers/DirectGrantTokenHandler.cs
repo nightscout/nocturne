@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -66,7 +67,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         }
 
         // Direct grants are tenant-scoped — only match grants for the resolved tenant
-        var tenantCtx = context.Items["TenantContext"] as TenantContext;
+        var tenantCtx = context.GetTenantContext();
         if (tenantCtx is null)
         {
             return AuthResult.Skip();

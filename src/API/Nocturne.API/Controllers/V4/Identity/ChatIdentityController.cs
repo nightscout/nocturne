@@ -6,6 +6,7 @@ using Nocturne.API.Services.Chat;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -48,7 +49,7 @@ public class ChatIdentityController : ControllerBase
     /// <exception cref="InvalidOperationException">Thrown when <see cref="AuthContext"/> is missing or has no subject ID.</exception>
     private Guid GetUserIdOrThrow()
     {
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext
+        var authContext = HttpContext.GetAuthContext()
             ?? throw new InvalidOperationException("AuthContext not available");
         return authContext.SubjectId
             ?? throw new InvalidOperationException("Authenticated request has no subject id");
