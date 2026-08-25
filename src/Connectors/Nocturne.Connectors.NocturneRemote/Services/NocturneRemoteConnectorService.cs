@@ -44,17 +44,29 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     /// <summary>
     ///     Resolves the run's base URL and bearer header, then asks the remote whether it accepts the
-    ///     credential at all.
+    ///     credential. Answers with the result that ends the run, or null for a run that may proceed.
     /// </summary>
     /// <remarks>
-    ///     The question is put to a data endpoint, so only a 401 is this connector's to answer: a 403
-    ///     is a grant the tenant scoped deliberately, and anything else is that endpoint being
-    ///     unwell. Failing the run on either sends the tenant to re-authorize a credential that was
-    ///     never the problem and costs them every other type; both are left to the per-type crawls,
-    ///     which reach the same endpoint under the same retry budget and scope the failure to the
-    ///     types that asked for it.
+    ///     The question is put to a data endpoint, so of the answers it can get only a 401 is this
+    ///     connector's to report: a 403 is a grant the tenant scoped deliberately, and any other
+    ///     status is that endpoint being unwell. Failing the run on either sends the tenant to
+    ///     re-authorize a credential that was never the problem and costs them every other type; both
+    ///     are left to the per-type crawls, which reach the same endpoint under the tenant's retry
+    ///     budget and scope the failure to the types that asked for it.
+    ///     <para>
+    ///     A remote that answers nothing at all is neither, and is not per-endpoint either: every
+    ///     enabled type reads the same silent host, so there is nothing for a crawl to scope and each
+    ///     of them would spend the client's whole timeout rediscovering it. That ends the run here
+    ///     instead, under its own message rather than the credential's.
+    ///     </para>
+    ///     <para>
+    ///     One attempt, not the tenant's budget: a 401 is terminal in
+    ///     <see cref="BaseConnectorService{TConfig}.ExecuteWithRetryAsync{T}"/> and never retried, and
+    ///     every other answer proceeds regardless, so a second attempt cannot change what this
+    ///     returns — it can only spend another request on a remote already known to be unwell.
+    ///     </para>
     /// </remarks>
-    private async Task<bool> AuthenticateWithConfigAsync(
+    private async Task<SyncResult?> AuthenticateWithConfigAsync(
         NocturneRemoteConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
@@ -86,23 +98,53 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     return response.StatusCode;
                 },
                 _retryDelayStrategy,
-                maxRetries: config.MaxRetryAttempts,
+                maxRetries: 1,
                 operationName: "auth check",
                 cancellationToken: cancellationToken);
         }
         catch (HttpRequestException)
         {
-            // A budget spent on a status the retry loop kept re-throwing; `answered` holds it.
+            // A status the retry loop re-threw; `answered` holds it.
+        }
+        // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
+        // the caller's own token means the run was withdrawn, and a withdrawn run has no outcome to
+        // report; the rest is the remote falling silent.
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return UnansweredResult();
         }
 
         if (answered != HttpStatusCode.Unauthorized)
-            return true;
+            return null;
 
         _logger.LogError(
             "[{ConnectorSource}] The remote Nocturne instance at {Url} rejected the connector's credential",
             ConnectorSource,
             _resolvedBaseUrl);
-        return false;
+        return AuthenticationFailedResult();
+    }
+
+    /// <summary>
+    ///     The result of a run whose remote accepted the connection and then said nothing. Carries
+    ///     the same two fields as
+    ///     <see cref="BaseConnectorService{TConfig}.AuthenticationFailedResult"/> and for the same
+    ///     reasons, but must not borrow its wording: the credential is not what failed.
+    /// </summary>
+    private SyncResult UnansweredResult()
+    {
+        var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer";
+        var now = DateTimeOffset.UtcNow;
+
+        _logger.LogError("[{ConnectorSource}] {Detail}", ConnectorSource, unanswered);
+
+        return new SyncResult
+        {
+            Success = false,
+            StartTime = now,
+            EndTime = now,
+            Message = unanswered,
+            Errors = { unanswered },
+        };
     }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -113,8 +155,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // Both entry points converge here, and this is the only one of them holding the run's own
         // configuration — the background one authenticates through the parameterless overload above,
         // which has none.
-        if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-            return AuthenticationFailedResult();
+        if (await AuthenticateWithConfigAsync(config, cancellationToken) is { } refused)
+            return refused;
 
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 

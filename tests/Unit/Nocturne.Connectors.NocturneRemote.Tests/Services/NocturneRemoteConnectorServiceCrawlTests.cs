@@ -176,7 +176,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
     /// Each data type crawls its own endpoint, so one endpoint failing must cost only that type. A
     /// failed run withholds the connector's last-successful-sync stamp and shows the tenant a red
     /// connector, which has to name what actually broke. The glucose crawl fails on its second page,
-    /// so the failure is reached past the auth probe rather than by it.
+    /// so the failure is reached past the auth check rather than by it.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_WhenOneTypesCrawlFails_LeavesTheOtherTypeSynced()
@@ -442,11 +442,13 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
-    /// One service instance serves both entry points in turn, and each run must be crawled with the
-    /// configuration that run was handed. Holding it on the service instead — a cached copy the
-    /// background entry point alone assigns — leaves a manual "sync now" pulling the previous run's
-    /// pages with the previous run's credential, and the pagination loop terminating against a page
-    /// size the request never asked for.
+    /// A tripwire for the cached-configuration shape this connector used to carry: a field seeded at
+    /// construction from the frozen startup defaults and assigned by the background entry point
+    /// alone, so a run that never assigned it crawled with a page size and credential it had not
+    /// been given. That is no longer constructible — the service takes no registration, and the
+    /// registration is transient anyway, so each run resolves its own instance — which is why the
+    /// arrangement here is two runs through one instance: the cheapest one that still goes red the
+    /// moment any configuration starts outliving the run it belongs to.
     /// </summary>
     [Fact]
     public async Task SyncDataAsync_WhenAManualRunFollowsABackgroundRun_CrawlsWithTheManualRunsConfiguration()
