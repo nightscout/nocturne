@@ -82,13 +82,14 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         string token,
         DateTime? revokedAt = null,
         List<string>? scopes = null,
-        DateTime? expiresAt = null)
+        DateTime? expiresAt = null,
+        Guid? tenantId = null)
     {
         _dbContext.OAuthGrants.Add(new OAuthGrantEntity
         {
             Id = Guid.CreateVersion7(),
             SubjectId = _subjectId,
-            TenantId = _testTenantId,
+            TenantId = tenantId ?? _testTenantId,
             GrantType = OAuthGrantTypes.Direct,
             TokenHash = HashUtils.Sha256Hex(token),
             Scopes = scopes ?? ["glucose.read", "treatments.readwrite"],
@@ -246,6 +247,36 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
 
         result.Should().BeNull("an expired grant must not mint a token that outlives it");
+    }
+
+    /// <summary>
+    /// The exchange scopes its grant lookup by the context's global query filter rather than by an
+    /// explicit tenant id, so nothing in the query itself names the tenant. That filter is the only
+    /// thing standing between a grant minted on one tenant and a JWT issued on another, and
+    /// dropping it passed the rest of the suite unnoticed.
+    /// </summary>
+    [Fact]
+    public async Task A_grant_belonging_to_another_tenant_is_not_exchangeable()
+    {
+        const string token = "noc_othertenant";
+        var otherTenantId = Guid.CreateVersion7();
+        _dbContext.Tenants.Add(new TenantEntity
+        {
+            Id = otherTenantId,
+            Slug = "other",
+            DisplayName = "Other",
+            IsActive = true,
+        });
+        _dbContext.SaveChanges();
+
+        SeedGrant(token, tenantId: otherTenantId);
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        var result = await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        result.Should().BeNull(
+            "a grant minted on another tenant must not mint a token on the tenant this request resolved to");
     }
 
     [Fact]
