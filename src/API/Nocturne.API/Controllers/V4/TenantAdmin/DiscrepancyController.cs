@@ -475,6 +475,15 @@ public class DiscrepancyController : ControllerBase
             return false;
         }
 
+        // A repeated Authorization header is ambiguous about which credential was meant, and this
+        // is a private shared secret rather than a user credential, so it is refused rather than
+        // resolved. The shared reader takes the first value; the rest of the auth chain accepts
+        // that because a bearer token names its own subject.
+        if (Request.Headers.Authorization.Count > 1)
+        {
+            return false;
+        }
+
         if (Request.GetAuthorizationCredential() is not { } provided)
         {
             return false;
