@@ -5,11 +5,13 @@ import type { Manifest } from './types.js';
 
 const OPENING_TAG = '<Screenshot';
 const TAG_NAME_CHARACTER = /[A-Za-z0-9_-]/;
-const FENCED_CODE = /^[ \t]*```[\s\S]*?```/gm;
+const FENCED_CODE = /^[ \t]*(```|~~~)[\s\S]*?\1/gm;
 const HTML_COMMENT = /<!--[\s\S]*?-->/g;
-const ID_ATTRIBUTE = /\bid\s*=\s*"([^"]*)"/;
-const CALLOUTS_ATTRIBUTE = /\bcallouts\s*=\s*\{\s*\[([\s\S]*)\]\s*\}/;
-const ANCHOR_ENTRY = /\banchor\s*:\s*"([^"]*)"/g;
+const INLINE_CODE = /`[^`\n]*`/g;
+const ID_ATTRIBUTE = /(?<![\w-])id\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+const CALLOUTS_ATTRIBUTE = /(?<![\w-])callouts\s*=\s*\{\s*\[([\s\S]*)\]\s*\}/;
+const HAS_CALLOUTS = /(?<![\w-])callouts\s*=/;
+const ANCHOR_ENTRY = /\banchor\s*:\s*(?:"([^"]*)"|'([^']*)')/g;
 
 async function* docPages(directory: string): AsyncGenerator<string> {
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -50,7 +52,7 @@ function tagEnd(source: string, from: number): number {
  */
 function findProblems(page: string, where: string, manifest: Manifest): string[] {
 	const problems: string[] = [];
-	const source = page.replace(FENCED_CODE, '').replace(HTML_COMMENT, '');
+	const source = page.replace(FENCED_CODE, '').replace(HTML_COMMENT, '').replace(INLINE_CODE, '');
 
 	for (let at = source.indexOf(OPENING_TAG); at !== -1; at = source.indexOf(OPENING_TAG, at + 1)) {
 		const after = source[at + OPENING_TAG.length];
@@ -69,7 +71,8 @@ function findProblems(page: string, where: string, manifest: Manifest): string[]
 		}
 
 		const attributes = tag.slice(0, -1);
-		const id = ID_ATTRIBUTE.exec(attributes)?.[1];
+		const idMatch = ID_ATTRIBUTE.exec(attributes);
+		const id = idMatch?.[1] ?? idMatch?.[2];
 		if (!id) {
 			problems.push(`${where}: <Screenshot> has no literal id="..." attribute`);
 			continue;
@@ -81,14 +84,16 @@ function findProblems(page: string, where: string, manifest: Manifest): string[]
 			continue;
 		}
 
-		if (!attributes.includes('callouts')) continue;
+		if (!HAS_CALLOUTS.test(attributes)) continue;
 		const array = CALLOUTS_ATTRIBUTE.exec(attributes)?.[1];
 		if (array === undefined) {
 			problems.push(`${where}: <Screenshot id="${id}"> has a callouts attribute this check cannot read`);
 			continue;
 		}
 
-		const anchors = [...array.matchAll(ANCHOR_ENTRY)].map(([, anchor]) => anchor);
+		const anchors = [...array.matchAll(ANCHOR_ENTRY)].map(
+			([, doubleQuoted, singleQuoted]) => doubleQuoted ?? singleQuoted,
+		);
 		if (anchors.length === 0) {
 			problems.push(`${where}: <Screenshot id="${id}"> declares callouts with no literal anchor`);
 			continue;

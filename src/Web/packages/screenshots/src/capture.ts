@@ -192,9 +192,16 @@ function unsettled(dark: boolean): string[] {
 	// so inside one it is a steady state rather than a load in progress.
 	const skeletons = document.querySelectorAll('.animate-pulse:not(.glucose-value-indicator *)').length;
 	if (skeletons > 0) reasons.push(`${skeletons} skeleton placeholders`);
+	const spinners = document.querySelectorAll('.animate-spin').length;
+	if (spinners > 0) reasons.push(`${spinners} spinners`);
 	if (/\bLoading\b/.test(document.body.innerText)) reasons.push('"Loading" still on screen');
-	// The coach kill switch is set before any page script runs, so a popover here means it broke.
-	if (document.querySelector('.coach-popover')) reasons.push('coach mark on screen');
+	if (/\bFailed to load\b/.test(document.body.innerText)) reasons.push('a load error on screen');
+	// The kill switch leaves ineligible marks in the DOM as display:none, so only a visible one
+	// means it broke.
+	const marks = document.querySelectorAll('.coach-popover, .coach-hotspot');
+	if ([...marks].some((mark) => (mark as HTMLElement).checkVisibility())) {
+		reasons.push('coach mark on screen');
+	}
 	return reasons;
 }
 
