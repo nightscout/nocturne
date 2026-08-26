@@ -1,8 +1,8 @@
 import { findBrokenReferences } from './references.js';
+import { report } from './report.js';
 
-const broken = await findBrokenReferences();
-if (broken.length > 0) {
-	console.error(`Broken screenshot references:\n  ${broken.join('\n  ')}`);
-	process.exit(1);
-}
-console.log('All screenshot references resolve.');
+report(
+	'Broken screenshot references',
+	await findBrokenReferences(),
+	'All screenshot references resolve.',
+);

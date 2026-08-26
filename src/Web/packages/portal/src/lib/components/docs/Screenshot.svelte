@@ -35,11 +35,10 @@
                     `Screenshot "${id}" has no anchor "${anchor}". Declared anchors: ${declared.join(", ") || "none"}.`,
                 );
             }
-            // Anchors are recorded per entry, not per variant, so either variant's
-            // dimensions define the frame their pixel coordinates are relative to.
+            // Either variant serves as the frame: capture rejects an entry with
+            // anchors whose variants differ in size.
             const frame = entry.variants.light;
             return {
-                anchor,
                 label,
                 number: index + 1,
                 left: ((box.x + box.width / 2) / frame.width) * 100,
@@ -64,7 +63,7 @@
             />
         {/each}
 
-        {#each chips as chip (chip.anchor)}
+        {#each chips as chip, index (index)}
             <span
                 class="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5
                        rounded-full border border-border/60 bg-background/90 px-2 py-1

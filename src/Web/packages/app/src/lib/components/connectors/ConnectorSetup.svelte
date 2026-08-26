@@ -351,7 +351,7 @@
   {:else if connectorInfo && schema}
     <div class="space-y-6">
       <!-- Header -->
-      <div class="flex items-start justify-between gap-4" data-testid="connector-header">
+      <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
           <h2 class="text-2xl font-bold tracking-tight">{displayName}</h2>
           {#if connectorInfo.description}

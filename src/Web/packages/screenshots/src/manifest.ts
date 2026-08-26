@@ -15,7 +15,7 @@ export const definitions: ScreenshotDefinition[] = [
 		id: 'first-run',
 		route: '/',
 		scenario: 'first-run',
-		alt: 'The Nocturne home screen on a brand new site, before any device or app has sent readings. The graph area is empty and the page points to where you set up a data source.',
+		alt: 'The Nocturne home screen on a brand new site, before any device or app has sent readings. The graph is empty and every panel reads zero or "No data available".',
 	},
 	{
 		id: 'connect-data-source',
@@ -23,25 +23,33 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'first-run',
 		alt: 'The Connect a Data Source step of setup. Each service Nocturne can collect readings from, and each phone app that can send readings to it, is listed as a tile you pick from.',
 	},
+	// A docs column is narrower than the 1440px viewport, so a page-wide shot of a settings route
+	// arrives shrunk far below readable size. Both of these clip to one card, whose own width is
+	// close to the column's, so their text lands at about the size it has on screen.
 	{
-		id: 'connector-dexcom',
+		id: 'connector-dexcom-credentials',
 		route: '/settings/connectors/dexcom',
 		scenario: 'patient',
-		// The credentials panel sits below the fold; the callouts need the whole form in frame.
-		fullPage: true,
-		alt: 'The Dexcom connection page. A switch turns the connection on or off, and a Credentials panel holds the boxes for the Dexcom Share username and password that Nocturne signs in with.',
+		clip: '[data-testid="connector-credentials"]',
+		alt: 'The Credentials panel of the Dexcom connection page, holding the boxes for the Dexcom Share username and password that Nocturne signs in with.',
 		anchors: {
-			status: '[data-testid="connector-header"]',
-			'enable-switch': '[data-testid="connector-enable"]',
-			credentials: '[data-testid="connector-credentials"]',
+			username: '[data-testid="connector-credentials"] input:not([type="password"])',
+			password: '[data-testid="connector-credentials"] input[type="password"]',
 		},
+	},
+	{
+		id: 'connector-dexcom-enable',
+		route: '/settings/connectors/dexcom',
+		scenario: 'patient',
+		clip: '[data-testid="connector-enable"]',
+		alt: 'The Enable Connector card of the Dexcom connection page, with a switch that turns collection on or off.',
 	},
 	{
 		id: 'alerts-configuration',
 		route: '/alerts',
 		// 'patient' once /alerts can render seeded data without pegging the renderer.
 		scenario: 'first-run',
-		alt: 'The Alerts page of a newly created site, showing the default alert rules ready to be switched on and configured.',
+		alt: 'The Alerts page of a newly created site. It has no alert rules yet, and offers a New rule button to add the first one.',
 	},
 	{
 		id: 'report-agp',

@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Page } from '@playwright/test';
 
 export type Theme = 'light' | 'dark';
 export type Viewport = 'desktop' | 'mobile';
@@ -41,7 +41,6 @@ export interface ManifestEntry {
 	alt: string;
 	variants: Record<Theme, ManifestVariant>;
 	anchors?: Record<string, ManifestAnchor>;
-	capturedAt: string;
 }
 
 /** Shape of the generated manifest.json, keyed by screenshot id. */

@@ -1,6 +1,6 @@
 {
 	"alerts-configuration": {
-		"alt": "The Alerts page of a newly created site, showing the default alert rules ready to be switched on and configured.",
+		"alt": "The Alerts page of a newly created site. It has no alert rules yet, and offers a New rule button to add the first one.",
 		"variants": {
 			"light": {
 				"file": "images/alerts-configuration.light.webp",
@@ -12,8 +12,7 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
 	"connect-data-source": {
 		"alt": "The Connect a Data Source step of setup. Each service Nocturne can collect readings from, and each phone app that can send readings to it, is listed as a tile you pick from.",
@@ -28,44 +27,51 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
-	"connector-dexcom": {
-		"alt": "The Dexcom connection page. A switch turns the connection on or off, and a Credentials panel holds the boxes for the Dexcom Share username and password that Nocturne signs in with.",
+	"connector-dexcom-credentials": {
+		"alt": "The Credentials panel of the Dexcom connection page, holding the boxes for the Dexcom Share username and password that Nocturne signs in with.",
 		"variants": {
 			"light": {
-				"file": "images/connector-dexcom.light.webp",
-				"width": 2880,
-				"height": 3866
+				"file": "images/connector-dexcom-credentials.light.webp",
+				"width": 1488,
+				"height": 646
 			},
 			"dark": {
-				"file": "images/connector-dexcom.dark.webp",
-				"width": 2880,
-				"height": 3866
-			}
-		},
-		"anchors": {
-			"status": {
-				"x": 952,
-				"y": 168,
-				"width": 1488,
-				"height": 112
-			},
-			"enable-switch": {
-				"x": 952,
-				"y": 328,
-				"width": 1488,
-				"height": 256
-			},
-			"credentials": {
-				"x": 952,
-				"y": 2420,
+				"file": "images/connector-dexcom-credentials.dark.webp",
 				"width": 1488,
 				"height": 646
 			}
 		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		"anchors": {
+			"username": {
+				"x": 50,
+				"y": 230,
+				"width": 1388,
+				"height": 72
+			},
+			"password": {
+				"x": 50,
+				"y": 468,
+				"width": 1300,
+				"height": 72
+			}
+		}
+	},
+	"connector-dexcom-enable": {
+		"alt": "The Enable Connector card of the Dexcom connection page, with a switch that turns collection on or off.",
+		"variants": {
+			"light": {
+				"file": "images/connector-dexcom-enable.light.webp",
+				"width": 1488,
+				"height": 256
+			},
+			"dark": {
+				"file": "images/connector-dexcom-enable.dark.webp",
+				"width": 1488,
+				"height": 256
+			}
+		}
 	},
 	"dashboard-overview": {
 		"alt": "The Nocturne home screen. A large number shows the most recent glucose reading with an arrow for which way it is heading, and a graph underneath plots the readings from the last few hours alongside markers for insulin doses and meals.",
@@ -80,11 +86,10 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
 	"first-run": {
-		"alt": "The Nocturne home screen on a brand new site, before any device or app has sent readings. The graph area is empty and the page points to where you set up a data source.",
+		"alt": "The Nocturne home screen on a brand new site, before any device or app has sent readings. The graph is empty and every panel reads zero or \"No data available\".",
 		"variants": {
 			"light": {
 				"file": "images/first-run.light.webp",
@@ -96,8 +101,7 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
 	"report-agp": {
 		"alt": "The Ambulatory Glucose Profile report. It stacks every day of the chosen date range onto one 24-hour graph, drawing a middle line with shaded bands around it, and lists the share of time spent in each glucose range beside it.",
@@ -112,8 +116,7 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
 	"settings-overview": {
 		"alt": "The main Settings page, a grid of cards linking to each group of settings: your account, your data sources, sharing, alerts, appearance and more.",
@@ -128,8 +131,7 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	},
 	"sharing-settings": {
 		"alt": "The Sharing and Privacy settings page, where you choose whether anyone with the link can view your data, and see the list of people you have invited along with what each of them is allowed to do.",
@@ -144,7 +146,6 @@
 				"width": 2880,
 				"height": 1800
 			}
-		},
-		"capturedAt": "2026-08-26T15:32:34.594Z"
+		}
 	}
 }

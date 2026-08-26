@@ -14,10 +14,11 @@
 		"capture": "tsx src/capture.ts",
 		"validate": "tsx src/capture.ts --validate",
 		"check-refs": "tsx src/check-refs.ts",
+		"check-embeds": "tsx src/check-embeds.ts",
 		"check": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"playwright": "^1.60.0",
+		"@playwright/test": "^1.60.0",
 		"sharp": "^0.34.3",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2"

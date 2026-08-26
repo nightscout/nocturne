@@ -43,22 +43,30 @@ starts sending readings:
 
 ## Step 4: Connect a data source
 
-Open **Settings > Data Sources**. Every service Nocturne can collect readings
-from, and every phone app that can send readings to it, is listed as a tile:
+Saying where your readings come from is part of getting started. Every service
+Nocturne can collect readings from, and every phone app that can send readings
+to it, is offered as a tile you pick from:
 
 <Screenshot id="connect-data-source" />
 
-Pick the one your readings come from and fill in what it asks for — for Dexcom,
-that is the username and password of the Dexcom Share account you already use.
-Turn the connection on and Nocturne starts collecting on its own.
+The same choices are there later, under **Settings > Connectors & Apps**.
+
+Pick the one your readings come from, and Nocturne asks for whatever that
+service needs to sign in. For Dexcom that is the account you already use with
+the Dexcom Share app:
 
 <Screenshot
-  id="connector-dexcom"
+  id="connector-dexcom-credentials"
   callouts={[
-    { anchor: "enable-switch", label: "Turn the connection on" },
-    { anchor: "credentials", label: "Enter your Dexcom Share sign-in" },
+    { anchor: "username", label: "Your Dexcom Share username" },
+    { anchor: "password", label: "Your Dexcom Share password" },
   ]}
 />
+
+Then switch the connection on. From that point Nocturne collects your readings
+by itself, with nothing left for you to do:
+
+<Screenshot id="connector-dexcom-enable" />
 
 ## Next Steps
 

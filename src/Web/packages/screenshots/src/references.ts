@@ -1,27 +1,24 @@
+import { execFile } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { imagesDir, repoRoot } from './paths.js';
 
 const REFERENCE_PATTERN = /packages\/screenshots\/images\/([A-Za-z0-9._-]+)/g;
-const SKIPPED_DIRECTORIES = new Set([
-	'.git',
-	'.svelte-kit',
-	'bin',
-	'build',
-	'dist',
-	'node_modules',
-	'obj',
-]);
+const LIST_BUFFER_BYTES = 16 * 1024 * 1024;
 
-async function* markdownFiles(directory: string): AsyncGenerator<string> {
-	for (const entry of await readdir(directory, { withFileTypes: true })) {
-		const path = join(directory, entry.name);
-		if (entry.isDirectory()) {
-			if (!SKIPPED_DIRECTORIES.has(entry.name)) yield* markdownFiles(path);
-		} else if (entry.name.toLowerCase().endsWith('.md')) {
-			yield path;
-		}
-	}
+const run = promisify(execFile);
+
+/**
+ * Tracked files only. A checkout can hold sibling git worktrees and untracked scratch under it,
+ * and neither is documentation this run is allowed to fail on.
+ */
+async function markdownFiles(): Promise<string[]> {
+	const { stdout } = await run('git', ['ls-files', '-z', '--', '*.md'], {
+		cwd: repoRoot,
+		maxBuffer: LIST_BUFFER_BYTES,
+	});
+	return stdout.split('\0').filter(Boolean);
 }
 
 /**
@@ -32,11 +29,11 @@ export async function findBrokenReferences(): Promise<string[]> {
 	const captured = new Set(await readdir(imagesDir));
 	const broken: string[] = [];
 
-	for await (const file of markdownFiles(repoRoot)) {
-		const markdown = await readFile(file, 'utf8');
+	for (const file of await markdownFiles()) {
+		const markdown = await readFile(join(repoRoot, file), 'utf8');
 		for (const [, image] of markdown.matchAll(REFERENCE_PATTERN)) {
 			if (!captured.has(image)) {
-				broken.push(`${relative(repoRoot, file)} references images/${image}, which was not captured`);
+				broken.push(`${file} references images/${image}, which was not captured`);
 			}
 		}
 	}

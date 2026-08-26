@@ -75,12 +75,12 @@ Then restart Nocturne for the changes to take effect.
 
 ## 5. Set up an alert rule
 
-**Settings > Alerts** lists the rules a new instance starts with, ready to be
-switched on and adjusted:
+Alert rules live under **Alerts > Rules** in the sidebar. A new instance starts
+with none, so this is where you add your first:
 
 <Screenshot id="alerts-configuration" />
 
-1. Go to **Settings > Alerts**
+1. Go to **Alerts > Rules**
 2. Create or edit an alert rule
 3. Under **Delivery channels**, add an **Email** channel
 4. Enter the recipient email address
@@ -88,7 +88,7 @@ switched on and adjusted:
 
 ## 6. Test it
 
-1. Trigger a test alert from **Settings > Alerts** (or wait for a real glucose excursion)
+1. Trigger a test alert from **Alerts > Rules** (or wait for a real glucose excursion)
 2. Check the recipient's inbox for the alert email
 3. Verify that the **Acknowledge** link in the email works
 

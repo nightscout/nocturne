@@ -10,13 +10,19 @@ and anchor boxes, keyed by id. `src/types.ts` is the contract the docs-side cons
 ## Running a capture
 
 Needs a local stack (`aspire start` from the repo root) — capture drives the dev-only seeding API,
-which only exists when the API runs in Development.
+which only exists when the API runs in Development — and a browser binary, which pnpm does not
+install for you:
 
 ```bash
-pnpm --filter @nocturne/screenshots run capture     # seed, shoot, write manifest.json
-pnpm --filter @nocturne/screenshots run validate    # definitions only; no stack, no browser
-pnpm --filter @nocturne/screenshots run check-refs  # markdown references vs images on disk
+npx playwright install chromium                       # once per machine
+pnpm --filter @nocturne/screenshots run capture       # seed, shoot, write manifest.json
+pnpm --filter @nocturne/screenshots run validate      # definitions only; no stack, no browser
+pnpm --filter @nocturne/screenshots run check-refs    # markdown references vs images on disk
+pnpm --filter @nocturne/screenshots run check-embeds  # docs <Screenshot> ids and anchors vs the manifest
 ```
+
+A successful run tidies up after itself: images no manifest entry claims are deleted, and the
+tenants it seeded are removed. A failed one leaves both behind to be inspected.
 
 `NOCTURNE_API_URL` overrides the API base (default `http://localhost:1610`); a worktree gets dynamic
 ports, so read yours from `aspire describe`.
@@ -36,10 +42,8 @@ alerts-configuration: /alerts did not settle within 120000ms (34 skeleton placeh
 
 Remote queries stuck in flight while the API itself answers them in milliseconds is the dev server,
 not the app: a `vite dev` that has been up for hours, through several dependency re-optimisations,
-starts accepting remote-function requests and never answering them. Restarting `nocturne-web` clears
-it. Aspire's `start` on it then blocks in `Waiting`, because it waits for the one-shot
-`nocturne-bridge-build` to be *running* while that resource sits at `Finished`; starting
-`nocturne-bridge-build` again releases it.
+starts accepting remote-function requests and never answering them. Stopping and starting
+`nocturne-web` clears it.
 
 ## Ids and anchors
 

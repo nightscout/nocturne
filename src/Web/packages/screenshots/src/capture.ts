@@ -1,10 +1,12 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { chromium, type Browser, type Page, type Request } from 'playwright';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { chromium, errors, type Browser, type Page, type Request } from '@playwright/test';
 import sharp from 'sharp';
+import { findBrokenEmbeds } from './embeds.js';
 import { definitions } from './manifest.js';
 import { imagesDir, manifestPath } from './paths.js';
 import { findBrokenReferences } from './references.js';
+import { report } from './report.js';
 import type {
 	Manifest,
 	ManifestAnchor,
@@ -54,17 +56,29 @@ const REMOTE_ENDPOINT = '/_app/remote/';
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-interface Origin {
+interface Box {
 	x: number;
 	y: number;
+	width: number;
+	height: number;
 }
 
 interface DevTenant {
+	id: string;
 	url: string;
 	loginLink: string;
 }
 
 const remoteCallsInFlight = new WeakMap<Page, Set<Request>>();
+
+/**
+ * A request the previous route left hanging would otherwise hold every later definition on that
+ * page unsettled for good. Cleared immediately before the navigation that replaces the route
+ * rather than on `framenavigated`, which the new page's own requests can outrun.
+ */
+function forgetRemoteCalls(page: Page): void {
+	remoteCallsInFlight.get(page)?.clear();
+}
 
 function validate(candidates: ScreenshotDefinition[]): string[] {
 	const problems: string[] = [];
@@ -114,11 +128,11 @@ async function seedTenant(scenario: Scenario, runStart: Date): Promise<DevTenant
 		);
 	}
 
-	const body = (await response.json()) as Partial<DevTenant>;
-	if (!body.url || !body.loginLink) {
-		throw new Error(`seed-tenant returned no url/loginLink for scenario "${scenario}"`);
+	const body = (await response.json()) as Partial<DevTenant> & { tenantId?: string };
+	if (!body.tenantId || !body.url || !body.loginLink) {
+		throw new Error(`seed-tenant returned no tenantId/url/loginLink for scenario "${scenario}"`);
 	}
-	return { url: body.url, loginLink: body.loginLink };
+	return { id: body.tenantId, url: body.url, loginLink: body.loginLink };
 }
 
 async function openSession(
@@ -160,6 +174,7 @@ async function openSession(
 	page.on('requestfinished', (request) => inFlight.delete(request));
 	page.on('requestfailed', (request) => inFlight.delete(request));
 
+	forgetRemoteCalls(page);
 	await page.goto(tenant.loginLink, {
 		waitUntil: 'domcontentloaded',
 		timeout: NAVIGATION_TIMEOUT_MS,
@@ -186,6 +201,14 @@ function unsettled(dark: boolean): string[] {
 	return reasons;
 }
 
+/** Null when the renderer did not answer in time, which is a state of its own rather than "clean". */
+async function probe(page: Page, theme: Theme): Promise<string[] | null> {
+	return Promise.race([
+		page.evaluate(unsettled, theme === 'dark').catch(() => null),
+		page.waitForTimeout(PROBE_TIMEOUT_MS).then(() => null),
+	]);
+}
+
 /**
  * Holds until the route has come up clean on enough consecutive polls to cover SETTLE_MS. Anything
  * that arrives late — a widget's skeleton, a coach mark — restarts that window rather than landing
@@ -194,26 +217,20 @@ function unsettled(dark: boolean): string[] {
 async function settle(page: Page, definition: ScreenshotDefinition, theme: Theme): Promise<void> {
 	const inFlight = remoteCallsInFlight.get(page);
 	const deadline = Date.now() + SETTLE_TIMEOUT_MS;
-	let reasons: string[] = [];
 	let quietPolls = 0;
 	let unanswered = 0;
 
 	for (;;) {
-		const observed = await Promise.race([
-			page.evaluate(unsettled, theme === 'dark').catch(() => null),
-			page.waitForTimeout(PROBE_TIMEOUT_MS).then(() => null),
-		]);
-		if (observed) {
-			reasons = [...observed];
-			if (inFlight?.size) reasons.push(`${inFlight.size} remote queries in flight`);
-		} else {
-			unanswered++;
-		}
-		quietPolls = observed && reasons.length === 0 ? quietPolls + 1 : 0;
-		if (quietPolls * POLL_MS >= SETTLE_MS) return;
+		const observed = await probe(page, theme);
+		if (observed === null) unanswered++;
+		const quiet = observed?.length === 0 && !inFlight?.size;
+		quietPolls = quiet ? quietPolls + 1 : 0;
+		// The window a run of polls covers is the gaps between them, one fewer than the polls.
+		if ((quietPolls - 1) * POLL_MS >= SETTLE_MS) return;
 
-		// A skeleton captured silently is worse than no capture at all.
 		if (Date.now() >= deadline) {
+			const reasons = (await probe(page, theme)) ?? [];
+			if (inFlight?.size) reasons.push(`${inFlight.size} remote queries in flight`);
 			// Separates a route still waiting on data from one whose main thread is pegged, which
 			// is also what stalls the screenshot itself.
 			if (unanswered > 0) reasons.push(`renderer did not answer ${unanswered} probes`);
@@ -225,43 +242,81 @@ async function settle(page: Page, definition: ScreenshotDefinition, theme: Theme
 	}
 }
 
-function toImagePixels(
-	box: { x: number; y: number; width: number; height: number },
-	origin: Origin,
-): ManifestAnchor {
+/**
+ * Runs in the page. Reads every box the capture needs against one layout, in document coordinates:
+ * resolved across separate calls, a scroll between two of them would put the capture and the
+ * callouts that mark it up in different coordinate frames. Written without a helper function
+ * because esbuild's name-preserving wrapper does not survive serialisation into the page.
+ */
+function measureBoxes(selectors: string[]) {
+	return {
+		scroll: { x: window.scrollX, y: window.scrollY },
+		boxes: selectors.map((selector) => {
+			const element = document.querySelector(selector);
+			if (!element) return null;
+			const rect = element.getBoundingClientRect();
+			if (rect.width === 0 || rect.height === 0) return null;
+			return {
+				x: rect.left + window.scrollX,
+				y: rect.top + window.scrollY,
+				width: rect.width,
+				height: rect.height,
+			};
+		}),
+	};
+}
+
+interface Layout {
+	scroll: { x: number; y: number };
+	clip: Box | null;
+	anchors: [string, Box][];
+}
+
+async function measure(page: Page, definition: ScreenshotDefinition): Promise<Layout> {
+	const targets: { label: string; selector: string }[] = [];
+	if (definition.clip) targets.push({ label: 'clip', selector: definition.clip });
+	for (const [name, selector] of Object.entries(definition.anchors ?? {})) {
+		targets.push({ label: `anchor "${name}"`, selector });
+	}
+
+	const deadline = Date.now() + SELECTOR_TIMEOUT_MS;
+	for (;;) {
+		const measured = await page.evaluate(
+			measureBoxes,
+			targets.map((target) => target.selector),
+		);
+		const missing = targets
+			.filter((_, index) => measured.boxes[index] === null)
+			.map((target) => `${target.label} (${target.selector})`);
+
+		if (missing.length === 0) {
+			const boxes = measured.boxes as Box[];
+			const clip = definition.clip ? boxes[0] : null;
+			const offset = definition.clip ? 1 : 0;
+			return {
+				scroll: measured.scroll,
+				clip,
+				anchors: Object.keys(definition.anchors ?? {}).map((name, index) => [
+					name,
+					boxes[index + offset],
+				]),
+			};
+		}
+		if (Date.now() >= deadline) {
+			// See the package README on why this fails the run rather than warning.
+			throw new Error(`${definition.id}: matched no visible element for ${missing.join('; ')}`);
+		}
+		await page.waitForTimeout(POLL_MS);
+	}
+}
+
+function toImagePixels(box: Box, origin: { x: number; y: number }): ManifestAnchor {
 	return {
 		x: Math.round((box.x - origin.x) * DEVICE_SCALE_FACTOR),
 		y: Math.round((box.y - origin.y) * DEVICE_SCALE_FACTOR),
 		width: Math.round(box.width * DEVICE_SCALE_FACTOR),
 		height: Math.round(box.height * DEVICE_SCALE_FACTOR),
 	};
-}
-
-async function resolveAnchors(
-	page: Page,
-	definition: ScreenshotDefinition,
-	origin: Origin,
-): Promise<Record<string, ManifestAnchor> | undefined> {
-	const declared = Object.entries(definition.anchors ?? {});
-	if (declared.length === 0) return undefined;
-
-	const anchors: Record<string, ManifestAnchor> = {};
-	for (const [name, selector] of declared) {
-		const box = await page
-			.locator(selector)
-			.first()
-			.boundingBox({ timeout: SELECTOR_TIMEOUT_MS })
-			.catch(() => null);
-		// A callout pointing at markup that no longer exists is the whole reason this pipeline
-		// runs in CI. Never downgrade it to a warning.
-		if (!box) {
-			throw new Error(
-				`${definition.id}: anchor "${name}" matched no visible element for selector ${selector}`,
-			);
-		}
-		anchors[name] = toImagePixels(box, origin);
-	}
-	return anchors;
 }
 
 /**
@@ -275,7 +330,7 @@ async function expose(
 	try {
 		return await take();
 	} catch (error) {
-		if (error instanceof Error && error.message.includes('Timeout')) {
+		if (error instanceof errors.TimeoutError) {
 			throw new Error(
 				`${definition.id}: screenshot timed out after ${SCREENSHOT_TIMEOUT_MS}ms; the renderer stopped producing frames`,
 			);
@@ -284,36 +339,34 @@ async function expose(
 	}
 }
 
+/**
+ * A clipped shot is a full-page capture narrowed to the measured box rather than
+ * `locator.screenshot()`, which scrolls the element into view itself and so would render against a
+ * layout the boxes were not measured in.
+ */
 async function shoot(
 	page: Page,
 	definition: ScreenshotDefinition,
-): Promise<{ png: Buffer; origin: Origin }> {
-	if (!definition.clip) {
+	layout: Layout,
+): Promise<{ png: Buffer; origin: { x: number; y: number } }> {
+	const common = { animations: 'disabled', timeout: SCREENSHOT_TIMEOUT_MS } as const;
+
+	const clip = layout.clip;
+	if (clip) {
 		return {
-			png: await expose(definition, () =>
-				page.screenshot({
-					animations: 'disabled',
-					timeout: SCREENSHOT_TIMEOUT_MS,
-					fullPage: definition.fullPage ?? false,
-				}),
-			),
+			png: await expose(definition, () => page.screenshot({ ...common, fullPage: true, clip })),
+			origin: clip,
+		};
+	}
+	if (definition.fullPage) {
+		return {
+			png: await expose(definition, () => page.screenshot({ ...common, fullPage: true })),
 			origin: { x: 0, y: 0 },
 		};
 	}
-
-	const locator = page.locator(definition.clip).first();
-	await locator.scrollIntoViewIfNeeded({ timeout: SELECTOR_TIMEOUT_MS }).catch(() => undefined);
-	const box = await locator.boundingBox({ timeout: SELECTOR_TIMEOUT_MS }).catch(() => null);
-	if (!box) {
-		throw new Error(
-			`${definition.id}: clip matched no visible element for selector ${definition.clip}`,
-		);
-	}
 	return {
-		png: await expose(definition, () =>
-			locator.screenshot({ animations: 'disabled', timeout: SCREENSHOT_TIMEOUT_MS }),
-		),
-		origin: box,
+		png: await expose(definition, () => page.screenshot(common)),
+		origin: layout.scroll,
 	};
 }
 
@@ -322,7 +375,7 @@ async function encode(png: Buffer, file: string): Promise<ManifestVariant> {
 		.webp({ quality: WEBP_QUALITY })
 		.toBuffer({ resolveWithObject: true });
 	await writeFile(join(imagesDir, file), data);
-	// Package-root-relative, matching how consumers resolve it via the "./images/*" export.
+	// Package-root-relative.
 	return { file: `images/${file}`, width: info.width, height: info.height };
 }
 
@@ -337,6 +390,7 @@ async function captureTheme(
 	theme: Theme,
 	tenantUrl: string,
 ): Promise<Capture> {
+	forgetRemoteCalls(page);
 	await page.goto(new URL(definition.route, tenantUrl).href, {
 		waitUntil: 'domcontentloaded',
 		timeout: NAVIGATION_TIMEOUT_MS,
@@ -347,17 +401,56 @@ async function captureTheme(
 		await settle(page, definition, theme);
 	}
 
-	const { png, origin } = await shoot(page, definition);
+	const layout = await measure(page, definition);
+	const { png, origin } = await shoot(page, definition, layout);
 	const variant = await encode(png, `${definition.id}.${theme}.webp`);
-	const anchors = await resolveAnchors(page, definition, origin);
-	for (const [name, box] of Object.entries(anchors ?? {})) {
-		if (box.x < 0 || box.y < 0 || box.x + box.width > variant.width || box.y + box.height > variant.height) {
+
+	if (layout.anchors.length === 0) return { variant };
+
+	const anchors: Record<string, ManifestAnchor> = {};
+	for (const [name, box] of layout.anchors) {
+		const anchor = toImagePixels(box, origin);
+		if (
+			anchor.x < 0 ||
+			anchor.y < 0 ||
+			anchor.x + anchor.width > variant.width ||
+			anchor.y + anchor.height > variant.height
+		) {
 			throw new Error(
 				`${definition.id}: anchor "${name}" lies outside the captured image; capture with fullPage or clip to a region containing it`,
 			);
 		}
+		anchors[name] = anchor;
 	}
-	return anchors ? { variant, anchors } : { variant };
+	return { variant, anchors };
+}
+
+/**
+ * One set of anchor boxes serves both variants, so a theme that lays the route out differently
+ * would aim every callout on one of them at the wrong place.
+ */
+function assertSharedFrame(id: string, light: ManifestVariant, dark: ManifestVariant): void {
+	if (light.width === dark.width && light.height === dark.height) return;
+	throw new Error(
+		`${id}: light (${light.width}x${light.height}) and dark (${dark.width}x${dark.height}) differ in size, so the anchor boxes cannot describe both`,
+	);
+}
+
+/** Images left behind by an id that has since been renamed or dropped. */
+async function prune(manifest: Manifest): Promise<string[]> {
+	const captured = new Set(
+		Object.values(manifest).flatMap((entry) =>
+			Object.values(entry.variants).map((variant) => basename(variant.file)),
+		),
+	);
+
+	const removed: string[] = [];
+	for (const file of await readdir(imagesDir)) {
+		if (file.startsWith('.') || captured.has(file)) continue;
+		await rm(join(imagesDir, file));
+		removed.push(file);
+	}
+	return removed;
 }
 
 function serialize(manifest: Manifest): string {
@@ -413,12 +506,12 @@ async function main(): Promise<void> {
 			// whichever theme it broke under; the boxes themselves are theme-independent.
 			const light = await captureTheme(await sessionFor('light'), definition, 'light', tenant.url);
 			const dark = await captureTheme(await sessionFor('dark'), definition, 'dark', tenant.url);
+			if (light.anchors) assertSharedFrame(definition.id, light.variant, dark.variant);
 
 			manifest[definition.id] = {
 				alt: definition.alt,
 				variants: { light: light.variant, dark: dark.variant },
 				...(light.anchors ? { anchors: light.anchors } : {}),
-				capturedAt: runStart.toISOString(),
 			};
 			console.log(`captured ${definition.id}`);
 		}
@@ -428,10 +521,22 @@ async function main(): Promise<void> {
 
 	await writeFile(manifestPath, serialize(manifest));
 
-	const broken = await findBrokenReferences();
-	if (broken.length > 0) {
-		console.error(`Broken screenshot references:\n  ${broken.join('\n  ')}`);
-		process.exit(1);
+	const pruned = await prune(manifest);
+	if (pruned.length > 0) console.log(`pruned unreferenced images: ${pruned.join(', ')}`);
+
+	report(
+		'Broken screenshot references',
+		[...(await findBrokenReferences()), ...(await findBrokenEmbeds())],
+		'All screenshot references resolve.',
+	);
+
+	// Only once nothing above has failed: a run that stopped early leaves its tenants behind to
+	// be opened in a browser.
+	for (const tenant of tenants.values()) {
+		const response = await fetch(`${API_URL}/api/v4/dev-only/admin/tenants/${tenant.id}`, {
+			method: 'DELETE',
+		}).catch(() => null);
+		if (!response?.ok) console.warn(`could not remove seeded tenant ${tenant.id}`);
 	}
 }
 

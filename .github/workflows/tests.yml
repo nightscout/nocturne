@@ -215,6 +215,12 @@ jobs:
           pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
       - name: Bot unit tests
         run: pnpm --filter @nocturne/bot run test
+      - name: Documentation screenshots
+        run: |
+          pnpm --filter @nocturne/screenshots run check
+          pnpm --filter @nocturne/screenshots run validate
+          pnpm --filter @nocturne/screenshots run check-refs
+          pnpm --filter @nocturne/screenshots run check-embeds
 
   integration-db:
     runs-on: ubuntu-latest
