@@ -1987,6 +1987,17 @@ public class InsulinDeliveryStatistics
     public double MicroBolusInsulin { get; set; }
 
     /// <summary>
+    /// Total insulin from discrete long-acting basal injections (MDI) in units.
+    /// Included in <see cref="TotalBasal"/> and <see cref="ScheduledBasal"/>.
+    /// </summary>
+    public double BasalInjectionInsulin { get; set; }
+
+    /// <summary>
+    /// Number of discrete long-acting basal injections (MDI) in the period.
+    /// </summary>
+    public int BasalInjectionCount { get; set; }
+
+    /// <summary>
     /// Reliability assessment for insulin delivery statistics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }

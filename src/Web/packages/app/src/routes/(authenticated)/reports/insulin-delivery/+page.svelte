@@ -48,7 +48,16 @@
     endDate: reportsParams.endDate.toISOString() as unknown as Date,
   });
 
-  const dailyRatiosResource = $derived(getDailyBasalBolusRatios(statisticsDates));
+  // Routed through contextResource (not a bare $derived query) so a resolved
+  // response is retained across superseded query instances. A raw
+  // $derived(getDailyBasalBolusRatios(...)) stranded the value on a superseded
+  // instance (sveltejs/kit#14915), leaving .current undefined and the chart
+  // permanently showing "no insulin data available" even though the endpoint
+  // returned full daily data.
+  const dailyRatiosResource = contextResource(
+    () => getDailyBasalBolusRatios(statisticsDates),
+    { errorTitle: "Error Loading Insulin Delivery Data" }
+  );
 
   // Headline insulin figures for the selected range. The fixed-bucket
   // multi-period endpoint was used here instead, so every number above the

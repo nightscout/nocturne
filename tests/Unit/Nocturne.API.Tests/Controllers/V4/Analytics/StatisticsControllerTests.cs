@@ -25,6 +25,7 @@ public class StatisticsControllerTests
     private readonly Mock<ITempBasalRepository> _tempBasalRepoMock = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolverMock = new();
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepoMock = new();
+    private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
 
     private StatisticsController CreateController()
@@ -46,6 +47,7 @@ public class StatisticsControllerTests
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IDeviceEventRepository>(),
             _targetRangeScheduleRepoMock.Object,
+            _basalInjectionRepoMock.Object,
             _activeProfileResolverMock.Object,
             TestDoubles.CanonicalGlucosePassThrough.Create());
 
@@ -95,12 +97,21 @@ public class StatisticsControllerTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<TempBasal>());
 
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<BasalInjection>());
+
         _statsServiceMock
             .Setup(s => s.CalculateDailyBasalBolusRatios(
                 It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<Bolus>>(),
                 It.IsAny<IEnumerable<TempBasal>>(),
-                It.IsAny<TimeZoneInfo?>()))
+                It.IsAny<TimeZoneInfo?>(),
+                It.IsAny<IEnumerable<BasalInjection>?>()))
             .Returns(new DailyBasalBolusRatioResponse());
     }
 

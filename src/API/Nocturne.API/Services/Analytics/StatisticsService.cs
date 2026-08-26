@@ -1968,7 +1968,8 @@ public class StatisticsService : IStatisticsService
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
-        DateTime endDate
+        DateTime endDate,
+        IEnumerable<BasalInjection>? basalInjections = null
     )
     {
         // Start with bolus-based calculation (includes carb stats)
@@ -2011,7 +2012,23 @@ public class StatisticsService : IStatisticsService
         // Algorithm (micro) boluses are additional basal above scheduled
         additionalBasalInsulin += algorithmBolusInsulin;
 
-        var totalBasal = tempBasalInsulin + algorithmBolusInsulin;
+        // Sum basal injections (MDI long-acting insulin) — these are scheduled baseline coverage
+        var basalInjectionInsulin = 0.0;
+        var basalInjectionCount = 0;
+        if (basalInjections != null)
+        {
+            foreach (var bi in basalInjections)
+            {
+                if (bi.Units > 0)
+                {
+                    basalInjectionInsulin += bi.Units;
+                    basalInjectionCount++;
+                }
+            }
+        }
+        scheduledBasalInsulin += basalInjectionInsulin;
+
+        var totalBasal = tempBasalInsulin + algorithmBolusInsulin + basalInjectionInsulin;
         var totalInsulin = stats.TotalBolus + totalBasal;
 
         stats.TotalBasal = Math.Round(totalBasal * 100) / 100;
@@ -2025,6 +2042,8 @@ public class StatisticsService : IStatisticsService
             totalInsulin > 0 ? Math.Round(stats.TotalBolus / totalInsulin * 100 * 10) / 10 : 0;
         stats.MicroBolusCount = algorithmBolusList.Count;
         stats.MicroBolusInsulin = Math.Round(algorithmBolusInsulin * 100) / 100;
+        stats.BasalInjectionInsulin = Math.Round(basalInjectionInsulin * 100) / 100;
+        stats.BasalInjectionCount = basalInjectionCount;
 
         return stats;
     }
@@ -2036,7 +2055,8 @@ public class StatisticsService : IStatisticsService
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
-        TimeZoneInfo? userTimeZone = null
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null
     )
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
@@ -2084,6 +2104,23 @@ public class StatisticsService : IStatisticsService
 
             var (currentBasal, currentBolus) = dailyData[dateKey];
             dailyData[dateKey] = (currentBasal + ab.Insulin, currentBolus);
+        }
+
+        // Process basal injections (MDI long-acting insulin — treated as basal)
+        if (basalInjections != null)
+        {
+            foreach (var bi in basalInjections)
+            {
+                if (bi.Units <= 0)
+                    continue;
+
+                var dateKey = MillsToLocalDateString(bi.Mills, tz);
+                if (!dailyData.ContainsKey(dateKey))
+                    dailyData[dateKey] = (0, 0);
+
+                var (currentBasal, currentBolus) = dailyData[dateKey];
+                dailyData[dateKey] = (currentBasal + bi.Units, currentBolus);
+            }
         }
 
         // Build response
@@ -2255,7 +2292,8 @@ public class StatisticsService : IStatisticsService
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
-        TimeZoneInfo? userTimeZone = null)
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null)
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
 
@@ -2301,6 +2339,24 @@ public class StatisticsService : IStatisticsService
             tempBasal[hour] += ab.Insulin;
             counts[hour]++;
             basalDays.Add(LocalDay(ab.Mills, tz));
+        }
+
+        // Long-acting basal injections (MDI) provide baseline coverage across their duration
+        // of insulin action, so spread each dose evenly across that window as scheduled basal —
+        // the discrete-dose analogue of a pump's scheduled rate tiling the day. The coverage
+        // window is the injection's recorded DIA when present (e.g. ~42h for degludec), else 24h.
+        const long HourMs = 3_600_000L;
+        foreach (var bi in (basalInjections ?? Enumerable.Empty<BasalInjection>()).Where(bi => bi.Units > 0))
+        {
+            // Coverage window is the injection's recorded DIA when valid, else 24h.
+            // Clamp to a sane ceiling so a bad DIA can't smear one dose across days of buckets.
+            var dia = bi.InsulinContext?.Dia ?? 0.0;
+            var coverageHours = dia > 0 ? Math.Min(dia, 72.0) : 24.0;
+            var ratePerHour = bi.Units / coverageHours;
+            var endMills = bi.Mills + (long)(coverageHours * HourMs);
+            DistributeInsulinAcrossHourOfDay(
+                bi.Mills, endMills, ratePerHour, tz, scheduledBasal, basalDays);
+            counts[LocalHourOfDay(bi.Mills, tz)]++;
         }
 
         // Average each component over the days that actually have its data, not
