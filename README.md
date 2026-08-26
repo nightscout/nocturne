@@ -2,6 +2,8 @@
 
 A modern, high-performance diabetes management platform built with .NET 10. Nocturne is a complete rewrite of the Nightscout API with full feature parity, providing native C# implementations of all endpoints with optimized performance and modern cloud-native architecture.
 
+![The Nocturne home screen. A large number shows the most recent glucose reading with an arrow for which way it is heading, and a graph underneath plots the readings from the last few hours alongside markers for insulin doses and meals.](src/Web/packages/screenshots/images/dashboard-overview.light.webp)
+
 ## What is Nocturne?
 
 Nocturne is a comprehensive diabetes data platform that provides:

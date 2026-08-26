@@ -448,7 +448,9 @@ class Program
                 .WithPnpm()
                 .WithHttpHealthCheck("/health")
                 .WaitFor(api)
-                .WaitFor(bridge)
+                // WaitFor would deadlock a web restart: the one-shot build sits at Finished,
+                // which WaitFor (waiting for Running) never accepts.
+                .WaitForCompletion(bridge)
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);

@@ -4,6 +4,7 @@ title: Email Alerts (Resend)
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # Email Alerts
@@ -73,6 +74,11 @@ Set these in your `.env` or container environment:
 Then restart Nocturne for the changes to take effect.
 
 ## 5. Set up an alert rule
+
+**Settings > Alerts** lists the rules a new instance starts with, ready to be
+switched on and adjusted:
+
+<Screenshot id="alerts-configuration" />
 
 1. Go to **Settings > Alerts**
 2. Create or edit an alert rule

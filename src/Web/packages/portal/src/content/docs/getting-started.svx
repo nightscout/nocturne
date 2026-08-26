@@ -2,6 +2,10 @@
 title: Quick Start
 ---
 
+<script>
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
 # Quick Start
 
 Get Nocturne up and running in just a few minutes.
@@ -32,8 +36,31 @@ Once the containers are running, access your Nocturne instance at:
 https://your-server-ip:8443
 ```
 
+Sign in and you land on the home screen. It stays empty until a device or an app
+starts sending readings:
+
+<Screenshot id="first-run" />
+
+## Step 4: Connect a data source
+
+Open **Settings > Data Sources**. Every service Nocturne can collect readings
+from, and every phone app that can send readings to it, is listed as a tile:
+
+<Screenshot id="connect-data-source" />
+
+Pick the one your readings come from and fill in what it asks for — for Dexcom,
+that is the username and password of the Dexcom Share account you already use.
+Turn the connection on and Nocturne starts collecting on its own.
+
+<Screenshot
+  id="connector-dexcom"
+  callouts={[
+    { anchor: "enable-switch", label: "Turn the connection on" },
+    { anchor: "credentials", label: "Enter your Dexcom Share sign-in" },
+  ]}
+/>
+
 ## Next Steps
 
-- Configure your data connectors (Dexcom, LibreLinkUp, etc.)
 - Set up HTTPS with a reverse proxy
 - Configure your CGM app to point to your new instance

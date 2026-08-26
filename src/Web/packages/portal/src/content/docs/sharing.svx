@@ -4,6 +4,7 @@ title: Sharing your data
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # Sharing your data
@@ -15,7 +16,11 @@ any screen. This page explains what each one does and when to reach for it.
 
 Most of these live in your account under **Settings > Sharing & Privacy** (the
 clock is set up separately, in the **Clock** section). Nothing is shared until
-you turn it on, and you can revoke any of it at any time.
+you turn it on, and you can revoke any of it at any time. That page is where you
+switch the public link on or off and see everyone you have invited, with what
+each of them is allowed to do:
+
+<Screenshot id="sharing-settings" />
 
 ## At a glance
 
