@@ -528,7 +528,7 @@
   {#if secretFields.length > 0 || credentialFields.length > 0}
     <Separator class="my-6" />
 
-    <Card>
+    <Card data-testid="connector-credentials">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Lock class="h-4 w-4" />

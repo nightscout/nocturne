@@ -12,11 +12,13 @@ allowBuilds:
   "@tailwindcss/oxide": true
   esbuild: true
   protobufjs: true
+  sharp: true
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - esbuild
   - protobufjs
+  - sharp
 
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
 overrides:

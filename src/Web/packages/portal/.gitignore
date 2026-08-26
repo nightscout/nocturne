@@ -6,3 +6,5 @@ static/fonts/
 src/lib/release/
 # SDK manifest is derived from sdk/<lang>/config.yaml at build/dev time
 src/lib/sdk/generated/
+# Docs screenshots are copied from packages/screenshots at build/dev time
+static/screenshots/
