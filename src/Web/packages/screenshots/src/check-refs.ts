@@ -1,8 +1,3 @@
-import { findBrokenReferences } from './references.js';
-import { report } from './report.js';
+import { references, report } from './report.js';
 
-report(
-	'Broken screenshot references',
-	await findBrokenReferences(),
-	'All screenshot references resolve.',
-);
+await report(references);

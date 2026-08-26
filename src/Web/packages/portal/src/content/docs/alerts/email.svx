@@ -82,7 +82,7 @@ with none, so this is where you add your first:
 
 1. Go to **Alerts > Rules**
 2. Create or edit an alert rule
-3. Under **Delivery channels**, add an **Email** channel
+3. Under **Channels**, add an **Email** channel
 4. Enter the recipient email address
 5. Save the rule
 

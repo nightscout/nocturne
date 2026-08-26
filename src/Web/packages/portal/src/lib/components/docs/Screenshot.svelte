@@ -35,8 +35,8 @@
                     `Screenshot "${id}" has no anchor "${anchor}". Declared anchors: ${declared.join(", ") || "none"}.`,
                 );
             }
-            // Either variant serves as the frame: capture rejects an entry with
-            // anchors whose variants differ in size.
+            // Either variant serves as the frame: capture rejects an anchored
+            // entry whose variants differ in size or in any anchor box.
             const frame = entry.variants.light;
             return {
                 label,
@@ -63,7 +63,7 @@
             />
         {/each}
 
-        {#each chips as chip, index (index)}
+        {#each chips as chip}
             <span
                 class="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5
                        rounded-full border border-border/60 bg-background/90 px-2 py-1

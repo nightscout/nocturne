@@ -14,11 +14,11 @@ which only exists when the API runs in Development — and a browser binary, whi
 install for you:
 
 ```bash
-npx playwright install chromium                       # once per machine
-pnpm --filter @nocturne/screenshots run capture       # seed, shoot, write manifest.json
-pnpm --filter @nocturne/screenshots run validate      # definitions only; no stack, no browser
-pnpm --filter @nocturne/screenshots run check-refs    # markdown references vs images on disk
-pnpm --filter @nocturne/screenshots run check-embeds  # docs <Screenshot> ids and anchors vs the manifest
+pnpm --filter @nocturne/screenshots exec playwright install chromium  # once per machine
+pnpm --filter @nocturne/screenshots run capture                       # seed, shoot, write manifest.json
+pnpm --filter @nocturne/screenshots run validate                      # definitions only; no stack, no browser
+pnpm --filter @nocturne/screenshots run check-refs                    # markdown references vs images on disk
+pnpm --filter @nocturne/screenshots run check-embeds                  # docs <Screenshot> ids and anchors vs the manifest
 ```
 
 A successful run tidies up after itself: images no manifest entry claims are deleted, and the

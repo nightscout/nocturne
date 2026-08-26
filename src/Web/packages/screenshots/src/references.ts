@@ -27,10 +27,20 @@ async function markdownFiles(): Promise<string[]> {
  */
 export async function findBrokenReferences(): Promise<string[]> {
 	const captured = new Set(await readdir(imagesDir));
+	const files = await markdownFiles();
 	const broken: string[] = [];
 
-	for (const file of await markdownFiles()) {
-		const markdown = await readFile(join(repoRoot, file), 'utf8');
+	// See findBrokenEmbeds on why an empty scan is a failure rather than a pass.
+	if (files.length === 0) broken.push('git ls-files matched no markdown to check');
+
+	for (const file of files) {
+		let markdown: string;
+		try {
+			markdown = await readFile(join(repoRoot, file), 'utf8');
+		} catch {
+			broken.push(`${file} is tracked but not on disk, so its references cannot be read`);
+			continue;
+		}
 		for (const [, image] of markdown.matchAll(REFERENCE_PATTERN)) {
 			if (!captured.has(image)) {
 				broken.push(`${file} references images/${image}, which was not captured`);

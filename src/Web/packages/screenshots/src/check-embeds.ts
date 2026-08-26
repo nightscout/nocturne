@@ -1,8 +1,3 @@
-import { findBrokenEmbeds } from './embeds.js';
-import { report } from './report.js';
+import { embeds, report } from './report.js';
 
-report(
-	'Broken screenshot embeds',
-	await findBrokenEmbeds(),
-	'All documentation screenshot embeds resolve.',
-);
+await report(embeds);

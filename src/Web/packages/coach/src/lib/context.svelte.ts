@@ -214,6 +214,10 @@ export class CoachMarkContext {
   }
 
   isMarkEligible(key: string): boolean {
+    // The kill switch has to reach the hotspot dots too, not just the popovers: a mark that stays
+    // eligible while disabled leaves its dot drawn over the UI.
+    if (this._disabled) return false;
+
     const seqName = this._keyToSequence.get(key);
     if (!seqName) return true; // standalone marks are always eligible
 

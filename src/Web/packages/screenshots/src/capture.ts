@@ -2,11 +2,9 @@ import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { chromium, errors, type Browser, type Page, type Request } from '@playwright/test';
 import sharp from 'sharp';
-import { findBrokenEmbeds } from './embeds.js';
 import { definitions } from './manifest.js';
 import { imagesDir, manifestPath } from './paths.js';
-import { findBrokenReferences } from './references.js';
-import { report } from './report.js';
+import { embeds, references, report } from './report.js';
 import type {
 	Manifest,
 	ManifestAnchor,
@@ -30,7 +28,7 @@ const VIEWPORTS: Record<Viewport, { width: number; height: number }> = {
 
 /** mode-watcher reads this on hydration and toggles `dark` on the html element. */
 const MODE_STORAGE_KEY = 'mode-watcher-mode';
-/** @nocturne/coach's kill switch; the first-run tour would otherwise spotlight every capture. */
+/** @nocturne/coach's kill switch; without it every capture carries the tour's popovers and dots. */
 const COACH_DISABLED_KEY = 'nocturne:coach-marks-disabled';
 
 const SCENARIO_SEEDS: Record<Scenario, { sampleData: boolean; sampleDataDays: number }> = {
@@ -174,7 +172,6 @@ async function openSession(
 	page.on('requestfinished', (request) => inFlight.delete(request));
 	page.on('requestfailed', (request) => inFlight.delete(request));
 
-	forgetRemoteCalls(page);
 	await page.goto(tenant.loginLink, {
 		waitUntil: 'domcontentloaded',
 		timeout: NAVIGATION_TIMEOUT_MS,
@@ -425,15 +422,37 @@ async function captureTheme(
 	return { variant, anchors };
 }
 
+function describe(box: ManifestAnchor | undefined): string {
+	return box ? `${box.width}x${box.height} at ${box.x},${box.y}` : 'nothing';
+}
+
 /**
- * One set of anchor boxes serves both variants, so a theme that lays the route out differently
- * would aim every callout on one of them at the wrong place.
+ * The docs draw light's anchor boxes over whichever variant the reader's theme shows, so the two
+ * have to agree on both the frame and every box in it. They come out of identical layouts, so a
+ * difference is a theme-dependent layout shift the callouts cannot survive.
  */
-function assertSharedFrame(id: string, light: ManifestVariant, dark: ManifestVariant): void {
-	if (light.width === dark.width && light.height === dark.height) return;
-	throw new Error(
-		`${id}: light (${light.width}x${light.height}) and dark (${dark.width}x${dark.height}) differ in size, so the anchor boxes cannot describe both`,
-	);
+function assertSharedFrame(id: string, light: Capture, dark: Capture): void {
+	if (light.variant.width !== dark.variant.width || light.variant.height !== dark.variant.height) {
+		throw new Error(
+			`${id}: light (${light.variant.width}x${light.variant.height}) and dark (${dark.variant.width}x${dark.variant.height}) differ in size, so the anchor boxes cannot describe both`,
+		);
+	}
+
+	for (const [name, box] of Object.entries(light.anchors ?? {})) {
+		const counterpart = dark.anchors?.[name];
+		if (
+			counterpart &&
+			counterpart.x === box.x &&
+			counterpart.y === box.y &&
+			counterpart.width === box.width &&
+			counterpart.height === box.height
+		) {
+			continue;
+		}
+		throw new Error(
+			`${id}: anchor "${name}" is ${describe(box)} in light and ${describe(counterpart)} in dark`,
+		);
+	}
 }
 
 /** Images left behind by an id that has since been renamed or dropped. */
@@ -503,10 +522,10 @@ async function main(): Promise<void> {
 			};
 
 			// Both themes resolve the anchors, so a selector that has gone stale fails the run
-			// whichever theme it broke under; the boxes themselves are theme-independent.
+			// whichever theme it broke under.
 			const light = await captureTheme(await sessionFor('light'), definition, 'light', tenant.url);
 			const dark = await captureTheme(await sessionFor('dark'), definition, 'dark', tenant.url);
-			if (light.anchors) assertSharedFrame(definition.id, light.variant, dark.variant);
+			if (light.anchors) assertSharedFrame(definition.id, light, dark);
 
 			manifest[definition.id] = {
 				alt: definition.alt,
@@ -521,17 +540,13 @@ async function main(): Promise<void> {
 
 	await writeFile(manifestPath, serialize(manifest));
 
+	await report(references, embeds);
+
+	// Only once nothing above has failed: a run that stopped early leaves its images and its
+	// tenants behind to be inspected.
 	const pruned = await prune(manifest);
 	if (pruned.length > 0) console.log(`pruned unreferenced images: ${pruned.join(', ')}`);
 
-	report(
-		'Broken screenshot references',
-		[...(await findBrokenReferences()), ...(await findBrokenEmbeds())],
-		'All screenshot references resolve.',
-	);
-
-	// Only once nothing above has failed: a run that stopped early leaves its tenants behind to
-	// be opened in a browser.
 	for (const tenant of tenants.values()) {
 		const response = await fetch(`${API_URL}/api/v4/dev-only/admin/tenants/${tenant.id}`, {
 			method: 'DELETE',

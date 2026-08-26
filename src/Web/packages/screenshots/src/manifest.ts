@@ -23,9 +23,8 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'first-run',
 		alt: 'The Connect a Data Source step of setup. Each service Nocturne can collect readings from, and each phone app that can send readings to it, is listed as a tile you pick from.',
 	},
-	// A docs column is narrower than the 1440px viewport, so a page-wide shot of a settings route
-	// arrives shrunk far below readable size. Both of these clip to one card, whose own width is
-	// close to the column's, so their text lands at about the size it has on screen.
+	// Both clip to a single card because at docs-column width a page-wide shot of this route
+	// shrinks the credentials boxes past the point where the callouts over them can be read.
 	{
 		id: 'connector-dexcom-credentials',
 		route: '/settings/connectors/dexcom',
