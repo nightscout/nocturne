@@ -19,6 +19,7 @@
                 { href: "/docs/installation/docker-compose", label: "Docker Compose" },
                 { href: "/docs/installation/portainer", label: "Portainer" },
                 { href: "/docs/installation/byo-postgres", label: "Bring Your Own PostgreSQL" },
+                { href: "/docs/installation/reverse-proxy", label: "Bring Your Own Reverse Proxy" },
             ],
         },
         {

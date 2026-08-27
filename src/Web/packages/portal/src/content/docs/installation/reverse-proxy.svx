@@ -1,0 +1,220 @@
+---
+title: Bring your own reverse proxy
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Bring your own reverse proxy
+
+The Docker Compose bundle ships with Caddy, which obtains and renews TLS
+certificates for you. If you already run a reverse proxy -- nginx, Traefik,
+HAProxy, your own Caddy, a homelab edge -- you can terminate TLS there instead
+and forward plain HTTP to Nocturne's gateway.
+
+Nocturne needs three request headers from your proxy to work. Everything else on
+this page is ordinary reverse-proxy configuration; the headers are the part that
+is easy to miss, and missing them produces the confusing failures listed under
+Troubleshooting below.
+
+## Start the stack without Caddy
+
+The bundle includes an override that parks Caddy under an inactive profile and
+publishes the gateway on host port `8080` as plain HTTP:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d
+```
+
+Run `docker compose ps` afterwards and confirm no `caddy` container is listed. If
+one is running it still holds host ports 80 and 443, and it will fight your proxy
+for them.
+
+<Callout type="warning" title="The gateway speaks plain HTTP only">
+  Nothing behind port 8080 terminates TLS. Point your proxy at
+  <code>http://&lt;host&gt;:8080</code>. A browser opened directly at
+  <code>https://&lt;host&gt;:8080</code>, or a <code>proxy_pass https://</code>
+  aimed at it, will always fail the TLS handshake.
+</Callout>
+
+## DNS and certificates
+
+Nocturne is multi-tenant: the apex domain serves the marketing and login pages,
+and every tenant gets its own subdomain of `BASE_DOMAIN`. Your proxy therefore
+has to terminate both.
+
+- `BASE_DOMAIN` in `.env` must be a **root domain** -- `example.com`, not
+  `nocturne.example.com`, and not an IP address.
+- DNS needs an **A** record for the apex and a wildcard **A** record for
+  `*.example.com`, both pointing at your proxy.
+- The certificate must cover the wildcard, which means a **DNS-01** challenge --
+  HTTP-01 and TLS-ALPN-01 cannot issue wildcard certificates.
+
+## The three headers
+
+Nocturne's web container reconstructs the URL the browser is actually looking at
+from `X-Forwarded-Proto` and `X-Forwarded-Host`, falling back to `Host`. It uses
+that reconstructed origin to validate state-changing requests, so if it does not
+match what the browser sees, every form submission is rejected.
+
+The gateway passes these headers through untouched rather than inventing its own,
+so whatever your proxy sends is what Nocturne sees. Your proxy must set all
+three:
+
+| Header | Value | Why |
+|--------|-------|-----|
+| `Host` | The original request host | Selects the tenant. Most proxies default to the *upstream* address instead, which is the single most common misconfiguration. |
+| `X-Forwarded-Proto` | `https` | Without it the app believes the browser is on plain HTTP and rejects requests as cross-site. |
+| `X-Forwarded-Host` | The original request host | Used ahead of `Host` when reconstructing the origin. |
+
+<Callout type="danger" title="nginx does not send these by default">
+  nginx's default is <code>proxy_set_header Host $proxy_host</code> -- the literal
+  <code>proxy_pass</code> target, e.g. <code>192.168.1.10:8080</code> -- and it
+  sends no <code>X-Forwarded-*</code> headers at all. A stock
+  <code>proxy_pass</code> with no <code>proxy_set_header</code> lines gets you a
+  login page that loads and a login attempt that 403s.
+</Callout>
+
+## nginx
+
+```nginx
+# Required for SignalR / WebSocket upgrades.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name example.com *.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name example.com *.example.com;
+
+    # Wildcard certificate, issued via DNS-01.
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    # Nocturne's session cookies overflow nginx's 4k default and surface as 502.
+    proxy_buffer_size           16k;
+    proxy_buffers            8  16k;
+    proxy_busy_buffers_size     32k;
+    large_client_header_buffers 4 16k;
+
+    client_max_body_size 50m;
+
+    location / {
+        # Plain HTTP. The gateway does not terminate TLS.
+        proxy_pass http://127.0.0.1:8080;
+
+        # nginx defaults to HTTP/1.0, which breaks keepalive and upgrades.
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP         $remote_addr;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Real-time updates stream; buffering stalls them.
+        proxy_buffering    off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+```
+
+If nginx listens on a non-standard port, use `$http_host` in place of `$host` for
+both host headers so the port survives.
+
+## Traefik
+
+Traefik sets `X-Forwarded-*` automatically and preserves the original `Host`, so
+a plain router works. Labels on the `gateway` service:
+
+```yaml
+labels:
+  traefik.enable: "true"
+  traefik.http.routers.nocturne.rule: "Host(`example.com`) || HostRegexp(`{sub:.+}.example.com`)"
+  traefik.http.routers.nocturne.entrypoints: "websecure"
+  traefik.http.routers.nocturne.tls.certresolver: "dns"
+  traefik.http.routers.nocturne.tls.domains[0].main: "example.com"
+  traefik.http.routers.nocturne.tls.domains[0].sans: "*.example.com"
+  traefik.http.services.nocturne.loadbalancer.server.port: "5000"
+```
+
+The certificate resolver must be configured for DNS-01 for the wildcard SAN to be
+issued.
+
+## Caddy
+
+If you run your own Caddy rather than the bundled one, it sets the headers for
+you:
+
+```caddyfile
+example.com, *.example.com {
+    tls {
+        dns <your-provider> {env.PROVIDER_API_TOKEN}
+    }
+    reverse_proxy http://127.0.0.1:8080
+}
+```
+
+## Client addresses and the exposed port
+
+Audit rows and rate-limit buckets record the caller's address, which Nocturne takes
+from the **rightmost** `X-Forwarded-For` entry. A proxy that appends is therefore
+safe: nginx's `$proxy_add_x_forwarded_for`, and Caddy and Traefik by default, put
+the address they actually saw last, and anything a caller prepended is never read.
+
+Behind a CDN, keep that chain and raise the hop count instead of collapsing it, or
+the address recorded is your CDN's rather than the client's. Set
+`ForwardedHeaders__ForwardLimit` on `nocturne-api` to the number of hops you trust,
+and optionally `ForwardedHeaders__KnownProxies` or `ForwardedHeaders__KnownNetworks`
+to pin which addresses may speak for a client.
+
+<Callout type="warning" title="Do not leave port 8080 open to the world">
+  A caller that reaches the gateway directly, bypassing your proxy, does get to
+  choose its own <code>X-Forwarded-For</code>. Publish the port on the interface
+  your proxy uses rather than all of them &mdash; in the override, change
+  <code>"8080:5000"</code> to <code>"127.0.0.1:8080:5000"</code> when the proxy runs
+  on the same host.
+</Callout>
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---------|-------|
+| Login or any form POST returns **403** with `Cross-site POST form submissions are forbidden` | `X-Forwarded-Proto` and `X-Forwarded-Host` are missing or wrong, so the reconstructed origin does not match the browser's. |
+| The page shows **HTTPS Required** | You reached the site over plain HTTP on something other than `localhost`. Passkey registration needs a secure context, so finish the TLS setup before running first-run setup. |
+| **SSL error** connecting to port 8080 | Something is speaking TLS to the gateway. It serves plain HTTP only. |
+| **502 Bad Gateway** | Check your proxy's error log; it names the cause. See below. |
+| Tenant subdomains 404 or fail TLS while the apex works | No wildcard DNS record, or a certificate that does not cover `*.example.com`. |
+
+For a 502, nginx's `/var/log/nginx/error.log` is decisive:
+
+| error.log says | Cause |
+|----------------|-------|
+| `connect() failed (111: Connection refused)` | The gateway is not reachable at that address. Confirm the override is applied and port 8080 is published. |
+| `SSL_do_handshake() failed` | `proxy_pass https://` pointed at the plain-HTTP gateway. |
+| `upstream sent too big header` | Raise `proxy_buffer_size` as shown above. |
+| `upstream prematurely closed connection` | Add `proxy_http_version 1.1`. |
+
+<Callout type="tip" title="Confirming the headers arrive">
+  <code>docker compose logs gateway</code> records the host each request arrived
+  on. If that shows your upstream address rather than your domain, your proxy is
+  not forwarding <code>Host</code> -- fix that before looking anywhere else.
+</Callout>
+
+## Next steps
+
+Once the site loads over HTTPS on your domain, continue with
+[first-run setup](/docs/getting-started).

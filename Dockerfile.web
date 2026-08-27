@@ -57,11 +57,12 @@ WORKDIR /app/packages/app
 # Copy built artifacts
 COPY --from=builder /app/packages/app/build ./build
 
-# Copy custom server that integrates WebSocket bridge
+# Copy custom server that integrates WebSocket bridge, and the modules it imports
 COPY --from=builder /app/packages/app/server.js ./server.js
+COPY --from=builder /app/packages/app/server-origin-warning.js ./server-origin-warning.js
 
 # Smoke test critical runtime imports used by SvelteKit server chunks.
-RUN node -e "import('zod'); import('@nocturne/bridge')"
+RUN node -e "import('zod'); import('@nocturne/bridge'); import('./server-origin-warning.js')"
 
 ENV NODE_ENV=production
 ENV PORT=5173
