@@ -41,15 +41,29 @@ for them.
 ## DNS and certificates
 
 Nocturne is multi-tenant: the apex domain serves the marketing and login pages,
-and every tenant gets its own subdomain of `BASE_DOMAIN`. Your proxy therefore
-has to terminate both.
+every tenant gets its own subdomain of `BASE_DOMAIN`, and public share links sit
+one label deeper again, at `{token}.share.example.com`. Your proxy has to
+terminate all three.
 
-- `BASE_DOMAIN` in `.env` must be a **root domain** -- `example.com`, not
-  `nocturne.example.com`, and not an IP address.
-- DNS needs an **A** record for the apex and a wildcard **A** record for
-  `*.example.com`, both pointing at your proxy.
-- The certificate must cover the wildcard, which means a **DNS-01** challenge --
-  HTTP-01 and TLS-ALPN-01 cannot issue wildcard certificates.
+- `BASE_DOMAIN` in `.env` must be a hostname of **at least two labels**, and not
+  an IP address. It does *not* have to be a registrable root domain --
+  `nocturne.example.com` is fine, and tenants are then
+  `tenant.nocturne.example.com`. An IP address is what to avoid: WebAuthn refuses
+  an IP as a relying-party ID, so passkey login stops working, and tenant
+  subdomains have nowhere to live.
+- DNS needs an **A** record for the apex, a wildcard **A** record for
+  `*.example.com`, and a second wildcard for `*.share.example.com`. A DNS
+  wildcard matches exactly one label, so the first does not cover share hosts.
+- The certificate has to name every host it serves. Two wildcard SANs --
+  `*.example.com` and `*.share.example.com` -- cover all of them, and wildcards
+  require a **DNS-01** challenge, because HTTP-01 and TLS-ALPN-01 cannot issue
+  them.
+
+<Callout type="tip" title="Wildcards are not the only option">
+  A proxy that mints certificates per hostname on first request needs no wildcard
+  and no DNS credentials. That is what the bundled Caddy does, and you can do the
+  same &mdash; with one constraint, described under Caddy below.
+</Callout>
 
 ## The three headers
 
@@ -100,7 +114,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
 
-    # Nocturne's session cookies overflow nginx's 4k default and surface as 502.
+    # Large response headers overflow nginx's 4k default and surface as 502.
     proxy_buffer_size           16k;
     proxy_buffers            8  16k;
     proxy_busy_buffers_size     32k;
@@ -132,6 +146,10 @@ server {
 }
 ```
 
+nginx's `*.example.com` matches at any depth, unlike DNS and TLS wildcards, so
+the `server_name` above already covers share hosts. The DNS record and the
+certificate still need their own `*.share.example.com` entries.
+
 If nginx listens on a non-standard port, use `$http_host` in place of `$host` for
 both host headers so the port survives.
 
@@ -147,26 +165,69 @@ labels:
   traefik.http.routers.nocturne.entrypoints: "websecure"
   traefik.http.routers.nocturne.tls.certresolver: "dns"
   traefik.http.routers.nocturne.tls.domains[0].main: "example.com"
-  traefik.http.routers.nocturne.tls.domains[0].sans: "*.example.com"
+  traefik.http.routers.nocturne.tls.domains[0].sans: "*.example.com,*.share.example.com"
   traefik.http.services.nocturne.loadbalancer.server.port: "5000"
 ```
 
-The certificate resolver must be configured for DNS-01 for the wildcard SAN to be
-issued.
+`{sub:.+}` matches dots, so the router rule covers share hosts as it stands; the
+certificate is what needs the second SAN. The resolver must be configured for
+DNS-01, or neither wildcard will issue.
+
+Traefik reads these labels over the Docker socket but connects to the container
+itself, so it has to be attached to the bundle's `aspire` network to reach the
+gateway on port 5000. Once it is, it no longer needs the override's published
+port at all -- and dropping `ports` from the override, rather than binding it to
+loopback, is the safest version of the warning below.
 
 ## Caddy
 
 If you run your own Caddy rather than the bundled one, it sets the headers for
-you:
+you. A Caddy site-address wildcard matches one label, the same as DNS, so the
+share hosts have to be named separately:
 
 ```caddyfile
-example.com, *.example.com {
+example.com, *.example.com, *.share.example.com {
     tls {
         dns <your-provider> {env.PROVIDER_API_TOKEN}
     }
     reverse_proxy http://127.0.0.1:8080
 }
 ```
+
+That is the wildcard route, and it needs a DNS provider token. The bundled Caddy
+takes the other one: it issues a certificate per hostname on first request, with
+no wildcard and no DNS credentials, and asks the API whether a hostname is a real
+tenant before doing so.
+
+Reproducing that in your own Caddy has one constraint. The `ask` endpoint answers
+200 or 404 for a given hostname, which makes it an anonymous tenant-slug oracle,
+so the web container deliberately refuses it on the `/api` path the gateway
+serves. Caddy must therefore reach the API container directly rather than through
+the gateway on port 8080 -- which in practice means running Caddy as a service on
+the bundle's compose network:
+
+```caddyfile
+{
+    on_demand_tls {
+        ask http://nocturne-api:8080/api/v4/platform/tls-authorize
+    }
+}
+
+example.com {
+    reverse_proxy gateway:5000
+}
+
+*.example.com, *.share.example.com {
+    tls {
+        on_demand
+    }
+    reverse_proxy gateway:5000
+}
+```
+
+Do not point `ask` at a host that is reachable from the internet, and do not drop
+it: without it, anyone who points DNS at your server can drive certificate
+issuance for arbitrary names.
 
 ## Client addresses and the exposed port
 
@@ -180,6 +241,11 @@ the address recorded is your CDN's rather than the client's. Set
 `ForwardedHeaders__ForwardLimit` on `nocturne-api` to the number of hops you trust,
 and optionally `ForwardedHeaders__KnownProxies` or `ForwardedHeaders__KnownNetworks`
 to pin which addresses may speak for a client.
+
+Those two are not independent. If you raise `ForwardLimit` *and* declare a
+known-proxy list, every intermediate hop must appear in the list: the walk stops
+at the first address that is not on it, and the entries beyond it are silently
+left unread. Declare all of them, or none.
 
 <Callout type="warning" title="Do not leave port 8080 open to the world">
   A caller that reaches the gateway directly, bypassing your proxy, does get to
@@ -198,6 +264,7 @@ to pin which addresses may speak for a client.
 | **SSL error** connecting to port 8080 | Something is speaking TLS to the gateway. It serves plain HTTP only. |
 | **502 Bad Gateway** | Check your proxy's error log; it names the cause. See below. |
 | Tenant subdomains 404 or fail TLS while the apex works | No wildcard DNS record, or a certificate that does not cover `*.example.com`. |
+| Tenant subdomains work but **share links** fail TLS | A DNS wildcard and a certificate wildcard each match one label. `{token}.share.example.com` needs its own `*.share.example.com` record and SAN. |
 
 For a 502, nginx's `/var/log/nginx/error.log` is decisive:
 

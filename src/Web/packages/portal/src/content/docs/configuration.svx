@@ -46,8 +46,10 @@ so it always matches the current images:
 
 These have no default and must be set before the first start:
 
-- **`BASE_DOMAIN`** — the root domain only (e.g. `example.com`, **not**
-  `app.example.com`). Each tenant gets a subdomain generated from this.
+- **`BASE_DOMAIN`** — the hostname every tenant subdomain hangs off (e.g.
+  `example.com`, or `nocturne.example.com` if Nocturne itself lives under a
+  subdomain). At least two labels, and not an IP address. Each tenant gets a
+  subdomain generated from this.
 - **`INSTANCE_KEY`** — minimum 12 characters. Used for JWT signing and
   service-to-service authentication. Treat it like a password and keep it stable;
   changing it invalidates existing sessions.

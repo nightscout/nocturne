@@ -5,8 +5,25 @@
 // failed to match, once the handler has actually answered 403 so that an
 // authorization 403 from the proxied API (whose origin matches) stays quiet.
 
-/** Distinct origin pairings already reported, so a scanner cannot flood the log. */
+/** Distinct origin pairings reported per window, so a scanner cannot flood the log. */
 const REPORT_LIMIT = 32;
+
+/**
+ * How long a reported pairing stays remembered. The cap on its own is absorbing: a
+ * scanner that elicits 403s from 32 origins of its choosing spends the whole budget
+ * and the diagnostic never speaks again for the life of the process — including for
+ * the operator's own pairing, which is the one message this exists to deliver.
+ * Expiring the budget bounds the log to REPORT_LIMIT lines per window rather than
+ * REPORT_LIMIT lines for all time.
+ */
+const REPORT_WINDOW_MS = 10 * 60_000;
+
+/** @returns {{ reported: Set<string>, windowStart: number | null }} */
+export function createReportBudget() {
+  return { reported: new Set(), windowStart: null };
+}
+
+const defaultBudget = createReportBudget();
 
 /**
  * Attaches a one-shot 403 diagnostic to a request whose Origin disagrees with the
@@ -14,11 +31,12 @@ const REPORT_LIMIT = 32;
  *
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
- * @param {{ reported?: Set<string>, warn?: (message: string) => void }} [deps]
+ * @param {{ budget?: ReturnType<typeof createReportBudget>, warn?: (message: string) => void, now?: () => number }} [deps]
  */
 export function warnOnOriginMismatch(req, res, deps = {}) {
-  const reported = deps.reported ?? defaultReported;
+  const budget = deps.budget ?? defaultBudget;
   const warn = deps.warn ?? console.warn;
+  const now = deps.now ?? Date.now;
 
   const browserOrigin = req.headers.origin;
   if (!browserOrigin) return;
@@ -29,10 +47,18 @@ export function warnOnOriginMismatch(req, res, deps = {}) {
   res.on('finish', () => {
     if (res.statusCode !== 403) return;
 
+    // The window is anchored on first use, not on the epoch: anchoring at 0 would
+    // make the very first window expire immediately and drop the deduplication.
+    const at = now();
+    if (budget.windowStart === null || at - budget.windowStart >= REPORT_WINDOW_MS) {
+      budget.reported.clear();
+      budget.windowStart = at;
+    }
+
     const pairing = `${browserOrigin} -> ${computedOrigin}`;
-    if (reported.has(pairing)) return;
-    if (reported.size >= REPORT_LIMIT) return;
-    reported.add(pairing);
+    if (budget.reported.has(pairing)) return;
+    if (budget.reported.size >= REPORT_LIMIT) return;
+    budget.reported.add(pairing);
 
     warn(
       `[origin] Rejected a cross-site ${req.method} to ${req.url}. The browser said it is on ` +
@@ -43,5 +69,3 @@ export function warnOnOriginMismatch(req, res, deps = {}) {
     );
   });
 }
-
-const defaultReported = new Set();

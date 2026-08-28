@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EventEmitter } from "node:events";
 
 // @ts-expect-error - plain JS module shipped beside server.js, no types
-import { warnOnOriginMismatch } from "../../../server-origin-warning.js";
+import { createReportBudget, warnOnOriginMismatch } from "../../../server-origin-warning.js";
 
 /** A response whose status is chosen by the test and whose `finish` the test fires. */
 class FakeResponse extends EventEmitter {
@@ -31,17 +31,22 @@ function report(
   origin: string | undefined,
   forwarded: { proto: string; host: string },
   statusCode: number,
-  reported = new Set<string>()
+  budget = createReportBudget(),
+  at = 0
 ): string[] {
   const logged: string[] = [];
   const res = new FakeResponse(statusCode);
   warnOnOriginMismatch(fakeRequest(origin, forwarded), res, {
-    reported,
+    budget,
     warn: (m: string) => logged.push(m),
+    now: () => at,
   });
   res.emit("finish");
   return logged;
 }
+
+/** Matches REPORT_WINDOW_MS in the module under test. */
+const WINDOW_MS = 10 * 60_000;
 
 const proxied = { proto: "http", host: "192.168.1.121:8080" };
 const matching = { proto: "https", host: "nocturne.example.com" };
@@ -72,23 +77,51 @@ describe("warnOnOriginMismatch", () => {
   });
 
   it("reports a given pairing once, however often it recurs", () => {
-    const reported = new Set<string>();
-    const first = report("https://nocturne.example.com", proxied, 403, reported);
-    const second = report("https://nocturne.example.com", proxied, 403, reported);
+    const budget = createReportBudget();
+    const first = report("https://nocturne.example.com", proxied, 403, budget);
+    const second = report("https://nocturne.example.com", proxied, 403, budget);
 
     expect(first).toHaveLength(1);
     expect(second).toEqual([]);
   });
 
   it("stops reporting once distinct pairings hit the cap", () => {
-    const reported = new Set<string>();
+    const budget = createReportBudget();
     for (let i = 0; i < 32; i++) {
-      expect(report(`https://host-${i}.example.com`, proxied, 403, reported)).toHaveLength(1);
+      expect(report(`https://host-${i}.example.com`, proxied, 403, budget)).toHaveLength(1);
     }
 
     // Past the cap the set stops growing, so nothing further is logged — the
     // failure this guards is a cap that silently degrades into logging always.
-    expect(report("https://one-too-many.example.com", proxied, 403, reported)).toEqual([]);
-    expect(reported.size).toBe(32);
+    expect(report("https://one-too-many.example.com", proxied, 403, budget)).toEqual([]);
+    expect(budget.reported.size).toBe(32);
+  });
+
+  it("speaks again in the next window after a scanner spends the cap", () => {
+    // The cap is what stops a flood; without expiry it is also what permanently
+    // silences the one message an operator needs. A scanner burns all 32 slots on
+    // origins of its choosing, and the operator's own pairing still gets reported
+    // once the window rolls over.
+    const budget = createReportBudget();
+    for (let i = 0; i < 32; i++) {
+      report(`https://scanner-${i}.example.com`, proxied, 403, budget, 1000);
+    }
+    expect(report("https://nocturne.example.com", proxied, 403, budget, 1000)).toEqual([]);
+
+    const next = report("https://nocturne.example.com", proxied, 403, budget, 1000 + WINDOW_MS);
+    expect(next).toHaveLength(1);
+    expect(next[0]).toContain("https://nocturne.example.com");
+    expect(budget.reported.size).toBe(1);
+  });
+
+  it("keeps deduplicating within a window as the clock advances", () => {
+    // Expiry must be windowed, not per-call: a pairing seen twice inside one window
+    // is still reported once. The failure this guards is a reset that fires on every
+    // request and turns the dedupe off.
+    const budget = createReportBudget();
+    expect(report("https://nocturne.example.com", proxied, 403, budget, 1000)).toHaveLength(1);
+    expect(
+      report("https://nocturne.example.com", proxied, 403, budget, 1000 + WINDOW_MS - 1)
+    ).toEqual([]);
   });
 });

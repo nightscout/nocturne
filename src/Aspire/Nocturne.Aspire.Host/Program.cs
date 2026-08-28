@@ -236,7 +236,7 @@ class Program
         var baseDomain = builder.AddParameter("base-domain", "")
             .WithPublishMetadata(
                 "Base domain",
-                "Root domain only, e.g. example.com (not app.example.com — subdomains are generated per tenant)");
+                "The hostname tenant subdomains hang off, e.g. example.com or nocturne.example.com. At least two labels; not an IP address.");
 
         // CDN/proxy ranges the bundled Caddy will believe a client-address header from. Empty
         // means only the socket peer counts, which is right whenever Caddy is the outermost hop.
