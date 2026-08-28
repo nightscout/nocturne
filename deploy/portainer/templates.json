@@ -53,6 +53,12 @@
           "description": "The hostname tenant subdomains hang off, e.g. example.com or nocturne.example.com. At least two labels; not an IP address."
         },
         {
+          "name": "TRUSTED_PROXIES",
+          "label": "Trusted proxy ranges",
+          "default": "127.0.0.1/32",
+          "description": "Space-separated CIDRs of a CDN in front of this deployment, e.g. Cloudflare\u0027s published ranges. Decides whose CF-Connecting-IP header is believed; leave as-is unless a CDN is present, and never set it empty."
+        },
+        {
           "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
           "label": "OpenTelemetry OTLP endpoint",
           "description": "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry."
