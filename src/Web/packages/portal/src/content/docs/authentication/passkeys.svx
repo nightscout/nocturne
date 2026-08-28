@@ -1,0 +1,96 @@
+---
+title: Passkeys, recovery codes and the authenticator app
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Passkeys, recovery codes and the authenticator app
+
+Nocturne has no passwords. This page walks through what signing in actually looks like, and
+the two fallbacks that keep an account reachable when the usual device isn't to hand.
+
+## Signing in with a passkey
+
+A **passkey** is a credential kept on your phone, laptop, tablet or hardware security key
+and unlocked the way you already unlock that device — a fingerprint, a face scan, or its
+PIN. Nothing secret is typed in, and nothing secret is stored on the site, so there is no
+password to be guessed, reused or leaked.
+
+There are two ways in, both on the sign-in page:
+
+- **Sign in with passkey** — the main button. Your device offers the passkeys it holds for
+  this site and you pick one. You don't need to type a username.
+- **Sign in with username** — you type your username first, then unlock the passkey
+  registered to that account. Use this when the first button doesn't offer the account you
+  wanted, which usually means the passkey lives on a different device.
+
+<Callout type="info" title="Browser support">
+  Passkeys need a browser that supports them. On a browser that doesn't, the sign-in screen
+  says so and points you at a recovery code or a different browser instead, so an account is
+  never stranded.
+</Callout>
+
+## The authenticator app step
+
+An **authenticator app** — Aegis, 1Password, Google Authenticator and others — shows a
+six-digit code that changes every thirty seconds. The technical name for this is **TOTP**,
+short for time-based one-time password.
+
+It is optional, and it is a **second step rather than a way in on its own**. Once you have
+enrolled an authenticator app, signing in with your passkey is followed by a prompt for the
+current six-digit code. Both have to succeed.
+
+<Callout type="info" title="It applies to passkey sign-ins">
+  The authenticator step follows a passkey. If you sign in through a social login provider
+  instead, that provider handles any extra steps of its own, and Nocturne does not ask again.
+</Callout>
+
+### Setting one up
+
+Go to **Settings > Account** and choose the authenticator app option. Nocturne shows a QR
+code; scan it with your authenticator app, then type the six-digit code the app produces to
+confirm the two are in step:
+
+<Screenshot id="totp-setup" />
+
+Scan the code with the app before leaving the page — it isn't shown again afterwards.
+
+### Signing in afterwards
+
+From then on, sign in as usual with your passkey and a second screen asks for the current
+code from your app. Open the app, read the six digits, type them in.
+
+<Screenshot id="totp-challenge" />
+
+<Callout type="warning" title="Keep a way back in">
+  If you enrol an authenticator app, make sure you still have your recovery codes. Losing
+  the phone that holds both your passkey and your authenticator app, with no recovery code
+  saved, means losing the account.
+</Callout>
+
+## Recovery codes
+
+**Recovery codes** are a short list of one-time codes issued when your account is set up.
+Each one works once and then is spent. They exist for the day the usual device isn't
+available — lost, broken, or simply left at home.
+
+To use one, follow the **sign in with a recovery code** link on the sign-in page and enter
+a code you haven't used yet.
+
+Store them somewhere you can reach without the device you normally sign in with: a password
+manager on another device, or printed and kept somewhere safe. A copy saved only on the
+phone that holds your passkey is no help when that phone is the thing you've lost.
+
+## If you're locked out
+
+Work through, in order:
+
+1. **Another device.** A passkey saved in a password manager or synced through your phone
+   or laptop account is often already on your other devices.
+2. **A recovery code.** Any unused code gets you in, and once in you can register a fresh
+   passkey on the device you're holding.
+3. **The site owner.** On a site someone else runs, the owner can remove and re-invite your
+   member account. See [Member accounts and invites](/docs/sharing/members).

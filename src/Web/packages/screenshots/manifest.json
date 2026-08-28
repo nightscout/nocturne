@@ -14,6 +14,51 @@
 			}
 		}
 	},
+	"clock-builder": {
+		"alt": "The clock face editor. The face fills the canvas showing the reading it will display, with a plus button above and below it for adding another row of information, and a toolbar across the top to undo, save and preview.",
+		"variants": {
+			"light": {
+				"file": "images/clock-builder.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/clock-builder.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"clock-example": {
+		"alt": "A clock face filling the screen, as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading, and the change since the reading before it underneath.",
+		"variants": {
+			"light": {
+				"file": "images/clock-example.light.webp",
+				"width": 780,
+				"height": 1688
+			},
+			"dark": {
+				"file": "images/clock-example.dark.webp",
+				"width": 780,
+				"height": 1688
+			}
+		}
+	},
+	"clock-list": {
+		"alt": "The Clock page, listing the clock faces saved on this site. One called Bedside Clock is shown as a card with the date it was last changed and buttons to edit it or open it full screen, next to a button for adding another.",
+		"variants": {
+			"light": {
+				"file": "images/clock-list.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/clock-list.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
 	"connect-data-source": {
 		"alt": "The Connect a Data Source step of setup. Each service Nocturne can collect readings from, and each phone app that can send readings to it, is listed as a tile you pick from.",
 		"variants": {
@@ -103,6 +148,21 @@
 			}
 		}
 	},
+	"guest-code-entry": {
+		"alt": "The guest code page. Someone you have sent a code to types it into a single box and presses Access Data; the page explains the code works once and keeps that device signed in for 48 hours.",
+		"variants": {
+			"light": {
+				"file": "images/guest-code-entry.light.webp",
+				"width": 896,
+				"height": 680
+			},
+			"dark": {
+				"file": "images/guest-code-entry.dark.webp",
+				"width": 896,
+				"height": 680
+			}
+		}
+	},
 	"report-agp": {
 		"alt": "The Ambulatory Glucose Profile report. It stacks every day of the chosen date range onto one 24-hour graph, drawing a middle line with shaded bands around it, and lists the share of time spent in each glucose range beside it.",
 		"variants": {
@@ -115,6 +175,21 @@
 				"file": "images/report-agp.dark.webp",
 				"width": 2880,
 				"height": 1800
+			}
+		}
+	},
+	"request-membership-dialog": {
+		"alt": "The Request Membership box. You write a short note introducing yourself to the site owner, up to 500 characters, then press Continue to Sign Up.",
+		"variants": {
+			"light": {
+				"file": "images/request-membership-dialog.light.webp",
+				"width": 1024,
+				"height": 584
+			},
+			"dark": {
+				"file": "images/request-membership-dialog.dark.webp",
+				"width": 1024,
+				"height": 584
 			}
 		}
 	},
@@ -133,6 +208,80 @@
 			}
 		}
 	},
+	"share-anonymous-view": {
+		"alt": "What someone who opens your public link sees without signing in: the same home screen with the latest reading, the graph and the summary panels, and a Sign in button where your own account menu would be.",
+		"variants": {
+			"light": {
+				"file": "images/share-anonymous-view.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/share-anonymous-view.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"sharing-guest-links": {
+		"alt": "The Temporary Guest Links section, with one link made for a school nurse. It is marked Pending because nobody has used the code yet, and shows when it was created, when it expires, and a button to cancel it.",
+		"variants": {
+			"light": {
+				"file": "images/sharing-guest-links.light.webp",
+				"width": 1744,
+				"height": 364
+			},
+			"dark": {
+				"file": "images/sharing-guest-links.dark.webp",
+				"width": 1744,
+				"height": 364
+			}
+		}
+	},
+	"sharing-invite-card": {
+		"alt": "The Create Invite Link card. You can name the invite, tick the roles the person should have, choose how long the link stays usable, and limit them to the last 24 hours of data before pressing Create Link.",
+		"variants": {
+			"light": {
+				"file": "images/sharing-invite-card.light.webp",
+				"width": 1744,
+				"height": 1308
+			},
+			"dark": {
+				"file": "images/sharing-invite-card.dark.webp",
+				"width": 1744,
+				"height": 1308
+			}
+		}
+	},
+	"sharing-public-link": {
+		"alt": "The Public access card, switched on. It shows the read-only link, a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.",
+		"variants": {
+			"light": {
+				"file": "images/sharing-public-link.light.webp",
+				"width": 1744,
+				"height": 1616
+			},
+			"dark": {
+				"file": "images/sharing-public-link.dark.webp",
+				"width": 1744,
+				"height": 1616
+			}
+		},
+		"anchors": {
+			"enable": {
+				"x": 1630,
+				"y": 98,
+				"width": 64,
+				"height": 37
+			},
+			"time-window": {
+				"x": 1311,
+				"y": 1248,
+				"width": 383,
+				"height": 72
+			}
+		}
+	},
 	"sharing-settings": {
 		"alt": "The Sharing and Privacy settings page, where you choose whether anyone with the link can view your data, and see the list of people you have invited along with what each of them is allowed to do.",
 		"variants": {
@@ -145,6 +294,65 @@
 				"file": "images/sharing-settings.dark.webp",
 				"width": 2880,
 				"height": 1800
+			}
+		}
+	},
+	"sign-in": {
+		"alt": "The Nocturne sign-in card. Sign in with passkey is the main button, with a username option and a recovery code link under it, and a Request membership link at the bottom for someone who has not been given access yet.",
+		"variants": {
+			"light": {
+				"file": "images/sign-in.light.webp",
+				"width": 896,
+				"height": 892
+			},
+			"dark": {
+				"file": "images/sign-in.dark.webp",
+				"width": 896,
+				"height": 892
+			}
+		},
+		"anchors": {
+			"passkey": {
+				"x": 50,
+				"y": 362,
+				"width": 796,
+				"height": 96
+			},
+			"request-membership": {
+				"x": 288,
+				"y": 674,
+				"width": 319,
+				"height": 72
+			}
+		}
+	},
+	"totp-challenge": {
+		"alt": "The second step of signing in on an account that uses an authenticator app. Nocturne says the passkey was accepted and asks for the current six-digit code before it will finish signing you in.",
+		"variants": {
+			"light": {
+				"file": "images/totp-challenge.light.webp",
+				"width": 896,
+				"height": 1032
+			},
+			"dark": {
+				"file": "images/totp-challenge.dark.webp",
+				"width": 896,
+				"height": 1032
+			}
+		}
+	},
+	"totp-setup": {
+		"alt": "The Set up authenticator app box. It shows a QR code to scan with an authenticator app, the same secret written out for typing in by hand, a place to name the app, and six boxes for the code it gives back.",
+		"variants": {
+			"light": {
+				"file": "images/totp-setup.light.webp",
+				"width": 1024,
+				"height": 1312
+			},
+			"dark": {
+				"file": "images/totp-setup.dark.webp",
+				"width": 1024,
+				"height": 1312
 			}
 		}
 	}

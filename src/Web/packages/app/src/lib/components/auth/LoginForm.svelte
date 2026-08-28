@@ -297,6 +297,7 @@
         <form onsubmit={handleDiscoverableLogin}>
           <Button
             type="submit"
+            data-testid="passkey-sign-in"
             class="w-full h-12"
             size="lg"
             disabled={isLoading || isRedirecting || !passkeysSupported}

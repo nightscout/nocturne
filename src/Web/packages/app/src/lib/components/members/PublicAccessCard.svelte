@@ -153,7 +153,7 @@
 </script>
 
 {#if canManageSharing}
-  <Card.Root>
+  <Card.Root data-testid="public-access-card">
     <!-- Hero header: globe/lock + master toggle -->
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
@@ -175,6 +175,7 @@
         </p>
       </div>
       <Switch
+        data-testid="public-access-toggle"
         checked={enabled}
         disabled={busy}
         onCheckedChange={(v: boolean) => setEnabled(v)}
@@ -306,7 +307,7 @@
               Limit public viewers to recent data only. Older history stays private.
             </div>
           </div>
-          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1">
+          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1" data-testid="public-access-window">
             <button
               type="button"
               onclick={() => setWindow(true)}

@@ -70,6 +70,23 @@ not the app: a `vite dev` that has been up for hours, through several dependency
 starts accepting remote-function requests and never answering them. Stopping and starting
 `nocturne-web` clears it.
 
+## Arranging state, and who is looking
+
+An entry that needs something to exist before it can be photographed — a public share link, a guest
+link, a clock face — declares an `arrange`. It is handed the seeded tenant and a `fetch` that calls
+the real API as that tenant's owner, and it runs **once per entry**, not once per theme: the
+arrangement lives on the server, and both themes photograph the same one. Nothing may reach for a
+dev-only shortcut that production does not have; if the app cannot get into the state through its
+own API, the screenshot is describing something users cannot reach either.
+
+Whatever `arrange` returns fills `{key}` holes in `route`. A hole that nothing filled fails the run.
+A route that is *only* a hole may resolve to a full URL on another origin, which is how the public
+share view — served from `{token}.share.{base-domain}` — is reached.
+
+`session` decides who is looking. The default, `owner`, signs the browser in as the seeded tenant's
+owner. `anonymous` never visits the login link, so the capture shows what a stranger with a link
+sees. The two get separate browser contexts, so an anonymous entry cannot inherit a session.
+
 ## Ids and anchors
 
 An `id` is a permanent handle. Docs pages point at it, so adding is safe and renaming is not.

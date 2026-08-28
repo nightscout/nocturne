@@ -21,7 +21,7 @@
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">
-  <Card.Root class="w-full max-w-md">
+  <Card.Root class="w-full max-w-md" data-testid="guest-code-card">
     <Card.Header class="space-y-1 text-center">
       <div
         class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary"

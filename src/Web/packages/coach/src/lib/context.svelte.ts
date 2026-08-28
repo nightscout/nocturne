@@ -186,6 +186,11 @@ export class CoachMarkContext {
       this._activeSelection = null;
     }
 
+    // Recording progress is worth doing even with the marks switched off, but choosing the next
+    // one is not: the paths below assign _activeSelection directly, so the kill switch has to be
+    // honoured here as well as in scheduleSelection.
+    if (this._disabled) return;
+
     if (this._forcedSequence) {
       this.activateNextForcedStep();
     } else {

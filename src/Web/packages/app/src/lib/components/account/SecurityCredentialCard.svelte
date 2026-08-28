@@ -17,6 +17,8 @@
     description: string;
     icon: ComponentType;
     addLabel: string;
+    /** Stable handle for the add control, which the documentation screenshots drive. */
+    addTestId?: string;
     credentials: Credential[];
     isAdding: boolean;
     isRemoving: boolean;
@@ -32,6 +34,7 @@
     description,
     icon: Icon,
     addLabel,
+    addTestId,
     credentials,
     isAdding,
     removingId,
@@ -57,6 +60,7 @@
       <Button
         variant="outline"
         size="sm"
+        data-testid={addTestId}
         disabled={isAdding ||
           (maxCredentials ? credentials.length >= maxCredentials : false)}
         onclick={onAdd}

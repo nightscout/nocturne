@@ -27,6 +27,8 @@
             icon: Shield,
             items: [
                 { href: "/docs/authentication", label: "Overview" },
+                { href: "/docs/authentication/passkeys", label: "Passkeys & fallbacks" },
+                { href: "/docs/authentication/request-membership", label: "Request membership" },
                 { href: "/docs/authentication/google", label: "Sign in with Google" },
                 { href: "/docs/authentication/github", label: "Sign in with GitHub" },
                 { href: "/docs/authentication/oidc", label: "Generic OIDC" },
@@ -36,7 +38,11 @@
             title: "Sharing & Privacy",
             icon: Share2,
             items: [
-                { href: "/docs/sharing", label: "Sharing your data" },
+                { href: "/docs/sharing", label: "Overview" },
+                { href: "/docs/sharing/public-link", label: "Public share link" },
+                { href: "/docs/sharing/members", label: "Member accounts & invites" },
+                { href: "/docs/sharing/guest-links", label: "Temporary guest links" },
+                { href: "/docs/sharing/clock", label: "Clocks" },
             ],
         },
         {

@@ -160,6 +160,7 @@
   <!-- Not logged in - show login button -->
   <Button
     variant="ghost"
+    data-testid="sign-in-link"
     href="/auth/login"
     class="w-full justify-start gap-2 px-2 {collapsed
       ? 'justify-center'

@@ -259,7 +259,7 @@
 </script>
 
 {#if canCreateGuestLinks}
-  <div class="space-y-4">
+  <div class="space-y-4" data-testid="guest-links">
     <div class="flex items-center justify-between gap-4">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">
