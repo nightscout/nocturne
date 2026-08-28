@@ -52,7 +52,12 @@ function tagEnd(source: string, from: number): number {
  */
 function findProblems(page: string, where: string, manifest: Manifest): string[] {
 	const problems: string[] = [];
-	const source = page.replace(FENCED_CODE, '').replace(HTML_COMMENT, '').replace(INLINE_CODE, '');
+	let source = page;
+	let previous: string;
+	do {
+		previous = source;
+		source = source.replace(FENCED_CODE, '').replace(HTML_COMMENT, '').replace(INLINE_CODE, '');
+	} while (source !== previous);
 
 	for (let at = source.indexOf(OPENING_TAG); at !== -1; at = source.indexOf(OPENING_TAG, at + 1)) {
 		const after = source[at + OPENING_TAG.length];
