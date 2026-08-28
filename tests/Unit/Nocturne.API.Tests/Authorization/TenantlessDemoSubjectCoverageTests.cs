@@ -70,7 +70,6 @@ public class TenantlessDemoSubjectCoverageTests
             ["PlatformController.GetTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetOverview"] = "aggregates over the caller's own memberships, which for the demo subject is the demo tenant",
             ["MyTenantsController.GetMyTenants"] = "lists the caller's own memberships, which for the demo subject is the demo tenant",
-            ["MyPermissionsController.GetMyPermissions"] = "returns the caller's own global subject-role scopes; tenant-derived scopes are not applied off a tenant",
 
             ["PlatformController.GetTransitionStatus"] = "reports the deployment's multitenancy configuration, not subject state",
 
@@ -133,6 +132,7 @@ public class TenantlessDemoSubjectCoverageTests
     private static readonly IReadOnlyDictionary<string, string> FallbackPolicyExempt =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["MyPermissionsController.GetMyPermissions"] = "returns the caller's own resolved grant back to the caller; off a tenant that is their global subject-role scopes, which a demo subject has none of",
             ["OidcController.Logout"] = "revokes the refresh token the caller presented and clears the caller's own cookies; it reads the subject only to attribute the audit row, so a demo visitor signing themselves out reaches nothing another visitor holds",
         };
 

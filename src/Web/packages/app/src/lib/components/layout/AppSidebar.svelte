@@ -48,6 +48,7 @@
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
   import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+  import { readOnlyNav } from "$lib/navigation/read-only-navigation";
   import {
     activeTenants,
     resolveTenantSwitcher,
@@ -165,8 +166,7 @@
     children?: NavItem[];
   };
 
-  /** Read-only navigation items shown to guest sessions. */
-  const guestNavTitles = new Set(["Dashboard", "Calendar", "Time Spans", "Reports", "Clock"]);
+  const grantedScopes: string[] = $derived(page.data.effectivePermissions ?? []);
 
   const navigation: NavItem[] = $derived.by(() => {
     const items: NavItem[] = [
@@ -201,10 +201,12 @@
     },
     ];
 
-    // Guest sessions only see read-only navigation
-    if (isGuestSession) {
-      return items.filter((i) => guestNavTitles.has(i.title));
-    }
+    const readOnly = readOnlyNav(items, {
+      isGuestSession,
+      anonymous: !user,
+      grantedScopes,
+    });
+    if (readOnly) return readOnly;
 
     if (totalTenantCount > 1) {
       items.push({
