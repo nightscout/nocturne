@@ -25,30 +25,37 @@ interface Situation {
   /** Slugs the operator reserved for the dashboard (none by default). */
   dashboardSlugs?: string[];
   /** The /api/v4/status document. */
-  status: { status?: string; tenantSlug?: string | null };
+  status: { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean };
   /** The passkey auth-status answer; a number rejects with that HTTP status. */
   authStatus: { onboardingCompleted?: boolean } | number;
   signedIn?: boolean;
   pathname?: string;
   /** The caller's effective permissions, as /api/v4/me/permissions reports them. */
   permissions?: string[];
+  /** The cookies the browser presents on this host. */
+  cookies?: Record<string, string>;
 }
 
 function runLoad(situation: Situation) {
   const { kind } = classifyHost(situation.host, BASE, situation.dashboardSlugs ?? []);
   const tenantless = isTenantlessHost(kind, situation.apexResolvesTenant ?? false);
+  const shareHost = kind === "share";
 
+  const jar = new Map(Object.entries(situation.cookies ?? {}));
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- a stub of the three Cookies methods this load touches; implementing the full interface would say nothing
   const cookies = {
-    get: () => undefined,
+    get: (name: string) => jar.get(name),
     set: () => {},
     delete: () => {},
   } as unknown as Cookies;
 
-  const signedIn = situation.signedIn ?? true;
+  // A share host is never authenticated whatever the browser presents: the auth handler leaves
+  // its cookies unread (hooks.server.ts, authHandle), so the owner of the data behind the link
+  // arrives on it as anonymously as a stranger does.
+  const signedIn = !shareHost && (situation.signedIn ?? true);
   const locals = {
     isGuestSession: false,
-    isShareHost: false,
+    isShareHost: shareHost,
     isAuthenticated: signedIn,
     user: signedIn ? { subjectId: "s1", name: "Sam" } : null,
     effectivePermissions: situation.permissions ?? ["*"],
@@ -75,9 +82,14 @@ function runLoad(situation: Situation) {
 }
 
 /** The page data the load returned, for situations that render rather than redirect. */
-async function loadedData(situation: Situation): Promise<{ canViewRealtimeData: boolean }> {
+async function loadedData(
+  situation: Situation
+): Promise<{ canViewRealtimeData: boolean; user: { name: string } | null }> {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load's declared return includes void, for the paths that throw a redirect; these situations render
-  return (await runLoad(situation)) as { canViewRealtimeData: boolean };
+  return (await runLoad(situation)) as {
+    canViewRealtimeData: boolean;
+    user: { name: string } | null;
+  };
 }
 
 /** The Location of the redirect the load threw, or null if it returned page data. */
@@ -189,6 +201,84 @@ describe("(authenticated) layout load — where each host situation lands", () =
         ...populatedTenantless,
       })
     ).resolves.toBe("/auth/login?returnUrl=%2Fsettings%2Faccount");
+  });
+});
+
+describe("(authenticated) layout load — the public share host", () => {
+  const SHARE = `k7m2q9x4r3wt.share.${BASE}`;
+
+  /** The tenant behind a live share link: set up, resolved, and granting anonymous read. */
+  const sharedTenant = {
+    status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+    authStatus: { onboardingCompleted: true },
+  } as const;
+
+  /** What the owner's browser carries on every host under the base domain after signing in. */
+  const ownerSession = {
+    IsAuthenticated: "true",
+    nocturne_access_token: "owner-access",
+    nocturne_refresh_token: "owner-refresh",
+  };
+
+  it("renders the shared view for a browser carrying the owner's session", async () => {
+    await expect(
+      redirectLocation({ host: SHARE, cookies: ownerSession, ...sharedTenant })
+    ).resolves.toBeNull();
+  });
+
+  it("gives the owner's browser the same anonymous view a stranger's gets", async () => {
+    const stranger = await loadedData({ host: SHARE, ...sharedTenant });
+    const owner = await loadedData({ host: SHARE, cookies: ownerSession, ...sharedTenant });
+
+    expect(owner).toEqual(stranger);
+    expect(owner.user).toBeNull();
+    expect(owner.canViewRealtimeData).toBe(true);
+  });
+
+  it("renders the shared view when the instance reports onboarding incomplete", async () => {
+    // /setup is a sign-in destination for anyone without a session, so a share host sent there
+    // lands on /auth/login by a longer road.
+    await expect(
+      redirectLocation({
+        host: SHARE,
+        cookies: ownerSession,
+        status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+        authStatus: { onboardingCompleted: false },
+      })
+    ).resolves.toBeNull();
+  });
+
+  it("renders the shared view when the status document says setup_required", async () => {
+    await expect(
+      redirectLocation({
+        host: SHARE,
+        status: { status: "setup_required", tenantSlug: "acme", anonymousReadAccess: true },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBeNull();
+  });
+
+  it("still sends a share host of a tenant that grants no anonymous read to login", async () => {
+    await expect(
+      redirectLocation({
+        host: SHARE,
+        cookies: ownerSession,
+        status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: false },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe("/auth/login?returnUrl=%2F");
+  });
+
+  it("keeps the bare tenant host login-only even when the tenant shares publicly", async () => {
+    await expect(
+      redirectLocation({ host: `acme.${BASE}`, signedIn: false, ...sharedTenant })
+    ).resolves.toBe("/auth/login?returnUrl=%2F");
+  });
+
+  it("renders the tenant app for the owner on the bare tenant host", async () => {
+    await expect(
+      redirectLocation({ host: `acme.${BASE}`, cookies: ownerSession, ...sharedTenant })
+    ).resolves.toBeNull();
   });
 });
 

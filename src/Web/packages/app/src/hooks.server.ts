@@ -21,7 +21,7 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
 import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
-import { STATIC_ASSET_PREFIXES, isPublicRoute } from "$lib/server/public-routes";
+import { STATIC_ASSET_PREFIXES, requiresSignIn } from "$lib/server/public-routes";
 import {
   installRequestScopedBitsIdCounter,
   withFreshBitsIdCounter,
@@ -224,8 +224,14 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
       event.locals.siteSecurityChecked = true;
     }
 
-    // Only enforce requireAuthentication on non-public routes
-    if (!isPublicRoute(pathname) && event.locals.requireAuthentication && !event.locals.isAuthenticated) {
+    if (
+      requiresSignIn({
+        pathname,
+        requireAuthentication: event.locals.requireAuthentication ?? false,
+        isAuthenticated: event.locals.isAuthenticated,
+        isShareHost: event.locals.isShareHost,
+      })
+    ) {
       const returnUrl = encodeURIComponent(pathname + event.url.search);
       return new Response(null, {
         status: 303,
