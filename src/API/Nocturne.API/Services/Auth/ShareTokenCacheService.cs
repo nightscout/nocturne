@@ -20,7 +20,7 @@ namespace Nocturne.API.Services.Auth;
 /// The token is only ever stored and cached as its SHA-256 digest, so neither the database nor the
 /// cache holds a value that can be replayed as a share link.
 /// </remarks>
-public sealed class ShareTokenCacheService
+public sealed class ShareTokenCacheService : IShareTokenResolver
 {
     private readonly IMemoryCache _cache;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;

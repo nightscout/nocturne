@@ -321,6 +321,10 @@ configs:
       #                       request via HTTP-01. The on_demand "ask" endpoint lets
       #                       the API confirm a hostname is a real tenant before Caddy
       #                       requests a certificate, so only valid subdomains issue.
+      #   - *.share.{$$BASE_DOMAIN}
+      #                       public share links, one label deeper. A Caddy site-address
+      #                       wildcard matches exactly one label, so this needs naming
+      #                       separately or share links never get a certificate.
       #
       # To front Nocturne with your own reverse proxy instead, disable this service
       # (see docker-compose.byo-proxy.yaml) and the gateway is exposed on plain HTTP.
@@ -335,6 +339,13 @@ configs:
       }
 
       *.{$$BASE_DOMAIN} {
+      	tls {
+      		on_demand
+      	}
+      	reverse_proxy gateway:5000
+      }
+
+      *.share.{$$BASE_DOMAIN} {
       	tls {
       		on_demand
       	}

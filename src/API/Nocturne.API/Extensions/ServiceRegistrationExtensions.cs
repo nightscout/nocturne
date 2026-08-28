@@ -295,6 +295,8 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<GuestSessionCacheService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
+        // Same instance behind the seam, so the cache is shared rather than duplicated.
+        services.AddSingleton<IShareTokenResolver>(sp => sp.GetRequiredService<ShareTokenCacheService>());
         services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
         services.AddScoped<IShareLinkService, ShareLinkService>();
         // Singleton because its consumer runs at startup outside any request scope; it creates its
