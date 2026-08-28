@@ -116,6 +116,21 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveWithoutRecordingAccessAsync_resolves_but_does_not_stamp()
+    {
+        // The TLS authorization endpoint asks whether to mint a certificate for a share host.
+        // That is not somebody opening the link, and the value is shown to the tenant owner as
+        // "Last viewed", so a probe must not move it.
+        var tenant = await Service().ResolveWithoutRecordingAccessAsync(Token, CancellationToken.None);
+
+        tenant.Should().NotBeNull();
+
+        using var db = _factory.CreateDbContext();
+        db.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt.Should().BeNull(
+            "asking whether to issue a certificate is not a view of the share");
+    }
+
+    [Fact]
     public async Task EvictByHash_makes_a_rotated_token_stop_resolving()
     {
         var service = Service();

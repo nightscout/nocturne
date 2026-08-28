@@ -79,10 +79,11 @@ public class TlsAuthorizationController : ControllerBase
         // Resolving the token rather than accepting any well-formed share host is what stops a
         // stranger with DNS pointed here from driving issuance for names of their choosing; a
         // caller must already hold the token to get a 200, and the token is the secret the link
-        // hands out anyway.
+        // hands out anyway. Resolved without recording an access: asking whether to mint a
+        // certificate is not someone opening the link.
         if (SubdomainParser.TryExtractShareToken(slug, out var shareToken))
         {
-            var shareTenant = await _shareTokens.ResolveByTokenAsync(shareToken);
+            var shareTenant = await _shareTokens.ResolveWithoutRecordingAccessAsync(shareToken, ct);
             return shareTenant is { IsActive: true } ? Ok() : NotFound();
         }
 

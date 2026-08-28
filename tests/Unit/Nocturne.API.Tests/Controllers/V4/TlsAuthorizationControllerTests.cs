@@ -33,8 +33,8 @@ public sealed class TlsAuthorizationControllerTests
 
         var shareTokens = new Mock<IShareTokenResolver>();
         shareTokens
-            .Setup(s => s.ResolveByTokenAsync(It.IsAny<string>()))
-            .ReturnsAsync((string token) =>
+            .Setup(s => s.ResolveWithoutRecordingAccessAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string token, CancellationToken _) =>
             {
                 if (shares is not null && shares.TryGetValue(token, out var tenant))
                     return tenant;
@@ -144,13 +144,16 @@ public sealed class TlsAuthorizationControllerTests
     [Fact]
     public async Task Does_not_treat_the_bare_share_label_as_a_share_host()
     {
-        // "share.nocturne.run" carries no token; it is an ordinary subdomain and only
-        // authorizes if a tenant is actually called "share".
-        var controller = Build(Tenant("share", isActive: true));
+        // "share.nocturne.run" carries no token, so it takes the tenant branch rather than the
+        // share one. It can never authorize: "share" is in TenantService.ReservedSlugs, so no
+        // tenant holds that slug and nothing matches.
+        var controller = Build(
+            shares: new Dictionary<string, TenantContext> { ["tok3n"] = ShareTenant(isActive: true) },
+            Tenant("acme", isActive: true));
 
         var result = await controller.Authorize("share.nocturne.run", default);
 
-        result.Should().BeOfType<OkResult>();
+        result.Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
