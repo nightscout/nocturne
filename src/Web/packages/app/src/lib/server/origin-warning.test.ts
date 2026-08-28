@@ -72,6 +72,20 @@ describe("warnOnOriginMismatch", () => {
     expect(report("https://nocturne.example.com", proxied, 401)).toEqual([]);
   });
 
+  it("treats a default port as the same origin", () => {
+    // SvelteKit compares URL.origin, which drops :443 on https. Comparing raw
+    // strings here would blame the proxy for a deployment that is correct.
+    expect(
+      report("https://nocturne.example.com", { proto: "https", host: "nocturne.example.com:443" }, 403)
+    ).toEqual([]);
+  });
+
+  it("still reports when only the scheme differs", () => {
+    expect(
+      report("https://nocturne.example.com", { proto: "http", host: "nocturne.example.com" }, 403)
+    ).toHaveLength(1);
+  });
+
   it("ignores requests that carry no Origin at all", () => {
     expect(report(undefined, proxied, 403)).toEqual([]);
   });

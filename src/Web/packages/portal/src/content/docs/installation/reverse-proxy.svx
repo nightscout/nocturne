@@ -51,13 +51,15 @@ terminate all three.
   `tenant.nocturne.example.com`. An IP address is what to avoid: WebAuthn refuses
   an IP as a relying-party ID, so passkey login stops working, and tenant
   subdomains have nowhere to live.
-- DNS needs an **A** record for the apex, a wildcard **A** record for
-  `*.example.com`, and a second wildcard for `*.share.example.com`. A DNS
-  wildcard matches exactly one label, so the first does not cover share hosts.
-- The certificate has to name every host it serves. Two wildcard SANs --
-  `*.example.com` and `*.share.example.com` -- cover all of them, and wildcards
-  require a **DNS-01** challenge, because HTTP-01 and TLS-ALPN-01 cannot issue
-  them.
+- DNS needs an **A** record for the apex and a wildcard **A** record for
+  `*.example.com`. A DNS wildcard answers at any depth, so that one record
+  already covers `{token}.share.example.com` -- unless you have also created a
+  real `share.example.com` record, which stops the wildcard applying below it.
+- The certificate is the part that does *not* stretch. An X.509 wildcard matches
+  exactly one label, so `*.example.com` covers tenants and nothing deeper: you
+  need **both** `*.example.com` and `*.share.example.com` as SANs, or share links
+  fail the handshake while tenants work. Wildcards require a **DNS-01**
+  challenge, because HTTP-01 and TLS-ALPN-01 cannot issue them.
 
 <Callout type="tip" title="Wildcards are not the only option">
   A proxy that mints certificates per hostname on first request needs no wildcard
@@ -107,10 +109,13 @@ server {
 
 server {
     listen 443 ssl;
+    # nginx 1.25.1 and newer. On older builds -- Ubuntu 22.04, Debian 12 and
+    # Ubuntu 24.04 all ship one -- this directive does not exist and nginx
+    # refuses to start; use `listen 443 ssl http2;` above instead and drop it.
     http2 on;
     server_name example.com *.example.com;
 
-    # Wildcard certificate, issued via DNS-01.
+    # Wildcard certificates, issued via DNS-01.
     ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
 
@@ -146,9 +151,9 @@ server {
 }
 ```
 
-nginx's `*.example.com` matches at any depth, unlike DNS and TLS wildcards, so
-the `server_name` above already covers share hosts. The DNS record and the
-certificate still need their own `*.share.example.com` entries.
+nginx's `*.example.com` matches at any depth, so the `server_name` above already
+covers share hosts, as does the DNS wildcard. The certificate is the one that
+does not stretch -- it still needs `*.share.example.com` as a second SAN.
 
 If nginx listens on a non-standard port, use `$http_host` in place of `$host` for
 both host headers so the port survives.
@@ -161,7 +166,7 @@ a plain router works. Labels on the `gateway` service:
 ```yaml
 labels:
   traefik.enable: "true"
-  traefik.http.routers.nocturne.rule: "Host(`example.com`) || HostRegexp(`{sub:.+}.example.com`)"
+  traefik.http.routers.nocturne.rule: "Host(`example.com`) || HostRegexp(`^.+[.]example[.]com$`)"
   traefik.http.routers.nocturne.entrypoints: "websecure"
   traefik.http.routers.nocturne.tls.certresolver: "dns"
   traefik.http.routers.nocturne.tls.domains[0].main: "example.com"
@@ -169,9 +174,26 @@ labels:
   traefik.http.services.nocturne.loadbalancer.server.port: "5000"
 ```
 
-`{sub:.+}` matches dots, so the router rule covers share hosts as it stands; the
-certificate is what needs the second SAN. The resolver must be configured for
-DNS-01, or neither wildcard will issue.
+The dots use the character class `[.]`, which matches a literal dot without
+needing a backslash escape.
+
+`HostRegexp` takes a standard Go regular expression on Traefik v3. Traefik v2's
+named-group form is not an *error* on v3 -- the router loads and reports no
+error, it just silently matches nothing, so every tenant subdomain 404s while the
+apex keeps working:
+
+```yaml
+# Traefik v2 syntax. On v3 this matches the apex and nothing else.
+traefik.http.routers.nocturne.rule: "Host(`example.com`) || HostRegexp(`{sub:.+}.example.com`)"
+```
+
+Use that older form only on Traefik v2. If you are on v3 and want to keep it, add
+`traefik.http.routers.nocturne.rulesyntax: "v2"` so v3 parses the rule the old
+way.
+
+The v3 pattern matches at any depth, so it covers share hosts; the certificate is
+what needs the second SAN. The resolver must be configured for DNS-01, or neither
+wildcard will issue.
 
 Traefik reads these labels over the Docker socket but connects to the container
 itself, so it has to be attached to the bundle's `aspire` network to reach the
@@ -182,8 +204,8 @@ loopback, is the safest version of the warning below.
 ## Caddy
 
 If you run your own Caddy rather than the bundled one, it sets the headers for
-you. A Caddy site-address wildcard matches one label, the same as DNS, so the
-share hosts have to be named separately:
+you. A Caddy site-address wildcard matches one label, like an X.509 wildcard and
+unlike DNS, so the share hosts have to be named separately:
 
 ```caddyfile
 example.com, *.example.com, *.share.example.com {
@@ -217,7 +239,7 @@ example.com {
     reverse_proxy gateway:5000
 }
 
-*.example.com, *.share.example.com {
+*.example.com {
     tls {
         on_demand
     }
@@ -228,6 +250,14 @@ example.com {
 Do not point `ask` at a host that is reachable from the internet, and do not drop
 it: without it, anyone who points DNS at your server can drive certificate
 issuance for arbitrary names.
+
+<Callout type="warning" title="On-demand does not cover share links yet">
+  The <code>ask</code> endpoint authorizes the apex and active tenant subdomains
+  only; it answers 404 for a <code>&#123;token&#125;.share.example.com</code> host, so Caddy
+  declines to issue and the share link fails the handshake. Until that is fixed,
+  a deployment that hands out share links needs the wildcard route above, with
+  <code>*.share.example.com</code> among its SANs.
+</Callout>
 
 ## Client addresses and the exposed port
 
@@ -259,12 +289,12 @@ left unread. Declare all of them, or none.
 
 | Symptom | Cause |
 |---------|-------|
-| Login or any form POST returns **403** with `Cross-site POST form submissions are forbidden` | `X-Forwarded-Proto` and `X-Forwarded-Host` are missing or wrong, so the reconstructed origin does not match the browser's. |
+| Login, or anything that writes, returns **403** with `Cross-site remote requests are forbidden` | `X-Forwarded-Proto` and `X-Forwarded-Host` are missing or wrong, so the reconstructed origin does not match the browser's. A client posting a form content type sees `Cross-site POST form submissions are forbidden` instead; same cause. |
 | The page shows **HTTPS Required** | You reached the site over plain HTTP on something other than `localhost`. Passkey registration needs a secure context, so finish the TLS setup before running first-run setup. |
 | **SSL error** connecting to port 8080 | Something is speaking TLS to the gateway. It serves plain HTTP only. |
 | **502 Bad Gateway** | Check your proxy's error log; it names the cause. See below. |
 | Tenant subdomains 404 or fail TLS while the apex works | No wildcard DNS record, or a certificate that does not cover `*.example.com`. |
-| Tenant subdomains work but **share links** fail TLS | A DNS wildcard and a certificate wildcard each match one label. `{token}.share.example.com` needs its own `*.share.example.com` record and SAN. |
+| Tenant subdomains work but **share links** fail TLS | The certificate covers `*.example.com` only, which matches one label. Add `*.share.example.com` as a second SAN. The DNS wildcard already answers at that depth. |
 
 For a 502, nginx's `/var/log/nginx/error.log` is decisive:
 

@@ -4,6 +4,26 @@
 // sees a login page that loads and a login that fails. Name the two origins that
 // failed to match, once the handler has actually answered 403 so that an
 // authorization 403 from the proxied API (whose origin matches) stays quiet.
+//
+// This cannot be exact: CORS admits browser requests from any subdomain of the base
+// domain, so a genuine cross-subdomain call that is refused on authorization also
+// pairs a mismatch with a 403 and will be reported. The budget below bounds that to
+// noise rather than a flood.
+
+/**
+ * Compares the way SvelteKit does, on `URL.origin`, so a default port or a difference
+ * in host case is not mistaken for a proxy that is dropping headers. Falls back to the
+ * raw value for input that will not parse — both sides come off the wire.
+ *
+ * @param {string} value
+ */
+function normaliseOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value;
+  }
+}
 
 /** Distinct origin pairings reported per window, so a scanner cannot flood the log. */
 const REPORT_LIMIT = 32;
@@ -42,7 +62,7 @@ export function warnOnOriginMismatch(req, res, deps = {}) {
   if (!browserOrigin) return;
 
   const computedOrigin = `${req.headers['x-forwarded-proto']}://${req.headers['x-forwarded-host']}`;
-  if (browserOrigin === computedOrigin) return;
+  if (normaliseOrigin(browserOrigin) === normaliseOrigin(computedOrigin)) return;
 
   res.on('finish', () => {
     if (res.statusCode !== 403) return;
