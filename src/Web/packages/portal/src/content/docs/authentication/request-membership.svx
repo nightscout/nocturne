@@ -9,11 +9,11 @@ title: Request membership
 
 # Request membership
 
-Most access to a Nocturne site starts with an invite: the owner sends a link and the person
-accepts it. **Membership requests** turn that around. Someone who lands on the site can ask
+Most access to a Nocturne instance starts with an invite: the owner sends a link and the person
+accepts it. **Membership requests** turn that around. Someone who lands on the instance can ask
 the owner for access, and the owner decides. Asking grants nothing on its own.
 
-It is **on by default**, and each site owner can switch it off.
+It is **on by default**, and each instance owner can switch it off.
 
 ## What the visitor sees
 
@@ -37,18 +37,9 @@ when they decide, so a blank one is simply harder to say yes to.
 
 ## What the owner sees
 
-The toggle and the requests themselves both live on **Settings > Sharing & Privacy**.
-
-- **The toggle.** While it's on, your sign-in page carries the *Request membership* link.
-  Switch it off and no one new can ask; anyone you have already approved is unaffected.
-- **The review.** Requests are listed on that same page — there is no separate queue to go
-  looking for. Each shows who asked, the note they wrote, and when. Approving means picking
-  a **role** (and any limits, such as _Only last 24 hours_), which adds them as a member on
-  the spot. Denying closes the request.
-
-The roles are the same ones an invite uses, so see
-[Member accounts and invites](/docs/sharing/members) for what each role can see and do, and
-pick the narrowest one that covers what the person actually needs.
+The toggle and the requests themselves both live on **Settings > Sharing & Privacy** — see
+[reviewing requests](/docs/sharing/members#membership-requests) for the owner's side of this,
+including what each role lets the person see and do.
 
 <Callout type="tip" title="Approve deliberately">
   A request tells you what someone says about themselves, and nothing more. If a request is

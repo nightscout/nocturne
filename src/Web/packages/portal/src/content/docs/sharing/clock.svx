@@ -19,9 +19,10 @@ laid out differently for a different screen:
 
 <Screenshot id="clock-list" />
 
-Open one and it fills the screen:
+Open one and it takes over the whole screen: a bright readout in the middle of an
+otherwise blank display. Close up, on a phone:
 
-<Screenshot id="clock-example" />
+<Screenshot id="clock-example" class="mx-auto max-w-xs" />
 
 ## Building one
 
@@ -35,7 +36,8 @@ Keep in mind who can see the screen the clock will sit on. A clock shows whateve
 you put on it, so for a display in a shared room it's worth keeping to the current
 number and trend.
 
-When you're happy with it, use **Copy link** to get its address.
+When you're happy with it, use the **Copy link** button in the editor's toolbar to
+get its address.
 
 ## The link
 
@@ -44,28 +46,32 @@ device, and it keeps showing your latest reading. It works **whether or not** yo
 have turned on the [public share link](/docs/sharing/public-link) — a clock is its
 own, separate thing, and turning public access off does not switch a clock off.
 
-The address ends in a long random code, like
+The address ends in a long code, like
 `/clock/0c8f3a1e-9b7d-7e42-a1c5-2f6b9d4e8a30`. That code is the key: there's no
 list of clocks to browse and nothing to guess your way to, so the link works for
 whoever holds it.
 
 <details class="my-4 rounded-lg border border-border/60 p-4">
-  <summary class="cursor-pointer font-semibold">Why is a random link safe to share like this?</summary>
+  <summary class="cursor-pointer font-semibold">Why is a link like this safe to share?</summary>
   <div class="mt-3 space-y-2 text-sm">
     <p>
-      The code in a clock link is a <strong>UUID</strong> (a universally unique
-      identifier) — a value with 122 random bits. Two things make it hard to abuse:
+      The code is a <strong>UUID</strong> (a universally unique identifier), and it
+      is in two halves. The first records the moment the clock was made, so clocks
+      made at around the same time have codes that begin alike and sort in the order
+      they were created. The second half is 74 bits of randomness, and that half is
+      the whole of the security.
     </p>
     <ul class="list-disc space-y-1 pl-5">
       <li>
-        <strong>There's no directory.</strong> Clocks aren't listed anywhere and the
-        codes aren't sequential, so you can't browse them or step from one to the
-        next. A link only opens a clock if you already have its exact code.
+        <strong>There's no directory.</strong> Clocks aren't listed anywhere, so
+        nothing hands out codes and a link only opens a clock if you already have its
+        exact one.
       </li>
       <li>
-        <strong>The range of codes is astronomically large.</strong> There are
-        roughly 5 &times; 10<sup>36</sup> of them — a 5 followed by 36 digits.
-        Guessing a valid one at random is, for any practical purpose, impossible.
+        <strong>The random half is astronomically large.</strong> It has roughly
+        2 &times; 10<sup>22</sup> possible values — a 2 followed by 22 digits — so
+        even someone who knew to the second when you made a clock could not work
+        out the rest of its code.
       </li>
     </ul>
     <p>

@@ -56,6 +56,9 @@ const SETTLE_TIMEOUT_MS = 120_000;
 const PROBE_TIMEOUT_MS = 5_000;
 const POLL_MS = 250;
 const SCREENSHOT_TIMEOUT_MS = 30_000;
+// What a prepare's clicks and waits get. Deliberately not the settle budget: settle waits on data
+// arriving, whereas a control a prepare names either shows up promptly or is not there at all.
+const ACTION_TIMEOUT_MS = 30_000;
 const SELECTOR_TIMEOUT_MS = 10_000;
 const SETTLE_MS = 750;
 
@@ -231,7 +234,7 @@ async function openSession(
 	// An entry's prepare navigates and clicks on this context too, so the budgets live here rather
 	// than at each call site.
 	context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
-	context.setDefaultTimeout(SETTLE_TIMEOUT_MS);
+	context.setDefaultTimeout(ACTION_TIMEOUT_MS);
 
 	await context.addInitScript(
 		(entries: [string, string][]) => {
@@ -246,7 +249,9 @@ async function openSession(
 	// capture of a run. Fixing the clock leaves timers running, so the app still hydrates.
 	await context.clock.setFixedTime(runStart);
 
-	// Signing in once puts the session cookies on the context, where every later page inherits them.
+	// Signing in once puts the session cookies on the context, where every later page inherits
+	// them. `anonymous` and `isolated` both start signed out; they differ only in whether the
+	// context is shared with the entries around them.
 	if (session === 'owner') {
 		const page = await openPage(context);
 		await page.goto(tenant.loginLink, { waitUntil: 'domcontentloaded' });
@@ -450,6 +455,19 @@ async function shoot(
 	};
 }
 
+/**
+ * A Playwright locator error names the selector that timed out and nothing else, so on its own it
+ * says which control moved but not which screenshot was reaching for it.
+ */
+async function prepare(page: Page, definition: ScreenshotDefinition): Promise<void> {
+	try {
+		await definition.prepare!(page);
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error);
+		throw new Error(`${definition.id}: prepare failed: ${detail}`, { cause: error });
+	}
+}
+
 async function encode(png: Buffer, file: string): Promise<ManifestVariant> {
 	const { data, info } = await sharp(png)
 		.webp({ quality: WEBP_QUALITY })
@@ -473,7 +491,7 @@ async function captureTheme(
 	await page.goto(target, { waitUntil: 'domcontentloaded' });
 	await settle(page, definition, theme);
 	if (definition.prepare) {
-		await definition.prepare(page);
+		await prepare(page, definition);
 		await settle(page, definition, theme);
 	}
 
@@ -607,11 +625,16 @@ async function main(): Promise<void> {
 			const target = new URL(resolveRoute(definition, values), tenant.url).href;
 
 			const photograph = async (theme: Theme): Promise<Capture> => {
-				const page = await openPage(await sessionFor(theme));
+				const context =
+					session === 'isolated'
+						? await openSession(browser, tenant, session, theme, viewport, runStart)
+						: await sessionFor(theme);
+				const page = await openPage(context);
 				try {
 					return await captureTheme(page, definition, theme, target);
 				} finally {
 					await page.close();
+					if (session === 'isolated') await context.close();
 				}
 			};
 

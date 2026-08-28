@@ -30,22 +30,22 @@
 		}
 	},
 	"clock-example": {
-		"alt": "A clock face filling the screen, as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading, and the change since the reading before it underneath.",
+		"alt": "A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading — two of them when it is moving fast — and the change since the reading before it underneath.",
 		"variants": {
 			"light": {
 				"file": "images/clock-example.light.webp",
-				"width": 780,
-				"height": 1688
+				"width": 158,
+				"height": 146
 			},
 			"dark": {
 				"file": "images/clock-example.dark.webp",
-				"width": 780,
-				"height": 1688
+				"width": 158,
+				"height": 146
 			}
 		}
 	},
 	"clock-list": {
-		"alt": "The Clock page, listing the clock faces saved on this site. One called Bedside Clock is shown as a card with the date it was last changed and buttons to edit it or open it full screen, next to a button for adding another.",
+		"alt": "The Clock page, listing the clock faces saved on this instance. One called Bedside Clock is shown as a card: a small live copy of the face on top, then the date it was last changed and buttons to edit it or open it full screen. A New Clock button sits in the page header.",
 		"variants": {
 			"light": {
 				"file": "images/clock-list.light.webp",
@@ -224,7 +224,7 @@
 		}
 	},
 	"sharing-guest-links": {
-		"alt": "The Temporary Guest Links section, with one link made for a school nurse. It is marked Pending because nobody has used the code yet, and shows when it was created, when it expires, and a button to cancel it.",
+		"alt": "The Temporary Guest Links section, with one link made for a school nurse. It is marked Pending because nobody has used the code yet, and shows when it was created, when it expires, and a Revoke button.",
 		"variants": {
 			"light": {
 				"file": "images/sharing-guest-links.light.webp",
@@ -254,7 +254,7 @@
 		}
 	},
 	"sharing-public-link": {
-		"alt": "The Public access card, switched on. It shows the read-only link, a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.",
+		"alt": "The Public access card, switched on and holding a freshly minted link. The address is spelled out in full — the one time Nocturne shows it — with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.",
 		"variants": {
 			"light": {
 				"file": "images/sharing-public-link.light.webp",
@@ -283,7 +283,7 @@
 		}
 	},
 	"sharing-settings": {
-		"alt": "The Sharing and Privacy settings page, where you choose whether anyone with the link can view your data, and see the list of people you have invited along with what each of them is allowed to do.",
+		"alt": "The top of the Sharing and Privacy settings page. The Public access card fills the screen: a switch for whether anyone with the link can view your data, a tile for each kind of data, and a choice of how far back. Invites, guest links and your list of members follow further down the page.",
 		"variants": {
 			"light": {
 				"file": "images/sharing-settings.light.webp",

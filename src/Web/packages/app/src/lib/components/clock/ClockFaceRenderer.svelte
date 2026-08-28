@@ -437,6 +437,7 @@
 
   <!-- Rows -->
   <div
+    data-testid="clock-face-rows"
     class="relative z-10 flex flex-col items-center p-2"
     style="gap: {3 * scale}px;"
   >

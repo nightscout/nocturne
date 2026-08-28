@@ -18,6 +18,25 @@ async function openPublicShare({ fetch }: ArrangeContext): Promise<Record<string
 	return { shareUrl: rotated.url };
 }
 
+/**
+ * The card can show the link's address exactly once — at the moment the link is minted, since the
+ * server keeps only its digest — so a share arranged through the API alone is photographed with an
+ * empty link field. Regenerate mints one from the browser and is the card's own answer to "I no
+ * longer have the address", which makes it the one control that reaches this state whether or not
+ * public access was already on: the enable switch would only do it on a share that is currently
+ * off, and both themes photograph the same tenant.
+ */
+async function revealThePublicLink(page: Page): Promise<void> {
+	const regenerate = page.getByRole('button', { name: 'Regenerate' });
+	await regenerate.click();
+	await page.getByText('Regenerating invalidates the current link immediately.').waitFor();
+	// Confirming adds a second Regenerate after the first in the document.
+	await regenerate.last().click();
+	// Copy is offered only while the card is holding an address it can copy, so it is the receipt
+	// for a link that is actually in the frame.
+	await page.getByRole('button', { name: 'Copy', exact: true }).waitFor();
+}
+
 async function inviteAGuest({ fetch }: ArrangeContext): Promise<Record<string, string>> {
 	await fetch('/api/v4/guest-links', { method: 'POST', body: { label: 'School nurse' } });
 	return {};
@@ -37,7 +56,10 @@ function decodeBase32(secret: string): Buffer {
 	let bits = '';
 	for (const character of secret.toUpperCase()) {
 		const value = BASE32_ALPHABET.indexOf(character);
-		if (value >= 0) bits += value.toString(2).padStart(5, '0');
+		// Skipping the character instead would decode the enrolment secret to a different key and
+		// fail as a wrong six digits, which says nothing about where the corruption came from.
+		if (value < 0) throw new Error(`"${character}" is not a base32 character`);
+		bits += value.toString(2).padStart(5, '0');
 	}
 
 	const bytes: number[] = [];
@@ -49,7 +71,8 @@ function decodeBase32(secret: string): Buffer {
 
 /**
  * RFC 6238 over RFC 4226, standing in for the authenticator app the enrolment expects. Enrolment is
- * the only way to reach the sign-in step that asks for a code, and nothing dev-only shortcuts it.
+ * the only way to reach the sign-in step that asks for a code, and it runs through the same two
+ * endpoints a user's would.
  */
 function authenticatorCode(base32Secret: string): string {
 	const counter = Buffer.alloc(8);
@@ -98,10 +121,13 @@ async function signInToTheAuthenticatorStep(page: Page): Promise<void> {
 		},
 	});
 
+	// Standing up a signed-in browser is the one dev-only step here — the same one every owner
+	// session takes. What follows is the app's own: a real passkey registration, then a real
+	// assertion against it, which is what raises the challenge being photographed.
 	await page.goto(`${origin}/api/v4/dev-only/auth/login?redirect=%2Fsettings%2Faccount`, {
 		waitUntil: 'domcontentloaded',
 	});
-	await page.getByTestId('add-passkey').click();
+	await page.getByRole('button', { name: 'Add passkey' }).click();
 	const skipLabel = page.getByRole('button', { name: 'Skip' });
 	await skipLabel.click();
 	// The dialog closes only once the credential is stored, so this is the registration's receipt.
@@ -189,7 +215,7 @@ export const definitions: ScreenshotDefinition[] = [
 		id: 'sharing-settings',
 		route: '/settings/members',
 		scenario: 'patient',
-		alt: 'The Sharing and Privacy settings page, where you choose whether anyone with the link can view your data, and see the list of people you have invited along with what each of them is allowed to do.',
+		alt: 'The top of the Sharing and Privacy settings page. The Public access card fills the screen: a switch for whether anyone with the link can view your data, a tile for each kind of data, and a choice of how far back. Invites, guest links and your list of members follow further down the page.',
 	},
 	{
 		id: 'settings-overview',
@@ -197,13 +223,17 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		alt: 'The main Settings page, a grid of cards linking to each group of settings: your account, your data sources, sharing, alerts, appearance and more.',
 	},
+	// After share-anonymous-view, which opens the link this one replaces: minting a link revokes
+	// the tenant's previous one, so run the other way round the anonymous view has nothing to open.
 	{
 		id: 'sharing-public-link',
 		route: '/settings/members',
 		scenario: 'patient',
 		arrange: openPublicShare,
+		prepare: revealThePublicLink,
 		clip: '[data-testid="public-access-card"]',
-		alt: 'The Public access card, switched on. It shows the read-only link, a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
+		// The address is minted per run, so this one image differs every capture.
+		alt: 'The Public access card, switched on and holding a freshly minted link. The address is spelled out in full — the one time Nocturne shows it — with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.',
 		anchors: {
 			enable: '[data-testid="public-access-toggle"]',
 			'time-window': '[data-testid="public-access-window"]',
@@ -226,7 +256,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: inviteAGuest,
 		clip: '[data-testid="guest-links"]',
-		alt: 'The Temporary Guest Links section, with one link made for a school nurse. It is marked Pending because nobody has used the code yet, and shows when it was created, when it expires, and a button to cancel it.',
+		alt: 'The Temporary Guest Links section, with one link made for a school nurse. It is marked Pending because nobody has used the code yet, and shows when it was created, when it expires, and a Revoke button.',
 	},
 	{
 		id: 'guest-code-entry',
@@ -240,7 +270,7 @@ export const definitions: ScreenshotDefinition[] = [
 		id: 'clock-list',
 		route: '/clock',
 		scenario: 'patient',
-		alt: 'The Clock page, listing the clock faces saved on this site. One called Bedside Clock is shown as a card with the date it was last changed and buttons to edit it or open it full screen, next to a button for adding another.',
+		alt: 'The Clock page, listing the clock faces saved on this instance. One called Bedside Clock is shown as a card: a small live copy of the face on top, then the date it was last changed and buttons to edit it or open it full screen. A New Clock button sits in the page header.',
 	},
 	{
 		id: 'clock-example',
@@ -248,10 +278,13 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		session: 'anonymous',
 		// The face sizes itself to the screen, so a desktop frame leaves the reading a speck in a
-		// field of black; a phone is both the honest device for it and a legible picture.
+		// field of black; a phone is both the honest device for it and a legible picture. Clipped
+		// to the face's own rows because even a phone frame is mostly the empty screen around it,
+		// which at docs-column width shrinks the reading past legibility.
 		viewport: 'mobile',
+		clip: '[data-testid="clock-face-rows"]',
 		arrange: seededClockFace,
-		alt: 'A clock face filling the screen, as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading, and the change since the reading before it underneath.',
+		alt: 'A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading — two of them when it is moving fast — and the change since the reading before it underneath.',
 	},
 	{
 		id: 'clock-builder',
@@ -289,7 +322,7 @@ export const definitions: ScreenshotDefinition[] = [
 		route: '/settings/account',
 		scenario: 'patient',
 		prepare: async (page) => {
-			await page.getByTestId('add-authenticator').click();
+			await page.getByRole('button', { name: 'Add authenticator' }).click();
 			await page.getByTestId('totp-setup-dialog').waitFor();
 		},
 		clip: '[data-testid="totp-setup-dialog"]',
@@ -300,7 +333,10 @@ export const definitions: ScreenshotDefinition[] = [
 		id: 'totp-challenge',
 		route: '/auth/login',
 		scenario: 'first-run',
-		session: 'anonymous',
+		// Its prepare signs a browser in. On the shared anonymous context that session would
+		// outlive the entry and every later anonymous capture would be photographing a signed-in
+		// browser instead of a stranger's.
+		session: 'isolated',
 		arrange: enrolAuthenticator,
 		prepare: signInToTheAuthenticatorStep,
 		clip: '[data-testid="sign-in-card"]',

@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 export type Theme = 'light' | 'dark';
 export type Viewport = 'desktop' | 'mobile';
 export type Scenario = 'patient' | 'first-run';
-export type Session = 'owner' | 'anonymous';
+export type Session = 'owner' | 'anonymous' | 'isolated';
 
 /** The seeded tenant an entry's arrangement acts on. */
 export interface ArrangeTenant {
@@ -44,7 +44,12 @@ export interface ScreenshotDefinition {
 	/** Plain-language description of what the reader sees; rendered as the image alt text. */
 	alt: string;
 	scenario?: Scenario;
-	/** Who is looking. Defaults to the tenant's owner; `anonymous` never signs in. */
+	/**
+	 * Who is looking. `owner` (the default) and `anonymous` each share one browser context per
+	 * theme with every entry of the same kind, so the sign-in is paid for once. `isolated` is a
+	 * signed-out context created for this entry alone and closed after it — what a `prepare` that
+	 * signs in needs, so the session it leaves behind cannot become the next anonymous entry's.
+	 */
 	session?: Session;
 	viewport?: Viewport;
 	/** Selector to crop the capture to; the viewport when absent. */
@@ -56,7 +61,8 @@ export interface ScreenshotDefinition {
 	/**
 	 * Server-side state the entry needs (a share link, a guest link, a clock face). Runs once per
 	 * entry rather than once per theme: the arrangement is on the server, and both themes photograph
-	 * the same one. The returned map fills the route's `{key}` holes.
+	 * the same one. The returned map fills the route's `{key}` holes; an arrangement that exists
+	 * only for the state it leaves on the server returns an empty map.
 	 */
 	arrange?: (context: ArrangeContext) => Promise<Record<string, string>>;
 	/** Runs after navigation, before capture (open a dialog, hover a chart). */

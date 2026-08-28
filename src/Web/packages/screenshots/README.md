@@ -72,20 +72,33 @@ starts accepting remote-function requests and never answering them. Stopping and
 
 ## Arranging state, and who is looking
 
-An entry that needs something to exist before it can be photographed — a public share link, a guest
-link, a clock face — declares an `arrange`. It is handed the seeded tenant and a `fetch` that calls
-the real API as that tenant's owner, and it runs **once per entry**, not once per theme: the
-arrangement lives on the server, and both themes photograph the same one. Nothing may reach for a
-dev-only shortcut that production does not have; if the app cannot get into the state through its
-own API, the screenshot is describing something users cannot reach either.
+An entry that needs something to exist before it can be photographed — a guest link, a clock face,
+an enrolled authenticator — declares an `arrange`. It is handed the seeded tenant and a `fetch` that
+calls the real API as that tenant's owner, and it runs **once per entry**, not once per theme: the
+arrangement lives on the server, and both themes photograph the same one. An `arrange` may reach no
+dev-only shortcut that production lacks: if the app cannot be put into the state through its own
+API, the screenshot is describing something users cannot reach either. (Standing up a *signed-in
+browser* is the exception, and the one the runner already makes for every owner session.)
 
 Whatever `arrange` returns fills `{key}` holes in `route`. A hole that nothing filled fails the run.
 A route that is *only* a hole may resolve to a full URL on another origin, which is how the public
-share view — served from `{token}.share.{base-domain}` — is reached.
+share view — served from `{token}.share.{base-domain}` — is reached. An arrangement that exists only
+for the state it leaves on the server returns an empty map.
 
-`session` decides who is looking. The default, `owner`, signs the browser in as the seeded tenant's
-owner. `anonymous` never visits the login link, so the capture shows what a stranger with a link
-sees. The two get separate browser contexts, so an anonymous entry cannot inherit a session.
+State the app only ever shows once — the public share link, which the server keeps a digest of —
+cannot be arranged at all: it has to be created from the browser in a `prepare`, or the capture
+photographs the placeholder where the address should be.
+
+`session` decides who is looking:
+
+- **`owner`** (the default) signs the browser in as the seeded tenant's owner.
+- **`anonymous`** never visits the login link, so the capture shows what a stranger with a link sees.
+- **`isolated`** is a signed-out context created for that one entry and closed after it. Use it when
+  a `prepare` signs in: on the shared anonymous context that session would outlive the entry, and
+  every later anonymous capture would photograph a signed-in browser.
+
+`owner` and `anonymous` each reuse one context per theme, so the sign-in is paid for once and an
+anonymous entry cannot inherit a session.
 
 ## Ids and anchors
 

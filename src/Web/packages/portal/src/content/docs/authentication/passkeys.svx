@@ -16,13 +16,13 @@ the two fallbacks that keep an account reachable when the usual device isn't to 
 
 A **passkey** is a credential kept on your phone, laptop, tablet or hardware security key
 and unlocked the way you already unlock that device — a fingerprint, a face scan, or its
-PIN. Nothing secret is typed in, and nothing secret is stored on the site, so there is no
+PIN. Nothing secret is typed in, and nothing secret is stored on the instance, so there is no
 password to be guessed, reused or leaked.
 
 There are two ways in, both on the sign-in page:
 
 - **Sign in with passkey** — the main button. Your device offers the passkeys it holds for
-  this site and you pick one. You don't need to type a username.
+  this instance and you pick one. You don't need to type a username.
 - **Sign in with username** — you type your username first, then unlock the passkey
   registered to that account. Use this when the first button doesn't offer the account you
   wanted, which usually means the passkey lives on a different device.
@@ -77,7 +77,7 @@ code from your app. Open the app, read the six digits, type them in.
 Each one works once and then is spent. They exist for the day the usual device isn't
 available — lost, broken, or simply left at home.
 
-To use one, follow the **sign in with a recovery code** link on the sign-in page and enter
+To use one, follow the **Use a recovery code** link on the sign-in page and enter
 a code you haven't used yet.
 
 Store them somewhere you can reach without the device you normally sign in with: a password
@@ -92,5 +92,5 @@ Work through, in order:
    or laptop account is often already on your other devices.
 2. **A recovery code.** Any unused code gets you in, and once in you can register a fresh
    passkey on the device you're holding.
-3. **The site owner.** On a site someone else runs, the owner can remove and re-invite your
+3. **The instance owner.** On an instance someone else runs, the owner can remove and re-invite your
    member account. See [Member accounts and invites](/docs/sharing/members).

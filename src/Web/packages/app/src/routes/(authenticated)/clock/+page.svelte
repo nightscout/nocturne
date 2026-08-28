@@ -14,10 +14,9 @@
   import {
     list as listClockFaces,
     create as createClockFace,
-    getById as getClockFaceById,
     remove as removeClockFace,
   } from "$api/generated/clockFaces.generated.remote";
-  import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import ClockFacePreview from "$lib/components/clock/ClockFacePreview.svelte";
   import type { ClockFaceConfig } from "$lib/api";
 
   const clockFacesQuery = listClockFaces();
@@ -200,31 +199,14 @@
         <!-- Clock Face Grid -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {#each clockFaces as face (face.id)}
-            {@const preview = getClockFaceById(face.id ?? "")}
             <Card.Root
               class="group cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg"
             >
-              <!-- Preview Area -->
               <!-- Each preview reads its own query's state rather than awaiting it: an await here
                    is work the enclosing boundary has to finish before it can show the list at all,
                    and one preview that never resolves holds the whole page on its placeholder. -->
               <div class="h-32 overflow-hidden">
-                {#if preview.current?.config}
-                  <ClockFaceRenderer
-                    config={preview.current.config}
-                    scale={0.4}
-                    showCharts={false}
-                    class="h-full w-full"
-                  />
-                {:else}
-                  <div class="flex h-full items-center justify-center bg-neutral-950">
-                    {#if preview.loading}
-                      <Loader2 class="size-6 animate-spin text-muted-foreground" />
-                    {:else}
-                      <ClockIcon class="size-6 text-muted-foreground" />
-                    {/if}
-                  </div>
-                {/if}
+                <ClockFacePreview faceId={face.id} />
               </div>
 
             <Card.Content class="p-4">

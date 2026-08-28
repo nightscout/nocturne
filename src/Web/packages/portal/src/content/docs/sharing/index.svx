@@ -15,11 +15,15 @@ a person who needs their own ongoing login, or a glucose clock you can leave on
 any screen. This page explains what each one does and when to reach for it; each
 one then has its own page with the step-by-step detail.
 
-All of them are managed in one place: **Settings > Sharing & Privacy**. That page
-is where you switch the public link on or off, hand out guest links, see everyone
-you have invited along with what each of them is allowed to do, and choose
-whether people may ask you for access. Nothing is shared until you turn it on,
+All of them but the clock are managed in one place: **Settings > Sharing &
+Privacy**. That page is where you switch the public link on or off, hand out
+guest links, see everyone you have invited along with what each of them is
+allowed to do, and choose whether people may ask you for access. Clocks are their
+own thing, kept in the **Clock** section. Nothing is shared until you turn it on,
 and you can revoke any of it at any time.
+
+Public access sits at the top of the page; invites, guest links and your list of
+members follow below it:
 
 <Screenshot id="sharing-settings" />
 
@@ -27,7 +31,7 @@ and you can revoke any of it at any time.
 
 | Option | Best for | Needs a login? | Expires |
 |--------|----------|----------------|---------|
-| [Temporary guest link](/docs/sharing/guest-links) | A one-off look — a clinic visit | No | After about 48 hours, one use |
+| [Temporary guest link](/docs/sharing/guest-links) | A one-off look — a clinic visit | No | After 48 hours, one use |
 | [Public share link](/docs/sharing/public-link) | An always-on screen — a daycare | No | Never (until you turn it off) |
 | [Member account](/docs/sharing/members) | An ongoing helper — a teacher or nurse | Yes | Never (until you remove them) |
 | [Clock](/docs/sharing/clock) | An at-a-glance glucose screen — a bedside clock | No | Never (until you delete it) |
@@ -40,8 +44,8 @@ member account instead of waiting for you to send them an invite. See
 ## Which should I use?
 
 - **One-off, short-lived look** (a single appointment) →
-  [temporary guest link](/docs/sharing/guest-links). It cleans itself up after
-  about 48 hours and can only be used once.
+  [temporary guest link](/docs/sharing/guest-links). It cleans itself up 48 hours
+  after you make it and can only be used once.
 - **A screen lots of people glance at** (a daycare, a classroom display) →
   [public share link](/docs/sharing/public-link), with the fewest categories you
   can manage and the 24-hour window on.

@@ -28,7 +28,7 @@ If you're building an app or device that talks to the Nocturne API, see
 | **Passkeys (WebAuthn)** | Always on | The primary credential. Face ID, Touch ID, Windows Hello, or a hardware security key. |
 | **Social login (OIDC)** | Optional, per instance | Google, GitHub, or any OIDC provider. |
 | **Authenticator app (TOTP)** | Optional second step | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. Asked for after the passkey, on accounts that have enrolled one. |
-| **Recovery codes** | Fallback | One-time backup codes for when no passkey or authenticator is available. |
+| **Recovery codes** | Fallback | One-time backup codes. The only credential that gets an account in without a passkey. |
 
 For the step-by-step of what signing in actually looks like, see
 [Passkeys, recovery codes and the authenticator app](/docs/authentication/passkeys).
@@ -48,9 +48,9 @@ The login screen offers two passkey paths:
 
 <Callout type="info" title="Browser support">
   Passkeys need a browser that supports WebAuthn. On a browser that doesn't, the login
-  screen tells the user to use an authenticator app, a recovery code, or a different
-  browser. Because TOTP and recovery codes don't depend on WebAuthn, accounts stay
-  reachable everywhere.
+  screen says so and points the user at a recovery code or a different browser. An
+  authenticator app is no help there: it is a second step <em>after</em> a passkey, so it
+  cannot get anyone in on its own. The recovery code is the one fallback that stands alone.
 </Callout>
 
 ### Social login (OIDC)
@@ -81,7 +81,7 @@ operator.
   current code. It does not apply to OIDC sign-ins, where the provider handles any extra
   steps of its own.
 - **Recovery codes** — one-time backup codes issued when the account is set up, for when
-  no passkey is available. The login screen carries a *sign in with a recovery code* link.
+  no passkey is available. The login screen carries a *Use a recovery code* link.
 
 Both are covered in detail on
 [Passkeys, recovery codes and the authenticator app](/docs/authentication/passkeys).
@@ -106,9 +106,9 @@ In order:
    prompt doesn't surface the right account.
 3. **OIDC provider buttons** — one per enabled provider, shown under *Or continue with*.
    Only appear when social login is configured.
-4. **Sign in with a recovery code** — a small link for the fallback method.
+4. **Use a recovery code** — a small link for the fallback method.
 5. **Request membership** — a link at the foot of the card for visitors who don't have an
-   account on this site yet. See
+   account on this instance yet. See
    [Request membership](/docs/authentication/request-membership).
 
 If the account has an authenticator app enrolled, a second step asking for the six-digit
@@ -121,4 +121,4 @@ code follows the passkey.
 | Passkeys | Always on. Nothing to configure. |
 | Social login | Add a provider — see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), or [generic OIDC](/docs/authentication/oidc). |
 | Authenticator app / recovery codes | Always available. Users set these up from their account settings. |
-| Request membership | On by default. Each site owner can switch it off under **Settings > Sharing & Privacy**. |
+| Request membership | On by default. Each instance owner can switch it off under **Settings > Sharing & Privacy**. |

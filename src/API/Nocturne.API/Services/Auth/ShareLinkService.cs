@@ -94,7 +94,7 @@ public sealed class ShareLinkService : IShareLinkService
         var newToken = await GenerateUniqueTokenAsync(ct);
         var now = DateTime.UtcNow;
 
-        // On first enable, seed the default public scopes (glucose + statistics) as direct
+        // On first enable, seed the default public scopes (glucose reads alone) as direct
         // permissions on the Public subject, and default to a 24-hour window. Re-rotation only
         // swaps the token — the owner's chosen scopes and window are preserved.
         if (!wasEnabled)

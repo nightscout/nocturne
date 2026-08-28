@@ -16,7 +16,13 @@ itself as the key: anyone who has it can see whatever you've chosen to share.
 It is **off until you turn it on**, and you turn it on under
 **Settings > Sharing & Privacy**:
 
-<Screenshot id="sharing-public-link" />
+<Screenshot
+  id="sharing-public-link"
+  callouts={[
+    { anchor: "enable", label: "Turn public access on or off" },
+    { anchor: "time-window", label: "How far back viewers can see" },
+  ]}
+/>
 
 ## The link is shown once
 
@@ -41,10 +47,10 @@ independently:
 |----------|----------------|
 | Blood Glucose | Your glucose readings and the graph of them |
 | Treatments | Logged insulin doses, carbs and other entries |
-| Device Status | The state of your pump, phone or uploader — battery, reservoir and so on |
+| Device Status | The state of your pump, CGM and closed loop, including insulin on board |
 | Heart Rate | Heart rate collected from a watch or band |
 | Step Count | Step counts collected from a watch or phone |
-| Food | Your saved food items |
+| Food & Meals | Your saved food items and the meals you have logged |
 | Reports | The report pages, such as the day-by-day and profile reports |
 
 When public access is first switched on, only **Blood Glucose** is shared. Every
@@ -65,9 +71,10 @@ so older data is never exposed.
 
 ## What the visitor sees
 
-Someone opening the link gets a read-only dashboard — no sign-in prompt, no
-account, nothing they can change or log. It shows only the categories you
-switched on, within the time window you chose:
+Someone opening the link gets a read-only dashboard: the data, and a **Sign in**
+button where your own account menu would be. There is nothing on it they can edit
+or log. It shows only the categories you switched on, within the time window you
+chose:
 
 <Screenshot id="share-anonymous-view" />
 

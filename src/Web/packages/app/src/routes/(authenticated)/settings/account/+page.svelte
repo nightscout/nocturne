@@ -408,7 +408,6 @@
         description="Passkeys provide secure, phishing-resistant authentication using your device's biometrics or security key."
         icon={Fingerprint}
         addLabel="Add passkey"
-        addTestId="add-passkey"
         credentials={credentials.map((c) => ({
           id: c.id ?? "",
           label: c.label,
@@ -433,7 +432,6 @@
         description="Use an authenticator app like Google Authenticator or Authy to generate time-based one-time passwords for sign-in."
         icon={Smartphone}
         addLabel="Add authenticator"
-        addTestId="add-authenticator"
         credentials={totpCredentials.map((c) => ({
           id: c.id ?? "",
           label: c.label,

@@ -39,7 +39,7 @@ access:
 
 | Role | What they can do |
 |------|------------------|
-| Viewer | See blood glucose and time-in-range statistics. Read-only — a quick glance. |
+| Viewer | Read-only: blood glucose, the whole Reports section, and the ability to send a notification to your devices or act on one. For a quick glance. |
 | Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
 | Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
 | Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
@@ -69,15 +69,15 @@ Inviting someone is one direction — you reach out and hand them a link.
 access, and nothing is granted until you approve it.
 
 The toggle lives on **Settings > Sharing & Privacy**. While it's on, your sign-in
-page shows a **Request membership** link, so someone who lands on your site can
-send you a request — optionally with a short note saying who they are. The request
-**never grants access on its own**; it waits for you.
+page shows a **Request membership** link. Someone who lands on your instance writes
+a short note saying who they are, presses **Continue to Sign Up**, and signs in —
+which is how the request arrives with a name attached. It **never grants access on
+its own**; it waits for you.
 
 You review requests **in place, on Settings > Sharing & Privacy** — the same page
-as the toggle. Each one shows who asked, their note, and when. Pick a role (plus
-any limits, like _Only last 24 hours_) and approve to add them as a member, or
-deny it. It's the same roles as an invite; the only difference is who started the
-conversation.
+as the toggle. Each one shows who asked, their note, and when. Tick the roles they
+should have and approve to add them as a member, or deny it. It's the same roles as
+an invite; the only difference is who started the conversation.
 
 For what the person on the other side sees, and how to word the note, see
 [Request membership](/docs/authentication/request-membership).
@@ -85,7 +85,7 @@ For what the person on the other side sees, and how to word the note, see
 <Callout type="tip" title="When to use it: a relative who wants to follow along">
   A grandparent asks to keep an eye on your child's glucose. Rather than
   collecting their email and sending an invite, switch membership requests on and
-  point them at your site. They sign in, request access, and you approve them as a
+  point them at your instance. They sign in, request access, and you approve them as a
   <strong>Viewer</strong> when it suits you — or deny it if you change your mind.
 </Callout>
 

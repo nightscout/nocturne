@@ -283,7 +283,7 @@
       <div class="flex items-start gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
         <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
         <p class="text-sm text-yellow-700 dark:text-yellow-400">
-          Your browser does not support passkeys. Use an authenticator app, a recovery code, or try a different browser.
+          Your browser does not support passkeys. Use a recovery code, or try a different browser. An authenticator app is a second step after a passkey, so it cannot get you in on its own.
         </p>
       </div>
     {/if}
