@@ -13,6 +13,7 @@
 	"scripts": {
 		"capture": "tsx src/capture.ts",
 		"validate": "tsx src/capture.ts --validate",
+		"diff-stats": "tsx src/diff-stats.ts",
 		"check-refs": "tsx src/check-refs.ts",
 		"check-embeds": "tsx src/check-embeds.ts",
 		"check": "tsc --noEmit"

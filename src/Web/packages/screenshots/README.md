@@ -19,7 +19,15 @@ pnpm --filter @nocturne/screenshots run capture                       # seed, sh
 pnpm --filter @nocturne/screenshots run validate                      # definitions only; no stack, no browser
 pnpm --filter @nocturne/screenshots run check-refs                    # markdown references vs images on disk
 pnpm --filter @nocturne/screenshots run check-embeds                  # docs <Screenshot> ids and anchors vs the manifest
+pnpm --filter @nocturne/screenshots run diff-stats                    # what a capture just changed, against HEAD
 ```
+
+`diff-stats` reads the working tree against the committed images and prints a markdown table of
+how much of each one moved, plus anything added, deleted, resized or unreadable. `--output <file>`
+writes the same table to disk; `--restore-identical` puts committed bytes back for images whose
+pixels did not change, so an encoder re-quantising the same render never shows up as drift. A
+percentage is a shortlist of what to look at, not a verdict: a fraction of a percent can still be
+the label a docs page quotes.
 
 A successful run tidies up after itself: images no manifest entry claims are deleted, and the
 tenants it seeded are removed. A failed one leaves both behind to be inspected.
@@ -29,6 +37,23 @@ ports, so read yours from `aspire describe`.
 
 Locale, timezone, viewport, device scale and the browser clock are pinned in `src/capture.ts` and
 must stay that way: a screenshot is only reviewable as a diff against the one it replaces.
+
+## Regeneration workflow
+
+`.github/workflows/screenshot-regen.yml` boots a stack on the runner, runs the capture, and opens
+a PR on `docs/screenshot-regen` with the `diff-stats` table in its body when the images move.
+Dispatch it from the Actions tab ("Documentation screenshots" → Run workflow) after a UI change
+you expect the docs to show. It is dispatch-only: the seeded data is anchored to the calendar
+date, so an unattended schedule would drift on every run and bury real UI changes in data noise —
+a schedule becomes viable once seeding can replay identical data shapes across days.
+
+A capture failure — a stale anchor, a route that will not settle — fails the run and opens
+nothing; the capture log and whatever images it managed to write are attached to the run as an
+artifact.
+
+Two GitHub settings caveats: creating the PR at all requires "Allow GitHub Actions to create and
+approve pull requests" (Settings → Actions → General), and GitHub does not run workflows on a PR
+opened with `GITHUB_TOKEN`, so it arrives with no checks — close and reopen it to start them.
 
 ## When a run fails to settle
 
