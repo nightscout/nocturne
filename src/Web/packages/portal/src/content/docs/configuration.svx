@@ -88,6 +88,7 @@ roles yourself and point Nocturne at them with connection strings.
 | Group | Variables | What it enables |
 |-------|-----------|-----------------|
 | **Telemetry** | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` | Export metrics, traces, and logs to an OTLP collector. Off while the endpoint is empty. See [Observability](/docs/observability). |
+| **CDN** | `TRUSTED_PROXIES` | Space-separated CIDRs of a CDN in front of the deployment (for example Cloudflare's published ranges). Decides whose `CF-Connecting-IP` header the bundled Caddy believes when recording client addresses. Leave at the default `127.0.0.1/32` unless a CDN is present, and never set it empty. |
 | **Discord** | `DISCORD_*` | The Discord bot. See [Discord](/docs/bots/discord). |
 | **Slack** | `SLACK_*` | The Slack bot. See [Slack](/docs/bots/slack). |
 | **Telegram** | `TELEGRAM_*` | The Telegram bot. See [Telegram](/docs/bots/telegram). |

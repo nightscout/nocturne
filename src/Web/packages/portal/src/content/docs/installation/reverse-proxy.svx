@@ -251,12 +251,15 @@ Do not point `ask` at a host that is reachable from the internet, and do not dro
 it: without it, anyone who points DNS at your server can drive certificate
 issuance for arbitrary names.
 
-<Callout type="warning" title="On-demand does not cover share links yet">
-  The <code>ask</code> endpoint authorizes the apex and active tenant subdomains
-  only; it answers 404 for a <code>&#123;token&#125;.share.example.com</code> host, so Caddy
-  declines to issue and the share link fails the handshake. Until that is fixed,
-  a deployment that hands out share links needs the wildcard route above, with
-  <code>*.share.example.com</code> among its SANs.
+<Callout type="info" title="Share links need their own site block">
+  The <code>ask</code> endpoint also authorizes a
+  <code>&#123;token&#125;.share.example.com</code> host when the token resolves to an
+  active share link, so on-demand issuance covers share links. A Caddy
+  site-address wildcard matches exactly one label, though, so
+  <code>*.example.com</code> alone never matches a share host — a deployment
+  that hands out share links needs a <code>*.share.example.com</code> block
+  with the same <code>tls &#123; on_demand &#125;</code> and
+  <code>reverse_proxy</code> as the wildcard block above.
 </Callout>
 
 ## Client addresses and the exposed port
