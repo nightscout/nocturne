@@ -9,17 +9,24 @@ namespace Nocturne.Core.Models;
 /// <remarks>
 /// AAPS's NS v3 socket handler reads <c>doc.srvModified</c> with <c>getLong</c> before it
 /// dispatches on the collection, so an event whose doc has no numeric value there throws on the
-/// background thread and takes the AAPS process down. Read-only: none of these legs feed the
-/// document's own event time, so ingest and decomposition timelines are unaffected.
+/// background thread and takes the AAPS process down. Read-only: no leg here feeds a document's
+/// own event time, so ingest and decomposition timelines are unaffected.
 /// </remarks>
 internal static class V3Timestamps
 {
     /// <summary>
     /// Returns <paramref name="mills"/> when it carries an instant, otherwise the first of
-    /// <paramref name="isoFallbacks"/> that parses, otherwise null. An offset-bearing string is
-    /// honoured; a zone-less one is read as UTC rather than as server-local time.
+    /// <paramref name="isoFallbacks"/> that parses, otherwise null.
     /// </summary>
-    internal static long? Resolve(long? mills, params string?[] isoFallbacks)
+    /// <remarks>
+    /// Zero means "not set"; any other value — including a pre-1970 negative one — is an instant,
+    /// because dropping it puts the document back on the crashing path. Parsing is deliberately as
+    /// permissive as the reference server's: an offset-bearing string is honoured and a zone-less
+    /// one is read as UTC rather than as server-local time, but a bare time resolves against
+    /// today's date and a date-only string against midnight. Culture-invariant, so an
+    /// ambiguous numeric date is always read month-first.
+    /// </remarks>
+    internal static long? Resolve(long? mills, params ReadOnlySpan<string?> isoFallbacks)
     {
         if (mills is not null and not 0)
             return mills;

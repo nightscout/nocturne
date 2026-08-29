@@ -41,27 +41,27 @@ public class Treatment : ProcessableDocumentBase
 
     /// <summary>
     /// Gets the server-modified timestamp for V3 compatibility.
-    /// Returns Mills as Nightscout V3 uses this to track server-side modifications.
+    /// Falls back to Mills, which already resolves every other timestamp this document
+    /// carries. See <see cref="V3Timestamps"/> for why it may never serialize as null.
     /// </summary>
     private long? _srvModified;
 
     [JsonPropertyName("srvModified")]
     public long? SrvModified
     {
-        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        get => _srvModified ?? V3Timestamps.Resolve(Mills);
         set => _srvModified = value;
     }
 
     /// <summary>
     /// Gets the server-created timestamp for V3 compatibility.
-    /// Returns Mills as Nightscout V3 uses this to track server-side creation time.
     /// </summary>
     private long? _srvCreated;
 
     [JsonPropertyName("srvCreated")]
     public long? SrvCreated
     {
-        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        get => _srvCreated ?? V3Timestamps.Resolve(Mills);
         set => _srvCreated = value;
     }
 
@@ -176,7 +176,7 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     private long ResolveMills()
     {
-        if (_mills > 0)
+        if (_mills != 0)
             return _mills;
 
         if (TryParseIsoMills(_created_at, out var mills))
@@ -341,7 +341,7 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("date")]
     public long? Date
     {
-        get => _date ?? (Mills > 0 ? Mills : null);
+        get => _date ?? V3Timestamps.Resolve(Mills);
         set => _date = value;
     }
 

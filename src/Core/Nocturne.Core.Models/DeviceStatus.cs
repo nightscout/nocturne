@@ -45,7 +45,7 @@ public class DeviceStatus : ProcessableDocumentBase
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? Date
     {
-        get => _date ?? (Mills > 0 ? Mills : null);
+        get => _date ?? V3Timestamps.Resolve(Mills);
         set => _date = value;
     }
 
@@ -58,10 +58,8 @@ public class DeviceStatus : ProcessableDocumentBase
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
-    /// Falls back to <see cref="FallbackTimestampMills"/>: AAPS's NS v3 socket handler reads
-    /// <c>doc.srvModified</c> with <c>getLong</c> before it dispatches on the collection, so a
-    /// realtime storage event whose doc has no numeric value there throws on the background
-    /// thread and takes the AAPS process down.
+    /// Falls back to <see cref="FallbackTimestampMills"/>; see <see cref="V3Timestamps"/> for
+    /// why it may never serialize as null.
     /// </summary>
     private long? _srvModified;
 

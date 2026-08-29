@@ -7,4 +7,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Core.Models.Tests" />
+    </ItemGroup>
 </Project>

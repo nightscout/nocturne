@@ -162,6 +162,101 @@ public class V3SocketBroadcastContractTests
         new Entry { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
         new DeviceStatus { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
         new Profile { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
+        new Treatment { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
+        new Treatment { Mills = -86_400_000 }.SrvCreated.Should().Be(-86_400_000);
+    }
+
+    /// <summary>
+    /// The shape the V1 ingest path produces for a pre-1970 <c>created_at</c>:
+    /// DocumentProcessingService stamps Mills from it, and treatments is the collection AAPS
+    /// writes most.
+    /// </summary>
+    [Fact]
+    public void TreatmentWithAPre1970CreatedAt_IsBroadcastSafe()
+    {
+        var moonLanding = DateTimeOffset
+            .Parse("1969-07-20T20:17:00.000Z")
+            .ToUnixTimeMilliseconds();
+        var treatment = new Treatment
+        {
+            EventType = "Note",
+            CreatedAt = "1969-07-20T20:17:00.000Z",
+            Mills = moonLanding,
+        };
+
+        var root = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(treatment));
+
+        root.GetProperty("srvModified").ValueKind.Should().Be(JsonValueKind.Number);
+        root.GetProperty("srvModified").GetInt64().Should().Be(moonLanding);
+        root.GetProperty("date").GetInt64().Should().Be(moonLanding);
+    }
+
+    [Fact]
+    public void NoTimestampAtAll_FabricatesNothing()
+    {
+        new Entry { Mills = 0 }.SrvModified.Should().BeNull();
+        new Profile { Mills = 0, StartDate = "not-a-date" }.SrvModified.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Sub-second precision must survive: <c>srvModified</c> is AAPS's sync cursor, so
+    /// truncating to whole seconds silently re-delivers or skips documents.
+    /// </summary>
+    [Fact]
+    public void CreatedAtMilliseconds_AreNotTruncated()
+    {
+        new Entry { CreatedAt = "2026-08-06T12:00:00.123Z" }
+            .SrvModified.Should()
+            .Be(CreatedAtMills + 123);
+    }
+
+    /// <summary>
+    /// An ambiguous numeric date is read month-first regardless of the server's culture.
+    /// </summary>
+    [Fact]
+    public void AmbiguousDate_IsParsedCultureInvariantly()
+    {
+        var januarySecond = DateTimeOffset.Parse("2026-01-02T00:00:00Z").ToUnixTimeMilliseconds();
+
+        new Entry { CreatedAt = "01/02/2026" }.SrvModified.Should().Be(januarySecond);
+    }
+
+    /// <summary>
+    /// Declared precedence is Mills, then <c>date</c>, then <c>created_at</c> — pinned with all
+    /// three disagreeing so no two legs can be swapped without a failure.
+    /// </summary>
+    [Fact]
+    public void DeviceStatusSrvTimestamps_PreferMillsOverDateOverCreatedAt()
+    {
+        new DeviceStatus
+        {
+            Mills = Mills,
+            Date = Mills + 1_000,
+            CreatedAt = CreatedAt,
+        }
+            .SrvModified.Should()
+            .Be(Mills);
+
+        new DeviceStatus { Date = Mills + 1_000, CreatedAt = CreatedAt }
+            .SrvModified.Should()
+            .Be(Mills + 1_000);
+    }
+
+    /// <summary>
+    /// Profiles are often uploaded without mills, and <c>startDate</c> is the timestamp the V3
+    /// layer already treated as their event time.
+    /// </summary>
+    [Fact]
+    public void ProfileSrvTimestamps_PreferStartDateOverCreatedAt()
+    {
+        new Profile
+        {
+            Mills = 0,
+            StartDate = CreatedAt,
+            CreatedAt = "2020-01-01T00:00:00.000Z",
+        }
+            .SrvModified.Should()
+            .Be(CreatedAtMills);
     }
 
     [Theory]
