@@ -22,7 +22,7 @@ laid out differently for a different screen:
 Open one and it takes over the whole screen: a bright readout in the middle of an
 otherwise blank display. Close up, on a phone:
 
-<Screenshot id="clock-example" class="mx-auto max-w-xs" />
+<Screenshot id="clock-example" class="mx-auto max-w-40" />
 
 ## Building one
 

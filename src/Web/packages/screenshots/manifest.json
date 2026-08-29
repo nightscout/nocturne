@@ -30,7 +30,7 @@
 		}
 	},
 	"clock-example": {
-		"alt": "A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading — two of them when it is moving fast — and the change since the reading before it underneath.",
+		"alt": "A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading, and the change since the reading before it underneath.",
 		"variants": {
 			"light": {
 				"file": "images/clock-example.light.webp",

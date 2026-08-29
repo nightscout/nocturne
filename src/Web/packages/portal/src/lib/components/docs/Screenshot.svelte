@@ -49,7 +49,7 @@
 </script>
 
 <figure class="not-prose my-6 {className}">
-    <div class="relative rounded-lg border border-border/60 bg-muted/30 overflow-hidden">
+    <div class="relative rounded-lg border border-border/60 bg-muted/30">
         {#each themes as theme (theme)}
             {@const variant = entry.variants[theme]}
             <img
@@ -59,7 +59,7 @@
                 height={variant.height}
                 loading="lazy"
                 decoding="async"
-                class="w-full h-auto {theme === 'light' ? 'block dark:hidden' : 'hidden dark:block'}"
+                class="w-full h-auto rounded-lg {theme === 'light' ? 'block dark:hidden' : 'hidden dark:block'}"
             />
         {/each}
 

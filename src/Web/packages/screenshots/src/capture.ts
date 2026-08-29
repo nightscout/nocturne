@@ -633,8 +633,11 @@ async function main(): Promise<void> {
 				try {
 					return await captureTheme(page, definition, theme, target);
 				} finally {
-					await page.close();
-					if (session === 'isolated') await context.close();
+					try {
+						await page.close();
+					} finally {
+						if (session === 'isolated') await context.close();
+					}
 				}
 			};
 

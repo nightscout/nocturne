@@ -24,6 +24,9 @@ It is **off until you turn it on**, and you turn it on under
   ]}
 />
 
+The address pictured belongs to a local test instance; yours will end in your own
+domain, in the shape `https://<random>.share.<your domain>`.
+
 ## The link is shown once
 
 When you first switch public access on, Nocturne creates the link and shows it to

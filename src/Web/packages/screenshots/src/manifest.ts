@@ -223,8 +223,6 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		alt: 'The main Settings page, a grid of cards linking to each group of settings: your account, your data sources, sharing, alerts, appearance and more.',
 	},
-	// After share-anonymous-view, which opens the link this one replaces: minting a link revokes
-	// the tenant's previous one, so run the other way round the anonymous view has nothing to open.
 	{
 		id: 'sharing-public-link',
 		route: '/settings/members',
@@ -284,7 +282,8 @@ export const definitions: ScreenshotDefinition[] = [
 		viewport: 'mobile',
 		clip: '[data-testid="clock-face-rows"]',
 		arrange: seededClockFace,
-		alt: 'A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading — two of them when it is moving fast — and the change since the reading before it underneath.',
+		// The reading and its trend come from the seeded data, so this one image differs every capture.
+		alt: 'A clock face as it looks on a phone or tablet left by the bed: the latest glucose reading in large digits, an arrow for which way it is heading, and the change since the reading before it underneath.',
 	},
 	{
 		id: 'clock-builder',

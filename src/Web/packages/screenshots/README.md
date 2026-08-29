@@ -97,7 +97,7 @@ photographs the placeholder where the address should be.
   a `prepare` signs in: on the shared anonymous context that session would outlive the entry, and
   every later anonymous capture would photograph a signed-in browser.
 
-`owner` and `anonymous` each reuse one context per theme, so the sign-in is paid for once and an
+`owner` and `anonymous` each reuse one context per theme and viewport, so the sign-in is paid for once and an
 anonymous entry cannot inherit a session.
 
 ## Ids and anchors

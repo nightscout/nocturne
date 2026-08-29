@@ -39,7 +39,7 @@ access:
 
 | Role | What they can do |
 |------|------------------|
-| Viewer | Read-only: blood glucose, the whole Reports section, and the ability to send a notification to your devices or act on one. For a quick glance. |
+| Viewer | Read-only: blood glucose and the whole Reports section. For a quick glance. |
 | Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
 | Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
 | Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
