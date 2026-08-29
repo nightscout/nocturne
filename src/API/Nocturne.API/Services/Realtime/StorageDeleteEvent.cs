@@ -6,7 +6,7 @@ namespace Nocturne.API.Services.Realtime;
 /// <summary>
 /// The storage <c>delete</c> event for a single removed record, as
 /// <see cref="ISignalRBroadcastService.BroadcastStorageDeleteAsync"/> sends it. Five of the six
-/// delete producers use it; <see cref="SignalRV4RecordBroadcaster"/> sends its own shape, which the
+/// delete producers use it; <see cref="SignalRV4RecordBroadcaster{TModel}"/> sends its own shape, which the
 /// socket.io bridge skips for want of a <c>colName</c>.
 /// </summary>
 /// <remarks>
@@ -38,6 +38,11 @@ internal sealed record StorageDeleteEvent(
     /// <c>_id</c>, and keeps the supplied <see cref="Identifier"/> for a document carrying neither.
     /// Serializing the document here rather than at the call site also lets the hub write the result
     /// verbatim instead of reflecting over it a second time.
+    /// <para>
+    /// One serializer this cannot follow: <see cref="System.Text.Json.Serialization.ReferenceHandler.Preserve"/>
+    /// gives the pre-serialized document its own <c>$id</c> namespace, so the envelope emits <c>$id</c>
+    /// twice and a sibling <c>$ref</c> would dangle. Nothing configures it today.
+    /// </para>
     /// </summary>
     /// <param name="payloadOptions">
     /// <see cref="Microsoft.AspNetCore.SignalR.JsonHubProtocolOptions.PayloadSerializerOptions"/>.

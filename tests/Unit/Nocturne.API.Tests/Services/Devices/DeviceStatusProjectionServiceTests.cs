@@ -366,9 +366,6 @@ public class DeviceStatusProjectionServiceTests
     [Fact]
     public void ProjectAsync_WithClientIdentifierInExtras_DoesNotReEmitIt()
     {
-        // An NS v3 uploader sends its own identifier; DeviceStatus has no member to absorb it, so it
-        // is stored as an extra. Splatting it back would make the record's id — and the identifier of
-        // its realtime delete event — client-controlled.
         var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
 

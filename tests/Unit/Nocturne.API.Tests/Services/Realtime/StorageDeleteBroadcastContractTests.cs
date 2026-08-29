@@ -377,6 +377,44 @@ public class StorageDeleteBroadcastContractTests
             );
     }
 
+    /// <summary>
+    /// The bulk keys are the same wire contract as the single-record ones, so a reconfigured
+    /// payload serializer must not be able to rename them either.
+    /// </summary>
+    [Fact]
+    public async Task BulkDeleteKeys_SurviveAReconfiguredPayloadSerializer()
+    {
+        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
+
+        await CreateSideEffects(capture).OnBulkDeletedAsync("entries", 17);
+
+        capture.Delete.GetProperty("colName").GetString().Should().Be("entries");
+        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(17);
+    }
+
+    /// <summary>
+    /// The identifier a client reads and the document id it would match against are the same string
+    /// on the wire, under a serializer that is not the default.
+    /// </summary>
+    [Fact]
+    public async Task WireIdentifier_MatchesTheDocumentIdOnTheWire()
+    {
+        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new LegacyIdOnly());
+
+        var doc = capture.Delete.GetProperty("doc");
+        doc.ValueKind.Should().Be(JsonValueKind.Object);
+        capture
+            .Delete.GetProperty("identifier")
+            .GetString()
+            .Should()
+            .Be(
+                doc.GetProperty("_id").GetString(),
+                "an identifier that does not match the document's own id resolves nothing"
+            );
+    }
+
     /// <summary>A document carrying only the legacy id, and no record behind it to fall back on.</summary>
     private sealed class LegacyIdOnly
     {
