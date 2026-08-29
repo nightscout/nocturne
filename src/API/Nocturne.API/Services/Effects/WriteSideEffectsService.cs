@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.API.Services.Realtime;
 
@@ -211,7 +212,11 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                new { colName = collectionName, doc = deletedRecord }
+                StorageDeleteEvent.ForRecord(
+                    collectionName,
+                    (deletedRecord as IProcessableDocument)?.Id,
+                    deletedRecord
+                )
             );
         }
         catch (Exception ex)
@@ -243,7 +248,7 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                new { colName = collectionName, deletedCount }
+                StorageDeleteEvent.ForBulk(collectionName, deletedCount)
             );
         }
         catch (Exception ex)
