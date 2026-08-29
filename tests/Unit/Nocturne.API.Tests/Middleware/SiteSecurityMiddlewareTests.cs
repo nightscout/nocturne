@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -79,21 +80,42 @@ public sealed class SiteSecurityMiddlewareTests
         ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
     }
 
-    [Theory]
-    [InlineData("/api/v4/status")]
-    [InlineData("/api/v4/entries")]
-    public async Task Share_host_is_served_under_lockdown(string path)
+    /// <summary>
+    /// A request as the pipeline presents it to this middleware: routed (UseRouting has run), and
+    /// optionally resolved through a share token.
+    /// </summary>
+    private static DefaultHttpContext Request(
+        string path, bool shareAccess = false, bool allowAnonymous = false, bool routed = true)
     {
-        // A share link is an anonymous read the tenant owner granted; the site-wide lockdown
-        // must not revoke it, or every link already handed out 401s and the web layer never
-        // even learns the tenant allows anonymous read.
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-
         var ctx = new DefaultHttpContext();
         ctx.Response.Body = new MemoryStream();
         ctx.Request.Path = path;
-        ctx.SetShareAccess();
+
+        if (routed)
+        {
+            var metadata = allowAnonymous
+                ? new EndpointMetadataCollection(new AllowAnonymousAttribute())
+                : EndpointMetadataCollection.Empty;
+            ctx.SetEndpoint(new Endpoint(_ => Task.CompletedTask, metadata, path));
+        }
+
+        if (shareAccess)
+        {
+            ctx.SetShareAccess();
+        }
+
+        return ctx;
+    }
+
+    [Fact]
+    public async Task Share_host_reads_the_status_document_under_lockdown()
+    {
+        // The link is dead without this: the web layer learns a tenant grants anonymous read from
+        // /api/v4/status alone, and it is [AllowAnonymous], so lockdown was the only thing 401ing it.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = Request("/api/v4/status", shareAccess: true, allowAnonymous: true);
 
         await mw.InvokeAsync(ctx);
 
@@ -101,17 +123,75 @@ public sealed class SiteSecurityMiddlewareTests
         ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 
-    [Fact]
-    public async Task Bare_tenant_host_is_still_denied_under_lockdown()
+    [Theory]
+    [InlineData("/api/v4/entries")]
+    [InlineData("/api/v4/me/permissions")]
+    public async Task Share_host_reads_the_shared_data_under_lockdown(string path)
     {
-        // The counterpart to the share-host exemption: without a resolved share token the
-        // lockdown still applies, so the exemption is not a hole for any anonymous request.
+        // These carry no [AllowAnonymous], so the default-deny fallback policy re-derives the
+        // share's PublicShareScopes trie for each of them -- lockdown adds nothing this gate needs
+        // to keep, and keeping it revoked a grant the tenant owner published deliberately.
         var nextCalled = false;
         var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
 
-        var ctx = new DefaultHttpContext();
-        ctx.Response.Body = new MemoryStream();
-        ctx.Request.Path = "/api/v4/status";
+        var ctx = Request(path, shareAccess: true);
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeTrue();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+    }
+
+    [Theory]
+    [InlineData("/api/auth/passkey/login/options")]
+    [InlineData("/api/auth/passkey/recovery-mode/complete")]
+    [InlineData("/api/auth/totp/login")]
+    [InlineData("/api/v4/guest-links/activate")]
+    [InlineData("/api/v4/member-invites/tok/info")]
+    [InlineData("/hubs/data/negotiate")]
+    public async Task Share_host_stays_locked_down_on_the_anonymous_surface(string path)
+    {
+        // [AllowAnonymous] suppresses authorization evaluation, so nothing downstream narrows these
+        // to the share's scopes and this gate is their only gate. A share link is a public URL: if
+        // holding one exempted its bearer here, the operator's lockdown would leave the passkey
+        // ceremony and the token oracles open on the one host anybody can reach.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = Request(path, shareAccess: true, allowAnonymous: true);
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task Share_host_stays_locked_down_on_a_request_that_routed_nowhere()
+    {
+        // No endpoint means no metadata to read, so the exemption cannot establish that anything
+        // downstream would re-authorize. Fail closed rather than assume.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = Request("/api/v4/entries", shareAccess: true, routed: false);
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Theory]
+    [InlineData("/api/v4/status", true)]
+    [InlineData("/api/v4/entries", false)]
+    public async Task Bare_tenant_host_is_still_denied_under_lockdown(string path, bool allowAnonymous)
+    {
+        // Without a resolved share token the lockdown applies to both halves of the surface.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = Request(path, allowAnonymous: allowAnonymous);
 
         await mw.InvokeAsync(ctx);
 
