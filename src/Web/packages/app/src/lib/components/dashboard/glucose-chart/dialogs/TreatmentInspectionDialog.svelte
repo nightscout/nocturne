@@ -3,7 +3,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Activity, Syringe, Pencil } from "lucide-svelte";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import type { PredictionData } from "$api/predictions.remote";
   import type { BolusCalculation } from "$lib/api";
@@ -230,11 +230,7 @@
         {/if}
       </Dialog.Title>
       <Dialog.Description>
-        {timestamp.toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-          second: "2-digit",
-        })}
+        {time(timestamp, { seconds: true })}
         &mdash;
         {timestamp.toLocaleDateString([], {
           month: "short",
@@ -383,10 +379,7 @@
                 </div>
                 <div class="text-xs text-muted-foreground">
                   {record.data.mills
-                    ? new Date(record.data.mills).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })
+                    ? time(record.data.mills)
                     : ""}
                 </div>
               </div>

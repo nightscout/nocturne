@@ -1,6 +1,7 @@
 <script lang="ts">
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import type { TrackerCategory } from "$lib/api";
+  import { time as formatTime } from "$lib/utils/formatting";
 
   interface Props {
     xPos: number;
@@ -54,9 +55,6 @@
     text-anchor="start"
     class="text-[7px] fill-muted-foreground font-medium"
   >
-    {time.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    })}
+    {formatTime(time)}
   </text>
 </g>

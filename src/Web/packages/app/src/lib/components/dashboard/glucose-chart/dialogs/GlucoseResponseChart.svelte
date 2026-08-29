@@ -11,7 +11,7 @@
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
   import type { PredictionData } from "$api/predictions.remote";
-  import { bg } from "$lib/utils/formatting";
+  import { bg, time } from "$lib/utils/formatting";
 
   interface GlucoseDataPoint {
     time: Date;
@@ -209,10 +209,7 @@
           ticks={4}
           format={(v) =>
             v instanceof Date
-              ? v.toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
+              ? time(v)
               : String(v)}
           tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
         />

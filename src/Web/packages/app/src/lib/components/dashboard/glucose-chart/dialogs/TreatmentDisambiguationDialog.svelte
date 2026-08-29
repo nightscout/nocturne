@@ -4,6 +4,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
+  import { time } from "$lib/utils/formatting";
 
   interface Props {
     open: boolean;
@@ -60,10 +61,7 @@
             </div>
             <div class="text-xs text-muted-foreground">
               {entry.data.mills
-                ? new Date(entry.data.mills).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })
+                ? time(entry.data.mills)
                 : ""}
             </div>
           </div>

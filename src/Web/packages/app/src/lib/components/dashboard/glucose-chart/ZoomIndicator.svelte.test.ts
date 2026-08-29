@@ -1,9 +1,15 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import ZoomIndicator from "./ZoomIndicator.svelte";
+import { timeFormat } from "$lib/stores/appearance-store.svelte";
+import { time } from "$lib/utils/formatting";
 
 describe("ZoomIndicator", () => {
+	afterEach(() => {
+		timeFormat.current = "12";
+	});
+
 	it("renders nothing when not zoomed", async () => {
 		render(ZoomIndicator, {
 			isZoomed: false,
@@ -38,18 +44,31 @@ describe("ZoomIndicator", () => {
 			onResetZoom: vi.fn(),
 		});
 
-		const formatted_start = start.toLocaleTimeString([], {
-			hour: "numeric",
-			minute: "2-digit",
-		});
-		const formatted_end = end.toLocaleTimeString([], {
-			hour: "numeric",
-			minute: "2-digit",
+		await expect
+			.element(page.getByText(`${time(start)} - ${time(end)}`))
+			.toBeVisible();
+	});
+
+	// The chart used to format its own times, so the preference reached the
+	// settings page and the mini overview strip but not the chart itself. Both
+	// directions are asserted because whichever one matches the browser's own
+	// locale would pass without the preference being consulted at all.
+	it.each([
+		{ format: "24" as const, shown: "20:30", hidden: "8:30" },
+		{ format: "12" as const, shown: "8:30", hidden: "20:30" },
+	])("honours the $format-hour preference", async ({ format, shown, hidden }) => {
+		timeFormat.current = format;
+
+		render(ZoomIndicator, {
+			isZoomed: true,
+			brushXDomain: [new Date(2026, 3, 26, 8, 0), new Date(2026, 3, 26, 20, 30)],
+			onResetZoom: vi.fn(),
 		});
 
+		await expect.element(page.getByText(shown, { exact: false })).toBeVisible();
 		await expect
-			.element(page.getByText(`${formatted_start} - ${formatted_end}`))
-			.toBeVisible();
+			.element(page.getByText(hidden, { exact: true }))
+			.not.toBeInTheDocument();
 	});
 
 	it("calls onResetZoom when reset button is clicked", async () => {

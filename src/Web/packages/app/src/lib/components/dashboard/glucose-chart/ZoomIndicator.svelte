@@ -1,6 +1,7 @@
 <script lang="ts">
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
   import { Button } from "$lib/components/ui/button";
+  import { time } from "$lib/utils/formatting";
 
   interface Props {
     isZoomed: boolean;
@@ -19,13 +20,7 @@
       <span class="font-medium">Zoomed view</span>
       {#if brushXDomain}
         <span class="text-xs text-muted-foreground">
-          {brushXDomain[0].toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          })} - {brushXDomain[1].toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
+          {time(brushXDomain[0])} - {time(brushXDomain[1])}
         </span>
       {/if}
     </div>

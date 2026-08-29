@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Activity, Syringe, Utensils, AlertTriangle } from "lucide-svelte";
   import { BasalDeliveryOrigin, type ApsSnapshot } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import type { PredictionData } from "$api/predictions.remote";
   import { getAll as getApsSnapshots } from "$lib/api/generated/apsSnapshots.generated.remote";
@@ -170,11 +170,7 @@
         </Badge>
       </Dialog.Title>
       <Dialog.Description>
-        {timestamp.toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-          second: "2-digit",
-        })}
+        {time(timestamp, { seconds: true })}
         &mdash;
         {timestamp.toLocaleDateString([], {
           month: "short",

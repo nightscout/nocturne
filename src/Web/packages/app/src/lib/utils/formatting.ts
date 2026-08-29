@@ -179,17 +179,38 @@ export function prefersHour12(override?: boolean): boolean {
 /**
  * Format a time using the global time format and language preferences
  * @param date - Date object or Unix milliseconds
- * @param compact - If true, use numeric minutes in 12h mode
+ * @param opts.compact - If true, use numeric minutes in 12h mode
+ * @param opts.seconds - If true, append 2-digit seconds
  * @returns Formatted time string (e.g. "2:30 pm" or "14:30")
  */
-export function time(date: Date | number, compact?: boolean): string {
+export function time(
+  date: Date | number,
+  opts: { compact?: boolean; seconds?: boolean } = {}
+): string {
   const d = typeof date === "number" ? new Date(date) : date;
   const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
-    minute: compact && prefersHour12() ? "numeric" : "2-digit",
+    minute: opts.compact && prefersHour12() ? "numeric" : "2-digit",
     hour12: prefersHour12(),
   };
+  if (opts.seconds) options.second = "2-digit";
   return d.toLocaleTimeString(formatLocale(), options);
+}
+
+/**
+ * Format an hour-granularity label using the global time format and language
+ * preferences. Chart time axes tick on the hour, where `time`'s minutes are
+ * noise; layerchart's own `format="hour"` emits no hour12 token and so falls
+ * back to the browser locale, ignoring the preference entirely.
+ * @param date - Date object or Unix milliseconds
+ * @returns Formatted hour string (e.g. "2 pm" or "14")
+ */
+export function hourLabel(date: Date | number): string {
+  const d = typeof date === "number" ? new Date(date) : date;
+  return d.toLocaleTimeString(formatLocale(), {
+    hour: "numeric",
+    hour12: prefersHour12(),
+  });
 }
 
 /**

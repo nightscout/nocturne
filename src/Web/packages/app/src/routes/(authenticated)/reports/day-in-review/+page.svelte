@@ -23,7 +23,7 @@
   } from "lucide-svelte";
   import { getDayInReviewData } from "./data.remote";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseValue, getUnitLabel, time } from "$lib/utils/formatting";
   import {
     getRowTypeStyle,
     mergeTreatmentRows,
@@ -503,12 +503,7 @@
                 onclick={() => handleTreatmentClick(row)}
               >
                 <Table.Cell class="font-medium">
-                  {row.mills
-                    ? new Date(row.mills).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "—"}
+                  {row.mills ? time(row.mills) : "—"}
                 </Table.Cell>
                 <Table.Cell>
                   <Badge
