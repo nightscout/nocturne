@@ -28,7 +28,7 @@ function chartData(overrides: Partial<TransformedChartData> = {}): TransformedCh
     tempBasalSpans: [],
     basalDeliverySpans: [],
     defaultBasalRate: 1,
-    thresholds: {} as TransformedChartData["thresholds"],
+    thresholds: { glucoseYMax: 300 } as TransformedChartData["thresholds"],
     maxIob: 0,
     maxCob: 0,
     maxBasalRate: 0,
@@ -88,6 +88,29 @@ describe("mergeChartData wearable series", () => {
 
     expect(merged.heartRateSeries).toHaveLength(1);
     expect(merged.stepSeries).toHaveLength(1);
+  });
+});
+
+describe("mergeChartData glucose axis", () => {
+  // The server sizes glucoseYMax to the max SGV in the range it was asked for,
+  // so the streamed half can need a taller axis than the blocking half. The
+  // chart's yDomain clips above it, which would drop the excursion entirely.
+  it("takes the taller glucose axis from either half", () => {
+    const merged = mergeChartData(
+      chartData({ thresholds: { glucoseYMax: 300 } as never }),
+      chartData({ thresholds: { glucoseYMax: 370 } as never })
+    );
+
+    expect(merged.thresholds.glucoseYMax).toBe(370);
+  });
+
+  it("keeps the initial half's other thresholds", () => {
+    const merged = mergeChartData(
+      chartData({ thresholds: { glucoseYMax: 300, low: 70 } as never }),
+      chartData({ thresholds: { glucoseYMax: 280, low: 80 } as never })
+    );
+
+    expect(merged.thresholds.low).toBe(70);
   });
 });
 

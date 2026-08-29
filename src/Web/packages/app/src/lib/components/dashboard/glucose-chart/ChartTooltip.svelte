@@ -5,6 +5,7 @@
   import { BasalDeliveryOrigin, ChartSpanKind } from "$lib/api";
   import { bg, bgLabel } from "$lib/utils/formatting";
   import { getGlucoseChartContext } from "./chart-context.svelte";
+  import { isBasalAdjusted } from "./engine/basal-presentation";
   import type { GlucosePoint } from "./engine/chart-data-engine.svelte";
 
   interface Props {
@@ -133,10 +134,11 @@
       {/if}
       {#if showBasal && (activeBasal || activeBasalDelivery || activeTempBasal)}
         {#if activeBasal}
-          {@const isAdjusted =
-            (activeBasal.origin === BasalDeliveryOrigin.Algorithm ||
-              activeBasal.origin === BasalDeliveryOrigin.Manual) &&
-            activeBasal.rate !== activeBasal.scheduledRate}
+          {@const isAdjusted = isBasalAdjusted(
+            activeBasal.origin,
+            activeBasal.rate,
+            activeBasal.scheduledRate
+          )}
           {@const basalLabel =
             activeBasal.origin === BasalDeliveryOrigin.Suspended
               ? "Suspended"
@@ -159,7 +161,7 @@
                 : ""
             )}
           />
-          {#if isAdjusted && activeBasal.scheduledRate !== undefined}
+          {#if isAdjusted && activeBasal.scheduledRate != null}
             <Tooltip.Item
               label="Scheduled"
               value={activeBasal.scheduledRate}

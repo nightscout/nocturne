@@ -86,10 +86,18 @@ export function mergeChartData(
 			historical.basalDeliverySpans
 		),
 
-		// Resolved against the display window, which the historical half only extends
-		// backwards — the initial payload's values stand.
+		// Thresholds are profile-derived and identical across both halves, except
+		// glucoseYMax, which the server sizes to the max SGV it was asked for — the
+		// streamed half can carry a higher excursion, and the chart's yDomain clips
+		// anything above it.
 		defaultBasalRate: initial.defaultBasalRate,
-		thresholds: initial.thresholds,
+		thresholds: {
+			...initial.thresholds,
+			glucoseYMax: Math.max(
+				initial.thresholds.glucoseYMax,
+				historical.thresholds.glucoseYMax
+			),
+		},
 
 		// Take the max values from either dataset
 		maxIob: Math.max(initial.maxIob ?? 0, historical.maxIob ?? 0),
