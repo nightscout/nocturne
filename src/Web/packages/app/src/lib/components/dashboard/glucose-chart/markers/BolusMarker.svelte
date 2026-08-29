@@ -1,4 +1,11 @@
 <script lang="ts">
+  import {
+    trianglePoints,
+    MARKER_HALF_WIDTH,
+    MARKER_HEIGHT,
+    MARKER_HEIGHT_OVERRIDE,
+  } from "$lib/components/icons/marker-shapes";
+
   interface Props {
     xPos: number;
     yPos: number;
@@ -20,11 +27,19 @@
     onMarkerClick,
   }: Props = $props();
 
-  // Algorithm-delivered doses (SMBs / auto-boluses) render as an outlined dome so
-  // they read distinctly from a user-initiated (filled) bolus. Category comes from
-  // the backend; the frontend only picks the shape.
+  // Algorithm-delivered doses (SMBs / auto-boluses) render outlined so they read
+  // distinctly from a user-initiated (filled) bolus. Category comes from the
+  // backend; the frontend only picks the shape.
   const isAutomatic = $derived(
     bolusType === "AutomaticBolus" || bolusType === "Smb",
+  );
+
+  const points = $derived(
+    trianglePoints(
+      "down",
+      MARKER_HALF_WIDTH,
+      isOverride ? MARKER_HEIGHT_OVERRIDE : MARKER_HEIGHT,
+    ),
   );
 </script>
 
@@ -35,24 +50,16 @@
   onclick={() => onMarkerClick(treatmentId)}
   class="cursor-pointer"
 >
-  {#if isOverride}
-    <!-- Triangle for manual override -->
+  {#if isAutomatic}
     <polygon
-      points="0,12 -8,0 8,0"
-      class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
-    />
-  {:else if isAutomatic}
-    <!-- Outlined dome for algorithm-delivered doses (SMB / auto-bolus) -->
-    <path
-      d="M -8,0 A 8,8 0 0,1 8,0 Z"
+      {points}
       fill="none"
       class="stroke-insulin-bolus opacity-90 hover:opacity-100 transition-opacity"
       stroke-width="1.5"
     />
   {:else}
-    <!-- Hemisphere (dome shape - curves above baseline) -->
-    <path
-      d="M -8,0 A 8,8 0 0,1 8,0 Z"
+    <polygon
+      {points}
       class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
     />
   {/if}

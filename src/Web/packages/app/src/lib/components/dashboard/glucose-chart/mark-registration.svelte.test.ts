@@ -75,18 +75,18 @@ describe("glucose-chart mark registration", () => {
 	it("keeps marker glyph geometry and classes", async () => {
 		const { container } = await renderAt(1);
 
-		// Bolus override triangle (i % 3 === 0).
+		// Bolus override triangle (i % 3 === 0), pointing down at the baseline.
 		const triangle = container.querySelector<SVGPolygonElement>(
-			"polygon[points='0,12 -8,0 8,0']",
+			"polygon[points='-8,-12 8,-12 0,0']",
 		);
 		expect(triangle).not.toBeNull();
 		expect(triangle?.getAttribute("class")).toBe(
 			"opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity",
 		);
 
-		// Carb bowl.
+		// Carb triangle, pointing up at the same baseline.
 		expect(
-			container.querySelector("path[d='M -8,0 A 8,8 0 0,0 8,0 Z']"),
+			container.querySelector("polygon[points='-8,8 8,8 0,0']"),
 		).not.toBeNull();
 
 		// Tracker pill.

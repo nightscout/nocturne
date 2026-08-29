@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Syringe } from "lucide-svelte";
+  import { trianglePoints } from "$lib/components/icons/marker-shapes";
 
   interface Props {
     xPos: number;
@@ -41,12 +41,11 @@
     stroke-width="1"
     opacity={0.9}
   />
-  <!-- Syringe icon via foreignObject -->
-  <foreignObject x="-22" y="-7" width="14" height="14">
-    <div class="flex items-center justify-center w-full h-full">
-      <Syringe size={10} class="text-indigo-600 dark:text-indigo-400" />
-    </div>
-  </foreignObject>
+  <!-- Triangle pointing along the time axis, sized to sit inside the pill -->
+  <polygon
+    points={trianglePoints("right", 5, 9, -10, 0)}
+    class="fill-indigo-600 dark:fill-indigo-400"
+  />
   <!-- Units label -->
   <text
     x={2}

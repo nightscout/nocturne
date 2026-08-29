@@ -1,4 +1,10 @@
 <script lang="ts">
+  import {
+    trianglePoints,
+    MARKER_HALF_WIDTH,
+    MARKER_HEIGHT,
+  } from "$lib/components/icons/marker-shapes";
+
   interface Props {
     xPos: number;
     yPos: number;
@@ -30,9 +36,8 @@
       {label}
     </text>
   {/if}
-  <!-- Hemisphere (bowl shape - curves below baseline) -->
-  <path
-    d="M -8,0 A 8,8 0 0,0 8,0 Z"
+  <polygon
+    points={trianglePoints("up", MARKER_HALF_WIDTH, MARKER_HEIGHT)}
     fill="var(--carbs)"
     class="opacity-90 hover:opacity-100 transition-opacity"
   />

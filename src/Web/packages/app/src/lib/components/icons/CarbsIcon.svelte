@@ -1,10 +1,12 @@
 <script lang="ts">
   /**
-   * Carbs hemisphere icon - bowl shape curving below baseline. Used for carb
-   * treatment markers on charts and in legends. Complements BolusIcon to form a
-   * complete circle when both are present.
+   * Carbs marker icon — a triangle pointing up at the baseline. Used for carb
+   * treatment markers in legends and stat cards; the chart draws the same shape
+   * from <see>marker-shapes</see>. Complements BolusIcon, which points down at
+   * the same baseline.
    */
   import type { IconProps } from "./types";
+  import { trianglePoints } from "./marker-shapes";
 
   let {
     size = 16,
@@ -25,10 +27,8 @@
   class={className}
   {...rest}
 >
-  <!-- Hemisphere (bowl shape - curves below baseline) -->
-  <path
-    d="M {size / 2 - radius},{0} A {radius},{radius} 0 0,0 {size / 2 +
-      radius},{0} Z"
+  <polygon
+    points={trianglePoints("up", radius, size / 2, size / 2, 0)}
     fill={color}
   />
 </svg>
