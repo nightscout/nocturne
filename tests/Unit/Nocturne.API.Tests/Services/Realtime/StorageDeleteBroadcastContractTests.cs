@@ -36,40 +36,49 @@ public class StorageDeleteBroadcastContractTests
     private const string RecordGuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
     private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
+    /// <summary>
+    /// Records both arguments of every storage broadcast. The first argument selects the SignalR
+    /// tenant group; the bridge picks the socket.io room off the payload's <c>colName</c>. If the
+    /// two disagree the event is delivered to a room no client of that collection has joined.
+    /// </summary>
     private sealed class BroadcastCapture
     {
         public Mock<ISignalRBroadcastService> Broadcast { get; } = new();
-        private object? _payload;
+        private (string Group, object Data)? _delete;
+        private (string Group, object Data)? _create;
 
         public BroadcastCapture()
         {
             Broadcast
                 .Setup(b => b.BroadcastStorageDeleteAsync(It.IsAny<string>(), It.IsAny<object>()))
-                .Callback<string, object>((_, data) => _payload = data)
+                .Callback<string, object>((group, data) => _delete = (group, data))
+                .Returns(Task.CompletedTask);
+            Broadcast
+                .Setup(b => b.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()))
+                .Callback<string, object>((group, data) => _create = (group, data))
                 .Returns(Task.CompletedTask);
         }
 
-        public JsonElement Payload
-        {
-            get
-            {
-                _payload.Should().NotBeNull("the producer must broadcast a delete event");
-                return JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(_payload));
-            }
-        }
-    }
+        public JsonElement Delete => Read(_delete, "delete");
 
-    private static void AssertSingleRecordShape(JsonElement payload, string collection, string sourceId)
-    {
-        payload.GetProperty("colName").GetString().Should().Be(collection);
-        payload
-            .GetProperty("identifier")
-            .GetString()
-            .Should()
-            .Be(
-                MongoObjectId.Coerce(sourceId),
-                "clients match the identifier against the id the legacy wire gave them"
+        public JsonElement Create => Read(_create, "create");
+
+        private static JsonElement Read((string Group, object Data)? captured, string kind)
+        {
+            captured.Should().NotBeNull($"the producer must broadcast a {kind} event");
+            var payload = JsonSerializer.Deserialize<JsonElement>(
+                JsonSerializer.Serialize(captured!.Value.Data)
             );
+            payload
+                .GetProperty("colName")
+                .GetString()
+                .Should()
+                .Be(
+                    captured.Value.Group,
+                    "the SignalR group and the payload's colName select the same audience and must agree"
+                );
+            return payload;
+        }
     }
 
     private static WriteSideEffectsService CreateSideEffects(BroadcastCapture capture) =>
@@ -102,6 +111,9 @@ public class StorageDeleteBroadcastContractTests
             NullLogger<ActivityService>.Instance
         );
 
+    private static string? Identifier(JsonElement payload) =>
+        payload.GetProperty("identifier").GetString();
+
     [Theory]
     [InlineData("entries")]
     [InlineData("devicestatus")]
@@ -112,8 +124,8 @@ public class StorageDeleteBroadcastContractTests
         await CreateSideEffects(capture)
             .OnDeletedAsync(collection, new Entry { Id = RecordGuid, Sgv = 120 });
 
-        AssertSingleRecordShape(capture.Payload, collection, RecordGuid);
-        capture.Payload.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
+        Identifier(capture.Delete).Should().Be(MongoObjectId.Coerce(RecordGuid));
+        capture.Delete.GetProperty("doc").GetProperty("sgv").GetInt32().Should().Be(120);
     }
 
     [Fact]
@@ -123,47 +135,86 @@ public class StorageDeleteBroadcastContractTests
 
         await CreateSideEffects(capture).OnBulkDeletedAsync("entries", 17);
 
-        var payload = capture.Payload;
-        payload.GetProperty("colName").GetString().Should().Be("entries");
-        payload.GetProperty("deletedCount").GetInt64().Should().Be(17);
-        payload
-            .TryGetProperty("identifier", out _)
+        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(17);
+        capture
+            .Delete.TryGetProperty("identifier", out _)
             .Should()
             .BeFalse("a range delete materialises no ids; clients reconcile it on catch-up");
     }
 
     [Fact]
-    public async Task TreatmentSink_Delete_CarriesColNameAndIdentifier()
+    public async Task TreatmentSink_Delete_CarriesColNameIdentifierAndDoc()
     {
         var capture = new BroadcastCapture();
 
         await CreateTreatmentSink(capture)
             .OnDeletedAsync(new Treatment { Id = RecordGuid, EventType = "Meal Bolus" }, CancellationToken.None);
 
-        AssertSingleRecordShape(capture.Payload, "treatments", RecordGuid);
+        Identifier(capture.Delete).Should().Be(MongoObjectId.Coerce(RecordGuid));
+        capture
+            .Delete.GetProperty("doc")
+            .GetProperty("eventType")
+            .GetString()
+            .Should()
+            .Be("Meal Bolus", "the web client reads the removed record out of doc");
     }
 
     /// <summary>
-    /// The identifier on the wire has to be the same string the v3 REST projection served, or the
-    /// client's lookup misses just as surely as it does on an empty one.
+    /// The invariant the whole fix rests on: a client only ever holds the identifier its create
+    /// event delivered, so a delete carrying any other spelling of the same id misses the lookup
+    /// exactly as an empty one does.
+    /// </summary>
+    [Fact]
+    public async Task DeleteIdentifier_EqualsTheCreateIdentifier_ForEntries()
+    {
+        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
+        var capture = new BroadcastCapture();
+        var sideEffects = CreateSideEffects(capture);
+
+        await sideEffects.OnCreatedAsync("entries", new[] { entry });
+        await sideEffects.OnDeletedAsync("entries", entry);
+
+        var doc = capture.Create.GetProperty("doc");
+        doc.GetProperty("_id")
+            .GetString()
+            .Should()
+            .Be(doc.GetProperty("identifier").GetString(), "one record cannot ship two ids");
+        Identifier(capture.Delete).Should().Be(doc.GetProperty("identifier").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_EqualsTheCreateIdentifier_ForTreatments()
+    {
+        var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
+        var capture = new BroadcastCapture();
+        var sink = CreateTreatmentSink(capture);
+
+        await sink.OnCreatedAsync(treatment, CancellationToken.None);
+        await sink.OnDeletedAsync(treatment, CancellationToken.None);
+
+        Identifier(capture.Delete)
+            .Should()
+            .Be(capture.Create.GetProperty("doc").GetProperty("identifier").GetString());
+    }
+
+    /// <summary>
+    /// The same identifier also has to survive a client that loaded the record over REST rather
+    /// than over the socket.
     /// </summary>
     [Fact]
     public async Task DeleteIdentifier_MatchesTheV3RestProjection()
     {
-        var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
         var entry = new Entry { Id = RecordGuid, Sgv = 120 };
-
-        var restTreatmentId = RestIdentifier(treatment);
-        var restEntryId = RestIdentifier(new EntryV3Response(entry));
-
-        var treatmentCapture = new BroadcastCapture();
-        await CreateTreatmentSink(treatmentCapture).OnDeletedAsync(treatment, CancellationToken.None);
+        var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
 
         var entryCapture = new BroadcastCapture();
         await CreateSideEffects(entryCapture).OnDeletedAsync("entries", entry);
 
-        treatmentCapture.Payload.GetProperty("identifier").GetString().Should().Be(restTreatmentId);
-        entryCapture.Payload.GetProperty("identifier").GetString().Should().Be(restEntryId);
+        var treatmentCapture = new BroadcastCapture();
+        await CreateTreatmentSink(treatmentCapture).OnDeletedAsync(treatment, CancellationToken.None);
+
+        Identifier(entryCapture.Delete).Should().Be(RestIdentifier(new EntryV3Response(entry)));
+        Identifier(treatmentCapture.Delete).Should().Be(RestIdentifier(treatment));
 
         static string? RestIdentifier(object projection) =>
             JsonSerializer
@@ -172,8 +223,12 @@ public class StorageDeleteBroadcastContractTests
                 .GetString();
     }
 
+    /// <summary>
+    /// The Nocturne-native collections serve raw uuids on every surface they have, so coercing
+    /// their delete identifier would emit an id none of those surfaces produces.
+    /// </summary>
     [Fact]
-    public async Task SimpleEntityService_Delete_CarriesColNameAndIdentifier()
+    public async Task SimpleEntityService_Delete_SendsTheUuidVerbatim()
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -197,11 +252,12 @@ public class StorageDeleteBroadcastContractTests
         ).DeleteHeartRateAsync(RecordGuid);
 
         deleted.Should().BeTrue();
-        AssertSingleRecordShape(capture.Payload, "heartrate", RecordGuid);
+        capture.Delete.GetProperty("colName").GetString().Should().Be("heartrate");
+        Identifier(capture.Delete).Should().Be(RecordGuid);
     }
 
     [Fact]
-    public async Task ActivityService_SingleDelete_CarriesColNameAndIdentifier()
+    public async Task ActivityService_SingleDelete_SendsTheUuidVerbatim()
     {
         var stateSpans = new Mock<IStateSpanService>();
         stateSpans
@@ -212,11 +268,12 @@ public class StorageDeleteBroadcastContractTests
         await CreateActivityService(capture, stateSpans, new Mock<ISleepService>())
             .DeleteActivityAsync(RecordGuid, CancellationToken.None);
 
-        AssertSingleRecordShape(capture.Payload, "activity", RecordGuid);
+        capture.Delete.GetProperty("colName").GetString().Should().Be("activity");
+        Identifier(capture.Delete).Should().Be(RecordGuid);
     }
 
     [Fact]
-    public async Task ActivityService_SleepDelete_CarriesColNameAndIdentifier()
+    public async Task ActivityService_SleepDelete_SendsTheUuidVerbatim()
     {
         var sleep = new Mock<ISleepService>();
         sleep
@@ -227,7 +284,8 @@ public class StorageDeleteBroadcastContractTests
         await CreateActivityService(capture, new Mock<IStateSpanService>(), sleep)
             .DeleteActivityAsync(RecordGuid, CancellationToken.None);
 
-        AssertSingleRecordShape(capture.Payload, "activity", RecordGuid);
+        capture.Delete.GetProperty("colName").GetString().Should().Be("activity");
+        Identifier(capture.Delete).Should().Be(RecordGuid);
     }
 
     [Fact]
@@ -246,8 +304,7 @@ public class StorageDeleteBroadcastContractTests
         await CreateActivityService(capture, stateSpans, new Mock<ISleepService>())
             .DeleteMultipleActivitiesAsync("exercise", CancellationToken.None);
 
-        var payload = capture.Payload;
-        payload.GetProperty("colName").GetString().Should().Be("activity");
-        payload.GetProperty("deletedCount").GetInt64().Should().Be(1);
+        capture.Delete.GetProperty("colName").GetString().Should().Be("activity");
+        capture.Delete.GetProperty("deletedCount").GetInt64().Should().Be(1);
     }
 }

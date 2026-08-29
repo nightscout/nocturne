@@ -75,7 +75,7 @@ public class SignalRTreatmentEventSink : IDataEventSink<Treatment>
         try
         {
             await _broadcast.BroadcastStorageDeleteAsync(
-                Collection, StorageDeleteEvent.ForRecord(Collection, treatment?.Id, treatment));
+                Collection, StorageDeleteEvent.ForRecord(Collection, MongoObjectId.Coerce(treatment?.Id), treatment));
         }
         catch (Exception ex)
         {
