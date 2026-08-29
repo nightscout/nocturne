@@ -3,9 +3,12 @@
  * component lives.
  *
  * SvelteKit registers a query instance in its client-side query map from an `$effect.pre` created
- * wherever the query was constructed, and Svelte destroys a `$derived`'s effects the moment that
- * derived loses its last consumer. So a query held as `$derived(cond ? someQuery() : null)` leaves
- * the map as soon as the markup reading it stops doing so — an optimistic override that
+ * wherever the query was constructed, and that registration is released by the effect's teardown.
+ * Svelte runs the teardown of every effect a `$derived` owns the moment that derived loses its last
+ * consumer (`remove_reaction` disconnects it and calls `freeze_derived_effects`), and re-reading it
+ * does not unfreeze anything that would re-register: the entry is created in the query's
+ * constructor, not in the effect body. So a query held as `$derived(cond ? someQuery() : null)`
+ * leaves the map as soon as the markup reading it stops doing so — an optimistic override that
  * short-circuits the expression reading `.current`, or an `{#if}` block unmounting, is enough.
  * Reading the derived again does not bring it back: its own dependencies have not changed, so it
  * replays the cached, already-released instance. The next command's single-flight refresh then has
