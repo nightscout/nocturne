@@ -203,7 +203,8 @@ export function time(
  * noise; layerchart's own `format="hour"` emits no hour12 token and so falls
  * back to the browser locale, ignoring the preference entirely.
  * @param date - Date object or Unix milliseconds
- * @returns Formatted hour string (e.g. "2 pm" or "14")
+ * @returns Formatted hour string (e.g. "2 pm", or "14" — 24-hour output is
+ * zero-padded and may carry a locale suffix, e.g. "09" or "09 Uhr")
  */
 export function hourLabel(date: Date | number): string {
   const d = typeof date === "number" ? new Date(date) : date;

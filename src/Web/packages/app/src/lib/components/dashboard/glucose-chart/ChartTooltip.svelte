@@ -270,7 +270,7 @@
   {#snippet children({ data })}
     <Tooltip.Item
       value={data?.time}
-      format="minute"
+      format={(v) => (v instanceof Date ? time(v) : String(v))}
       onclick={() => goto(`/reports/day-in-review?date=${data?.time}`)}
     />
   {/snippet}
