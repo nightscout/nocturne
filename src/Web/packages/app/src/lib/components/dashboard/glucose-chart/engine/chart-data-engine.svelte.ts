@@ -539,7 +539,6 @@ export function createChartDataEngine(
   // mills value must never appear twice — even if base or realtimeStore
   // emit duplicates.
   const glucoseData = $derived.by(() => {
-    $inspect.trace("glucoseData");
     const base = serverChartData?.glucoseData ?? [];
     if (!serverChartData) return base as GlucosePoint[];
 
