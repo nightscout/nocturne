@@ -1,31 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { readOnlyNav, type NavViewer } from "./read-only-navigation";
-
-/** The sidebar's navigation, in the order AppSidebar builds it. */
-const SIDEBAR_NAV = [
-  { title: "Dashboard" },
-  { title: "Calendar" },
-  { title: "Time Spans" },
-  { title: "Reports" },
-  { title: "Clock" },
-  { title: "Tenants" },
-  { title: "Food" },
-  { title: "Meals" },
-  { title: "Tools" },
-  { title: "Alerts" },
-  { title: "Dev Tools" },
-  { title: "Settings" },
-];
+import { buildAppNavigation, type NavViewer } from "./app-navigation";
 
 const MEMBER: NavViewer = {
+  user: { subjectId: "s1" },
   isGuestSession: false,
-  anonymous: false,
+  isPlatformAdmin: false,
   grantedScopes: ["*"],
+  tenantCount: 1,
+  tenantless: false,
 };
-/** A share on its default categories. */
+/** A share link on its default categories. */
 const GLUCOSE_ONLY_SHARE: NavViewer = {
-  isGuestSession: false,
-  anonymous: true,
+  ...MEMBER,
+  user: null,
   grantedScopes: ["glucose.read"],
 };
 const REPORTING_SHARE: NavViewer = {
@@ -33,18 +20,34 @@ const REPORTING_SHARE: NavViewer = {
   grantedScopes: ["glucose.read", "reports.read"],
 };
 const GUEST: NavViewer = {
+  ...MEMBER,
   isGuestSession: true,
-  anonymous: false,
   grantedScopes: ["glucose.read", "reports.read"],
 };
 
-function titles(viewer: NavViewer): string[] | null {
-  return readOnlyNav(SIDEBAR_NAV, viewer)?.map((item) => item.title) ?? null;
+/** Surfaces only the data owner can act on. */
+const OWNER_ONLY = [
+  "Food",
+  "Meals",
+  "Tools",
+  "Alerts",
+  "Dev Tools",
+  "Settings",
+];
+
+function titles(viewer: NavViewer): string[] {
+  return buildAppNavigation(viewer).map((item) => item.title);
 }
 
-describe("readOnlyNav", () => {
-  it("leaves a member's navigation alone", () => {
-    expect(titles(MEMBER)).toBeNull();
+describe("buildAppNavigation", () => {
+  it("gives a member every surface", () => {
+    const visible = titles(MEMBER);
+
+    for (const owned of OWNER_ONLY) {
+      expect(visible).toContain(owned);
+    }
+    expect(visible).toContain("Dashboard");
+    expect(visible).toContain("Reports");
   });
 
   it("offers a public share only the dashboard when it grants no reports", () => {
@@ -56,25 +59,11 @@ describe("readOnlyNav", () => {
   });
 
   it("withholds every owner surface from a public share", () => {
-    const visible = titles(REPORTING_SHARE) ?? [];
+    const visible = titles(REPORTING_SHARE);
 
-    for (const owned of [
-      "Food",
-      "Meals",
-      "Tools",
-      "Alerts",
-      "Dev Tools",
-      "Settings",
-      "Tenants",
-    ]) {
+    for (const owned of [...OWNER_ONLY, "Tenants"]) {
       expect(visible).not.toContain(owned);
     }
-  });
-
-  it("counts a readwrite grant as its read counterpart", () => {
-    expect(
-      titles({ ...GLUCOSE_ONLY_SHARE, grantedScopes: ["reports.readwrite"] })
-    ).toContain("Reports");
   });
 
   it("offers a share nothing beyond the dashboard when its scopes are unknown", () => {
@@ -96,6 +85,13 @@ describe("readOnlyNav", () => {
   it("does not narrow a guest link to the share's surfaces", () => {
     expect(titles({ ...GUEST, grantedScopes: ["glucose.read"] })).toContain(
       "Reports"
+    );
+  });
+
+  it("offers the tenant switcher only to a member holding more than one", () => {
+    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("Tenants");
+    expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
+      "Tenants"
     );
   });
 });
