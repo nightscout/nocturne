@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Xunit;
 
@@ -71,6 +72,46 @@ public sealed class SiteSecurityMiddlewareTests
         var ctx = new DefaultHttpContext();
         ctx.Response.Body = new MemoryStream();
         ctx.Request.Path = "/api/v4/entries";
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Theory]
+    [InlineData("/api/v4/status")]
+    [InlineData("/api/v4/entries")]
+    public async Task Share_host_is_served_under_lockdown(string path)
+    {
+        // A share link is an anonymous read the tenant owner granted; the site-wide lockdown
+        // must not revoke it, or every link already handed out 401s and the web layer never
+        // even learns the tenant allows anonymous read.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = new DefaultHttpContext();
+        ctx.Response.Body = new MemoryStream();
+        ctx.Request.Path = path;
+        ctx.SetShareAccess();
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeTrue();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+    }
+
+    [Fact]
+    public async Task Bare_tenant_host_is_still_denied_under_lockdown()
+    {
+        // The counterpart to the share-host exemption: without a resolved share token the
+        // lockdown still applies, so the exemption is not a hole for any anonymous request.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = new DefaultHttpContext();
+        ctx.Response.Body = new MemoryStream();
+        ctx.Request.Path = "/api/v4/status";
 
         await mw.InvokeAsync(ctx);
 

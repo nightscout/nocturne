@@ -64,6 +64,19 @@ public class SiteSecurityMiddleware
             return;
         }
 
+        // A public share link is a per-tenant grant of anonymous read the tenant owner minted
+        // deliberately; the site-wide lockdown governs who may reach the instance's own hosts, and
+        // applying it here would silently 401 every link already handed out. Safe because
+        // TenantResolutionMiddleware sets ShareAccess only once the token resolves to an active
+        // tenant, and AuthenticationMiddleware narrows the request to Scope.PublicShareScopes --
+        // the exemption cannot reach past what the tenant published. Mirrors requiresSignIn in the
+        // web layer's public-routes.ts.
+        if (context.IsShareAccess())
+        {
+            await _next(context);
+            return;
+        }
+
         // Site is locked down - check if the route should be protected
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
 
