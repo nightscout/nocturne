@@ -186,8 +186,8 @@ public class Treatment : ProcessableDocumentBase
         if (TryParseIsoMills(Timestamp, out mills))
             return mills;
 
-        if (Date is > 0)
-            return Date.Value;
+        if (_date is > 0)
+            return _date.Value;
 
         return 0;
     }
@@ -330,10 +330,19 @@ public class Treatment : ProcessableDocumentBase
     public string? Split { get; set; }
 
     /// <summary>
-    /// Gets or sets when this treatment was created
+    /// Gets or sets when this treatment was created (Unix milliseconds).
+    /// Falls back to Mills so every serialized treatment carries it: AAPS reads "date"
+    /// unconditionally from realtime storage events and throws when it is null or absent.
+    /// <see cref="ResolveMills"/> reads the backing field directly to avoid recursing here.
     /// </summary>
+    private long? _date;
+
     [JsonPropertyName("date")]
-    public long? Date { get; set; }
+    public long? Date
+    {
+        get => _date ?? (Mills > 0 ? Mills : null);
+        set => _date = value;
+    }
 
     /// <summary>
     /// Gets or sets the carb time offset

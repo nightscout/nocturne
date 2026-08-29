@@ -35,10 +35,18 @@ public class DeviceStatus : ProcessableDocumentBase
 
     /// <summary>
     /// Timestamp in milliseconds since Unix epoch. AAPS sends "date" instead of "mills".
+    /// Falls back to Mills, matching the V3 REST projection: AAPS reads "date" unconditionally
+    /// from realtime storage events and throws when it is absent, killing the upload thread.
     /// </summary>
+    private long? _date;
+
     [JsonPropertyName("date")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? Date { get; set; }
+    public long? Date
+    {
+        get => _date ?? (Mills > 0 ? Mills : null);
+        set => _date = value;
+    }
 
     /// <summary>
     /// Gets or sets the ISO 8601 formatted creation timestamp
