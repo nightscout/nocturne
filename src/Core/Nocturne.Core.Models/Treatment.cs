@@ -329,6 +329,8 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("split")]
     public string? Split { get; set; }
 
+    private long? _date;
+
     /// <summary>
     /// Gets or sets when this treatment was created (Unix milliseconds).
     /// Falls back to Mills — which already resolves <c>created_at</c>, <c>eventTime</c> and
@@ -336,10 +338,7 @@ public class Treatment : ProcessableDocumentBase
     /// layer projects. <see cref="ResolveMills"/> reads the backing field directly to avoid
     /// recursing back into this getter.
     /// </summary>
-    private long? _date;
-
     [JsonPropertyName("date")]
-    [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? Date
     {
         get => _date ?? (Mills > 0 ? Mills : null);

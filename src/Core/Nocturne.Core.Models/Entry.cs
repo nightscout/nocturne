@@ -408,25 +408,11 @@ public class Entry : ProcessableDocumentBase
     }
 
     /// <summary>
-    /// Resolves the event time for the V3 compatibility timestamps: Mills, then <c>created_at</c>.
-    /// Mills already resolves <c>date</c> and <c>dateString</c>; <c>created_at</c> is the only
-    /// timestamp it does not reach, and it is read-only here so the ingest timeline is unchanged.
+    /// Resolves the V3 compatibility timestamps: Mills, then <c>created_at</c>. Mills already
+    /// resolves <c>date</c> and <c>dateString</c>; <c>created_at</c> is the only timestamp it
+    /// does not reach.
     /// </summary>
-    private long? FallbackTimestampMills()
-    {
-        if (Mills > 0)
-            return Mills;
-
-        return DateTimeOffset.TryParse(
-            CreatedAt,
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AssumeUniversal
-                | System.Globalization.DateTimeStyles.AdjustToUniversal,
-            out var createdAt
-        )
-            ? createdAt.ToUnixTimeMilliseconds()
-            : null;
-    }
+    private long? FallbackTimestampMills() => V3Timestamps.Resolve(Mills, CreatedAt);
 
     /// <summary>
     /// Gets or sets the subject identifier. V3 compatibility field.

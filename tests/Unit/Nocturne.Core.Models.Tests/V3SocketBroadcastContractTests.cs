@@ -38,6 +38,26 @@ public class V3SocketBroadcastContractTests
             { "devicestatus (created_at only)", new DeviceStatus { CreatedAt = CreatedAt }, CreatedAtMills },
             { "profile (mills)", new Profile { Mills = Mills }, Mills },
             { "profile (startDate only)", new Profile { Mills = 0, StartDate = CreatedAt }, CreatedAtMills },
+            {
+                "profile (created_at only)",
+                new Profile
+                {
+                    Mills = 0,
+                    StartDate = null!,
+                    CreatedAt = CreatedAt,
+                },
+                CreatedAtMills
+            },
+            {
+                "profile (unparseable startDate)",
+                new Profile
+                {
+                    Mills = 0,
+                    StartDate = "not-a-date",
+                    CreatedAt = CreatedAt,
+                },
+                CreatedAtMills
+            },
         };
 
     [Theory]
@@ -105,10 +125,43 @@ public class V3SocketBroadcastContractTests
     }
 
     [Fact]
-    public void UnparseableCreatedAt_FabricatesNothing()
+    public void UnparseableCreatedAt_YieldsNoSrvTimestamp()
     {
+        // DeviceStatus.CreatedAt defaults to UtcNow, so this pins the parse leg only — it is
+        // not a claim that a timestamp-less devicestatus resolves to null.
         new Entry { CreatedAt = "not-a-date" }.SrvModified.Should().BeNull();
         new DeviceStatus { CreatedAt = "not-a-date" }.SrvModified.Should().BeNull();
+        new Profile { Mills = 0, StartDate = "not-a-date", CreatedAt = "also-not-a-date" }
+            .SrvModified.Should()
+            .BeNull();
+    }
+
+    /// <summary>
+    /// An offset-bearing <c>created_at</c> must be honoured, and a zone-less one read as UTC
+    /// rather than as server-local time — the box's timezone must not move the value.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-08-06T14:00:00+02:00", 1786017600000L)]
+    [InlineData("2026-08-06T12:00:00Z", 1786017600000L)]
+    [InlineData("2026-08-06T12:00:00", 1786017600000L)]
+    [InlineData("2026-08-06T09:00:00-03:00", 1786017600000L)]
+    public void CreatedAtOffsets_ResolveToTheSameInstant(string createdAt, long expected)
+    {
+        new Entry { CreatedAt = createdAt }.SrvModified.Should().Be(expected);
+        new DeviceStatus { CreatedAt = createdAt }.SrvModified.Should().Be(expected);
+        new Profile { Mills = 0, StartDate = createdAt }.SrvModified.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// A pre-1970 event time is still an event time. A <c>&gt; 0</c> guard drops it and puts
+    /// the doc back on the crashing path.
+    /// </summary>
+    [Fact]
+    public void NegativeMills_StillYieldsANumericSrvTimestamp()
+    {
+        new Entry { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
+        new DeviceStatus { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
+        new Profile { Mills = -86_400_000 }.SrvModified.Should().Be(-86_400_000);
     }
 
     [Theory]
@@ -121,6 +174,19 @@ public class V3SocketBroadcastContractTests
         {
             date.ValueKind.Should()
                 .Be(JsonValueKind.Number, $"{shape} must not broadcast date as null");
+        }
+    }
+
+    [Fact]
+    public void DocsWithAnEventTime_SerializeANumericDate()
+    {
+        foreach (object doc in new object[] { new Treatment { Mills = Mills }, new DeviceStatus { Mills = Mills } })
+        {
+            var root = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(doc));
+
+            root.TryGetProperty("date", out var date).Should().BeTrue();
+            date.ValueKind.Should().Be(JsonValueKind.Number);
+            date.GetInt64().Should().Be(Mills);
         }
     }
 
@@ -193,19 +259,14 @@ public class V3SocketBroadcastContractTests
     }
 
     /// <summary>
-    /// The NS v3 spec allows the timestamp fields as strings, and every sibling
-    /// (<c>mills</c>, <c>srvModified</c>, <c>srvCreated</c>) already accepts one.
+    /// An out-of-range <c>date</c> must be rejected at deserialization rather than saturated
+    /// into <see cref="long.MaxValue"/>, which <c>Treatment.Created_at</c> then throws on.
     /// </summary>
     [Fact]
-    public void StringDate_Deserializes()
+    public void OutOfRangeDate_IsRejectedNotSaturated()
     {
-        JsonSerializer
-            .Deserialize<Treatment>("{\"date\":\"" + Mills + "\"}")!
-            .Date.Should()
-            .Be(Mills);
-        JsonSerializer
-            .Deserialize<DeviceStatus>("{\"date\":\"" + Mills + "\"}")!
-            .Date.Should()
-            .Be(Mills);
+        var act = () => JsonSerializer.Deserialize<Treatment>("{\"date\":1.9e19}");
+
+        act.Should().Throw<JsonException>();
     }
 }

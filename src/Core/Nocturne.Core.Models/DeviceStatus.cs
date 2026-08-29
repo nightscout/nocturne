@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Serializers;
@@ -34,17 +33,16 @@ public class DeviceStatus : ProcessableDocumentBase
     [JsonPropertyName("mills")]
     public override long Mills { get; set; }
 
+    private long? _date;
+
     /// <summary>
     /// Timestamp in milliseconds since Unix epoch. AAPS sends "date" instead of "mills".
     /// Falls back to Mills only — never to <c>created_at</c>, because DeviceStatusDecomposer
     /// seeds Mills from this property when a doc arrives without one, and a deeper fallback
     /// here would pre-empt the richer precedence in its ResolveTimestamp.
     /// </summary>
-    private long? _date;
-
     [JsonPropertyName("date")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? Date
     {
         get => _date ?? (Mills > 0 ? Mills : null);
@@ -89,30 +87,14 @@ public class DeviceStatus : ProcessableDocumentBase
     }
 
     /// <summary>
-    /// Resolves the event time for the V3 compatibility timestamps: Mills, then <c>date</c>,
-    /// then <c>created_at</c>. Loop and xDrip+ upload a devicestatus carrying neither
-    /// <c>mills</c> nor <c>date</c>, and the broadcast document is the raw upload, so without
-    /// the <c>created_at</c> leg those fields serialize as null. Read-only — the V4
-    /// decomposition timeline is resolved separately, and with a richer precedence, by
-    /// DeviceStatusDecomposer.ResolveTimestamp.
+    /// Resolves the V3 compatibility timestamps: Mills, then <c>date</c>, then <c>created_at</c>.
+    /// Loop and xDrip+ upload a devicestatus carrying neither <c>mills</c> nor <c>date</c>, and
+    /// the broadcast document is the raw upload, so without the <c>created_at</c> leg those
+    /// fields serialize as null. Reads <see cref="_date"/> rather than <see cref="Date"/> so
+    /// deepening that property can never make this recurse.
     /// </summary>
-    private long? FallbackTimestampMills()
-    {
-        if (Mills > 0)
-            return Mills;
-
-        if (Date is > 0)
-            return Date.Value;
-
-        return DateTimeOffset.TryParse(
-            CreatedAt,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out var createdAt
-        )
-            ? createdAt.ToUnixTimeMilliseconds()
-            : null;
-    }
+    private long? FallbackTimestampMills() =>
+        V3Timestamps.Resolve(Mills != 0 ? Mills : _date, CreatedAt);
 
     /// <summary>
     /// Gets or sets the UTC offset in minutes
