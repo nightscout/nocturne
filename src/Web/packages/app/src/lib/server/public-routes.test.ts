@@ -3,8 +3,9 @@ import {
   isPublicRoute,
   PUBLIC_PREFIXES,
   requiresSignIn,
-  shareLinkIsDeadEnd,
+  statusProbeRedirect,
 } from "./public-routes";
+import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 
 describe("isPublicRoute", () => {
   it("treats /join as public so an invitee without an account can accept an invite", () => {
@@ -86,22 +87,62 @@ describe("requiresSignIn", () => {
   });
 });
 
-describe("shareLinkIsDeadEnd", () => {
-  it("claims the statuses a share host cannot act on", () => {
-    // 404 is the API's answer to a token it cannot resolve; 503 is setup/recovery mode, which a
-    // share host has no way to satisfy. Both otherwise steer to /setup or the marketing site.
-    expect(shareLinkIsDeadEnd(true, 404)).toBe(true);
-    expect(shareLinkIsDeadEnd(true, 503)).toBe(true);
+describe("statusProbeRedirect", () => {
+  /** A self-hosted install with no marketing site, on an ordinary tenant host. */
+  const selfHosted = {
+    isShareHost: false,
+    recoveryMode: false,
+    marketingUrl: undefined,
+  };
+
+  it("claims every status a share host cannot act on, ahead of the instance-wide ones", () => {
+    // 404 an unresolvable token, 403 a suspended tenant, 503 an API that is itself unready. Each
+    // would otherwise steer to /setup, /auth/recovery or the marketing site, none of which a
+    // share host can do anything with.
+    for (const apiStatus of [404, 403, 503]) {
+      expect(
+        statusProbeRedirect({
+          ...selfHosted,
+          isShareHost: true,
+          recoveryMode: true,
+          marketingUrl: "https://nocturne.run",
+          apiStatus,
+        }),
+        String(apiStatus)
+      ).toEqual({ location: SHARE_UNAVAILABLE_PATH, status: 303 });
+    }
   });
 
-  it("leaves every other host on its own dead ends", () => {
-    expect(shareLinkIsDeadEnd(false, 404)).toBe(false);
-    expect(shareLinkIsDeadEnd(false, 503)).toBe(false);
+  it("leaves every other host on its own destinations", () => {
+    expect(statusProbeRedirect({ ...selfHosted, apiStatus: 503 })).toEqual({
+      location: "/setup",
+      status: 303,
+    });
+    expect(
+      statusProbeRedirect({ ...selfHosted, apiStatus: 503, recoveryMode: true })
+    ).toEqual({ location: "/auth/recovery", status: 303 });
+    expect(statusProbeRedirect({ ...selfHosted, apiStatus: 404 })).toEqual({
+      location: "/setup",
+      status: 303,
+    });
+    expect(
+      statusProbeRedirect({ ...selfHosted, apiStatus: 404, marketingUrl: "https://nocturne.run" })
+    ).toEqual({ location: "https://nocturne.run", status: 302 });
   });
 
-  it("does not claim a status that means something else on a share host", () => {
-    for (const status of [401, 403, 500, undefined, null, "404"]) {
-      expect(shareLinkIsDeadEnd(true, status), String(status)).toBe(false);
+  it("sends nowhere on a status neither branch answers for", () => {
+    // 403 is among them: only a share host reads it as a suspended tenant.
+    for (const apiStatus of [401, 403, 500, undefined, null, "404"]) {
+      expect(statusProbeRedirect({ ...selfHosted, apiStatus }), String(apiStatus)).toBeNull();
+    }
+  });
+
+  it("sends a share host nowhere on a status that is not its dead end either", () => {
+    for (const apiStatus of [401, 500, undefined, "404"]) {
+      expect(
+        statusProbeRedirect({ ...selfHosted, isShareHost: true, apiStatus }),
+        String(apiStatus)
+      ).toBeNull();
     }
   });
 });

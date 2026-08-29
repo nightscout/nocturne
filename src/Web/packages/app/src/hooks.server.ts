@@ -24,7 +24,7 @@ import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from
 import {
   STATIC_ASSET_PREFIXES,
   requiresSignIn,
-  shareLinkIsDeadEnd,
+  statusProbeRedirect,
 } from "$lib/server/public-routes";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import {
@@ -248,56 +248,24 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
     }
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
-      const status = (error as any).status;
-
-      if (shareLinkIsDeadEnd(event.locals.isShareHost, status)) {
-        return new Response(null, {
-          status: 303,
-          headers: { Location: SHARE_UNAVAILABLE_PATH },
-        });
+      let body: any = {};
+      try {
+        body = JSON.parse((error as any).response ?? "{}");
+      } catch {
+        // Couldn't parse — leave recoveryMode unset, which reads as "not ready"
       }
 
-      if (status === 503) {
-        let body: any = {};
-        try {
-          body = JSON.parse((error as any).response ?? "{}");
-        } catch {
-          // Couldn't parse — treat as setup required (API isn't ready)
-        }
+      const redirect = statusProbeRedirect({
+        isShareHost: event.locals.isShareHost,
+        apiStatus: (error as any).status,
+        recoveryMode: body.recoveryMode === true,
+        marketingUrl: env.MARKETING_URL,
+      });
 
-        if (body.recoveryMode) {
-          return new Response(null, {
-            status: 303,
-            headers: { Location: "/auth/recovery" },
-          });
-        }
-
-        // Any 503 from the API (setup_required, no tenants, or unparseable)
-        // means the instance isn't ready — redirect to setup
+      if (redirect) {
         return new Response(null, {
-          status: 303,
-          headers: { Location: "/setup" },
-        });
-      }
-
-      // Tenant not found (404) — either no tenant for this subdomain,
-      // or apex domain with no tenants set up yet.
-      if (status === 404) {
-        // If a marketing site is configured, redirect there (SaaS apex landing)
-        const marketingUrl = env.MARKETING_URL;
-        if (marketingUrl) {
-          return new Response(null, {
-            status: 302,
-            headers: { Location: marketingUrl },
-          });
-        }
-
-        // No marketing site — this is likely a self-hosted install.
-        // Check if this is an apex domain request (no tenant subdomain).
-        // If so, redirect to setup so the user can create their first tenant.
-        return new Response(null, {
-          status: 303,
-          headers: { Location: "/setup" },
+          status: redirect.status,
+          headers: { Location: redirect.location },
         });
       }
     }

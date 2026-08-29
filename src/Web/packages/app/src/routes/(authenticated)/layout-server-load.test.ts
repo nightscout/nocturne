@@ -25,8 +25,10 @@ interface Situation {
   apexResolvesTenant?: boolean;
   /** Slugs the operator reserved for the dashboard (none by default). */
   dashboardSlugs?: string[];
-  /** The /api/v4/status document. */
-  status: { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean };
+  /** The /api/v4/status document; a number rejects with that HTTP status. */
+  status:
+    | { status?: string; tenantSlug?: string | null; anonymousReadAccess?: boolean }
+    | number;
   /** The passkey auth-status answer; a number rejects with that HTTP status. */
   authStatus: { onboardingCompleted?: boolean } | number;
   signedIn?: boolean;
@@ -61,7 +63,12 @@ function runLoad(situation: Situation) {
     user: signedIn ? { subjectId: "s1", name: "Sam" } : null,
     effectivePermissions: situation.permissions ?? ["*"],
     apiClient: {
-      status: { getStatus: async () => situation.status },
+      status: {
+        getStatus: async () => {
+          if (typeof situation.status === "number") throw { status: situation.status };
+          return situation.status;
+        },
+      },
       passkey: {
         getAuthStatus: async () => {
           if (typeof situation.authStatus === "number") throw { status: situation.authStatus };
@@ -282,6 +289,16 @@ describe("(authenticated) layout load — the public share host", () => {
         status: { status: "setup_required", tenantSlug: null, anonymousReadAccess: false },
         authStatus: 404,
       })
+    ).resolves.toBe(SHARE_UNAVAILABLE_PATH);
+  });
+
+  it("does not claim a cause when the status call is what failed", async () => {
+    // getRequestStatus swallows any failure to null, so a live link during an API blip is
+    // indistinguishable here from one that was rotated. It lands on the same page, which is why
+    // that page says the link is not working rather than that it was replaced — telling a viewer
+    // to ask for a replacement would have the owner rotate, killing the link for everyone else.
+    await expect(
+      redirectLocation({ host: SHARE, status: 503, authStatus: 404 })
     ).resolves.toBe(SHARE_UNAVAILABLE_PATH);
   });
 
