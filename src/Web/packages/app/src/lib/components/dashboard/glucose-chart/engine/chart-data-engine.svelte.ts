@@ -183,6 +183,18 @@ export interface ChartDataEngineOptions {
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
   demoMode?: boolean;
+  /**
+   * How wide a window the consumer draws, which is how far the realtime merge
+   * may reach. `"buffer"` is the 48-hour `fullDataRange` that `fullXDomain`
+   * spans — what anything rendering the mini overview needs, whether or not it
+   * was handed that data up front. `"display"` is the visible window alone, for
+   * a consumer that renders nothing wider: the sidebar sparkline, the clock
+   * faces.
+   *
+   * Defaults to `"buffer"`, because over-reaching only costs points a chart
+   * declines to draw, where under-reaching silently drops points it is drawing.
+   */
+  dataWindow?: "buffer" | "display";
   /** Fired once when `serverChartData` first becomes non-null. */
   onDataReady?: () => void;
 }
@@ -374,23 +386,26 @@ export function createChartDataEngine(
   });
 
   // ---- Data range ----
-  // The window this engine's data actually covers. The wider `fullDataRange`
-  // (48h) belongs to consumers that asked for a range or preloaded one — the
-  // MiniOverview on the dashboard, which gets its data via SSR. A consumer that
-  // fetches for itself (sidebar widget, clock face) only ever has the visible
-  // window, and merging realtime readings over the wider one hands its chart
-  // points it will never draw: the sidebar's 3-hour sparkline was being given 48
-  // hours of readings, sixteen times what it renders.
+  // How far the realtime merge may reach — the window the consumer draws, per
+  // `dataWindow`. The realtime store holds the last 1000 readings, so merging
+  // over `fullDataRange` for a consumer that only draws the visible window hands
+  // its chart points it will never render: the sidebar's 3-hour sparkline was
+  // being given 48 hours of readings, sixteen times what it draws, on every
+  // route, because the widget lives in the sidebar.
   const dataRange = $derived(
-    options.dateRange || options.initialChartData
-      ? fullDataRange
-      : displayDateRange
+    options.dataWindow === "display" ? displayDateRange : fullDataRange
   );
 
   // ---- Stable fetch range ----
-  // Keyed on the rounded bounds so a re-evaluation returns the same window: this
-  // one drives the fetch effect below, and a fresh object from it re-runs that
-  // effect — a chart-data request per read. See the note on `stableBy`.
+  // Fetch only the visible window when no dateRange is configured. The wider
+  // `fullDataRange` (48h) is used by the MiniOverview on the dashboard, which
+  // preloads data via SSR — so consumers that hit this fetch path (sidebar
+  // widget, clock face) don't need the full buffer.
+  //
+  // Keyed on the rounded bounds so a re-evaluation returns the same window: a
+  // fresh object here re-runs the fetch effect below, which under `nowMinute`
+  // alone was a chart-data request a minute, defeating the 5-minute rounding.
+  // See the note on `stableBy`.
   const fetchWindowOf = stableBy((startTime: number, endTime: number) => ({
     startTime,
     endTime,
@@ -398,7 +413,7 @@ export function createChartDataEngine(
 
   const stableFetchRange = $derived.by(() => {
     if (!isBrowser) return null;
-    const range = dataRange;
+    const range = options.dateRange ? fullDataRange : displayDateRange;
     const fromTime = range.from.getTime();
     const toTime = range.to.getTime();
     if (isNaN(fromTime) || isNaN(toTime)) return null;

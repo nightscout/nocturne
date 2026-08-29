@@ -23,6 +23,7 @@
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,
+    dataWindow: "display",
   });
 
   // Glucose-only layout — no space reserved for basal/IOB/swim lanes

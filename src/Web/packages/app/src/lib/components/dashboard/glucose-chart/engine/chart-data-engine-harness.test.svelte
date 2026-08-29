@@ -26,8 +26,11 @@
     pingTimeout: 0,
     pingInterval: 0,
   });
+  // Read once, deliberately: each test mounts the harness with the props it wants
+  // and never changes them, so there is nothing for a closure to track.
   // svelte-ignore state_referenced_locally
   store.entries = entries;
 
+  // svelte-ignore state_referenced_locally
   onengine(createChartDataEngine(options));
 </script>

@@ -36,8 +36,10 @@ export function stableBy<K extends readonly unknown[], T>(
       if (unchanged) return previous;
     }
 
-    previousKey = key;
+    // Committed only once `build` has returned: recording the new key beside the
+    // old value would serve that stale value to every later call with this key.
     previous = build(...key);
+    previousKey = key;
     return previous;
   };
 }

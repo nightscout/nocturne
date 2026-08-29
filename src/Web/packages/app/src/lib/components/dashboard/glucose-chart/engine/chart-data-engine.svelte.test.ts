@@ -45,7 +45,7 @@ const entries = [
   reading(30 * 60, 140),
 ];
 
-async function glucoseOf(options: ChartDataEngineOptions) {
+async function engineFor(options: ChartDataEngineOptions) {
   let engine!: ChartDataEngine;
   render(Harness, {
     props: {
@@ -57,21 +57,37 @@ async function glucoseOf(options: ChartDataEngineOptions) {
 
   // The engine fetches its server half in an effect; nothing merges until it lands.
   await vi.waitFor(() => expect(engine.serverChartData).not.toBeNull());
+  return engine;
+}
+
+async function glucoseOf(options: ChartDataEngineOptions) {
+  const engine = await engineFor(options);
   return engine.glucoseData.map((p) => p.sgv).sort((a, b) => a - b);
 }
 
 describe("chart data engine — realtime merge window", () => {
-  it("gives a self-fetching consumer only the window it displays", async () => {
-    // The sidebar widget and the clock face: no range, no preloaded data, so the
-    // engine fetched three hours and must not merge readings from outside it.
-    const sgvs = await glucoseOf({ focusHours: 3, enablePredictions: false });
+  it("reaches no further than a display-window consumer draws", async () => {
+    // The sidebar sparkline and the clock faces render `displayDateRange` and
+    // nothing wider, so readings outside it are points they would never draw.
+    const sgvs = await glucoseOf({
+      focusHours: 3,
+      enablePredictions: false,
+      dataWindow: "display",
+    });
 
     expect(sgvs).toEqual([110, 120]);
   });
 
+  it("keeps the full buffer by default", async () => {
+    // Anything that renders `fullXDomain` — GlucoseChartCard's mini overview —
+    // draws 48 hours whether or not it was handed them up front, so a consumer
+    // that says nothing must keep the wide merge.
+    const sgvs = await glucoseOf({ focusHours: 3, enablePredictions: false });
+
+    expect(sgvs).toEqual([110, 120, 130, 140]);
+  });
+
   it("keeps the full buffer for a consumer that preloaded one", async () => {
-    // The dashboard hands the engine 48 hours via SSR, and its MiniOverview draws
-    // all of it, so the merge has to span the same 48 hours.
     const sgvs = await glucoseOf({
       focusHours: 3,
       enablePredictions: false,
@@ -92,5 +108,23 @@ describe("chart data engine — realtime merge window", () => {
     });
 
     expect(sgvs).toEqual([110, 120, 130, 140]);
+  });
+});
+
+describe("chart data engine — reference stability", () => {
+  // Svelte re-executes a derived it has flagged dirty on every read while more
+  // than one batch is alive, so a merge that allocated per read republished a new
+  // array each time and re-dirtied every chart scale reading it — the loop in
+  // #995. Repeated reads with unchanged inputs must hand back one instance.
+  it("hands out the same series until its inputs change", async () => {
+    const engine = await engineFor({
+      focusHours: 3,
+      enablePredictions: false,
+      dataWindow: "display",
+    });
+
+    const first = engine.glucoseData;
+    expect(engine.glucoseData).toBe(first);
+    expect(engine.glucoseData).toBe(first);
   });
 });

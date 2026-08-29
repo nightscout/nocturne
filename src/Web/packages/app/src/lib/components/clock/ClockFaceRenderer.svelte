@@ -391,6 +391,7 @@
       {@const bgChartEngine = createChartDataEngine({
         focusHours: backgroundChart.hours || 3,
         enablePredictions: backgroundChart.chartConfig?.showPredictions ?? false,
+        dataWindow: "display",
       })}
       <div class="absolute inset-0 z-0">
         <GlucoseChartShell engine={bgChartEngine} heightClass="h-full">
@@ -450,6 +451,7 @@
                 {@const inlineEngine = createChartDataEngine({
                   focusHours: element.hours || 3,
                   enablePredictions: element.chartConfig?.showPredictions ?? false,
+                  dataWindow: "display",
                 })}
                 <div
                   class="overflow-hidden rounded"
