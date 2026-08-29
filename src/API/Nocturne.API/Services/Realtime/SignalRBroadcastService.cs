@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -163,6 +164,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     private readonly IHubContext<HomeAssistantHub> _homeAssistantHubContext;
     private readonly IHubContext<OverviewHub> _overviewHubContext;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IOptions<JsonHubProtocolOptions> _hubProtocolOptions;
     private readonly ILogger<SignalRBroadcastService> _logger;
 
     /// <summary>
@@ -175,6 +177,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     /// <param name="homeAssistantHubContext">Hub context for <see cref="HomeAssistantHub"/> — glucose relay and alert event relay to Home Assistant instances.</param>
     /// <param name="overviewHubContext">Hub context for <see cref="OverviewHub"/> — cross-tenant overview pings.</param>
     /// <param name="tenantAccessor">Provides the current tenant context for scoping group names.</param>
+    /// <param name="hubProtocolOptions">The serializer the hubs write payloads with — see <see cref="WithWireIdentifier"/>.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalRBroadcastService(
         IHubContext<DataHub> dataHubContext,
@@ -184,6 +187,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         IHubContext<HomeAssistantHub> homeAssistantHubContext,
         IHubContext<OverviewHub> overviewHubContext,
         ITenantAccessor tenantAccessor,
+        IOptions<JsonHubProtocolOptions> hubProtocolOptions,
         ILogger<SignalRBroadcastService> logger
     )
     {
@@ -194,6 +198,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         _homeAssistantHubContext = homeAssistantHubContext;
         _overviewHubContext = overviewHubContext;
         _tenantAccessor = tenantAccessor;
+        _hubProtocolOptions = hubProtocolOptions;
         _logger = logger;
     }
 
@@ -410,7 +415,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("delete", new[] { data });
+                .SendCoreAsync("delete", new[] { WithWireIdentifier(data) });
         }
         catch (Exception ex)
         {
@@ -420,6 +425,26 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 collectionName
             );
         }
+    }
+
+    /// <summary>
+    /// Resolves a <see cref="StorageDeleteEvent"/> against the payload serializer this hub sends with,
+    /// which is the only serializer whose output a client ever sees. Any other payload passes through.
+    /// </summary>
+    private object WithWireIdentifier(object data)
+    {
+        if (data is not StorageDeleteEvent delete)
+            return data;
+
+        var resolved = delete.OnWire(_hubProtocolOptions.Value.PayloadSerializerOptions);
+
+        if (resolved.Identifier is null)
+            _logger.LogWarning(
+                "Storage delete for {Collection} carries no identifier; no client can resolve it",
+                resolved.ColName
+            );
+
+        return resolved;
     }
 
     /// <inheritdoc />

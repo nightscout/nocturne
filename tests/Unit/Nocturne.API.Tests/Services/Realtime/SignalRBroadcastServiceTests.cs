@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Realtime;
@@ -89,6 +90,7 @@ public class SignalRBroadcastServiceTests
             _mockHomeAssistantHubContext.Object,
             _mockOverviewHubContext.Object,
             MockTenantAccessor.Create().Object,
+            Options.Create(new JsonHubProtocolOptions()),
             _mockLogger.Object
         );
     }

@@ -359,6 +359,7 @@ public class HubCredentialKindTests
             Mock.Of<IHubContext<HomeAssistantHub>>(),
             Mock.Of<IHubContext<OverviewHub>>(),
             tenantAccessor.Object,
+            Options.Create(new JsonHubProtocolOptions()),
             Mock.Of<ILogger<SignalRBroadcastService>>());
 
         return (service, sends);

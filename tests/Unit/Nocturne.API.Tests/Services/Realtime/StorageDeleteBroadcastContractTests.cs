@@ -1,8 +1,13 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR.Protocol;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Hubs;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Realtime;
@@ -37,44 +42,97 @@ public class StorageDeleteBroadcastContractTests
     private static readonly Guid TenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     /// <summary>
-    /// Records both arguments of every storage broadcast. The first argument selects the SignalR
-    /// tenant group; the bridge picks the socket.io room off the payload's <c>colName</c>. If the
-    /// two disagree the event is delivered to a room no client of that collection has joined.
+    /// Runs the producers against a real <see cref="SignalRBroadcastService"/> and reads the events
+    /// back as <see cref="JsonHubProtocol"/> writes them. Asserting on anything else — a fresh
+    /// <see cref="JsonSerializer"/> call over the captured object, say — validates a serialization
+    /// no client ever sees.
     /// </summary>
     private sealed class BroadcastCapture
     {
-        public Mock<ISignalRBroadcastService> Broadcast { get; } = new();
-        private (string Group, object Data)? _delete;
-        private (string Group, object Data)? _create;
+        private readonly JsonHubProtocolOptions _protocol = new();
+        private readonly Dictionary<string, (string Group, object Data)> _sent = [];
 
-        public BroadcastCapture()
+        public ISignalRBroadcastService Broadcast { get; }
+
+        /// <param name="configurePayloadSerializer">
+        /// Reconfigures the serializer the hubs send payloads with, as an app calling
+        /// <c>AddJsonProtocol</c> would.
+        /// </param>
+        public BroadcastCapture(Action<JsonSerializerOptions>? configurePayloadSerializer = null)
         {
-            Broadcast
-                .Setup(b => b.BroadcastStorageDeleteAsync(It.IsAny<string>(), It.IsAny<object>()))
-                .Callback<string, object>((group, data) => _delete = (group, data))
-                .Returns(Task.CompletedTask);
-            Broadcast
-                .Setup(b => b.BroadcastStorageCreateAsync(It.IsAny<string>(), It.IsAny<object>()))
-                .Callback<string, object>((group, data) => _create = (group, data))
-                .Returns(Task.CompletedTask);
+            configurePayloadSerializer?.Invoke(_protocol.PayloadSerializerOptions);
+
+            Broadcast = new SignalRBroadcastService(
+                StubHub<DataHub>(),
+                StubHub<AlarmHub>(),
+                StubHub<ConfigHub>(),
+                StubHub<AlertHub>(),
+                StubHub<HomeAssistantHub>(),
+                StubHub<OverviewHub>(),
+                MockTenantAccessor.Create().Object,
+                Options.Create(_protocol),
+                NullLogger<SignalRBroadcastService>.Instance
+            );
         }
 
-        public JsonElement Delete => Read(_delete, "delete");
+        public JsonElement Delete => Wire("delete");
 
-        public JsonElement Create => Read(_create, "create");
+        public JsonElement Create => Wire("create");
 
-        private static JsonElement Read((string Group, object Data)? captured, string kind)
+        private IHubContext<THub> StubHub<THub>()
+            where THub : Hub
         {
-            captured.Should().NotBeNull($"the producer must broadcast a {kind} event");
-            var payload = JsonSerializer.Deserialize<JsonElement>(
-                JsonSerializer.Serialize(captured!.Value.Data)
-            );
-            payload
-                .GetProperty("colName")
-                .GetString()
+            var clients = new Mock<IHubClients>();
+            clients
+                .Setup(c => c.Group(It.IsAny<string>()))
+                .Returns((string group) =>
+                {
+                    var proxy = new Mock<IClientProxy>();
+                    proxy
+                        .Setup(p =>
+                            p.SendCoreAsync(
+                                It.IsAny<string>(),
+                                It.IsAny<object?[]>(),
+                                It.IsAny<CancellationToken>()
+                            )
+                        )
+                        .Callback<string, object?[], CancellationToken>(
+                            (method, args, _) => _sent[method] = (group, args[0]!)
+                        )
+                        .Returns(Task.CompletedTask);
+                    return proxy.Object;
+                });
+
+            var hub = new Mock<IHubContext<THub>>();
+            hub.Setup(h => h.Clients).Returns(clients.Object);
+            return hub.Object;
+        }
+
+        /// <summary>
+        /// The event's bytes on the wire. The first argument of the hub invocation selects the
+        /// SignalR tenant group; the bridge picks the socket.io room off the payload's
+        /// <c>colName</c>. If the two disagree the event is delivered to a room no client of that
+        /// collection has joined.
+        /// </summary>
+        private JsonElement Wire(string method)
+        {
+            _sent.ContainsKey(method).Should().BeTrue($"the producer must broadcast a {method} event");
+            var (group, data) = _sent[method];
+
+            var frame = new JsonHubProtocol(Options.Create(_protocol))
+                .GetMessageBytes(new InvocationMessage(method, [data]))
+                .ToArray();
+            var payload = JsonSerializer
+                .Deserialize<JsonElement>(frame.AsSpan(0, frame.Length - 1)) // trailing 0x1e separator
+                .GetProperty("arguments")[0];
+
+            group
                 .Should()
                 .Be(
-                    captured.Value.Group,
+                    TenantAwareHub.FormatTenantGroup(
+                        MockTenantAccessor.DefaultTenantId.ToString(),
+                        payload.GetProperty("colName").GetString()!
+                    ),
                     "the SignalR group and the payload's colName select the same audience and must agree"
                 );
             return payload;
@@ -84,7 +142,7 @@ public class StorageDeleteBroadcastContractTests
     private static WriteSideEffectsService CreateSideEffects(BroadcastCapture capture) =>
         new(
             Mock.Of<ICacheService>(),
-            capture.Broadcast.Object,
+            capture.Broadcast,
             Mock.Of<IDecompositionPipeline>(),
             MockTenantAccessor.Create().Object,
             Enumerable.Empty<ICollectionEffectDescriptor>(),
@@ -92,7 +150,7 @@ public class StorageDeleteBroadcastContractTests
         );
 
     private static SignalRTreatmentEventSink CreateTreatmentSink(BroadcastCapture capture) =>
-        new(capture.Broadcast.Object, NullLogger<SignalRTreatmentEventSink>.Instance);
+        new(capture.Broadcast, NullLogger<SignalRTreatmentEventSink>.Instance);
 
     private static ActivityService CreateActivityService(
         BroadcastCapture capture,
@@ -103,7 +161,7 @@ public class StorageDeleteBroadcastContractTests
             stateSpans.Object,
             sleep.Object,
             Mock.Of<IDocumentProcessingService>(),
-            capture.Broadcast.Object,
+            capture.Broadcast,
             Mock.Of<IDataEventSink<Activity>>(),
             Mock.Of<IActivityDecomposer>(),
             Mock.Of<IHeartRateService>(),
@@ -256,10 +314,14 @@ public class StorageDeleteBroadcastContractTests
     /// </summary>
     private sealed class DisagreeingIds
     {
-        [System.Text.Json.Serialization.JsonPropertyName("identifier")]
+        /// <summary>A decoy: the first id-ish key on the wire is not the one clients match on.</summary>
+        [JsonPropertyName("pumpId")]
+        public string PumpId => "from-pump-id";
+
+        [JsonPropertyName("identifier")]
         public string Identifier => "from-identifier";
 
-        [System.Text.Json.Serialization.JsonPropertyName("_id")]
+        [JsonPropertyName("_id")]
         public string Id => "from-underscore-id";
     }
 
@@ -271,6 +333,110 @@ public class StorageDeleteBroadcastContractTests
         await CreateSideEffects(capture).OnDeletedAsync("entries", new DisagreeingIds());
 
         Identifier(capture.Delete).Should().Be("from-identifier");
+    }
+
+    /// <summary>
+    /// A document that spells its id the ordinary C# way, as a projection or DTO added later would.
+    /// Its wire spelling is whatever the hub's naming policy makes of it, which is the only spelling
+    /// the derivation may look for.
+    /// </summary>
+    private sealed class UnattributedIdentifier
+    {
+        public string Identifier => RecordGuid;
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_ReadsTheDocumentAsTheHubSpellsIt()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new UnattributedIdentifier());
+
+        capture.Delete.GetProperty("doc").GetProperty("identifier").GetString().Should().Be(RecordGuid);
+        Identifier(capture.Delete).Should().Be(RecordGuid);
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_FollowsAReconfiguredPayloadSerializer()
+    {
+        var capture = new BroadcastCapture(o => o.PropertyNamingPolicy = null);
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new UnattributedIdentifier());
+
+        var doc = capture.Delete.GetProperty("doc");
+        doc.TryGetProperty("identifier", out _)
+            .Should()
+            .BeFalse("this serializer spells the property verbatim");
+        doc.GetProperty("Identifier").GetString().Should().Be(RecordGuid);
+        capture
+            .Delete.GetProperty("identifier")
+            .ValueKind.Should()
+            .Be(
+                JsonValueKind.Null,
+                "the document put no contract id on the wire, and an id no client can match is worth no more than none"
+            );
+    }
+
+    /// <summary>A document carrying only the legacy id, and no record behind it to fall back on.</summary>
+    private sealed class LegacyIdOnly
+    {
+        [JsonPropertyName("_id")]
+        public string Id => RecordGuid;
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_FallsBackToTheLegacyId()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new LegacyIdOnly());
+
+        Identifier(capture.Delete).Should().Be(RecordGuid);
+    }
+
+    /// <summary>A document whose id is a number, as a legacy import or an external store may spell it.</summary>
+    private sealed class NumericId
+    {
+        [JsonPropertyName("_id")]
+        public long Id => 12345;
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_CarriesANumericIdAsTheStringClientsMatchOn()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new NumericId());
+
+        capture.Delete.GetProperty("doc").GetProperty("_id").GetInt64().Should().Be(12345);
+        Identifier(capture.Delete).Should().Be("12345");
+    }
+
+    /// <summary>A record whose document spells neither contract key, leaving only its own id.</summary>
+    private sealed class OrdinaryIdDocument : IProcessableDocument
+    {
+        public string? Id { get; set; }
+        public string? CreatedAt { get; set; }
+        public long Mills { get; set; }
+        public int? UtcOffset { get; set; }
+
+        public Dictionary<string, string?> GetSanitizableFields() => [];
+
+        public void SetSanitizedField(string fieldName, string? sanitizedValue) { }
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_FallsBackToTheRecordId_WhenTheDocumentSpellsNeitherKey()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture)
+            .OnDeletedAsync("entries", new OrdinaryIdDocument { Id = RecordGuid });
+
+        var doc = capture.Delete.GetProperty("doc");
+        doc.TryGetProperty("_id", out _).Should().BeFalse();
+        doc.TryGetProperty("identifier", out _).Should().BeFalse();
+        Identifier(capture.Delete).Should().Be(RecordGuid);
     }
 
     /// <summary>
@@ -316,7 +482,7 @@ public class StorageDeleteBroadcastContractTests
         var deleted = await new HeartRateService(
             context,
             Mock.Of<IDocumentProcessingService>(),
-            capture.Broadcast.Object,
+            capture.Broadcast,
             NullLogger<HeartRateService>.Instance
         ).DeleteHeartRateAsync(RecordGuid);
 

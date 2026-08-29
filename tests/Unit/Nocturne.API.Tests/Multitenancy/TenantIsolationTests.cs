@@ -313,7 +313,8 @@ public class TenantIsolationTests
 
         var service = new SignalRBroadcastService(
             mockDataHub.Object, mockAlarmHub.Object, mockConfigHub.Object, mockAlertHub.Object,
-            mockHaHub.Object, mockOverviewHub.Object, mockAccessor.Object, mockLogger.Object);
+            mockHaHub.Object, mockOverviewHub.Object, mockAccessor.Object,
+            Options.Create(new JsonHubProtocolOptions()), mockLogger.Object);
 
         return (service, dataClients, alarmClients, configClients, dataProxy, alarmProxy, configProxy);
     }

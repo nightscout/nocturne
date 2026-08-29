@@ -363,6 +363,31 @@ public class DeviceStatusProjectionServiceTests
         result.ExtensionData.Should().NotContainKey("srvCreated");
     }
 
+    [Fact]
+    public void ProjectAsync_WithClientIdentifierInExtras_DoesNotReEmitIt()
+    {
+        // An NS v3 uploader sends its own identifier; DeviceStatus has no member to absorb it, so it
+        // is stored as an extra. Splatting it back would make the record's id — and the identifier of
+        // its realtime delete event — client-controlled.
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
+
+        var extras = new DeviceStatusExtras
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = aps.CorrelationId!.Value,
+            Timestamp = ReferenceTime,
+            Extras = new Dictionary<string, object?>
+            {
+                ["identifier"] = JsonSerializer.SerializeToElement("CLIENT-SUPPLIED", JsonOptions),
+            },
+        };
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, extras);
+
+        result.ExtensionData.Should().NotContainKey("identifier");
+    }
+
     #endregion
 
     #region Correlation

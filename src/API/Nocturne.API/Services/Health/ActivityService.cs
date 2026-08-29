@@ -469,7 +469,7 @@ public class ActivityService : IActivityService
                 {
                     await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                         "activity",
-                        StorageDeleteEvent.ForRecord("activity", id)
+                        new StorageDeleteEvent("activity", id)
                     );
                     await _events.OnDeletedAsync(null, cancellationToken);
                     _logger.LogDebug("Successfully deleted sleep session for activity ID: {Id}", id);
@@ -483,7 +483,7 @@ public class ActivityService : IActivityService
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    StorageDeleteEvent.ForRecord("activity", id)
+                    new StorageDeleteEvent("activity", id)
                 );
 
                 await _events.OnDeletedAsync(null, cancellationToken);
@@ -552,7 +552,7 @@ public class ActivityService : IActivityService
             {
                 await _signalRBroadcastService.BroadcastStorageDeleteAsync(
                     "activity",
-                    StorageDeleteEvent.ForBulk("activity", deletedCount)
+                    new StorageBulkDeleteEvent("activity", deletedCount)
                 );
 
                 await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);

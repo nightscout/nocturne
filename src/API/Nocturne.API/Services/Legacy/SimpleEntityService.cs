@@ -367,7 +367,7 @@ public abstract class SimpleEntityService<TDomain, TEntity>
 
             await SignalRBroadcastService.BroadcastStorageDeleteAsync(
                 CollectionName,
-                StorageDeleteEvent.ForRecord(CollectionName, id)
+                new StorageDeleteEvent(CollectionName, id)
             );
 
             Logger.LogDebug(

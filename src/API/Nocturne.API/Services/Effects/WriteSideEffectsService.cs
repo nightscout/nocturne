@@ -212,7 +212,7 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                StorageDeleteEvent.ForRecord(
+                new StorageDeleteEvent(
                     collectionName,
                     (deletedRecord as IProcessableDocument)?.Id,
                     deletedRecord
@@ -248,7 +248,7 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageDeleteAsync(
                 collectionName,
-                StorageDeleteEvent.ForBulk(collectionName, deletedCount)
+                new StorageBulkDeleteEvent(collectionName, deletedCount)
             );
         }
         catch (Exception ex)

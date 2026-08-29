@@ -75,7 +75,7 @@ public class SignalRTreatmentEventSink : IDataEventSink<Treatment>
         try
         {
             await _broadcast.BroadcastStorageDeleteAsync(
-                Collection, StorageDeleteEvent.ForRecord(Collection, treatment?.Id, treatment));
+                Collection, new StorageDeleteEvent(Collection, treatment?.Id, treatment));
         }
         catch (Exception ex)
         {

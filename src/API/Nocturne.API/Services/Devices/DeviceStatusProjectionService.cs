@@ -534,6 +534,12 @@ public class DeviceStatusProjectionService
                 case "srvCreated":
                     ds.SrvCreated = CoerceLong(value);
                     break;
+                // An NS v3 uploader sends its own identifier and it is stored verbatim.
+                // DeviceStatus has no member to absorb it, so re-emitting it would put a
+                // client-supplied value where every reader takes the record's identity from —
+                // including the id of its delete event (see StorageDeleteEvent).
+                case "identifier":
+                    break;
                 default:
                     // Unknown keys go into ExtensionData
                     var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions);
