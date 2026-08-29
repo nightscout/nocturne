@@ -25,6 +25,7 @@ import {
 import { mergeChartData } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
+import { stableBy } from "$lib/utils/stable-by";
 import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
 import { bisector } from "d3";
 
@@ -372,21 +373,40 @@ export function createChartDataEngine(
         : fullDataRange.to,
   });
 
+  // ---- Data range ----
+  // The window this engine's data actually covers. The wider `fullDataRange`
+  // (48h) belongs to consumers that asked for a range or preloaded one — the
+  // MiniOverview on the dashboard, which gets its data via SSR. A consumer that
+  // fetches for itself (sidebar widget, clock face) only ever has the visible
+  // window, and merging realtime readings over the wider one hands its chart
+  // points it will never draw: the sidebar's 3-hour sparkline was being given 48
+  // hours of readings, sixteen times what it renders.
+  const dataRange = $derived(
+    options.dateRange || options.initialChartData
+      ? fullDataRange
+      : displayDateRange
+  );
+
   // ---- Stable fetch range ----
-  // Fetch only the visible window when no dateRange or preloaded data is
-  // configured. The wider `fullDataRange` (48h) is used by the MiniOverview
-  // on the dashboard, which preloads data via SSR — so consumers that hit
-  // this fetch path (sidebar widget, clock face) don't need the full buffer.
+  // Keyed on the rounded bounds so a re-evaluation returns the same window: this
+  // one drives the fetch effect below, and a fresh object from it re-runs that
+  // effect — a chart-data request per read. See the note on `stableBy`.
+  const fetchWindowOf = stableBy((startTime: number, endTime: number) => ({
+    startTime,
+    endTime,
+  }));
+
   const stableFetchRange = $derived.by(() => {
     if (!isBrowser) return null;
-    const range = options.dateRange ? fullDataRange : displayDateRange;
+    const range = dataRange;
     const fromTime = range.from.getTime();
     const toTime = range.to.getTime();
     if (isNaN(fromTime) || isNaN(toTime)) return null;
     const intervalMs = 5 * 60 * 1000;
-    const startRounded = Math.floor(fromTime / intervalMs) * intervalMs;
-    const endRounded = Math.ceil(toTime / intervalMs) * intervalMs;
-    return { startTime: startRounded, endTime: endRounded };
+    return fetchWindowOf(
+      Math.floor(fromTime / intervalMs) * intervalMs,
+      Math.ceil(toTime / intervalMs) * intervalMs
+    );
   });
 
   // ---- Effects: data fetching ----
@@ -538,41 +558,63 @@ export function createChartDataEngine(
   // A keyed {#each} downstream requires a unique key per point, so the same
   // mills value must never appear twice — even if base or realtimeStore
   // emit duplicates.
-  const glucoseData = $derived.by(() => {
-    const base = serverChartData?.glucoseData ?? [];
-    if (!serverChartData) return base as GlucosePoint[];
+  //
+  // Keyed on its four inputs rather than merged on each evaluation. A derived
+  // that Svelte has flagged dirty stays dirty for as long as more than one batch
+  // is alive — which is the whole time a page-level `<svelte:boundary>` is
+  // awaiting — so it is re-executed on *every read*, not once per change. This
+  // is the most-read and most expensive derived in the app, and a fresh array
+  // from it re-dirties the chart's entire scale and extent chain, which then
+  // reads it again. See the note on `stableBy`.
+  const mergeGlucose = stableBy(
+    (
+      chartData: TransformedChartData | null,
+      entries: typeof realtimeStore.entries,
+      fromMs: number,
+      toMs: number
+    ): GlucosePoint[] => {
+      const base = chartData?.glucoseData ?? [];
+      if (!chartData) return base as GlucosePoint[];
 
-    const thresholds = resolveGlucoseThresholds(serverChartData.thresholds);
-    const fromMs = fullDataRange.from.getTime();
-    const toMs = fullDataRange.to.getTime();
+      const thresholds = resolveGlucoseThresholds(chartData.thresholds);
 
-    const byMills = new Map<number, GlucosePoint>();
-    for (const p of base) byMills.set(p.time.getTime(), p);
+      const byMills = new Map<number, GlucosePoint>();
+      for (const p of base) byMills.set(p.time.getTime(), p);
 
-    for (const e of realtimeStore.entries) {
-      if (
-        e.type !== "sgv" ||
-        e.mills == null ||
-        e.sgv == null ||
-        e.mills < fromMs ||
-        e.mills > toMs ||
-        byMills.has(e.mills)
-      ) {
-        continue;
+      for (const e of entries) {
+        if (
+          e.type !== "sgv" ||
+          e.mills == null ||
+          e.sgv == null ||
+          e.mills < fromMs ||
+          e.mills > toMs ||
+          byMills.has(e.mills)
+        ) {
+          continue;
+        }
+        byMills.set(e.mills, {
+          time: new Date(e.mills),
+          sgv: e.sgv,
+          direction: e.direction,
+          dataSource: e.data_source,
+          color: getGlucoseColor(e.sgv, thresholds),
+        });
       }
-      byMills.set(e.mills, {
-        time: new Date(e.mills),
-        sgv: e.sgv,
-        direction: e.direction,
-        dataSource: e.data_source,
-        color: getGlucoseColor(e.sgv, thresholds),
-      });
-    }
 
-    return [...byMills.values()].sort(
-      (a, b) => a.time.getTime() - b.time.getTime()
-    ) as GlucosePoint[];
-  });
+      return [...byMills.values()].sort(
+        (a, b) => a.time.getTime() - b.time.getTime()
+      ) as GlucosePoint[];
+    }
+  );
+
+  const glucoseData = $derived(
+    mergeGlucose(
+      serverChartData,
+      realtimeStore.entries,
+      dataRange.from.getTime(),
+      dataRange.to.getTime()
+    )
+  );
 
   // ---- Series derivations ----
   const bolusMarkers = $derived(
