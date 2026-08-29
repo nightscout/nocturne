@@ -214,7 +214,7 @@ public class WriteSideEffectsService : IWriteSideEffects
                 collectionName,
                 StorageDeleteEvent.ForRecord(
                     collectionName,
-                    MongoObjectId.Coerce((deletedRecord as IProcessableDocument)?.Id),
+                    (deletedRecord as IProcessableDocument)?.Id,
                     deletedRecord
                 )
             );

@@ -114,18 +114,30 @@ public class StorageDeleteBroadcastContractTests
     private static string? Identifier(JsonElement payload) =>
         payload.GetProperty("identifier").GetString();
 
+    /// <summary>
+    /// <see cref="Entry"/> carries an <c>identifier</c> of its own; <see cref="DeviceStatus"/> carries
+    /// none, so its delete falls back to <c>_id</c>. Neither model coerces, so both send the uuid.
+    /// </summary>
+    public static TheoryData<string, object> LegacyRecords =>
+        new()
+        {
+            { "entries", new Entry { Id = RecordGuid, Sgv = 120 } },
+            { "devicestatus", new DeviceStatus { Id = RecordGuid } },
+        };
+
     [Theory]
-    [InlineData("entries")]
-    [InlineData("devicestatus")]
-    public async Task WriteSideEffects_SingleDelete_CarriesColNameAndIdentifier(string collection)
+    [MemberData(nameof(LegacyRecords))]
+    public async Task WriteSideEffects_SingleDelete_CarriesColNameAndIdentifier(
+        string collection,
+        object record
+    )
     {
         var capture = new BroadcastCapture();
 
-        await CreateSideEffects(capture)
-            .OnDeletedAsync(collection, new Entry { Id = RecordGuid, Sgv = 120 });
+        await CreateSideEffects(capture).OnDeletedAsync(collection, record);
 
-        Identifier(capture.Delete).Should().Be(MongoObjectId.Coerce(RecordGuid));
-        capture.Delete.GetProperty("doc").GetProperty("sgv").GetInt32().Should().Be(120);
+        Identifier(capture.Delete).Should().Be(RecordGuid);
+        capture.Delete.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
     }
 
     [Fact]
@@ -198,29 +210,86 @@ public class StorageDeleteBroadcastContractTests
     }
 
     /// <summary>
-    /// The same identifier also has to survive a client that loaded the record over REST rather
-    /// than over the socket.
+    /// A treatment has one identifier everywhere, so a client that loaded it over REST resolves the
+    /// delete too.
     /// </summary>
     [Fact]
-    public async Task DeleteIdentifier_MatchesTheV3RestProjection()
+    public async Task DeleteIdentifier_MatchesTheV3RestProjection_ForTreatments()
     {
-        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
         var treatment = new Treatment { Id = RecordGuid, EventType = "Meal Bolus" };
 
-        var entryCapture = new BroadcastCapture();
-        await CreateSideEffects(entryCapture).OnDeletedAsync("entries", entry);
+        var capture = new BroadcastCapture();
+        await CreateTreatmentSink(capture).OnDeletedAsync(treatment, CancellationToken.None);
 
-        var treatmentCapture = new BroadcastCapture();
-        await CreateTreatmentSink(treatmentCapture).OnDeletedAsync(treatment, CancellationToken.None);
+        Identifier(capture.Delete).Should().Be(RestIdentifier(treatment));
+    }
 
-        Identifier(entryCapture.Delete).Should().Be(RestIdentifier(new EntryV3Response(entry)));
-        Identifier(treatmentCapture.Delete).Should().Be(RestIdentifier(treatment));
+    /// <summary>
+    /// Entries do not have one identifier everywhere: the REST wrapper coerces its id to an ObjectId
+    /// and the model the socket serializes does not. Delete follows the socket, because that is the
+    /// half this event has to agree with, which leaves a client that only ever loaded the reading over
+    /// REST unable to resolve the delete. Pinned so the divergence is deliberate and so this test
+    /// fails the day the two are unified.
+    /// </summary>
+    [Fact]
+    public async Task DeleteIdentifier_DivergesFromTheV3RestProjection_ForEntries()
+    {
+        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
 
-        static string? RestIdentifier(object projection) =>
-            JsonSerializer
-                .Deserialize<JsonElement>(JsonSerializer.Serialize(projection))
-                .GetProperty("identifier")
-                .GetString();
+        var capture = new BroadcastCapture();
+        await CreateSideEffects(capture).OnDeletedAsync("entries", entry);
+
+        Identifier(capture.Delete).Should().Be(RecordGuid);
+        RestIdentifier(new EntryV3Response(entry)).Should().Be(MongoObjectId.Coerce(RecordGuid));
+    }
+
+    private static string? RestIdentifier(object projection) =>
+        JsonSerializer
+            .Deserialize<JsonElement>(JsonSerializer.Serialize(projection))
+            .GetProperty("identifier")
+            .GetString();
+
+    /// <summary>
+    /// A record whose two id spellings disagree, to pin which one the delete follows. No shipping
+    /// model does this today — <see cref="Treatment"/> coerces both, <see cref="Entry"/> neither —
+    /// so the precedence is only observable here.
+    /// </summary>
+    private sealed class DisagreeingIds
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("identifier")]
+        public string Identifier => "from-identifier";
+
+        [System.Text.Json.Serialization.JsonPropertyName("_id")]
+        public string Id => "from-underscore-id";
+    }
+
+    [Fact]
+    public async Task DeleteIdentifier_PrefersTheV3IdentifierOverTheLegacyId()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnDeletedAsync("entries", new DisagreeingIds());
+
+        Identifier(capture.Delete).Should().Be("from-identifier");
+    }
+
+    /// <summary>
+    /// The web app's realtime store matches a create against a delete on <c>doc._id</c> alone, and
+    /// the entries it holds come from the V4 REST DTO, whose <c>_id</c> is the record's full uuid.
+    /// A broadcast that shortens <c>_id</c> leaves a deleted reading on the chart until reload.
+    /// </summary>
+    [Fact]
+    public async Task EntriesBroadcastDocId_StaysTheFullUuid()
+    {
+        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
+        var capture = new BroadcastCapture();
+        var sideEffects = CreateSideEffects(capture);
+
+        await sideEffects.OnCreatedAsync("entries", new[] { entry });
+        await sideEffects.OnDeletedAsync("entries", entry);
+
+        capture.Create.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
+        capture.Delete.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
     }
 
     /// <summary>

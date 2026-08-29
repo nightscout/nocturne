@@ -24,7 +24,6 @@ public class Entry : ProcessableDocumentBase
     /// Gets or sets the MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
-    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public override string? Id { get; set; }
 
     /// <summary>
@@ -376,7 +375,6 @@ public class Entry : ProcessableDocumentBase
     /// Gets the V3 API identifier - alias for <see cref="ProcessableDocumentBase.Id"/>.
     /// </summary>
     [JsonPropertyName("identifier")]
-    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
     /// <summary>
