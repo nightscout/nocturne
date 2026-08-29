@@ -379,8 +379,10 @@ public class Entry : ProcessableDocumentBase
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
-    /// Falls back to Mills so every serialized entry carries it: NS v3 socket clients (AAPS)
-    /// read it unconditionally from realtime storage events and drop docs without it.
+    /// Falls back to <see cref="FallbackTimestampMills"/>: AAPS's NS v3 socket handler reads
+    /// <c>doc.srvModified</c> with <c>getLong</c> before it dispatches on the collection, so a
+    /// realtime storage event whose doc has no numeric value there throws on the background
+    /// thread and takes the AAPS process down.
     /// </summary>
     private long? _srvModified;
 
@@ -388,7 +390,7 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvModified
     {
-        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        get => _srvModified ?? FallbackTimestampMills();
         set => _srvModified = value;
     }
 
@@ -401,8 +403,29 @@ public class Entry : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvCreated
     {
-        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        get => _srvCreated ?? FallbackTimestampMills();
         set => _srvCreated = value;
+    }
+
+    /// <summary>
+    /// Resolves the event time for the V3 compatibility timestamps: Mills, then <c>created_at</c>.
+    /// Mills already resolves <c>date</c> and <c>dateString</c>; <c>created_at</c> is the only
+    /// timestamp it does not reach, and it is read-only here so the ingest timeline is unchanged.
+    /// </summary>
+    private long? FallbackTimestampMills()
+    {
+        if (Mills > 0)
+            return Mills;
+
+        return DateTimeOffset.TryParse(
+            CreatedAt,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal
+                | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out var createdAt
+        )
+            ? createdAt.ToUnixTimeMilliseconds()
+            : null;
     }
 
     /// <summary>
