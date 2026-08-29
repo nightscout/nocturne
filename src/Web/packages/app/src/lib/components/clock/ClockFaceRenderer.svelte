@@ -400,7 +400,7 @@
               <BasalTrack />
             {/if}
             <ThresholdRules />
-            <GlucoseTrack />
+            <GlucoseTrack showPoints={false} />
             {#if backgroundChart.chartConfig?.showPredictions ?? false}
               <PredictionTrack />
             {/if}
@@ -463,7 +463,7 @@
                         <BasalTrack />
                       {/if}
                       <ThresholdRules />
-                      <GlucoseTrack />
+                      <GlucoseTrack showPoints={false} />
                       {#if element.chartConfig?.showPredictions ?? false}
                         <PredictionTrack />
                       {/if}

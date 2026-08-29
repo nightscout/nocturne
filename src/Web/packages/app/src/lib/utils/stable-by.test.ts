@@ -19,6 +19,23 @@ describe("stableBy", () => {
     expect(build).toHaveBeenCalledTimes(3);
   });
 
+  it("cannot see a key mutated in place", () => {
+    // The contract, pinned so it is not mistaken for a bug later: parts are
+    // compared by identity, so an object key is only safe when whatever owns it
+    // replaces it wholesale. `mergeGlucose` relies on exactly that of the
+    // realtime store's `$state.raw` entries array.
+    const build = vi.fn((rows: number[]) => rows.length);
+    const memo = stableBy(build);
+    const rows = [1];
+
+    expect(memo(rows)).toBe(1);
+    rows.push(2);
+    expect(memo(rows)).toBe(1);
+    expect(build).toHaveBeenCalledTimes(1);
+
+    expect(memo([...rows])).toBe(2);
+  });
+
   it("treats NaN bounds as unchanged", () => {
     // An unparseable dateRange yields NaN bounds; `===` would thrash on them and
     // rebuild forever, which is the failure this memo exists to avoid.

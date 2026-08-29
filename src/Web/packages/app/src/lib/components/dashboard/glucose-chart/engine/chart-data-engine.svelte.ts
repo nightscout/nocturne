@@ -184,15 +184,15 @@ export interface ChartDataEngineOptions {
   enablePredictions?: boolean;
   demoMode?: boolean;
   /**
-   * How wide a window the consumer draws, which is how far the realtime merge
-   * may reach. `"buffer"` is the 48-hour `fullDataRange` that `fullXDomain`
-   * spans — what anything rendering the mini overview needs, whether or not it
-   * was handed that data up front. `"display"` is the visible window alone, for
-   * a consumer that renders nothing wider: the sidebar sparkline, the clock
-   * faces.
+   * How wide a window the consumer draws, and so how far the realtime merge may
+   * reach. `"buffer"` is `fullDataRange` — `dateRange` when one was named, the
+   * 48-hour buffer otherwise — which is what `fullXDomain` spans and therefore
+   * what anything rendering the mini overview needs, however it was fed.
+   * `"display"` is the visible window alone, for a consumer that renders nothing
+   * wider: the sidebar sparkline, the clock faces.
    *
-   * Defaults to `"buffer"`, because over-reaching only costs points a chart
-   * declines to draw, where under-reaching silently drops points it is drawing.
+   * Defaults to `"buffer"`: over-reaching costs points a chart declines to draw,
+   * where under-reaching silently drops points it is drawing.
    */
   dataWindow?: "buffer" | "display";
   /** Fired once when `serverChartData` first becomes non-null. */
@@ -386,12 +386,10 @@ export function createChartDataEngine(
   });
 
   // ---- Data range ----
-  // How far the realtime merge may reach — the window the consumer draws, per
-  // `dataWindow`. The realtime store holds the last 1000 readings, so merging
-  // over `fullDataRange` for a consumer that only draws the visible window hands
-  // its chart points it will never render: the sidebar's 3-hour sparkline was
-  // being given 48 hours of readings, sixteen times what it draws, on every
-  // route, because the widget lives in the sidebar.
+  // How far the realtime merge may reach: the window the consumer draws, per
+  // `dataWindow`. The realtime store holds the last 1000 readings — several days
+  // of them — so merging over `fullDataRange` for a consumer that draws only the
+  // visible window hands its chart points it will never render.
   const dataRange = $derived(
     options.dataWindow === "display" ? displayDateRange : fullDataRange
   );
@@ -401,16 +399,6 @@ export function createChartDataEngine(
   // `fullDataRange` (48h) is used by the MiniOverview on the dashboard, which
   // preloads data via SSR — so consumers that hit this fetch path (sidebar
   // widget, clock face) don't need the full buffer.
-  //
-  // Keyed on the rounded bounds so a re-evaluation returns the same window: a
-  // fresh object here re-runs the fetch effect below, which under `nowMinute`
-  // alone was a chart-data request a minute, defeating the 5-minute rounding.
-  // See the note on `stableBy`.
-  const fetchWindowOf = stableBy((startTime: number, endTime: number) => ({
-    startTime,
-    endTime,
-  }));
-
   const stableFetchRange = $derived.by(() => {
     if (!isBrowser) return null;
     const range = options.dateRange ? fullDataRange : displayDateRange;
@@ -418,10 +406,9 @@ export function createChartDataEngine(
     const toTime = range.to.getTime();
     if (isNaN(fromTime) || isNaN(toTime)) return null;
     const intervalMs = 5 * 60 * 1000;
-    return fetchWindowOf(
-      Math.floor(fromTime / intervalMs) * intervalMs,
-      Math.ceil(toTime / intervalMs) * intervalMs
-    );
+    const startRounded = Math.floor(fromTime / intervalMs) * intervalMs;
+    const endRounded = Math.ceil(toTime / intervalMs) * intervalMs;
+    return { startTime: startRounded, endTime: endRounded };
   });
 
   // ---- Effects: data fetching ----
@@ -575,12 +562,11 @@ export function createChartDataEngine(
   // emit duplicates.
   //
   // Keyed on its four inputs rather than merged on each evaluation. A derived
-  // that Svelte has flagged dirty stays dirty for as long as more than one batch
-  // is alive — which is the whole time a page-level `<svelte:boundary>` is
-  // awaiting — so it is re-executed on *every read*, not once per change. This
-  // is the most-read and most expensive derived in the app, and a fresh array
-  // from it re-dirties the chart's entire scale and extent chain, which then
-  // reads it again. See the note on `stableBy`.
+  // Svelte has flagged dirty stays dirty for as long as more than one batch is
+  // alive — the whole time a page-level `<svelte:boundary>` is awaiting — so it
+  // is re-executed on every read, not once per change. This is the most-read
+  // series in the app, and a fresh array from it re-dirties the chart's entire
+  // extent and scale chain, which reads it again. See the note on `stableBy`.
   const mergeGlucose = stableBy(
     (
       chartData: TransformedChartData | null,

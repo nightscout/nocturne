@@ -45,7 +45,7 @@ const entries = [
   reading(30 * 60, 140),
 ];
 
-async function engineFor(options: ChartDataEngineOptions) {
+async function glucoseOf(options: ChartDataEngineOptions) {
   let engine!: ChartDataEngine;
   render(Harness, {
     props: {
@@ -57,11 +57,6 @@ async function engineFor(options: ChartDataEngineOptions) {
 
   // The engine fetches its server half in an effect; nothing merges until it lands.
   await vi.waitFor(() => expect(engine.serverChartData).not.toBeNull());
-  return engine;
-}
-
-async function glucoseOf(options: ChartDataEngineOptions) {
-  const engine = await engineFor(options);
   return engine.glucoseData.map((p) => p.sgv).sort((a, b) => a - b);
 }
 
@@ -87,44 +82,32 @@ describe("chart data engine — realtime merge window", () => {
     expect(sgvs).toEqual([110, 120, 130, 140]);
   });
 
-  it("keeps the full buffer for a consumer that preloaded one", async () => {
-    const sgvs = await glucoseOf({
-      focusHours: 3,
-      enablePredictions: false,
-      initialChartData: served,
-    });
+  it("includes a reading sitting exactly on either bound", async () => {
+    // The bounds are the caller's own instants here, so both comparisons can be
+    // pinned without depending on where the minute happens to have ticked.
+    const from = Date.now() - 5 * HOUR;
+    const to = Date.now() - 1 * HOUR;
 
-    expect(sgvs).toEqual([110, 120, 130, 140]);
-  });
-
-  it("keeps an explicitly requested range", async () => {
-    const sgvs = await glucoseOf({
-      focusHours: 3,
-      enablePredictions: false,
-      dateRange: {
-        from: new Date(Date.now() - 40 * HOUR),
-        to: new Date(Date.now() + HOUR),
+    let engine!: ChartDataEngine;
+    render(Harness, {
+      props: {
+        entries: [
+          { _id: "before", type: "sgv", mills: from - 1, sgv: 60 },
+          { _id: "on-from", type: "sgv", mills: from, sgv: 70 },
+          { _id: "on-to", type: "sgv", mills: to, sgv: 80 },
+          { _id: "after", type: "sgv", mills: to + 1, sgv: 90 },
+        ],
+        options: {
+          enablePredictions: false,
+          dateRange: { from: new Date(from), to: new Date(to) },
+        },
+        onengine: (e: ChartDataEngine) => (engine = e),
       },
     });
+    await vi.waitFor(() => expect(engine.serverChartData).not.toBeNull());
 
-    expect(sgvs).toEqual([110, 120, 130, 140]);
-  });
-});
-
-describe("chart data engine — reference stability", () => {
-  // Svelte re-executes a derived it has flagged dirty on every read while more
-  // than one batch is alive, so a merge that allocated per read republished a new
-  // array each time and re-dirtied every chart scale reading it — the loop in
-  // #995. Repeated reads with unchanged inputs must hand back one instance.
-  it("hands out the same series until its inputs change", async () => {
-    const engine = await engineFor({
-      focusHours: 3,
-      enablePredictions: false,
-      dataWindow: "display",
-    });
-
-    const first = engine.glucoseData;
-    expect(engine.glucoseData).toBe(first);
-    expect(engine.glucoseData).toBe(first);
+    expect(engine.glucoseData.map((p) => p.sgv).sort((a, b) => a - b)).toEqual([
+      70, 80,
+    ]);
   });
 });

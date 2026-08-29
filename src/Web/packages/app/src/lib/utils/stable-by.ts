@@ -1,6 +1,6 @@
 /**
- * Builds a value from primitives, returning the previous instance whenever
- * those primitives are unchanged.
+ * Builds a value from a key, returning the previous instance whenever the key
+ * is unchanged.
  *
  * Svelte re-evaluates a `$derived` whenever a dependency _may_ have changed,
  * and a derived it has flagged dirty is re-executed on every read for as long
@@ -9,10 +9,15 @@
  * a new identity on each of those reads and reports a change it did not have.
  * Where the result feeds a chart, that rebuilds the whole series and every
  * scale below it, and the effects that reconciles re-enter the flush that
- * provoked them.
- *
- * Keying the allocation on primitives makes the comparison succeed, so a
+ * provoked them. Keying the allocation makes the comparison succeed, so a
  * re-evaluation costs nothing and propagates nothing.
+ *
+ * **Key parts are compared by identity** (`Object.is`), which is what makes the
+ * comparison cheap enough to run on every read. A key part that is an object is
+ * therefore only safe if it is replaced wholesale on every change —
+ * `$state.raw` holding an array that is always reassigned, never pushed into.
+ * One mutated in place looks unchanged and this returns a stale value
+ * indefinitely.
  *
  * Each call returns a memo with its own one-entry cache, so build one per thing
  * being kept stable — never one shared across component or store instances.
