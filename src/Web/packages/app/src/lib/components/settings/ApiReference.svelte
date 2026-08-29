@@ -7,6 +7,7 @@
     getTenantSettings,
     setPublicDocs,
   } from "$api/generated/tenantSettings.generated.remote";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -17,6 +18,7 @@
   );
 
   const settingsQuery = $derived(canManageSettings ? getTenantSettings() : null);
+  retainQuery(() => settingsQuery);
 
   // Held only while a write is in flight; null = use server truth.
   let pending = $state<boolean | null>(null);

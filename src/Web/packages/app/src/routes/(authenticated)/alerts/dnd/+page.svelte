@@ -22,6 +22,7 @@
   } from "$lib/components/ui/card";
   import { ArrowLeft, BellOff, Save, Loader2, ShieldAlert } from "lucide-svelte";
   import { EditorActionBar } from "$lib/components/layout";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -34,6 +35,7 @@
   );
 
   const dndQuery = $derived(canSetDnd ? getDnd() : undefined);
+  retainQuery(() => dndQuery);
 
   let saving = $state(false);
   let error = $state<string | null>(null);

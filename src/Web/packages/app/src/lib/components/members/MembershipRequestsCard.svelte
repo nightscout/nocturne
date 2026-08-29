@@ -8,6 +8,7 @@
     setMembershipRequestSettings,
     getPendingRequests,
   } from "$api/generated/membershipRequests.generated.remote";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -19,6 +20,8 @@
 
   const settingsQuery = $derived(canManage ? getMembershipRequestSettings() : null);
   const pendingQuery = $derived(canManage ? getPendingRequests() : null);
+  retainQuery(() => settingsQuery);
+  retainQuery(() => pendingQuery);
 
   let pendingAllow = $state<boolean | null>(null);
   const allow = $derived(pendingAllow ?? settingsQuery?.current?.allowRequests ?? false);

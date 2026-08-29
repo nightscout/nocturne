@@ -18,6 +18,7 @@
   } from "lucide-svelte";
   import { consentForm, getClientInfo } from "../oauth.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -39,6 +40,7 @@
 
   // Fetch client info via remote function
   const clientInfoQuery = $derived(clientId ? getClientInfo({ clientId }) : null);
+  retainQuery(() => clientInfoQuery);
   const clientInfo = $derived(clientInfoQuery?.current ?? {
     clientId,
     displayName: null,

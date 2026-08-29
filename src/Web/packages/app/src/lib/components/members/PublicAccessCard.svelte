@@ -26,6 +26,7 @@
     publicDataCategories,
     formatList,
   } from "./public-data-categories";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -36,6 +37,7 @@
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => shareQuery);
   const share = $derived(shareQuery?.current ?? null);
 
   // Optimistic overrides held only while a mutation is in flight; null = use server truth.

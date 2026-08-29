@@ -49,6 +49,7 @@
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
   import SyncResultCard from "$lib/components/connectors/SyncResultCard.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   interface Props {
     /** Pre-select a specific connector (skips selection grid) */
@@ -105,6 +106,11 @@
   const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
+  retainQuery(() => schemaQuery);
+  retainQuery(() => configQuery);
+  retainQuery(() => effectiveConfigQuery);
+  retainQuery(() => dataSummaryQuery);
+  retainQuery(() => capabilitiesQuery);
   const statusQuery = getAllConnectorStatus();
 
   // --- Derived data from queries ---

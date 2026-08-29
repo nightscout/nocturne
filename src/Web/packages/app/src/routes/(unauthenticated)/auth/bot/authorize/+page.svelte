@@ -5,6 +5,7 @@
 	import { Button } from "$lib/components/ui/button";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
 	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
+	import { retainQuery } from "$lib/api/retain-query.svelte";
 
 	// Read state token from URL
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
@@ -17,6 +18,7 @@
 	const pendingQuery = $derived(
 		context?.mode === "tenant" && stateToken ? getPending(stateToken) : null,
 	);
+	retainQuery(() => pendingQuery);
 	const pending = $derived(pendingQuery?.current);
 	const pendingError = $derived(pendingQuery?.error);
 

@@ -41,6 +41,7 @@
   import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
   import RolesSection from "$lib/components/members/RolesSection.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -80,6 +81,9 @@
   const rolesQuery = getRoles();
   const pendingRequestsQuery = $derived(canManageMembers ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => invitesQuery);
+  retainQuery(() => pendingRequestsQuery);
+  retainQuery(() => shareQuery);
 
   // Data
   const allMembers = $derived(membersQuery.current ?? []);

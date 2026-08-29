@@ -29,6 +29,7 @@
     type GuestLinkInfo,
     GuestLinkStatus,
   } from "$api/generated/nocturne-api-client";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? []
@@ -46,6 +47,7 @@
   const guestLinksQuery = $derived(
     canCreateGuestLinks ? getGuestLinks({ includeDismissed: true }) : null
   );
+  retainQuery(() => guestLinksQuery);
   const allLinks = $derived(guestLinksQuery?.current ?? []);
   const guestLinks = $derived(
     showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)
