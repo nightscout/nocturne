@@ -148,7 +148,13 @@ public class BasalPoint
 {
     public long Timestamp { get; set; }
     public double Rate { get; set; }
-    public double ScheduledRate { get; set; }
+
+    /// <summary>
+    /// The rate the basal schedule called for at this instant, or <c>null</c> when
+    /// there is no therapy profile to read one from. Consumers fall back to
+    /// <see cref="Rate"/> rather than substituting a placeholder.
+    /// </summary>
+    public double? ScheduledRate { get; set; }
     public BasalDeliveryOrigin Origin { get; set; }
     public ChartColor FillColor { get; set; }
     public ChartColor StrokeColor { get; set; }

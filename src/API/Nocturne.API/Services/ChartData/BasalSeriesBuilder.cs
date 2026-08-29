@@ -12,7 +12,9 @@ namespace Nocturne.API.Services.ChartData;
 /// TempBasal records are the v4 source of truth for pump-confirmed basal delivery.
 /// Gaps in TempBasal coverage are filled at 5-minute resolution from the active
 /// basal rate schedule; when no TempBasal records exist the entire series is
-/// profile-derived.
+/// profile-derived. With no therapy settings at all there is no schedule to
+/// infer from, so the series is left empty rather than invented — a fabricated
+/// flat rate renders as real delivery on the chart.
 /// </summary>
 internal sealed class BasalSeriesBuilder(
     ITherapySettingsResolver therapySettingsResolver,
@@ -57,9 +59,7 @@ internal sealed class BasalSeriesBuilder(
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
-                ?? (hasData
-                    ? timeline.SnapshotAt(tbStart).BasalRateAt(tbStart)
-                    : defaultBasalRate);
+                ?? (hasData ? timeline.SnapshotAt(tbStart).BasalRateAt(tbStart) : (double?)null);
 
             series.Add(
                 new BasalPoint
@@ -79,7 +79,7 @@ internal sealed class BasalSeriesBuilder(
         if (currentTime < endTime)
             series.AddRange(BuildFromProfile(currentTime, endTime, defaultBasalRate, timeline, hasData));
 
-        if (series.Count == 0)
+        if (series.Count == 0 && hasData)
         {
             series.Add(
                 new BasalPoint
@@ -106,14 +106,18 @@ internal sealed class BasalSeriesBuilder(
     )
     {
         var series = new List<BasalPoint>();
+
+        // No therapy settings means no basal schedule. Emitting defaultBasalRate
+        // here would draw a flat band the wearer never received.
+        if (!hasData)
+            return series;
+
         const long intervalMs = 5 * 60 * 1000;
         double? prevRate = null;
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            var rate = hasData
-                ? timeline.SnapshotAt(t).BasalRateAt(t)
-                : defaultBasalRate;
+            var rate = timeline.SnapshotAt(t).BasalRateAt(t);
 
             if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
             {
