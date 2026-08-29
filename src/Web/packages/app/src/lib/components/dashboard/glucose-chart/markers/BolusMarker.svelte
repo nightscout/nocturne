@@ -30,6 +30,10 @@
   // Algorithm-delivered doses (SMBs / auto-boluses) render outlined so they read
   // distinctly from a user-initiated (filled) bolus. Category comes from the
   // backend; the frontend only picks the shape.
+  //
+  // Fill and height are independent: a dose that is both automatic and a manual
+  // override draws outlined *and* tall, where the two used to be exclusive
+  // branches and the override silhouette won.
   const isAutomatic = $derived(
     bolusType === "AutomaticBolus" || bolusType === "Smb",
   );

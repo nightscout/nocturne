@@ -66,9 +66,9 @@
   {@const iobZero = iobCobLayout.zero}
   {@const iobTrackTop = iobCobLayout.top}
   {@const iobAxisScale = iobCobLayout.axisScale}
-  <!-- Treatment markers share one baseline so a bolus (dome above) and a carb
-       entry (bowl below) at the same time meet at their flat edge and form a
-       single circle. Magnitude is conveyed by the marker labels, not height. -->
+  <!-- Treatment markers share one baseline so a bolus (pointing down from above)
+       and a carb entry (pointing up from below) at the same time meet apex to
+       apex. Magnitude is conveyed by the marker labels, not height. -->
   {@const markerBaselineY = (iobCobLayout.top + iobCobLayout.bottom) / 2}
 
   <!-- IOB axis on right -->

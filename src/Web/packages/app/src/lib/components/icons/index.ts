@@ -2,7 +2,8 @@
  * Semantic icon components for diabetes-related events and states
  *
  * Device event and therapy icons use AAPS (AndroidAPS) SVG paths.
- * Chart marker icons (BolusIcon, CarbsIcon) use custom hemisphere shapes.
+ * Chart marker icons (BolusIcon, CarbsIcon) use the shared triangle geometry
+ * in marker-shapes.ts, so they match what the chart draws.
  *
  * NOTE: For SVG chart contexts (inside <svg>), use the raw SVG paths defined
  * in GlucoseChartCard.svelte since Lucide components render their own <svg>.
