@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { isPublicRoute, PUBLIC_PREFIXES, requiresSignIn } from "./public-routes";
+import {
+  isPublicRoute,
+  PUBLIC_PREFIXES,
+  requiresSignIn,
+  shareLinkIsDeadEnd,
+} from "./public-routes";
 
 describe("isPublicRoute", () => {
   it("treats /join as public so an invitee without an account can accept an invite", () => {
@@ -78,5 +83,25 @@ describe("requiresSignIn", () => {
   it("leaves the public routes alone on a locked-down tenant host", () => {
     expect(requiresSignIn({ ...lockedDown, pathname: "/" })).toBe(false);
     expect(requiresSignIn({ ...lockedDown, pathname: "/auth/login" })).toBe(false);
+  });
+});
+
+describe("shareLinkIsDeadEnd", () => {
+  it("claims the statuses a share host cannot act on", () => {
+    // 404 is the API's answer to a token it cannot resolve; 503 is setup/recovery mode, which a
+    // share host has no way to satisfy. Both otherwise steer to /setup or the marketing site.
+    expect(shareLinkIsDeadEnd(true, 404)).toBe(true);
+    expect(shareLinkIsDeadEnd(true, 503)).toBe(true);
+  });
+
+  it("leaves every other host on its own dead ends", () => {
+    expect(shareLinkIsDeadEnd(false, 404)).toBe(false);
+    expect(shareLinkIsDeadEnd(false, 503)).toBe(false);
+  });
+
+  it("does not claim a status that means something else on a share host", () => {
+    for (const status of [401, 403, 500, undefined, null, "404"]) {
+      expect(shareLinkIsDeadEnd(true, status), String(status)).toBe(false);
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isRedirect, type Cookies } from "@sveltejs/kit";
 import { classifyHost, isTenantlessHost } from "$lib/server/tenantless-host";
+import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { load } from "./+layout.server";
 
 /**
@@ -258,7 +259,9 @@ describe("(authenticated) layout load — the public share host", () => {
     ).resolves.toBeNull();
   });
 
-  it("still sends a share host of a tenant that grants no anonymous read to login", async () => {
+  it("tells a share host of a tenant that grants no anonymous read that the link is gone", async () => {
+    // Sign-in is not an option the visitor has: the host holds no session, and the account the
+    // login page would take belongs to a different host anyway.
     await expect(
       redirectLocation({
         host: SHARE,
@@ -266,7 +269,30 @@ describe("(authenticated) layout load — the public share host", () => {
         status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: false },
         authStatus: { onboardingCompleted: true },
       })
-    ).resolves.toBe("/auth/login?returnUrl=%2F");
+    ).resolves.toBe(SHARE_UNAVAILABLE_PATH);
+  });
+
+  it("never serves the first-run wizard to a share host whose token resolves nothing", async () => {
+    // A token the API cannot parse as one leaves the host resolving no tenant, and the status
+    // endpoint reports "setup_required" for any request that resolves none — which put the
+    // "WELCOME TO NOCTURNE" wizard in front of whoever held a rotated link.
+    await expect(
+      redirectLocation({
+        host: SHARE,
+        status: { status: "setup_required", tenantSlug: null, anonymousReadAccess: false },
+        authStatus: 404,
+      })
+    ).resolves.toBe(SHARE_UNAVAILABLE_PATH);
+  });
+
+  it("never serves the first-run wizard to a share host reporting onboarding incomplete", async () => {
+    await expect(
+      redirectLocation({
+        host: SHARE,
+        status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: false },
+        authStatus: { onboardingCompleted: false },
+      })
+    ).resolves.toBe(SHARE_UNAVAILABLE_PATH);
   });
 
   it("keeps the bare tenant host login-only even when the tenant shares publicly", async () => {

@@ -60,3 +60,18 @@ export function requiresSignIn({
   if (isPublicRoute(pathname)) return false;
   return requireAuthentication && !isAuthenticated;
 }
+
+/**
+ * Whether a failed status probe means the share link itself is the dead end, rather than the
+ * instance-wide condition the same status means on any other host.
+ *
+ * A share host answers for one tenant's link and nothing else, so the destinations those statuses
+ * otherwise carry are all wrong for it: a marketing site on another domain, a first-run wizard on
+ * an instance a share link only resolves on once it is past setup, a recovery sign-in the host
+ * holds no session for. The API 404s a token it cannot resolve — rotated, disabled, or never
+ * valid — and 503s only when it is itself unready; either way the link is what the visitor came
+ * for and is not working.
+ */
+export function shareLinkIsDeadEnd(isShareHost: boolean, apiStatus: unknown): boolean {
+  return isShareHost && (apiStatus === 404 || apiStatus === 503);
+}

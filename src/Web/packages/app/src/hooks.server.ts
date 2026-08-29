@@ -21,7 +21,12 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
 import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
-import { STATIC_ASSET_PREFIXES, requiresSignIn } from "$lib/server/public-routes";
+import {
+  STATIC_ASSET_PREFIXES,
+  requiresSignIn,
+  shareLinkIsDeadEnd,
+} from "$lib/server/public-routes";
+import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import {
   installRequestScopedBitsIdCounter,
   withFreshBitsIdCounter,
@@ -184,12 +189,13 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
   const pathname = event.url.pathname;
 
   // Skip the status probe entirely for static assets, for pages that ARE
-  // the setup/recovery/auth destinations (probing those would cause infinite
+  // the setup/recovery/auth/share-unavailable destinations (probing those would cause infinite
   // redirect loops), and for external webhook/bot endpoints that must respond
   // regardless of setup state — third-party services like Discord cannot
   // follow HTML redirects and will treat any non-2xx as a hard failure.
   const skipProbe =
     STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith(SHARE_UNAVAILABLE_PATH) ||
     pathname.startsWith("/setup") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api/v4/webhooks") ||
@@ -243,6 +249,13 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
       const status = (error as any).status;
+
+      if (shareLinkIsDeadEnd(event.locals.isShareHost, status)) {
+        return new Response(null, {
+          status: 303,
+          headers: { Location: SHARE_UNAVAILABLE_PATH },
+        });
+      }
 
       if (status === 503) {
         let body: any = {};

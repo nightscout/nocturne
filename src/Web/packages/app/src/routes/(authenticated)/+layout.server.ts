@@ -3,6 +3,7 @@ import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getRequestStatus } from "$lib/server/request-status";
 import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
+import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
@@ -45,6 +46,14 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, parent }) =
   // is a longer road to the sign-in page this view exists to avoid — and a share link only
   // resolves a tenant on an instance that is past setup.
   const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
+
+  // A share host that grants nothing is a link that was rotated, disabled, or never valid.
+  // Neither redirect below reaches anywhere it can act on — /auth/login for a host that holds no
+  // session, /setup for an instance a link only resolves on once it is past setup — and a
+  // first-run wizard reads as "this deployment is broken". Say the one actionable thing instead.
+  if (locals.isShareHost && !publicViewAllowed) {
+    throw redirect(303, SHARE_UNAVAILABLE_PATH);
+  }
 
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
   if (!locals.isGuestSession && !publicViewAllowed) {
