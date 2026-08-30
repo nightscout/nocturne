@@ -194,6 +194,25 @@ public class TandemE2eSyncTests
         fixture.Publisher.SystemEvents.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A narrowed request re-pulls one type; every other type the tenant has switched on stays
+    /// untouched, however much of it the window carries.
+    /// </summary>
+    [Fact]
+    public async Task Narrowed_request_syncs_only_the_requested_type()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.RunAsync(new SyncRequest { DataTypes = [SyncDataType.Glucose] });
+
+        // ItemsSynced carries a key per type the run looked at, so every other type must be absent.
+        result.ItemsSynced.Keys.Should().Equal(SyncDataType.Glucose);
+        fixture.Publisher.SensorGlucoses.Should().HaveCount(2);
+        fixture.Publisher.Boluses.Should().BeEmpty();
+        fixture.Publisher.TempBasals.Should().BeEmpty();
+        fixture.Publisher.DeviceEvents.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Empty_window_publishes_nothing()
     {
@@ -425,7 +444,7 @@ public class TandemE2eSyncTests
                 Publisher);
         }
 
-        public Task<SyncResult> RunAsync() =>
-            _service.SyncDataAsync(new SyncRequest(), _config, CancellationToken.None);
+        public Task<SyncResult> RunAsync(SyncRequest? request = null) =>
+            _service.SyncDataAsync(request ?? new SyncRequest(), _config, CancellationToken.None);
     }
 }

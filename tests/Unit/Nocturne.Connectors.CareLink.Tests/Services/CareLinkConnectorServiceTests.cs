@@ -335,6 +335,47 @@ public class CareLinkConnectorServiceTests
             "a type the tenant switched off is never reported, stale payload or not");
     }
 
+    /// <summary>
+    /// A narrowed request re-pulls one type; every other type the tenant has switched on stays
+    /// untouched, however much of it the payload carries.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_NarrowedRequest_SyncsOnlyTheRequestedType()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            MonitorDataJson = """
+                {
+                  "currentServerTime": 1767261600000,
+                  "lastSG": { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" },
+                  "sgs": [
+                    { "sg": 120, "datetime": "2026-01-01T10:00:00", "kind": "SG" }
+                  ],
+                  "markers": [
+                    {
+                      "type": "INSULIN",
+                      "dateTime": "2026-01-01T10:00:00",
+                      "id": 1,
+                      "bolusType": "NORMAL",
+                      "programmedFastAmount": 2.5,
+                      "deliveredFastAmount": 2.5
+                    }
+                  ]
+                }
+                """
+        };
+        // The default config leaves every type switched on, so only the request can narrow the run.
+        var fixture = new ServiceFixture(handler, withPublisher: true);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        // ItemsSynced carries a key per type the run looked at, so every other type must be absent.
+        result.ItemsSynced.Keys.Should().Equal(SyncDataType.Glucose);
+        fixture.PublishedGlucose.Should().ContainSingle();
+        fixture.PublishedDeviceStatuses.Should().BeEmpty();
+    }
+
     /// <summary>Leaves only the glucose step able to publish.</summary>
     private static CareLinkConnectorConfiguration GlucoseOnlyConfiguration() => new()
     {
