@@ -69,6 +69,7 @@ public class ChartDataController : ControllerBase
     [ProducesResponseType(typeof(DashboardChartData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<DashboardChartData>> GetDashboardChartData(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
@@ -76,28 +77,20 @@ public class ChartDataController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (endTime <= startTime)
-                return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+        if (endTime <= startTime)
+            return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
-            if (intervalMinutes < 1 || intervalMinutes > 60)
-                return Problem(detail: "intervalMinutes must be between 1 and 60", statusCode: 400, title: "Bad Request");
+        if (intervalMinutes < 1 || intervalMinutes > 60)
+            return Problem(detail: "intervalMinutes must be between 1 and 60", statusCode: 400, title: "Bad Request");
 
-            var result = await _chartDataService.GetDashboardChartDataAsync(
-                startTime,
-                endTime,
-                intervalMinutes,
-                cancellationToken
-            );
+        var result = await _chartDataService.GetDashboardChartDataAsync(
+            startTime,
+            endTime,
+            intervalMinutes,
+            cancellationToken
+        );
 
-            return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calculating dashboard chart data");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
     }
 
     /// <summary>
@@ -117,25 +110,18 @@ public class ChartDataController : ControllerBase
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<List<BasalPoint>>> GetBasalSeries(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (endTime <= startTime)
-                return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+        if (endTime <= startTime)
+            return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
-            var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
+        var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
 
-            return Ok(basalSeries);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calculating basal series");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(basalSeries);
     }
 }

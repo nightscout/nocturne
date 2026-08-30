@@ -87,123 +87,116 @@ public class RetrospectiveController : ControllerBase
     [ProducesResponseType(typeof(RetrospectiveDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<RetrospectiveDataResponse>> GetRetrospectiveData(
         [FromQuery] long time,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (time <= 0)
         {
-            if (time <= 0)
-            {
-                return Problem(detail: "Time parameter must be a positive Unix timestamp in milliseconds", statusCode: 400, title: "Bad Request");
-            }
-            // Get glucose entries for context (entries around the target time)
-            // Use JSON format for the findQuery with mills field
-            var fromMills = time - (30 * 60 * 1000); // 30 minutes before
-            var toMills = time + (5 * 60 * 1000);    // 5 minutes after
-            var findQuery = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: "sgv",
-                count: 50,
-                skip: 0,
-                findQuery: findQuery,
-                dateString: null,
-                reverseResults: false,
-                cancellationToken: cancellationToken
-            );
-            var entryList = entries?.ToList() ?? new List<Entry>();
-            _logger.LogDebug("GetRetrospectiveData: Found {Count} entries for time {Time} (range: {From} to {To})",
-                entryList.Count, time, fromMills, toMills);
-            // Query v4 types for IOB/COB calculation (8 hours before for DIA)
-            var targetDateTime = DateTimeOffset.FromUnixTimeMilliseconds(time).UtcDateTime;
-            var fetchFrom = targetDateTime.AddHours(-8);
-            var boluses = (await _bolusRepository.GetAsync(
-                from: fetchFrom, to: targetDateTime, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: fetchFrom, to: targetDateTime, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            var carbIntakes = (await _carbIntakeRepository.GetAsync(
-                from: fetchFrom, to: targetDateTime, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            // Calculate IOB at the specified time
-            var iobResult = await _iobCalculator.CalculateTotalAsync(
-                boluses,
-                tempBasals,
-                time,
-                ct: cancellationToken
-            );
-            // Calculate COB at the specified time
-            var cobResult = await _cobCalculator.CalculateTotalAsync(
-                carbIntakes,
-                boluses,
-                tempBasals,
-                time,
-                ct: cancellationToken
-            );
-            // Get glucose at the specified time (interpolated)
-            var glucoseData = GetGlucoseAtTime(entryList, time);
-            // Get basal rate at the specified time
-            var basalData = await GetBasalRateAtTimeAsync(tempBasals, time);
-            // Get recent treatments as summary data (boluses and carb intakes within 30 minutes)
-            var recentTreatments = new List<TreatmentSummaryData>();
-            var recentCutoff = time - 30 * 60 * 1000;
-            foreach (var b in boluses.Where(b => b.Mills >= recentCutoff && b.Mills <= time).OrderByDescending(b => b.Mills).Take(10))
-            {
-                recentTreatments.Add(new TreatmentSummaryData
-                {
-                    Id = b.Id.ToString(),
-                    Mills = b.Mills,
-                    EventType = "Bolus",
-                    Insulin = b.Insulin,
-                });
-            }
-            foreach (var c in carbIntakes.Where(c => c.Mills >= recentCutoff && c.Mills <= time).OrderByDescending(c => c.Mills).Take(10))
-            {
-                recentTreatments.Add(new TreatmentSummaryData
-                {
-                    Id = c.Id.ToString(),
-                    Mills = c.Mills,
-                    EventType = "Carb Correction",
-                    Carbs = c.Carbs,
-                });
-            }
-            recentTreatments = recentTreatments.OrderByDescending(t => t.Mills).Take(10).ToList();
-            var response = new RetrospectiveDataResponse
-            {
-                Time = time,
-                TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss"),
-                Glucose = glucoseData,
-                Iob = new IobData
-                {
-                    Total = iobResult.Iob,
-                    Bolus = iobResult.Iob - (iobResult.BasalIob ?? 0),
-                    Basal = iobResult.BasalIob ?? 0,
-                    Activity = iobResult.Activity,
-                    Source = iobResult.Source
-                },
-                Cob = new CobData
-                {
-                    Total = cobResult.Cob,
-                    IsDecaying = cobResult.IsDecaying ?? 0,
-                    CarbsHr = cobResult.CarbsHr,
-                    RawCarbImpact = cobResult.RawCarbImpact,
-                    Source = cobResult.Source
-                },
-                Basal = basalData,
-                RecentTreatments = recentTreatments
-            };
-            return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
+            return Problem(detail: "Time parameter must be a positive Unix timestamp in milliseconds", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+        // Get glucose entries for context (entries around the target time)
+        // Use JSON format for the findQuery with mills field
+        var fromMills = time - (30 * 60 * 1000); // 30 minutes before
+        var toMills = time + (5 * 60 * 1000);    // 5 minutes after
+        var findQuery = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
+        var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
+            type: "sgv",
+            count: 50,
+            skip: 0,
+            findQuery: findQuery,
+            dateString: null,
+            reverseResults: false,
+            cancellationToken: cancellationToken
+        );
+        var entryList = entries?.ToList() ?? new List<Entry>();
+        _logger.LogDebug("GetRetrospectiveData: Found {Count} entries for time {Time} (range: {From} to {To})",
+            entryList.Count, time, fromMills, toMills);
+        // Query v4 types for IOB/COB calculation (8 hours before for DIA)
+        var targetDateTime = DateTimeOffset.FromUnixTimeMilliseconds(time).UtcDateTime;
+        var fetchFrom = targetDateTime.AddHours(-8);
+        var boluses = (await _bolusRepository.GetAsync(
+            from: fetchFrom, to: targetDateTime, device: null, source: null,
+            limit: 2000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        var tempBasals = (await _tempBasalRepository.GetAsync(
+            from: fetchFrom, to: targetDateTime, device: null, source: null,
+            limit: 2000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        var carbIntakes = (await _carbIntakeRepository.GetAsync(
+            from: fetchFrom, to: targetDateTime, device: null, source: null,
+            limit: 2000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        // Calculate IOB at the specified time
+        var iobResult = await _iobCalculator.CalculateTotalAsync(
+            boluses,
+            tempBasals,
+            time,
+            ct: cancellationToken
+        );
+        // Calculate COB at the specified time
+        var cobResult = await _cobCalculator.CalculateTotalAsync(
+            carbIntakes,
+            boluses,
+            tempBasals,
+            time,
+            ct: cancellationToken
+        );
+        // Get glucose at the specified time (interpolated)
+        var glucoseData = GetGlucoseAtTime(entryList, time);
+        // Get basal rate at the specified time
+        var basalData = await GetBasalRateAtTimeAsync(tempBasals, time);
+        // Get recent treatments as summary data (boluses and carb intakes within 30 minutes)
+        var recentTreatments = new List<TreatmentSummaryData>();
+        var recentCutoff = time - 30 * 60 * 1000;
+        foreach (var b in boluses.Where(b => b.Mills >= recentCutoff && b.Mills <= time).OrderByDescending(b => b.Mills).Take(10))
         {
-            _logger.LogError(ex, "Error calculating retrospective data for time {Time}", time);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            recentTreatments.Add(new TreatmentSummaryData
+            {
+                Id = b.Id.ToString(),
+                Mills = b.Mills,
+                EventType = "Bolus",
+                Insulin = b.Insulin,
+            });
         }
+        foreach (var c in carbIntakes.Where(c => c.Mills >= recentCutoff && c.Mills <= time).OrderByDescending(c => c.Mills).Take(10))
+        {
+            recentTreatments.Add(new TreatmentSummaryData
+            {
+                Id = c.Id.ToString(),
+                Mills = c.Mills,
+                EventType = "Carb Correction",
+                Carbs = c.Carbs,
+            });
+        }
+        recentTreatments = recentTreatments.OrderByDescending(t => t.Mills).Take(10).ToList();
+        var response = new RetrospectiveDataResponse
+        {
+            Time = time,
+            TimeFormatted = DateTimeOffset.FromUnixTimeMilliseconds(time).ToString("HH:mm:ss"),
+            Glucose = glucoseData,
+            Iob = new IobData
+            {
+                Total = iobResult.Iob,
+                Bolus = iobResult.Iob - (iobResult.BasalIob ?? 0),
+                Basal = iobResult.BasalIob ?? 0,
+                Activity = iobResult.Activity,
+                Source = iobResult.Source
+            },
+            Cob = new CobData
+            {
+                Total = cobResult.Cob,
+                IsDecaying = cobResult.IsDecaying ?? 0,
+                CarbsHr = cobResult.CarbsHr,
+                RawCarbImpact = cobResult.RawCarbImpact,
+                Source = cobResult.Source
+            },
+            Basal = basalData,
+            RecentTreatments = recentTreatments
+        };
+        return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
     }
     /// <summary>
     /// Get retrospective data for an entire day at specified interval
@@ -222,118 +215,111 @@ public class RetrospectiveController : ControllerBase
     [ProducesResponseType(typeof(RetrospectiveTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<RetrospectiveTimelineResponse>> GetRetrospectiveTimeline(
         [FromQuery] string date,
         [FromQuery] int intervalMinutes = 5,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
         {
-            if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
-            {
-                return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
-            }
-            if (intervalMinutes < 1 || intervalMinutes > 60)
-            {
-                return Problem(detail: "Interval must be between 1 and 60 minutes", statusCode: 400, title: "Bad Request");
-            }
-            // Calculate day boundaries
-            var dayStart = new DateTimeOffset(parsedDate.Year, parsedDate.Month, parsedDate.Day, 0, 0, 0, TimeSpan.Zero);
-            var dayEnd = dayStart.AddDays(1).AddMilliseconds(-1);
-            var startMills = dayStart.ToUnixTimeMilliseconds();
-            var endMills = dayEnd.ToUnixTimeMilliseconds();
-            // Fetch all data for the day (plus 8 hours before for IOB calculation context)
-            var fetchFrom = dayStart.UtcDateTime.AddHours(-8);
-            var fetchTo = dayEnd.UtcDateTime;
-            // Get entries for the day
-            var entries = await _entryService.GetEntriesAsync(
-                $"find[date][$gte]={startMills}&find[date][$lte]={endMills}",
-                count: 5000,
-                skip: 0,
-                cancellationToken
-            );
-            var entryList = entries?.ToList() ?? new List<Entry>();
-            // Query v4 types
-            var boluses = (await _bolusRepository.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 5000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 5000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            var carbIntakes = (await _carbIntakeRepository.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 5000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            // Get device status
-            var deviceStatus = await _projectionService.GetAsync(
-                count: 500,
-                skip: 0,
-                find: null,
-                ct: cancellationToken
-            );
-            var deviceStatusList = deviceStatus?
-                .Where(d => d.Mills >= startMills && d.Mills <= endMills)
-                .ToList() ?? new List<DeviceStatus>();
-            // Calculate data points at each interval
-            var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
-            var dataPoints = new List<RetrospectiveDataPoint>();
-            var totalIntervals = (24 * 60) / intervalMinutes;
-            for (int i = 0; i < totalIntervals; i++)
-            {
-                var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
-                var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
-                // Filter records relevant to this time point
-                var relevantBoluses = boluses.Where(b => b.Mills <= pointTime).ToList();
-                var relevantCarbIntakes = carbIntakes.Where(c => c.Mills <= pointTime).ToList();
-                var relevantTempBasals = tempBasals.Where(t => t.StartMills <= pointTime).ToList();
-                // Calculate IOB
-                var iobResult = _iobCalculator.FromBoluses(relevantBoluses, pointTime);
-                // Calculate COB
-                var cobResult = _cobCalculator.FromCarbIntakes(
-                    relevantCarbIntakes,
-                    relevantBoluses,
-                    relevantTempBasals,
-                    pointTime
-                );
-                // Get glucose at this time
-                var glucose = GetGlucoseAtTime(entryList, pointTime);
-                // Get basal rate
-                var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
-                dataPoints.Add(new RetrospectiveDataPoint
-                {
-                    Time = pointTime,
-                    Hour = timestamp.Hour,
-                    Minute = timestamp.Minute,
-                    TimeLabel = timestamp.ToString("HH:mm"),
-                    Glucose = glucose?.Value,
-                    GlucoseDirection = glucose?.Direction,
-                    Iob = Math.Round(iobResult.Iob, 3),
-                    BolusIob = Math.Round(iobResult.Iob - (iobResult.BasalIob ?? 0), 3),
-                    BasalIob = Math.Round(iobResult.BasalIob ?? 0, 3),
-                    Cob = Math.Round(cobResult.Cob, 1),
-                    BasalRate = basal.Rate,
-                    IsTemp = basal.IsTemp
-                });
-            }
-            var response = new RetrospectiveTimelineResponse
-            {
-                Date = date,
-                StartTime = startMills,
-                EndTime = endMills,
-                IntervalMinutes = intervalMinutes,
-                TotalPoints = dataPoints.Count,
-                Data = dataPoints
-            };
-            return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
+            return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+        if (intervalMinutes < 1 || intervalMinutes > 60)
         {
-            _logger.LogError(ex, "Error calculating retrospective timeline for date {Date}", date);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            return Problem(detail: "Interval must be between 1 and 60 minutes", statusCode: 400, title: "Bad Request");
         }
+        // Calculate day boundaries
+        var dayStart = new DateTimeOffset(parsedDate.Year, parsedDate.Month, parsedDate.Day, 0, 0, 0, TimeSpan.Zero);
+        var dayEnd = dayStart.AddDays(1).AddMilliseconds(-1);
+        var startMills = dayStart.ToUnixTimeMilliseconds();
+        var endMills = dayEnd.ToUnixTimeMilliseconds();
+        // Fetch all data for the day (plus 8 hours before for IOB calculation context)
+        var fetchFrom = dayStart.UtcDateTime.AddHours(-8);
+        var fetchTo = dayEnd.UtcDateTime;
+        // Get entries for the day
+        var entries = await _entryService.GetEntriesAsync(
+            $"find[date][$gte]={startMills}&find[date][$lte]={endMills}",
+            count: 5000,
+            skip: 0,
+            cancellationToken
+        );
+        var entryList = entries?.ToList() ?? new List<Entry>();
+        // Query v4 types
+        var boluses = (await _bolusRepository.GetAsync(
+            from: fetchFrom, to: fetchTo, device: null, source: null,
+            limit: 5000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        var tempBasals = (await _tempBasalRepository.GetAsync(
+            from: fetchFrom, to: fetchTo, device: null, source: null,
+            limit: 5000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        var carbIntakes = (await _carbIntakeRepository.GetAsync(
+            from: fetchFrom, to: fetchTo, device: null, source: null,
+            limit: 5000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        // Get device status
+        var deviceStatus = await _projectionService.GetAsync(
+            count: 500,
+            skip: 0,
+            find: null,
+            ct: cancellationToken
+        );
+        var deviceStatusList = deviceStatus?
+            .Where(d => d.Mills >= startMills && d.Mills <= endMills)
+            .ToList() ?? new List<DeviceStatus>();
+        // Calculate data points at each interval
+        var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
+        var dataPoints = new List<RetrospectiveDataPoint>();
+        var totalIntervals = (24 * 60) / intervalMinutes;
+        for (int i = 0; i < totalIntervals; i++)
+        {
+            var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
+            var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
+            // Filter records relevant to this time point
+            var relevantBoluses = boluses.Where(b => b.Mills <= pointTime).ToList();
+            var relevantCarbIntakes = carbIntakes.Where(c => c.Mills <= pointTime).ToList();
+            var relevantTempBasals = tempBasals.Where(t => t.StartMills <= pointTime).ToList();
+            // Calculate IOB
+            var iobResult = _iobCalculator.FromBoluses(relevantBoluses, pointTime);
+            // Calculate COB
+            var cobResult = _cobCalculator.FromCarbIntakes(
+                relevantCarbIntakes,
+                relevantBoluses,
+                relevantTempBasals,
+                pointTime
+            );
+            // Get glucose at this time
+            var glucose = GetGlucoseAtTime(entryList, pointTime);
+            // Get basal rate
+            var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
+            dataPoints.Add(new RetrospectiveDataPoint
+            {
+                Time = pointTime,
+                Hour = timestamp.Hour,
+                Minute = timestamp.Minute,
+                TimeLabel = timestamp.ToString("HH:mm"),
+                Glucose = glucose?.Value,
+                GlucoseDirection = glucose?.Direction,
+                Iob = Math.Round(iobResult.Iob, 3),
+                BolusIob = Math.Round(iobResult.Iob - (iobResult.BasalIob ?? 0), 3),
+                BasalIob = Math.Round(iobResult.BasalIob ?? 0, 3),
+                Cob = Math.Round(cobResult.Cob, 1),
+                BasalRate = basal.Rate,
+                IsTemp = basal.IsTemp
+            });
+        }
+        var response = new RetrospectiveTimelineResponse
+        {
+            Date = date,
+            StartTime = startMills,
+            EndTime = endMills,
+            IntervalMinutes = intervalMinutes,
+            TotalPoints = dataPoints.Count,
+            Data = dataPoints
+        };
+        return Ok(RetrospectiveReadScopeGuard.Redact(response, HttpContext.GetGrantedScopes()));
     }
     /// <summary>
     /// Get basal rate timeline for a day
@@ -349,64 +335,57 @@ public class RetrospectiveController : ControllerBase
     [ProducesResponseType(typeof(BasalTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<BasalTimelineResponse>> GetBasalTimeline(
         [FromQuery] string date,
         [FromQuery] int intervalMinutes = 5,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
         {
-            if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
-            {
-                return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
-            }
-            // Calculate day boundaries
-            var dayStart = new DateTimeOffset(parsedDate.Year, parsedDate.Month, parsedDate.Day, 0, 0, 0, TimeSpan.Zero);
-            var dayEnd = dayStart.AddDays(1);
-            var startMills = dayStart.ToUnixTimeMilliseconds();
-            var endMills = dayEnd.ToUnixTimeMilliseconds();
-            // Query temp basals (include 1 hour before for active temp basals spanning midnight)
-            var fetchFrom = dayStart.UtcDateTime.AddHours(-1);
-            var fetchTo = dayEnd.UtcDateTime;
-            var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: cancellationToken
-            )).ToList();
-            // Generate basal timeline
-            var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
-            var dataPoints = new List<BasalDataPoint>();
-            var totalIntervals = (24 * 60) / intervalMinutes;
-            for (int i = 0; i < totalIntervals; i++)
-            {
-                var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
-                var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
-                var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
-                dataPoints.Add(new BasalDataPoint
-                {
-                    Time = pointTime,
-                    Hour = timestamp.Hour,
-                    Minute = timestamp.Minute,
-                    TimeLabel = timestamp.ToString("HH:mm"),
-                    Rate = basal.Rate,
-                    IsTemp = basal.IsTemp
-                });
-            }
-            var response = new BasalTimelineResponse
-            {
-                Date = date,
-                StartTime = startMills,
-                EndTime = endMills,
-                IntervalMinutes = intervalMinutes,
-                Data = dataPoints
-            };
-            return Ok(response);
+            return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
         }
-        catch (Exception ex)
+        // Calculate day boundaries
+        var dayStart = new DateTimeOffset(parsedDate.Year, parsedDate.Month, parsedDate.Day, 0, 0, 0, TimeSpan.Zero);
+        var dayEnd = dayStart.AddDays(1);
+        var startMills = dayStart.ToUnixTimeMilliseconds();
+        var endMills = dayEnd.ToUnixTimeMilliseconds();
+        // Query temp basals (include 1 hour before for active temp basals spanning midnight)
+        var fetchFrom = dayStart.UtcDateTime.AddHours(-1);
+        var fetchTo = dayEnd.UtcDateTime;
+        var tempBasals = (await _tempBasalRepository.GetAsync(
+            from: fetchFrom, to: fetchTo, device: null, source: null,
+            limit: 2000, offset: 0, descending: false, ct: cancellationToken
+        )).ToList();
+        // Generate basal timeline
+        var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
+        var dataPoints = new List<BasalDataPoint>();
+        var totalIntervals = (24 * 60) / intervalMinutes;
+        for (int i = 0; i < totalIntervals; i++)
         {
-            _logger.LogError(ex, "Error calculating basal timeline for date {Date}", date);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+            var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
+            var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
+            var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
+            dataPoints.Add(new BasalDataPoint
+            {
+                Time = pointTime,
+                Hour = timestamp.Hour,
+                Minute = timestamp.Minute,
+                TimeLabel = timestamp.ToString("HH:mm"),
+                Rate = basal.Rate,
+                IsTemp = basal.IsTemp
+            });
         }
+        var response = new BasalTimelineResponse
+        {
+            Date = date,
+            StartTime = startMills,
+            EndTime = endMills,
+            IntervalMinutes = intervalMinutes,
+            Data = dataPoints
+        };
+        return Ok(response);
     }
     #region Helper Methods
     /// <summary>

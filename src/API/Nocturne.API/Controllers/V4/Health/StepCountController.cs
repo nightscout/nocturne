@@ -55,6 +55,7 @@ public class StepCountController : ControllerBase
     [RequireScope(Scope.StepCountRead)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
         [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
@@ -65,24 +66,16 @@ public class StepCountController : ControllerBase
     {
         skip = V4ReadLimits.ClampOffset(skip);
 
-        try
-        {
-            IEnumerable<StepCount> records;
-            if (from.HasValue && to.HasValue)
-                records = await _stepCountService.GetStepCountsByDateRangeAsync(
-                    from.Value, to.Value,
-                    V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
-            else
-                records = await _stepCountService.GetStepCountsAsync(
-                    V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
+        IEnumerable<StepCount> records;
+        if (from.HasValue && to.HasValue)
+            records = await _stepCountService.GetStepCountsByDateRangeAsync(
+                from.Value, to.Value,
+                V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
+        else
+            records = await _stepCountService.GetStepCountsAsync(
+                V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
 
-            return Ok(records);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving step count records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(records);
     }
 
     /// <summary>
@@ -96,24 +89,17 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<StepCount>> GetStepCount(
         string id,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var record = await _stepCountService.GetStepCountByIdAsync(id, cancellationToken);
-            if (record == null)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var record = await _stepCountService.GetStepCountByIdAsync(id, cancellationToken);
+        if (record == null)
+            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(record);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(record);
     }
 
     /// <summary>
@@ -124,36 +110,29 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<IEnumerable<StepCount>>> CreateStepCounts(
         [FromBody] UpsertStepCountRequest[] requests,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (requests.Length == 0)
-                return Problem(detail: "At least one step count record is required", statusCode: 400, title: "Bad Request");
+        if (requests.Length == 0)
+            return Problem(detail: "At least one step count record is required", statusCode: 400, title: "Bad Request");
 
-            var stepCountList = requests.Select(request => new StepCount
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Metric = request.Metric,
-                Source = request.Source,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            }).ToList();
-
-            var result = await _stepCountService.CreateStepCountsAsync(stepCountList, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
+        var stepCountList = requests.Select(request => new StepCount
         {
-            _logger.LogError(ex, "Error creating step count records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+            Timestamp = request.Timestamp.UtcDateTime,
+            UtcOffset = request.UtcOffset,
+            Metric = request.Metric,
+            Source = request.Source,
+            Device = request.Device,
+            EnteredBy = request.App,
+            DataSource = request.DataSource,
+            SyncIdentifier = request.SyncIdentifier,
+        }).ToList();
+
+        var result = await _stepCountService.CreateStepCountsAsync(stepCountList, cancellationToken);
+        return Ok(result);
     }
 
     /// <summary>
@@ -164,37 +143,30 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<StepCount>> UpdateStepCount(
         string id,
         [FromBody] UpsertStepCountRequest request,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        var stepCount = new StepCount
         {
-            var stepCount = new StepCount
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Metric = request.Metric,
-                Source = request.Source,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            };
+            Timestamp = request.Timestamp.UtcDateTime,
+            UtcOffset = request.UtcOffset,
+            Metric = request.Metric,
+            Source = request.Source,
+            Device = request.Device,
+            EnteredBy = request.App,
+            DataSource = request.DataSource,
+            SyncIdentifier = request.SyncIdentifier,
+        };
 
-            var updated = await _stepCountService.UpdateStepCountAsync(id, stepCount, cancellationToken);
-            if (updated == null)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var updated = await _stepCountService.UpdateStepCountAsync(id, stepCount, cancellationToken);
+        if (updated == null)
+            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(updated);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(updated);
     }
 
     /// <summary>
@@ -205,23 +177,16 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteStepCount(
         string id,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var deleted = await _stepCountService.DeleteStepCountAsync(id, cancellationToken);
-            if (!deleted)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var deleted = await _stepCountService.DeleteStepCountAsync(id, cancellationToken);
+        if (!deleted)
+            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(new { message = "Step count record deleted successfully" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(new { message = "Step count record deleted successfully" });
     }
 }

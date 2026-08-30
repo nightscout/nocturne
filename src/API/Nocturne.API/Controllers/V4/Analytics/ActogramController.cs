@@ -57,6 +57,7 @@ public class ActogramController : ControllerBase
     [ProducesResponseType(typeof(ActogramReportData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ErrorEnvelope]
     public async Task<ActionResult<ActogramReportData>> GetActogram(
         [FromQuery] long startTime,
         [FromQuery] long endTime,
@@ -66,15 +67,7 @@ public class ActogramController : ControllerBase
         if (endTime <= startTime)
             return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
-        try
-        {
-            var result = await _service.GetAsync(startTime, endTime, cancellationToken);
-            return Ok(ActogramReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error building actogram report for window {Start}-{End}", startTime, endTime);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        var result = await _service.GetAsync(startTime, endTime, cancellationToken);
+        return Ok(ActogramReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
     }
 }

@@ -55,6 +55,7 @@ public class HeartRateController : ControllerBase
     [RequireScope(Scope.HeartRateRead)]
     [ProducesResponseType(typeof(IEnumerable<HeartRate>), 200)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<IEnumerable<HeartRate>>> GetHeartRates(
         [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
@@ -65,24 +66,16 @@ public class HeartRateController : ControllerBase
     {
         skip = V4ReadLimits.ClampOffset(skip);
 
-        try
-        {
-            IEnumerable<HeartRate> records;
-            if (from.HasValue && to.HasValue)
-                records = await _heartRateService.GetHeartRatesByDateRangeAsync(
-                    from.Value, to.Value,
-                    V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
-            else
-                records = await _heartRateService.GetHeartRatesAsync(
-                    V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
+        IEnumerable<HeartRate> records;
+        if (from.HasValue && to.HasValue)
+            records = await _heartRateService.GetHeartRatesByDateRangeAsync(
+                from.Value, to.Value,
+                V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
+        else
+            records = await _heartRateService.GetHeartRatesAsync(
+                V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
 
-            return Ok(records);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving heart rate records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(records);
     }
 
     /// <summary>
@@ -96,24 +89,17 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(typeof(HeartRate), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<HeartRate>> GetHeartRate(
         string id,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var record = await _heartRateService.GetHeartRateByIdAsync(id, cancellationToken);
-            if (record == null)
-                return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var record = await _heartRateService.GetHeartRateByIdAsync(id, cancellationToken);
+        if (record == null)
+            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(record);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving heart rate record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(record);
     }
 
     /// <summary>
@@ -124,36 +110,29 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<HeartRate>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<IEnumerable<HeartRate>>> CreateHeartRates(
         [FromBody] UpsertHeartRateRequest[] requests,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            if (requests.Length == 0)
-                return Problem(detail: "At least one heart rate record is required", statusCode: 400, title: "Bad Request");
+        if (requests.Length == 0)
+            return Problem(detail: "At least one heart rate record is required", statusCode: 400, title: "Bad Request");
 
-            var heartRateList = requests.Select(request => new HeartRate
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Bpm = request.Bpm,
-                Accuracy = request.Accuracy,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            }).ToList();
-
-            var result = await _heartRateService.CreateHeartRatesAsync(heartRateList, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
+        var heartRateList = requests.Select(request => new HeartRate
         {
-            _logger.LogError(ex, "Error creating heart rate records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+            Timestamp = request.Timestamp.UtcDateTime,
+            UtcOffset = request.UtcOffset,
+            Bpm = request.Bpm,
+            Accuracy = request.Accuracy,
+            Device = request.Device,
+            EnteredBy = request.App,
+            DataSource = request.DataSource,
+            SyncIdentifier = request.SyncIdentifier,
+        }).ToList();
+
+        var result = await _heartRateService.CreateHeartRatesAsync(heartRateList, cancellationToken);
+        return Ok(result);
     }
 
     /// <summary>
@@ -164,37 +143,30 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(typeof(HeartRate), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<HeartRate>> UpdateHeartRate(
         string id,
         [FromBody] UpsertHeartRateRequest request,
         CancellationToken cancellationToken = default
     )
     {
-        try
+        var heartRate = new HeartRate
         {
-            var heartRate = new HeartRate
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Bpm = request.Bpm,
-                Accuracy = request.Accuracy,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            };
+            Timestamp = request.Timestamp.UtcDateTime,
+            UtcOffset = request.UtcOffset,
+            Bpm = request.Bpm,
+            Accuracy = request.Accuracy,
+            Device = request.Device,
+            EnteredBy = request.App,
+            DataSource = request.DataSource,
+            SyncIdentifier = request.SyncIdentifier,
+        };
 
-            var updated = await _heartRateService.UpdateHeartRateAsync(id, heartRate, cancellationToken);
-            if (updated == null)
-                return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var updated = await _heartRateService.UpdateHeartRateAsync(id, heartRate, cancellationToken);
+        if (updated == null)
+            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(updated);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating heart rate record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(updated);
     }
 
     /// <summary>
@@ -205,23 +177,16 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteHeartRate(
         string id,
         CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var deleted = await _heartRateService.DeleteHeartRateAsync(id, cancellationToken);
-            if (!deleted)
-                return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
+        var deleted = await _heartRateService.DeleteHeartRateAsync(id, cancellationToken);
+        if (!deleted)
+            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
 
-            return Ok(new { message = "Heart rate record deleted successfully" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting heart rate record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
+        return Ok(new { message = "Heart rate record deleted successfully" });
     }
 }
