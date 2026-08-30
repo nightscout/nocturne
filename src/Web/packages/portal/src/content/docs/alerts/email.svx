@@ -75,8 +75,8 @@ Then restart Nocturne for the changes to take effect.
 
 ## 5. Set up an alert rule
 
-Alert rules live under **Alerts > Rules** in the sidebar. A new instance starts
-with none, so this is where you add your first:
+Alert rules live under **Alerts > Rules** in the sidebar. Each rule decides what
+Nocturne watches for; the email address goes on a channel inside one:
 
 <Screenshot id="alerts-configuration" />
 
