@@ -2,7 +2,9 @@
  * Treatment marker geometry, shared by the chart markers and the legend/stat
  * icons so the two cannot drift apart.
  *
- * Every triangle is anchored on its apex, which is what the marker points at.
+ * A triangle from trianglePoints is anchored on its apex, which is what a
+ * marker points at. The chart's own markers anchor on their base instead — see
+ * CARB_MARKER_POINTS.
  */
 export type MarkerDirection = "down" | "up" | "right";
 
@@ -35,24 +37,29 @@ export const MARKER_HEIGHT_OVERRIDE = 12;
  * The chart's carb and bolus markers rest their bases on the one shared
  * baseline — carbs rise above it, a bolus hangs below — so a meal's pair
  * composes into a single diamond.
- *
- * The baseline is therefore the only band clear of both triangles, and it is
- * where the markers anchor their labels: the IOB/COB track holds the baseline
- * at its midpoint and is the chart's last track, so the chart clips at the
- * track's bottom edge and a label placed past the bolus tip is cut off on a
- * short chart. See computeTrackLayout for the track's share of the chart.
  */
-export function carbMarkerPoints(): string {
-  return trianglePoints(
-    "up",
-    MARKER_HALF_WIDTH,
-    MARKER_HEIGHT,
-    0,
-    -MARKER_HEIGHT
-  );
-}
+export const CARB_MARKER_POINTS = trianglePoints(
+  "up",
+  MARKER_HALF_WIDTH,
+  MARKER_HEIGHT,
+  0,
+  -MARKER_HEIGHT
+);
 
-/** @see carbMarkerPoints */
+/** @see CARB_MARKER_POINTS */
 export function bolusMarkerPoints(height: number): string {
   return trianglePoints("down", MARKER_HALF_WIDTH, height, 0, height);
 }
+
+/**
+ * Both amount labels stack above the diamond, the carb amount nearest it.
+ *
+ * Below is unusable: the IOB/COB track is 18% of the chart (computeTrackLayout)
+ * and holds the baseline at its midpoint, and being the last track its bottom
+ * edge is where the chart clips — so a label under the bolus tip is cut off on
+ * a short chart. The baseline itself is unusable too: every marker's triangle
+ * meets it, and carb markers paint after bolus markers, so a label left there
+ * is overdrawn by a neighbouring meal's triangle. Above the diamond is clear.
+ */
+export const CARB_LABEL_Y = -MARKER_HEIGHT - 2;
+export const BOLUS_LABEL_Y = -MARKER_HEIGHT - 12;

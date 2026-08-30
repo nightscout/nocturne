@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     bolusMarkerPoints,
-    MARKER_HALF_WIDTH,
+    BOLUS_LABEL_Y,
     MARKER_HEIGHT,
     MARKER_HEIGHT_OVERRIDE,
   } from "$lib/components/icons/marker-shapes";
@@ -63,10 +63,9 @@
     />
   {/if}
   <text
-    x={-(MARKER_HALF_WIDTH + 3)}
-    y={0}
-    dy="0.35em"
-    text-anchor="end"
+    y={BOLUS_LABEL_Y}
+    dy="-0.355em"
+    text-anchor="middle"
     pointer-events="none"
     class="text-[8px] fill-insulin-bolus font-medium"
   >

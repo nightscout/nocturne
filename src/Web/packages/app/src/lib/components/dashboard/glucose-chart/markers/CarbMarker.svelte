@@ -1,8 +1,8 @@
 <script lang="ts">
   import {
-    carbMarkerPoints,
+    CARB_LABEL_Y,
+    CARB_MARKER_POINTS,
     MARKER_HALF_WIDTH,
-    MARKER_HEIGHT,
   } from "$lib/components/icons/marker-shapes";
 
   interface Props {
@@ -26,15 +26,16 @@
   class="cursor-pointer"
 >
   <text
-    y={-MARKER_HEIGHT - 2}
+    y={CARB_LABEL_Y}
     dy="-0.355em"
     text-anchor="middle"
+    pointer-events="none"
     class="text-[8px] fill-carbs font-medium"
   >
     {carbs}g
   </text>
   <polygon
-    points={carbMarkerPoints()}
+    points={CARB_MARKER_POINTS}
     fill="var(--carbs)"
     class="opacity-90 hover:opacity-100 transition-opacity"
   />

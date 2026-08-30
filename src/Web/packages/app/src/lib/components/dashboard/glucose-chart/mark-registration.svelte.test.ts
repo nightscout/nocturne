@@ -1,7 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
 import Harness from "./MarkRegistrationHarness.test.svelte";
-import { MARKER_HEIGHT } from "$lib/components/icons/marker-shapes";
+import {
+	BOLUS_LABEL_Y,
+	CARB_LABEL_Y,
+	MARKER_HALF_WIDTH,
+	MARKER_HEIGHT,
+} from "$lib/components/icons/marker-shapes";
 
 /**
  * Every layerchart component registers itself with the chart on mount, and
@@ -104,23 +109,33 @@ describe("glucose-chart mark registration", () => {
 				(t) => t.textContent?.trim() === value,
 			);
 
+		// Amounts stack above the diamond, the meal name beside its waist.
+		const carbs = byText("30g");
+		expect(carbs?.getAttribute("y")).toBe(String(CARB_LABEL_Y));
+		expect(carbs?.getAttribute("dy")).toBe("-0.355em");
+		expect(carbs?.getAttribute("text-anchor")).toBe("middle");
+		expect(carbs?.getAttribute("x")).toBeNull();
+
 		const units = byText("1.5U");
-		expect(units?.getAttribute("x")).toBe("-11");
-		expect(units?.getAttribute("text-anchor")).toBe("end");
+		expect(units?.getAttribute("y")).toBe(String(BOLUS_LABEL_Y));
+		expect(units?.getAttribute("dy")).toBe("-0.355em");
+		expect(units?.getAttribute("text-anchor")).toBe("middle");
+		expect(units?.getAttribute("x")).toBeNull();
 
 		const meal = byText("Lunch");
-		expect(meal?.getAttribute("x")).toBe("11");
+		expect(meal?.getAttribute("x")).toBe(String(MARKER_HALF_WIDTH + 3));
+		expect(meal?.getAttribute("y")).toBe("0");
 		expect(meal?.getAttribute("text-anchor")).toBe("start");
 
-		const carbs = byText("30g");
-		expect(carbs?.getAttribute("text-anchor")).toBe("middle");
-		expect(Number(carbs?.getAttribute("y"))).toBeLessThan(-MARKER_HEIGHT);
+		// Only the meal name may sit in the band the triangles occupy.
+		for (const label of [carbs, units]) {
+			expect(Number(label?.getAttribute("y"))).toBeLessThan(-MARKER_HEIGHT);
+		}
 
-		// None of them may sit below the baseline: the IOB/COB track is the last
-		// one, so the chart clips at its bottom edge and a label past the bolus
-		// tip is cut off on a short chart.
-		for (const label of [units, meal, carbs]) {
-			expect(Number(label?.getAttribute("y"))).toBeLessThanOrEqual(0);
+		// A label can outgrow its own glyph and reach over a neighbouring
+		// marker, so none of them may take a click that marker would have had.
+		for (const label of [carbs, units, meal]) {
+			expect(label?.getAttribute("pointer-events")).toBe("none");
 		}
 	});
 
