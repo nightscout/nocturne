@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
-   * Bolus marker icon — a triangle hanging below the baseline. Used for bolus
-   * treatment markers in legends and stat cards; the chart draws the same shape
-   * from <see>marker-shapes</see>. When isOverride is true it is taller, echoing
-   * the chart's manual-override marker — scaled to the icon box rather than
-   * sharing the chart's pixel height.
+   * Bolus marker icon — the lower half of the chart's meal diamond, drawn to
+   * fill its own icon box rather than sharing the chart's baseline. Used for
+   * bolus treatment markers in legends and stat cards; the chart draws the same
+   * shape from <see>marker-shapes</see>. When isOverride is true it is taller,
+   * echoing the chart's manual-override marker — scaled to the icon box rather
+   * than sharing the chart's pixel height.
    */
   import type { IconProps } from "./types";
   import { trianglePoints } from "./marker-shapes";

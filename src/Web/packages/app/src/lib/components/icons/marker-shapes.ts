@@ -35,12 +35,23 @@ export const MARKER_HEIGHT_OVERRIDE = 12;
  * The chart's carb and bolus markers rest their *bases* on the one shared
  * baseline — carbs rise above it, a bolus hangs below — so a meal's pair
  * composes into a single diamond rather than an hourglass.
+ *
+ * That leaves the baseline as the only band clear of both triangles, so the
+ * markers hang their labels off it sideways rather than stacking them above and
+ * below: the track is only 18% of the chart, and a label pushed past a marker's
+ * outer tip is clipped away on a short chart.
  */
-export function carbMarkerPoints(height = MARKER_HEIGHT): string {
-  return trianglePoints("up", MARKER_HALF_WIDTH, height, 0, -height);
+export function carbMarkerPoints(): string {
+  return trianglePoints(
+    "up",
+    MARKER_HALF_WIDTH,
+    MARKER_HEIGHT,
+    0,
+    -MARKER_HEIGHT,
+  );
 }
 
 /** @see carbMarkerPoints */
-export function bolusMarkerPoints(height = MARKER_HEIGHT): string {
+export function bolusMarkerPoints(height: number): string {
   return trianglePoints("down", MARKER_HALF_WIDTH, height, 0, height);
 }

@@ -29,6 +29,7 @@
     y={-MARKER_HEIGHT - 2}
     dy="-0.355em"
     text-anchor="middle"
+    pointer-events="none"
     class="text-[8px] fill-carbs font-medium"
   >
     {carbs}g
@@ -38,13 +39,13 @@
     fill="var(--carbs)"
     class="opacity-90 hover:opacity-100 transition-opacity"
   />
-  <!-- Beside the diamond's waist, clear of the bolus label a meal also carries -->
   {#if label}
     <text
       x={MARKER_HALF_WIDTH + 3}
       y={0}
       dy="0.35em"
       text-anchor="start"
+      pointer-events="none"
       class="text-[7px] fill-carbs font-medium opacity-80"
     >
       {label}

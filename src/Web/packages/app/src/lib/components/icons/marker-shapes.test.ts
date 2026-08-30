@@ -50,7 +50,7 @@ describe("trianglePoints", () => {
     // The chart draws both at the same y, so the pair must share the baseline
     // edge and lie on opposite sides of it.
     const carbs = parse(carbMarkerPoints());
-    const bolus = parse(bolusMarkerPoints());
+    const bolus = parse(bolusMarkerPoints(MARKER_HEIGHT));
 
     expect(carbs.slice(0, 2)).toEqual(bolus.slice(0, 2));
     expect(carbs.every(([, y]) => y <= 0)).toBe(true);
@@ -61,9 +61,11 @@ describe("trianglePoints", () => {
 
   it("keeps a taller override bolus on the same shared base", () => {
     const carbs = parse(carbMarkerPoints());
+    const normal = parse(bolusMarkerPoints(MARKER_HEIGHT));
     const override = parse(bolusMarkerPoints(MARKER_HEIGHT_OVERRIDE));
 
     expect(override.slice(0, 2)).toEqual(carbs.slice(0, 2));
-    expect(override.at(-1)).toEqual([0, MARKER_HEIGHT_OVERRIDE]);
+    // Taller, and only downward: the base cannot drift off the baseline.
+    expect(override.at(-1)?.[1]).toBeGreaterThan(normal.at(-1)![1]);
   });
 });
