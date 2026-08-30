@@ -174,9 +174,9 @@ public class GlycemicVariability
 public class GlycemicThresholds
 {
     /// <summary>
-    /// Threshold for very low glucose (default: 54 mg/dL)
+    /// Threshold for very low glucose (defaults to <see cref="GlucoseConstants.VeryLowMgdl"/>)
     /// </summary>
-    public double VeryLow { get; set; } = 54;
+    public double VeryLow { get; set; } = GlucoseConstants.VeryLowMgdl;
 
     /// <summary>
     /// Threshold for low glucose (defaults to <see cref="GlucoseConstants.TargetBottomMgdl"/>)
@@ -210,9 +210,9 @@ public class GlycemicThresholds
     public double High { get; set; } = GlucoseConstants.TargetTopMgdl;
 
     /// <summary>
-    /// Threshold for very high glucose (default: 250 mg/dL)
+    /// Threshold for very high glucose (defaults to <see cref="GlucoseConstants.VeryHighMgdl"/>)
     /// </summary>
-    public double VeryHigh { get; set; } = 250;
+    public double VeryHigh { get; set; } = GlucoseConstants.VeryHighMgdl;
 }
 
 /// <summary>

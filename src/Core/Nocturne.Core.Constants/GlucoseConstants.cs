@@ -25,6 +25,17 @@ public static class GlucoseConstants
     public const double TargetTopMgdl = 180;
 
     /// <summary>
+    /// Clinically significant hypoglycaemia in mg/dL: the level-2 boundary the consensus reports
+    /// time below, distinct from the level-1 boundary at <see cref="TargetBottomMgdl"/>.
+    /// </summary>
+    public const double VeryLowMgdl = 54;
+
+    /// <summary>
+    /// Clinically significant hyperglycaemia in mg/dL. See <see cref="VeryLowMgdl"/>.
+    /// </summary>
+    public const double VeryHighMgdl = 250;
+
+    /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading
     /// directly — the desktop tray tile and the taskbar sparkline — instead of resolving the web
     /// theme's status tokens.
