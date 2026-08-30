@@ -136,6 +136,31 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
     }
 
     /// <summary>
+    /// A NaN reaches the series from Postgres rather than from the entity model, which the
+    /// in-memory provider cannot reproduce, so the month's readings are handed to
+    /// <see cref="DataOverviewService.BuildGriPeriod"/> directly.
+    /// </summary>
+    [Fact]
+    public void BuildGriPeriod_ExcludesANonReadingFromEveryZoneAndFromTheDenominator()
+    {
+        var readings = Enumerable.Repeat(120d, 72).Append(double.NaN).ToList();
+
+        var period = _service.BuildGriPeriod(
+            3, 2026, 72,
+            new Dictionary<int, List<double>> { [3] = readings },
+            [], [], [], []
+        );
+
+        period.Should().NotBeNull();
+        period!.ReadingCount.Should().Be(72);
+        period.AverageGlucoseMgdl.Should().Be(120);
+
+        var percentages = _griInputs.Should().ContainSingle().Subject.Percentages;
+        percentages.Target.Should().Be(100);
+        percentages.VeryHigh.Should().Be(0);
+    }
+
+    /// <summary>
     /// Seventy-two readings on 2026-01-01 Brisbane time, one probe an hour before the local year
     /// starts and one an hour after it ends.
     /// </summary>

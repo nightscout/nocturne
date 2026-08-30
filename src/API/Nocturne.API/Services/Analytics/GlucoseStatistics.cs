@@ -57,6 +57,16 @@ public static class GlucoseStatistics
             : sortedValues[sortedValues.Count / 2];
 
     /// <summary>
+    /// Whether <paramref name="mgdl"/> is a glucose reading at all. A <c>&gt; 0</c> test does not
+    /// settle it: PostgreSQL orders NaN above every number, so a NaN stored in a
+    /// <c>double precision</c> column passes that test when it runs in SQL. Admitted into a
+    /// series, a NaN fails every bound of a <see cref="GlucoseZoneScale"/> and so is classified
+    /// into the remainder zone — severe hyperglycaemia, on a scale that ends there — and makes any
+    /// mean taken over the series NaN.
+    /// </summary>
+    public static bool IsReading(double mgdl) => mgdl > 0 && !double.IsNaN(mgdl);
+
+    /// <summary>
     /// Estimated A1C as a percentage from mean glucose in mg/dL, by the ADAG regression
     /// <c>(mean + 46.7) / 28.7</c>. A mean of zero means there were no readings, and reports zero
     /// rather than the 1.6% the regression would give.

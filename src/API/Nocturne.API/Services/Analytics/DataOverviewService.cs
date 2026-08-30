@@ -499,7 +499,8 @@ public class DataOverviewService : IDataOverviewService
         // SensorGlucose (CGM)
         await AccumulateMonthlyReadingsAsync(
             context.SensorGlucose
-                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !npSensorGlucoseIds.Contains(e.Id))
                 .Select(e => new { e.Timestamp, e.Mgdl }),
@@ -509,7 +510,8 @@ public class DataOverviewService : IDataOverviewService
         // MeterGlucose (finger sticks)
         await AccumulateMonthlyReadingsAsync(
             context.MeterGlucose
-                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
@@ -694,9 +696,12 @@ public class DataOverviewService : IDataOverviewService
 
     /// <summary>
     /// Builds one month's GRI timeline period, or null when the month has fewer than
-    /// <paramref name="minimumReadings"/> glucose readings.
+    /// <paramref name="minimumReadings"/> glucose readings. Values that are not readings are
+    /// dropped before anything is counted, so they reach neither a zone nor the denominator — see
+    /// <see cref="GlucoseStatistics.IsReading"/>. Internal for the test assembly; not part of the
+    /// service's contract.
     /// </summary>
-    private GriTimelinePeriod? BuildGriPeriod(
+    internal GriTimelinePeriod? BuildGriPeriod(
         int month,
         int year,
         int minimumReadings,
@@ -706,10 +711,11 @@ public class DataOverviewService : IDataOverviewService
         Dictionary<int, double> tempBasalByMonth,
         Dictionary<int, double> carbsByMonth)
     {
-        if (
-            !allGlucoseByMonth.TryGetValue(month, out var glucoseReadings)
-            || glucoseReadings.Count < minimumReadings
-        )
+        if (!allGlucoseByMonth.TryGetValue(month, out var monthValues))
+            return null;
+
+        var glucoseReadings = monthValues.Where(GlucoseStatistics.IsReading).ToList();
+        if (glucoseReadings.Count < minimumReadings)
             return null;
 
         var totalCount = glucoseReadings.Count;
@@ -910,9 +916,8 @@ public class DataOverviewService : IDataOverviewService
                 .Select(lr => lr.RecordId);
 
             var sensorReadings = await context
-                .SensorGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+                .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !npSensorGlucoseIds.Contains(e.Id))
                 .Select(e => new { e.Timestamp, e.Mgdl })
@@ -929,9 +934,8 @@ public class DataOverviewService : IDataOverviewService
         try
         {
             var meterReadings = await context
-                .MeterGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+                .MeterGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ToListAsync(cancellationToken);
@@ -955,6 +959,7 @@ public class DataOverviewService : IDataOverviewService
 
         // Group by date and compute daily averages + time in range
         var grouped = allReadings
+            .Where(r => GlucoseStatistics.IsReading(r.Mgdl))
             .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
             .Select(g =>
             {
