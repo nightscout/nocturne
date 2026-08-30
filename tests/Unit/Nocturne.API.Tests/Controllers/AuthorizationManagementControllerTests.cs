@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V2;
 using Nocturne.Core.Contracts.Identity;
 using Xunit;
@@ -58,19 +57,6 @@ public class AuthorizationManagementControllerTests
         var returnedSubjects = Assert.IsType<List<Subject>>(okResult.Value);
         Assert.Equal(2, returnedSubjects.Count);
         Assert.Equal("Test Subject 1", returnedSubjects[0].Name);
-    }
-
-    [Fact]
-    public async Task GetAllSubjects_WhenServiceThrows_LeavesTheResponseToTheErrorEnvelopeSeam()
-    {
-        // Arrange
-        _mockAuthorizationService
-            .Setup(s => s.GetAllSubjectsAsync())
-            .ThrowsAsync(new Exception("Database error"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<Exception>(() => _controller.GetAllSubjects());
-        AssertOptsIntoTheErrorEnvelope(nameof(AuthorizationController.GetAllSubjects));
     }
 
     [Fact]
@@ -238,32 +224,6 @@ public class AuthorizationManagementControllerTests
         Assert.Equal(2, returnedRoles.Count);
         Assert.Equal("admin", returnedRoles[0].Name);
     }
-
-    [Fact]
-    public async Task GetAllRoles_WhenServiceThrows_LeavesTheResponseToTheErrorEnvelopeSeam()
-    {
-        // Arrange
-        _mockAuthorizationService
-            .Setup(s => s.GetAllRolesAsync())
-            .ThrowsAsync(new Exception("Database error"));
-
-        // Act & Assert
-        await Assert.ThrowsAsync<Exception>(() => _controller.GetAllRoles());
-        AssertOptsIntoTheErrorEnvelope(nameof(AuthorizationController.GetAllRoles));
-    }
-
-    /// <summary>
-    /// Propagating is only equivalent to the old inline 500 while the action opts into
-    /// <see cref="ErrorEnvelopeAttribute"/>; the body itself is pinned by
-    /// <c>ApiErrorEnvelopeTests</c>.
-    /// </summary>
-    private static void AssertOptsIntoTheErrorEnvelope(string actionName) =>
-        Assert.NotNull(
-            typeof(AuthorizationController)
-                .GetMethod(actionName)!
-                .GetCustomAttributes(typeof(ErrorEnvelopeAttribute), inherit: false)
-                .SingleOrDefault()
-        );
 
     [Fact]
     public async Task CreateRole_WithValidRole_ReturnsCreatedRole()

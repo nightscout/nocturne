@@ -87,13 +87,17 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
     }
 
     /// <summary>
-    /// V2 routes carry the V4 <c>ProblemDetails</c> body but are serialised by
-    /// <c>NightscoutJsonFilter</c>, which drops default-valued members.
+    /// V2 routes carry the V4 <c>ProblemDetails</c> body, serialised by
+    /// <c>ApiErrorEnvelopeHandler</c> under the Nightscout options its remarks explain — no result
+    /// filter can run once the pipeline has unwound to the exception handler.
     /// </summary>
-    [Fact]
-    public async Task V2_ThrowingAction_AnswersProblemDetailsWithoutTheExceptionMessage()
+    [Theory]
+    [InlineData("/api/v2/authorization/request/some-access-token")]
+    [InlineData("/api/v2/authorization/subjects")]
+    [InlineData("/api/v2/authorization/roles")]
+    public async Task V2_ThrowingAction_AnswersProblemDetailsWithoutTheExceptionMessage(string route)
     {
-        var response = await _client.GetAsync("/api/v2/authorization/request/some-access-token");
+        var response = await _client.GetAsync(route);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
@@ -147,6 +151,12 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
                 var authorization = new Mock<IAuthorizationService>();
                 authorization
                     .Setup(s => s.GenerateJwtFromAccessTokenAsync(It.IsAny<string>()))
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                authorization
+                    .Setup(s => s.GetAllSubjectsAsync())
+                    .ThrowsAsync(new InvalidOperationException(BoomMessage));
+                authorization
+                    .Setup(s => s.GetAllRolesAsync())
                     .ThrowsAsync(new InvalidOperationException(BoomMessage));
                 services.AddSingleton(authorization.Object);
             });
