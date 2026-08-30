@@ -41,10 +41,10 @@
   />
   {#if label}
     <text
-      x={MARKER_HALF_WIDTH + 3}
+      x={-(MARKER_HALF_WIDTH + 3)}
       y={0}
       dy="0.35em"
-      text-anchor="start"
+      text-anchor="end"
       pointer-events="none"
       class="text-[7px] fill-carbs font-medium opacity-80"
     >
