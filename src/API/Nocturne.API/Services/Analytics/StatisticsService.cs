@@ -690,25 +690,11 @@ public class StatisticsService : IStatisticsService
         var count = values.Count;
         var mean = CalculateMean(values);
 
-        // Calculate median correctly for even/odd number of values
-        double median;
-        if (count % 2 == 0)
-        {
-            // Even number of values - average of two middle values
-            median = (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0;
-        }
-        else
-        {
-            // Odd number of values - middle value
-            median = sorted[count / 2];
-        }
-
+        var median = GlucoseStatistics.Median(sorted);
         var min = sorted[0];
         var max = sorted[count - 1];
-
-        // Standard deviation
-        var variance = count > 1 ? values.Sum(v => Math.Pow(v - mean, 2)) / (count - 1) : 0;
-        var standardDeviation = Math.Sqrt(variance);
+        var standardDeviation = GlucoseStatistics.StandardDeviation(
+            values, mean, VarianceMode.Sample);
 
         // Percentiles
         var percentiles = new GlucosePercentiles
@@ -808,11 +794,8 @@ public class StatisticsService : IStatisticsService
         }
 
         var mean = valuesList.Average();
-        var variance =
-            valuesList.Count > 1
-                ? valuesList.Sum(v => Math.Pow(v - mean, 2)) / (valuesList.Count - 1)
-                : 0;
-        var standardDeviation = Math.Sqrt(variance);
+        var standardDeviation = GlucoseStatistics.StandardDeviation(
+            valuesList, mean, VarianceMode.Sample);
         var coefficientOfVariation = (standardDeviation / mean) * 100;
 
         var mage = CalculateMAGE(valuesList);
@@ -910,13 +893,8 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="averageGlucose">Average glucose in mg/dL</param>
     /// <returns>Estimated A1C percentage</returns>
-    public double CalculateEstimatedA1C(double averageGlucose)
-    {
-        if (averageGlucose == 0)
-            return 0;
-        var a1c = (averageGlucose + 46.7) / 28.7;
-        return a1c;
-    }
+    public double CalculateEstimatedA1C(double averageGlucose) =>
+        GlucoseStatistics.EstimatedA1C(averageGlucose);
 
     /// <summary>
     /// Calculate MAGE (Mean Amplitude of Glycemic Excursions)
@@ -930,8 +908,7 @@ public class StatisticsService : IStatisticsService
         if (valuesList.Count < 3)
             return 0;
 
-        var mean = valuesList.Average();
-        var sd = Math.Sqrt(valuesList.Sum(v => Math.Pow(v - mean, 2)) / valuesList.Count);
+        var sd = GlucoseStatistics.StandardDeviation(valuesList, VarianceMode.Population);
 
         var excursions = new List<double>();
         string? currentDirection = null;
@@ -1000,10 +977,8 @@ public class StatisticsService : IStatisticsService
     public double CalculateADRR(IEnumerable<double> values)
     {
         var logTransformed = values.Select(val => Math.Log(val)).ToList();
-        var mean = logTransformed.Average();
-        var variance = logTransformed.Sum(v => Math.Pow(v - mean, 2)) / logTransformed.Count();
 
-        return Math.Sqrt(variance) * 100;
+        return GlucoseStatistics.StandardDeviation(logTransformed, VarianceMode.Population) * 100;
     }
 
     /// <summary>
@@ -1041,7 +1016,7 @@ public class StatisticsService : IStatisticsService
     {
         const double targetMean = 112; // Target glucose level in mg/dL
         var meanComponent = 0.324 * Math.Pow(mean - targetMean, 2);
-        var variance = values.Sum(v => Math.Pow(v - mean, 2)) / values.Count();
+        var variance = GlucoseStatistics.Variance(values.ToList(), mean, VarianceMode.Population);
         var variabilityComponent = 0.0018 * variance;
 
         return meanComponent + variabilityComponent;
@@ -1193,6 +1168,71 @@ public class StatisticsService : IStatisticsService
     #region Time in Range
 
     /// <summary>
+    /// The mutually excluding zones <see cref="CalculateTimeInRange"/> counts against, listed in
+    /// the order it has always tested them: very-high before high, so a tenant who configures
+    /// <c>VeryHigh</c> below <c>TargetTop</c> keeps seeing the reading reported as very high.
+    /// <see cref="Target"/> is the remainder and is not reported from here — the target percentage
+    /// comes from the closed <c>TargetBottom</c>..<c>TargetTop</c> band, which overlaps
+    /// <see cref="Low"/> when the two are configured apart.
+    /// </summary>
+    private enum ExcludingZone
+    {
+        VeryLow,
+        Low,
+        VeryHigh,
+        High,
+        Target,
+    }
+
+    private static GlucoseZoneScale ExcludingZones(GlycemicThresholds thresholds) =>
+        new(
+            GlucoseZoneBound.Under(thresholds.VeryLow),
+            GlucoseZoneBound.Under(thresholds.Low),
+            GlucoseZoneBound.Over(thresholds.VeryHigh),
+            GlucoseZoneBound.Over(thresholds.TargetTop)
+        );
+
+    /// <summary>
+    /// The zones the per-range statistics partition on, which are not <see cref="ExcludingZone"/>:
+    /// <see cref="Low"/> is everything below <c>Low</c>, so it holds the very-low readings as well,
+    /// and <see cref="High"/> is everything above <c>TargetTop</c>.
+    /// </summary>
+    private enum RangeStatZone
+    {
+        Low,
+        High,
+        Target,
+    }
+
+    private static GlucoseZoneScale RangeStatZones(GlycemicThresholds thresholds) =>
+        new(
+            GlucoseZoneBound.Under(thresholds.Low),
+            GlucoseZoneBound.Over(thresholds.TargetTop)
+        );
+
+    /// <summary>
+    /// The hourly zone set, which splits the target band at 63 and 140 and hyperglycaemia at 200
+    /// rather than following the tenant's thresholds.
+    /// </summary>
+    private enum ExtendedZone
+    {
+        VeryLow,
+        Low,
+        Normal,
+        AboveTarget,
+        High,
+        VeryHigh,
+    }
+
+    private static readonly GlucoseZoneScale ExtendedZones = new(
+        GlucoseZoneBound.Under(GlucoseConstants.VeryLowMgdl),
+        GlucoseZoneBound.Under(63),
+        GlucoseZoneBound.Under(140),
+        GlucoseZoneBound.Under(GlucoseConstants.TargetTopMgdl),
+        GlucoseZoneBound.Under(200)
+    );
+
+    /// <summary>
     /// Calculate time in range metrics
     /// </summary>
     /// <param name="entries">Collection of glucose entries</param>
@@ -1232,18 +1272,23 @@ public class StatisticsService : IStatisticsService
             };
         }
 
-        // Single-pass counting across all ranges
-        int veryLowCount = 0, lowCount = 0, targetCount = 0, tightTargetCount = 0, highCount = 0, veryHighCount = 0;
+        // The target and tight-target bands overlap each other, and overlap the excluding zones
+        // whenever Low and TargetBottom are configured apart, so they are counted alongside the
+        // scale rather than read off it.
+        var zones = ExcludingZones(thresholds);
+        var zoneCounts = new int[zones.ZoneCount];
+        int targetCount = 0, tightTargetCount = 0;
         foreach (var v in glucoseValues)
         {
-            if (v < thresholds.VeryLow) veryLowCount++;
-            else if (v < thresholds.Low) lowCount++;
-            else if (v > thresholds.VeryHigh) veryHighCount++;
-            else if (v > thresholds.TargetTop) highCount++;
-            // Target and tight-target overlap, so count both independently
+            zoneCounts[zones.Classify(v)]++;
             if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetCount++;
             if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop) tightTargetCount++;
         }
+
+        var veryLowCount = zoneCounts[(int)ExcludingZone.VeryLow];
+        var lowCount = zoneCounts[(int)ExcludingZone.Low];
+        var highCount = zoneCounts[(int)ExcludingZone.High];
+        var veryHighCount = zoneCounts[(int)ExcludingZone.VeryHigh];
 
         // Calculate percentages
         var percentages = new TimeInRangePercentages
@@ -1272,13 +1317,22 @@ public class StatisticsService : IStatisticsService
         var episodes = CalculateEpisodes(glucoseValues, thresholds);
 
         // Calculate per-range detailed statistics
+        var rangeZones = RangeStatZones(thresholds);
         var lowValues = new List<double>(veryLowCount + lowCount);
         var targetValues = new List<double>(targetCount);
         var highValues = new List<double>(highCount + veryHighCount);
         foreach (var v in glucoseValues)
         {
-            if (v < thresholds.Low) lowValues.Add(v);
-            else if (v > thresholds.TargetTop) highValues.Add(v);
+            switch ((RangeStatZone)rangeZones.Classify(v))
+            {
+                case RangeStatZone.Low:
+                    lowValues.Add(v);
+                    break;
+                case RangeStatZone.High:
+                    highValues.Add(v);
+                    break;
+            }
+
             if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetValues.Add(v);
         }
 
@@ -1358,15 +1412,8 @@ public class StatisticsService : IStatisticsService
         }
 
         var mean = values.Average();
-        var sortedValues = values.OrderBy(v => v).ToList();
-        var median =
-            sortedValues.Count % 2 == 0
-                ? (sortedValues[sortedValues.Count / 2 - 1] + sortedValues[sortedValues.Count / 2])
-                    / 2
-                : sortedValues[sortedValues.Count / 2];
-        var variance =
-            values.Count > 1 ? values.Sum(v => Math.Pow(v - mean, 2)) / (values.Count - 1) : 0;
-        var stdDev = Math.Sqrt(variance);
+        var median = GlucoseStatistics.Median(values.OrderBy(v => v).ToList());
+        var stdDev = GlucoseStatistics.StandardDeviation(values, mean, VarianceMode.Sample);
 
         return new PeriodMetrics
         {
@@ -1391,43 +1438,24 @@ public class StatisticsService : IStatisticsService
         if (!glucoseValues.Any())
             return episodes;
 
-        string? lastRange = null;
-        var episodeCounts = new Dictionary<string, int>();
+        var zones = ExcludingZones(thresholds);
+        var episodeCounts = new int[zones.ZoneCount];
+        var lastZone = -1;
 
         foreach (var value in glucoseValues)
         {
-            string currentRange;
-            if (value < thresholds.VeryLow)
-                currentRange = "VeryLow";
-            else if (value < thresholds.Low)
-                currentRange = "Low";
-            else if (value > thresholds.VeryHigh)
-                currentRange = "VeryHigh";
-            else if (value > thresholds.TargetTop)
-                currentRange = "High";
-            else
-                currentRange = "Target";
+            var zone = zones.Classify(value);
 
-            if (
-                currentRange != lastRange
-                && (
-                    currentRange == "VeryLow"
-                    || currentRange == "Low"
-                    || currentRange == "High"
-                    || currentRange == "VeryHigh"
-                )
-            )
-            {
-                episodeCounts[currentRange] = episodeCounts.GetValueOrDefault(currentRange, 0) + 1;
-            }
+            if (zone != lastZone && zone != (int)ExcludingZone.Target)
+                episodeCounts[zone]++;
 
-            lastRange = currentRange;
+            lastZone = zone;
         }
 
-        episodes.VeryLow = episodeCounts.GetValueOrDefault("VeryLow", 0);
-        episodes.Low = episodeCounts.GetValueOrDefault("Low", 0);
-        episodes.High = episodeCounts.GetValueOrDefault("High", 0);
-        episodes.VeryHigh = episodeCounts.GetValueOrDefault("VeryHigh", 0);
+        episodes.VeryLow = episodeCounts[(int)ExcludingZone.VeryLow];
+        episodes.Low = episodeCounts[(int)ExcludingZone.Low];
+        episodes.High = episodeCounts[(int)ExcludingZone.High];
+        episodes.VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh];
 
         return episodes;
     }
@@ -1499,11 +1527,8 @@ public class StatisticsService : IStatisticsService
     public string CalculateEstimatedHbA1C(IEnumerable<double> values)
     {
         var valuesList = values as IList<double> ?? values.ToList();
-        var mean = CalculateMean(valuesList);
-        if (mean == 0)
-            return "0.0";
-        var a1c = (mean + 46.7) / 28.7;
-        return a1c.ToString("F1");
+
+        return CalculateEstimatedA1C(CalculateMean(valuesList)).ToString("F1");
     }
 
     /// <summary>
@@ -1585,8 +1610,8 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// Calculate extended 7-range time in range percentages
-    /// Ranges: &lt;54, 54-63, 63-140, 140-180, 180-200, 200-220, &gt;220
+    /// Calculate extended time in range percentages over the hourly zone set
+    /// Ranges: &lt;54, 54-63, 63-140, 140-180, 180-200, &gt;=200
     /// </summary>
     /// <param name="glucoseValues">Collection of glucose values in mg/dL</param>
     /// <returns>Extended time in range percentages</returns>
@@ -1598,23 +1623,18 @@ public class StatisticsService : IStatisticsService
         }
 
         var total = glucoseValues.Count;
+        var counts = ExtendedZones.Count(glucoseValues);
 
-        // Count readings in each of the 7 ranges
-        var veryLowCount = glucoseValues.Count(v => v < 54);
-        var lowCount = glucoseValues.Count(v => v >= 54 && v < 63);
-        var normalCount = glucoseValues.Count(v => v >= 63 && v < 140);
-        var aboveTargetCount = glucoseValues.Count(v => v >= 140 && v < 180);
-        var highCount = glucoseValues.Count(v => v >= 180 && v < 200);
-        var veryHighCount = glucoseValues.Count(v => v >= 200);
+        double Percent(ExtendedZone zone) => Math.Round((double)counts[(int)zone] / total * 100, 1);
 
         return new ExtendedTimeInRangePercentages
         {
-            VeryLow = Math.Round((double)veryLowCount / total * 100, 1),
-            Low = Math.Round((double)lowCount / total * 100, 1),
-            Normal = Math.Round((double)normalCount / total * 100, 1),
-            AboveTarget = Math.Round((double)aboveTargetCount / total * 100, 1),
-            High = Math.Round((double)highCount / total * 100, 1),
-            VeryHigh = Math.Round((double)veryHighCount / total * 100, 1),
+            VeryLow = Percent(ExtendedZone.VeryLow),
+            Low = Percent(ExtendedZone.Low),
+            Normal = Percent(ExtendedZone.Normal),
+            AboveTarget = Percent(ExtendedZone.AboveTarget),
+            High = Percent(ExtendedZone.High),
+            VeryHigh = Percent(ExtendedZone.VeryHigh),
         };
     }
 
@@ -2945,8 +2965,7 @@ public class StatisticsService : IStatisticsService
 
             var sorted = values.OrderBy(v => v).ToList();
             var mean = values.Average();
-            var variance = values.Sum(v => Math.Pow(v - mean, 2)) / values.Count;
-            var stdDev = Math.Sqrt(variance);
+            var stdDev = GlucoseStatistics.StandardDeviation(values, mean, VarianceMode.Population);
 
             dataPoints.Add(
                 new SiteChangeImpactDataPoint
