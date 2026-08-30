@@ -23,7 +23,7 @@ public class MyFitnessPalConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<MyFitnessPalAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<MyFitnessPalSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<MyFitnessPalConnectorService, MyFitnessPalConnectorConfiguration>>();
     }
 
     private sealed class MyFitnessPalConnectorOptions : ConnectorOptions
@@ -37,12 +37,4 @@ public class MyFitnessPalConnectorInstaller : IConnectorInstaller
             UserAgent = $"MyFitnessPal/{MyFitnessPalConstants.AppVersion} Android";
         }
     }
-}
-
-public class MyFitnessPalSyncExecutor
-    : ConnectorSyncExecutor<MyFitnessPalConnectorService, MyFitnessPalConnectorConfiguration>
-{
-    public override string ConnectorId => "myfitnesspal";
-
-    protected override string ConnectorName => "MyFitnessPal";
 }

@@ -41,14 +41,6 @@ public class NocturneRemoteConnectorInstaller : IConnectorInstaller
         services.AddHttpClient<NocturneRemoteConnectorService>()
             .ConfigureConnectorClient(string.IsNullOrEmpty(config.Url) ? null : config.Url);
 
-        services.AddScoped<IConnectorSyncExecutor, NocturneRemoteSyncExecutor>();
+        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>>();
     }
-}
-
-public class NocturneRemoteSyncExecutor
-    : ConnectorSyncExecutor<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>
-{
-    public override string ConnectorId => "nocturneremote";
-
-    protected override string ConnectorName => "NocturneRemote";
 }

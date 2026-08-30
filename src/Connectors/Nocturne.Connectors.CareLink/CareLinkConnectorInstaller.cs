@@ -22,7 +22,7 @@ public class CareLinkConnectorInstaller : IConnectorInstaller
         if (config == null) return;
 
         services.AddConnectorTokenProvider<CareLinkAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<CareLinkSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<CareLinkConnectorService, CareLinkConnectorConfiguration>>();
     }
 
     private sealed class CareLinkConnectorOptions : ConnectorOptions
@@ -39,11 +39,4 @@ public class CareLinkConnectorInstaller : IConnectorInstaller
             GetServerRegion = config => ((CareLinkConnectorConfiguration)config).Server;
         }
     }
-}
-
-public class CareLinkSyncExecutor
-    : ConnectorSyncExecutor<CareLinkConnectorService, CareLinkConnectorConfiguration>
-{
-    public override string ConnectorId => "carelink";
-    protected override string ConnectorName => "CareLink";
 }

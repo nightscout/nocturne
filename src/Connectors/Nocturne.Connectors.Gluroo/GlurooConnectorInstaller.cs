@@ -37,14 +37,6 @@ public class GlurooConnectorInstaller : IConnectorInstaller
             .ConfigureConnectorClient(
                 string.IsNullOrEmpty(glurooConfig.Url) ? null : glurooConfig.Url);
 
-        services.AddScoped<IConnectorSyncExecutor, GlurooSyncExecutor>();
+        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<GlurooConnectorService, GlurooConnectorConfiguration>>();
     }
-}
-
-public class GlurooSyncExecutor
-    : ConnectorSyncExecutor<GlurooConnectorService, GlurooConnectorConfiguration>
-{
-    public override string ConnectorId => "gluroo";
-
-    protected override string ConnectorName => "Gluroo";
 }

@@ -23,7 +23,7 @@ public class GlookoConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<GlookoAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<GlookoSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<GlookoConnectorService, GlookoConnectorConfiguration>>();
     }
 
     private sealed class GlookoConnectorOptions : ConnectorOptions
@@ -37,11 +37,4 @@ public class GlookoConnectorInstaller : IConnectorInstaller
             AddResilience = true;
         }
     }
-}
-
-public class GlookoSyncExecutor : ConnectorSyncExecutor<GlookoConnectorService, GlookoConnectorConfiguration>
-{
-    public override string ConnectorId => "glooko";
-
-    protected override string ConnectorName => "Glooko";
 }

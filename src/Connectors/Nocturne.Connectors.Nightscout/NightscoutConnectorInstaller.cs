@@ -52,7 +52,7 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
             .ConfigureConnectorClient(
                 string.IsNullOrEmpty(nightscoutConfig.Url) ? null : nightscoutConfig.Url);
 
-        services.AddScoped<IConnectorSyncExecutor, NightscoutSyncExecutor>();
+        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<NightscoutConnectorService, NightscoutConnectorConfiguration>>();
 
         // Write-back sinks (circuit breaker is shared singleton, sinks are scoped)
         services.AddSingleton<NightscoutCircuitBreaker>();
@@ -71,12 +71,4 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
         RegisterWriteBackClient<NightscoutFoodWriteBackSink>();
         RegisterWriteBackClient<NightscoutActivityWriteBackSink>();
     }
-}
-
-public class NightscoutSyncExecutor
-    : ConnectorSyncExecutor<NightscoutConnectorService, NightscoutConnectorConfiguration>
-{
-    public override string ConnectorId => "nightscout";
-
-    protected override string ConnectorName => "Nightscout";
 }

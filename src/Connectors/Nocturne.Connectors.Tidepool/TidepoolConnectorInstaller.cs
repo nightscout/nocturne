@@ -23,7 +23,7 @@ public class TidepoolConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<TidepoolAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<TidepoolSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TidepoolConnectorService, TidepoolConnectorConfiguration>>();
     }
 
     private sealed class TidepoolConnectorOptions : ConnectorOptions
@@ -40,12 +40,4 @@ public class TidepoolConnectorInstaller : IConnectorInstaller
             GetServerRegion = config => ((TidepoolConnectorConfiguration)config).Server;
         }
     }
-}
-
-public class TidepoolSyncExecutor
-    : ConnectorSyncExecutor<TidepoolConnectorService, TidepoolConnectorConfiguration>
-{
-    public override string ConnectorId => "tidepool";
-
-    protected override string ConnectorName => "Tidepool";
 }

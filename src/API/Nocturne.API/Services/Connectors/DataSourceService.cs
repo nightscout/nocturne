@@ -346,7 +346,7 @@ public class DataSourceService : IDataSourceService
             var connectorMeta = ConnectorMetadataService.GetByDataSourceId(connectorKey);
             if (connectorMeta != null)
             {
-                info.ConnectorId = connectorMeta.ConnectorName.ToLowerInvariant();
+                info.ConnectorId = connectorMeta.ConnectorId;
                 var connConfig = connectorConfigs.FirstOrDefault(c =>
                     c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
                 if (connConfig?.LastSuccessfulSync != null)
@@ -407,7 +407,7 @@ public class DataSourceService : IDataSourceService
             var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
             if (connectorMeta != null)
             {
-                info.ConnectorId = connectorMeta.ConnectorName.ToLowerInvariant();
+                info.ConnectorId = connectorMeta.ConnectorId;
                 var connConfig = connectorConfigs.FirstOrDefault(c =>
                     c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
                 if (connConfig?.LastSuccessfulSync != null)

@@ -23,7 +23,7 @@ public class EversenseConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<EversenseAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<EversenseSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<EversenseConnectorService, EversenseConnectorConfiguration>>();
     }
 
     private sealed class EversenseConnectorOptions : ConnectorOptions
@@ -39,12 +39,4 @@ public class EversenseConnectorInstaller : IConnectorInstaller
             GetServerRegion = config => ((EversenseConnectorConfiguration)config).Server;
         }
     }
-}
-
-public class EversenseSyncExecutor
-    : ConnectorSyncExecutor<EversenseConnectorService, EversenseConnectorConfiguration>
-{
-    public override string ConnectorId => "eversense";
-
-    protected override string ConnectorName => "Eversense";
 }

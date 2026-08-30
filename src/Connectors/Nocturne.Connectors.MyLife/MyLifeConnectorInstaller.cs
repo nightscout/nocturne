@@ -47,14 +47,6 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.AddSingleton<MyLifeSyncService>();
         services.AddSingleton<MyLifeEventProcessor>();
 
-        services.AddScoped<IConnectorSyncExecutor, MyLifeSyncExecutor>();
+        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>>();
     }
-}
-
-public class MyLifeSyncExecutor
-    : ConnectorSyncExecutor<MyLifeConnectorService, MyLifeConnectorConfiguration>
-{
-    public override string ConnectorId => "mylife";
-
-    protected override string ConnectorName => "MyLife";
 }

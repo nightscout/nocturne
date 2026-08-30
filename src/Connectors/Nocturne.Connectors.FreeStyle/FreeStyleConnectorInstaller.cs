@@ -23,7 +23,7 @@ public class FreeStyleConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<LibreLinkAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<FreeStyleSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<LibreConnectorService, LibreLinkUpConnectorConfiguration>>();
     }
 
     private sealed class LibreLinkUpConnectorOptions : ConnectorOptions
@@ -54,12 +54,4 @@ public class FreeStyleConnectorInstaller : IConnectorInstaller
             };
         }
     }
-}
-
-public class FreeStyleSyncExecutor
-    : ConnectorSyncExecutor<LibreConnectorService, LibreLinkUpConnectorConfiguration>
-{
-    public override string ConnectorId => "librelinkup";
-
-    protected override string ConnectorName => "LibreLinkUp";
 }

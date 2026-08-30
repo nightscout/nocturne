@@ -23,7 +23,7 @@ public class TandemConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<TandemAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<TandemSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TandemConnectorService, TandemConnectorConfiguration>>();
     }
 
     private sealed class TandemConnectorOptions : ConnectorOptions
@@ -38,12 +38,4 @@ public class TandemConnectorInstaller : IConnectorInstaller
             AddResilience = true;
         }
     }
-}
-
-public class TandemSyncExecutor
-    : ConnectorSyncExecutor<TandemConnectorService, TandemConnectorConfiguration>
-{
-    public override string ConnectorId => "tandem";
-
-    protected override string ConnectorName => "Tandem";
 }

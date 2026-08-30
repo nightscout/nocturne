@@ -26,7 +26,7 @@ public class DexcomConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<DexcomAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<DexcomSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<DexcomConnectorService, DexcomConnectorConfiguration>>();
     }
 
     private sealed class DexcomConnectorOptions : ConnectorOptions
@@ -44,12 +44,4 @@ public class DexcomConnectorInstaller : IConnectorInstaller
             GetServerRegion = config => ((DexcomConnectorConfiguration)config).Server;
         }
     }
-}
-
-public class DexcomSyncExecutor
-    : ConnectorSyncExecutor<DexcomConnectorService, DexcomConnectorConfiguration>
-{
-    public override string ConnectorId => "dexcom";
-
-    protected override string ConnectorName => "Dexcom";
 }

@@ -63,7 +63,14 @@ public class ConnectorRegistrationAttribute(
     ///     Connector name used in configuration paths (e.g., "LibreLinkUp")
     /// </summary>
     public string ConnectorName { get; } = connectorName;
-    
+
+    /// <summary>
+    ///     The key every sync trigger dispatches on — the API route segment, the stored
+    ///     <c>ConnectorConfiguration.ConnectorName</c> lowered, and the id the tenant UI sends back
+    ///     (e.g. "librelinkup"). Derived so the name and the key cannot drift apart.
+    /// </summary>
+    public string ConnectorId { get; } = connectorName.ToLowerInvariant();
+
     /// <summary>
     ///     Service name constant (e.g., "ServiceNames.LibreConnector")
     /// </summary>

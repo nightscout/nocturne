@@ -118,6 +118,7 @@ public static class ConnectorMetadataService
                         var info = new ConnectorDisplayInfo
                         {
                             ConnectorName = attr.ConnectorName,
+                            ConnectorId = attr.ConnectorId,
                             DisplayName = attr.DisplayName,
                             DataSourceId = attr.DataSourceId,
                             Icon = attr.Icon,
@@ -130,8 +131,7 @@ public static class ConnectorMetadataService
 
                         ConnectorsByDataSourceId[attr.DataSourceId] = info;
 
-                        var connectorId = attr.ConnectorName.ToLowerInvariant();
-                        RegistrationsByConnectorId[connectorId] = attr;
+                        RegistrationsByConnectorId[attr.ConnectorId] = attr;
                     }
                 }
                 catch (ReflectionTypeLoadException)
@@ -149,6 +149,9 @@ public static class ConnectorMetadataService
     public class ConnectorDisplayInfo
     {
         public string ConnectorName { get; init; } = string.Empty;
+
+        /// <inheritdoc cref="ConnectorRegistrationAttribute.ConnectorId"/>
+        public string ConnectorId { get; init; } = string.Empty;
         public string DisplayName { get; init; } = string.Empty;
         public string DataSourceId { get; init; } = string.Empty;
         public string Icon { get; init; } = string.Empty;

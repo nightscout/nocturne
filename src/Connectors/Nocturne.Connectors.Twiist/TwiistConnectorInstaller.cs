@@ -23,7 +23,7 @@ public class TwiistConnectorInstaller : IConnectorInstaller
             return;
 
         services.AddConnectorTokenProvider<TwiistAuthTokenProvider>();
-        services.AddConnectorSyncExecutor<TwiistSyncExecutor>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TwiistConnectorService, TwiistConnectorConfiguration>>();
     }
 
     private sealed class TwiistConnectorOptions : ConnectorOptions
@@ -34,12 +34,4 @@ public class TwiistConnectorInstaller : IConnectorInstaller
             ConnectorName = "Twiist";
         }
     }
-}
-
-public class TwiistSyncExecutor
-    : ConnectorSyncExecutor<TwiistConnectorService, TwiistConnectorConfiguration>
-{
-    public override string ConnectorId => "twiist";
-
-    protected override string ConnectorName => "Twiist";
 }
