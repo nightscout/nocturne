@@ -1482,7 +1482,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     TrackFailedRequest("Unauthorized and re-authentication failed");
                     return RetryStep<T>.Complete(default);
                 }
-                catch (HttpRequestException ex) when (IsRetryableStatusCode(ex.StatusCode))
+                catch (HttpRequestException ex) when (HttpResponseExtensions.IsRetryableStatusCode(ex.StatusCode))
                 {
                     lastException = ex;
                     _logger.LogWarning(
@@ -1625,20 +1625,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             content,
             cancellationToken
         );
-    }
-
-    /// <summary>
-    ///     Determines if an HTTP status code is retryable.
-    /// </summary>
-    private static bool IsRetryableStatusCode(HttpStatusCode? statusCode)
-    {
-        return statusCode
-            is HttpStatusCode.TooManyRequests
-                or HttpStatusCode.ServiceUnavailable
-                or HttpStatusCode.InternalServerError
-                or HttpStatusCode.BadGateway
-                or HttpStatusCode.GatewayTimeout
-                or HttpStatusCode.RequestTimeout;
     }
 
     /// <summary>
