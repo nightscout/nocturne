@@ -23,7 +23,6 @@ import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import {
   STATIC_ASSET_PREFIXES,
-  requiresSignIn,
   statusProbeRedirect,
 } from "$lib/server/public-routes";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
@@ -176,10 +175,14 @@ const authHandle: Handle = async ({ event, resolve }) => {
 };
 
 /**
- * Site security handler - enforces authentication when required, detects setup/recovery mode.
- * Uses shared public route list to determine which paths bypass all gates.
+ * Readiness handler - detects setup/recovery mode and an unresolvable host, and redirects to the
+ * destination each calls for.
+ *
+ * It does not gate on authentication: the API requires it unconditionally for tenant data (the
+ * default-deny fallback policy, plus the anonymous public subject being granted only on a share
+ * host), so there is no site-wide setting for this to mirror.
  */
-const siteSecurityHandle: Handle = async ({ event, resolve }) => {
+const readinessHandle: Handle = async ({ event, resolve }) => {
   const apiBaseUrl = getApiBaseUrl();
 
   if (!apiBaseUrl) {
@@ -206,9 +209,10 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // Probe the API for setup/recovery mode and site-level requireAuthentication.
+  // Probe the API for setup/recovery mode. The probe's answer is the failure it throws: a
+  // successful status means the instance is ready and this gate has nothing to do.
   try {
-    if (!event.locals.siteSecurityChecked) {
+    if (!event.locals.statusProbed) {
       const probeHost = getEffectiveHost(event.request, event.cookies);
       const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
       if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
@@ -217,34 +221,13 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
       // sees 200 and can never detect setup_required/recovery_mode — leaving the
       // authenticated page load to run and 503 instead of redirecting to /setup. Probing
       // as an unprivileged visitor makes this gate observe the same 503 a real user gets.
-      // The status endpoint is [AllowAnonymous] and still returns requireAuthentication
-      // once setup is complete, so the auth-enforcement check below is unaffected.
       const apiClient = createServerApiClient(apiBaseUrl, fetch, {
         extraHeaders: probeHeaders,
       });
 
-      const status = await apiClient.status.getStatus();
-      const requireAuth = status?.settings?.["requireAuthentication"] === true;
+      await apiClient.status.getStatus();
 
-      event.locals.requireAuthentication = requireAuth;
-      event.locals.siteSecurityChecked = true;
-    }
-
-    if (
-      requiresSignIn({
-        pathname,
-        requireAuthentication: event.locals.requireAuthentication ?? false,
-        isAuthenticated: event.locals.isAuthenticated,
-        isShareHost: event.locals.isShareHost,
-      })
-    ) {
-      const returnUrl = encodeURIComponent(pathname + event.url.search);
-      return new Response(null, {
-        status: 303,
-        headers: {
-          Location: `/auth/login?returnUrl=${returnUrl}`,
-        },
-      });
+      event.locals.statusProbed = true;
     }
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
@@ -269,7 +252,7 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
         });
       }
     }
-    console.error("Failed to check site security settings:", error);
+    console.error("Failed to probe API readiness:", error);
   }
 
   return resolve(event);
@@ -312,7 +295,6 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
         : undefined,
       redirect: "manual",
     });
-
 
     // Return the proxied response
     return new Response(proxyResponse.body, {
@@ -554,4 +536,4 @@ const healthHandle: Handle = async ({ event, resolve }) => {
 // Chain the auth handler, site security handler, proxy handler, and API client handler.
 // requestContextHandle comes first of the request-serving handlers: everything after it reads
 // the facts it establishes.
-export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, requestContextHandle, shareHostSecurityHandle, resetBitsId, authHandle, readinessHandle, proxyHandle, apiClientHandle, locale);

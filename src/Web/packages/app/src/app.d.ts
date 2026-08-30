@@ -65,13 +65,9 @@ declare global {
 			 */
 			isAuthenticated: boolean;
 			/**
-			 * Whether site security has been checked for this request
+			 * Whether the API readiness probe has already run for this request
 			 */
-			siteSecurityChecked?: boolean;
-			/**
-			 * Whether site requires authentication (lockdown mode)
-			 */
-			requireAuthentication?: boolean;
+			statusProbed?: boolean;
 			/**
 			 * Effective permissions (granted scopes) for the current user on the current tenant
 			 */

@@ -167,7 +167,6 @@ public class UISettingsServiceTests
                 {
                     SleepSchedule = new SleepScheduleSettings { BedtimeHour = 1 },
                 },
-                Security = new SecuritySettings { RequireAuthForPublicAccess = true },
             }
         );
 
@@ -180,7 +179,6 @@ public class UISettingsServiceTests
             .Which.Threshold.Should().Be(123);
         stored.Services.SyncSettings.AutoSync.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
-        stored.Security.RequireAuthForPublicAccess.Should().BeTrue();
     }
 
     [Fact]
@@ -190,7 +188,6 @@ public class UISettingsServiceTests
         var legacy = LegacyAggregate(AlarmConfiguration("legacy", 88));
         legacy.Devices.AutoConnect = false;
         legacy.DataQuality.SleepSchedule.BedtimeHour = 1;
-        legacy.Security.RequireAuthForPublicAccess = true;
         Seed(context, LegacyAggregateKey, legacy);
         await context.SaveChangesAsync();
 
@@ -199,7 +196,6 @@ public class UISettingsServiceTests
 
         stored.Devices.AutoConnect.Should().BeFalse();
         stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
-        stored.Security.RequireAuthForPublicAccess.Should().BeTrue();
 
         foreach (var config in await EveryAlarmReadPath(service))
         {

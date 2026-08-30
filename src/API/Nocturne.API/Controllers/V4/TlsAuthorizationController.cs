@@ -17,8 +17,7 @@ namespace Nocturne.API.Controllers.V4;
 /// <remarks>
 /// Anonymous and tenantless by design: it lives under the <c>/api/v4/platform/</c>
 /// prefix, which <see cref="TenantResolutionMiddleware"/> allows through without a
-/// resolved tenant, and <see cref="Middleware.SiteSecurityMiddleware"/> allowlists it
-/// under lockdown (matched exactly, so sibling paths are not allowlisted).
+/// resolved tenant.
 /// <para>
 /// It stays anonymous because Caddy's <c>on_demand_tls.ask</c> takes only a URL and sends no
 /// custom headers, so there is no credential to require. It is not authenticated-by-network

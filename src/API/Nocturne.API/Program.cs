@@ -355,9 +355,6 @@ app.UseMiddleware<MemberScopeMiddleware>();
 // Add audit context middleware (captures actor metadata for mutation audit log)
 app.UseMiddleware<AuditContextMiddleware>();
 
-// Add site security middleware (enforces authentication when site lockdown is enabled)
-app.UseMiddleware<SiteSecurityMiddleware>();
-
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
 //
 // The framework's authentication middleware is NOT absent — minimal hosting auto-inserts it at the

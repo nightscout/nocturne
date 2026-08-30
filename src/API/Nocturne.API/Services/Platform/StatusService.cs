@@ -434,7 +434,12 @@ public class StatusService : IStatusService
 
         // Auth settings
         settings["authDefaultRoles"] = _configuration["Auth:DefaultRoles"] ?? "readable";
-        settings["requireAuthentication"] = _configuration.GetValue<bool>("Security:RequireAuthentication", false);
+        // Always false, and kept only because it is part of the Nightscout status document a
+        // legacy client parses. Nocturne has no site-wide lockdown to report: the default-deny
+        // fallback policy already denies every unauthenticated request, and the anonymous public
+        // subject is granted only on a share host (AuthenticationMiddleware), so authentication is
+        // required for tenant data unconditionally rather than by setting.
+        settings["requireAuthentication"] = false;
 
         // Threshold values
         settings["thresholds"] = new Dictionary<string, object>

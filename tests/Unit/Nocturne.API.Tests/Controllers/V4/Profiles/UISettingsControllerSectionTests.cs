@@ -53,23 +53,6 @@ public class UISettingsControllerSectionTests
         dataQuality.CompressionLowDetection.Enabled.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task GetSectionSettings_servesThePersistedSecuritySection()
-    {
-        var controller = NewController();
-        var settings = new UISettingsConfiguration();
-        settings.Security.RequireAuthForPublicAccess = true;
-        settings.Security.HideGlucoseInFavicon = true;
-        await controller.SaveUISettings(settings);
-
-        var security = OkValue<SecuritySettings>(
-            (await controller.GetSectionSettings("security")).Result
-        );
-
-        security.RequireAuthForPublicAccess.Should().BeTrue();
-        security.HideGlucoseInFavicon.Should().BeTrue();
-    }
-
     [Theory]
     [InlineData("Devices")]
     [InlineData("DEVICES")]
@@ -108,7 +91,6 @@ public class UISettingsControllerSectionTests
         settings.Algorithm.Should().BeEquivalentTo(new AlgorithmSettings());
         settings.Notifications.Should().BeEquivalentTo(new NotificationSettings());
         settings.DataQuality.Should().BeEquivalentTo(new DataQualitySettings());
-        settings.Security.Should().BeEquivalentTo(new SecuritySettings());
         settings.Services.SyncSettings.Should().BeEquivalentTo(new SyncSettings());
     }
 

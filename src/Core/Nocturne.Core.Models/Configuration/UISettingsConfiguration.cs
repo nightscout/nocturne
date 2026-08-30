@@ -46,12 +46,6 @@ public class UISettingsConfiguration
     /// </summary>
     [JsonPropertyName("dataQuality")]
     public DataQualitySettings DataQuality { get; set; } = new();
-
-    /// <summary>
-    /// Security settings including site lockdown and privacy options
-    /// </summary>
-    [JsonPropertyName("security")]
-    public SecuritySettings Security { get; set; } = new();
 }
 
 #region Device Settings
@@ -674,28 +668,6 @@ public class CompressionLowDetectionSettings
     /// </summary>
     [JsonPropertyName("excludeFromStatistics")]
     public bool ExcludeFromStatistics { get; set; } = true;
-}
-
-#endregion
-
-#region Security Settings
-
-/// <summary>
-/// Security settings including site lockdown and privacy options
-/// </summary>
-public class SecuritySettings
-{
-    /// <summary>
-    /// Whether to require authentication to view any part of the site (including glucose data)
-    /// </summary>
-    [JsonPropertyName("requireAuthForPublicAccess")]
-    public bool RequireAuthForPublicAccess { get; set; } = false;
-
-    /// <summary>
-    /// Whether to hide glucose values from favicon for unauthenticated users
-    /// </summary>
-    [JsonPropertyName("hideGlucoseInFavicon")]
-    public bool HideGlucoseInFavicon { get; set; } = false;
 }
 
 #endregion

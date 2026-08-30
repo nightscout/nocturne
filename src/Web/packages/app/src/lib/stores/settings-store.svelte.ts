@@ -16,7 +16,6 @@ import type {
   NotificationSettings,
   ServicesSettings,
   DataQualitySettings,
-  SecuritySettings,
   ConnectedService,
 } from "$lib/api";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
@@ -45,7 +44,6 @@ export class SettingsStore {
   notifications = $state<NotificationSettings | null>(null);
   services = $state<ServicesSettings | null>(null);
   dataQuality = $state<DataQualitySettings | null>(null);
-  security = $state<SecuritySettings | null>(null);
 
   // xDrip+-style alarm configuration (stored separately for convenience)
   alarmConfiguration = $state<UserAlarmConfiguration>(createDefaultUserAlarmConfiguration());
@@ -105,7 +103,6 @@ export class SettingsStore {
       this.notifications = settings.notifications ? { ...settings.notifications } : null;
       this.services = settings.services ? { ...settings.services } : null;
       this.dataQuality = settings.dataQuality ? { ...settings.dataQuality } : null;
-      this.security = settings.security ? { ...settings.security } : null;
 
       // Load alarm configuration from notifications or create default
       if (settings.notifications?.alarmConfiguration) {
@@ -155,7 +152,6 @@ export class SettingsStore {
       notifications,
       services: this.services ?? undefined,
       dataQuality: this.dataQuality ?? undefined,
-      security: this.security ?? undefined,
     };
   }
 

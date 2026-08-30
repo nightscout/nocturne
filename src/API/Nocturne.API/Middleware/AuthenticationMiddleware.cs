@@ -20,11 +20,11 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 5 of 7 custom middleware):
+/// Pipeline order (position 5 of 6 custom middleware):
 /// <see cref="JsonExtensionMiddleware"/>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <b>AuthenticationMiddleware</b>,
-/// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
+/// <see cref="MemberScopeMiddleware"/>.
 /// </para>
 /// <para>
 /// Populates <c>HttpContext.Items[AuthContextKeys.AuthContext]</c> with an <see cref="AuthContext"/>,
@@ -37,7 +37,6 @@ namespace Nocturne.API.Middleware;
 /// </remarks>
 /// <seealso cref="IAuthHandler"/>
 /// <seealso cref="MemberScopeMiddleware"/>
-/// <seealso cref="SiteSecurityMiddleware"/>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
 public class AuthenticationMiddleware
 {

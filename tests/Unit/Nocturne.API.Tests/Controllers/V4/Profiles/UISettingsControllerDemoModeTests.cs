@@ -25,7 +25,7 @@ public class UISettingsControllerDemoModeTests
     public async Task SaveUISettings_inDemoMode_persistsNothing()
     {
         var settings = new UISettingsConfiguration();
-        settings.Security.RequireAuthForPublicAccess = true;
+        settings.DataQuality.SleepSchedule.Timezone = "Pacific/Auckland";
 
         await PersistsNothing(c => c.SaveUISettings(settings));
     }

@@ -64,12 +64,6 @@ public static class UISettingsSections
             s => s.DataQuality,
             (s, v) => s.DataQuality = (DataQualitySettings)v
         ),
-        new(
-            "security",
-            typeof(SecuritySettings),
-            s => s.Security,
-            (s, v) => s.Security = (SecuritySettings)v
-        ),
     ];
 
     /// <summary>
