@@ -163,6 +163,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiErrorEnvelopeHandler>();
 builder.Services.AddEndpointsApiExplorer();
 
 // ── OpenAPI document generation ──────────────────────────────────────

@@ -16,11 +16,8 @@ public class NightscoutJsonFilter : IAsyncResultFilter
 
     public async Task OnResultExecutionAsync(ResultExecutingContext context, ResultExecutionDelegate next)
     {
-        // Check if this is a Nightscout endpoint (v1, v2, v3)
-        var path = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
-        var isNightscoutEndpoint = path.StartsWith("/api/v1/") ||
-                                   path.StartsWith("/api/v2/") ||
-                                   path.StartsWith("/api/v3/");
+        var isNightscoutEndpoint =
+            NightscoutApiPath.Version(context.HttpContext.Request.Path) is not null;
 
         if (isNightscoutEndpoint && context.Result is ObjectResult objectResult)
         {
