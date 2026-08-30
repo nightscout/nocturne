@@ -441,7 +441,7 @@ public class DataSourceService : IDataSourceService
         var connectors = ConnectorMetadataService.GetAll()
             .Select(connector => new AvailableConnector
             {
-                Id = connector.ConnectorName.ToLowerInvariant(),
+                Id = connector.ConnectorId,
                 Name = connector.DisplayName,
                 Category = connector.Category.ToString().ToLowerInvariant(),
                 Description = connector.Description,

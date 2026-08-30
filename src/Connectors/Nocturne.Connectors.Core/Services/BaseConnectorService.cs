@@ -533,9 +533,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <summary>
     ///     The data types one run of <see cref="PerformSyncInternalAsync"/> may touch: what the
     ///     caller asked for, narrowed to what the tenant has switched on. An empty
-    ///     <see cref="SyncRequest.DataTypes"/> asks for everything, which is how the background flow
-    ///     and an unfiltered cursor reset arrive; a narrowed one is an operator re-pulling a single
-    ///     type and must not drag the rest of the connector's history back with it.
+    ///     <see cref="SyncRequest.DataTypes"/> asks for everything, which is how an unfiltered cursor
+    ///     reset arrives; a narrowed one is an operator re-pulling a single type and must not drag
+    ///     the rest of the connector's history back with it.
     /// </summary>
     /// <remarks>
     ///     Answered rather than written back into <paramref name="request"/>: a tenant-wide cursor
