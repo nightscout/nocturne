@@ -151,11 +151,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
 
         // On an open-ended catch-up (no explicit upper bound) each data type below resolves its
         // bound through ResumeFrom, from request.From and its own resume point. Explicit ranged

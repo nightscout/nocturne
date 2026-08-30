@@ -170,7 +170,7 @@ public class GlookoConnectorServicePublishFailureTests
         var result = await service.SyncDataAsync(
             request, BuildConfig(useV3Api: true), CancellationToken.None);
 
-        request.DataTypes.Should().Contain(SyncDataType.Food,
+        result.ItemsSynced.Should().ContainKey(SyncDataType.Food,
             "the expansion must actually reach food, or the assertions below prove nothing");
         result.Success.Should().BeTrue();
         result.Errors.Should().BeEmpty();

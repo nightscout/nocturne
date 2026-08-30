@@ -92,11 +92,7 @@ public class MyLifeConnectorService(
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
 
         try
         {

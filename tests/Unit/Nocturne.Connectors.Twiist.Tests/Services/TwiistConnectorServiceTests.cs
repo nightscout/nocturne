@@ -93,6 +93,43 @@ public class TwiistConnectorServiceTests
     }
 
     [Fact]
+    public async Task SyncDataAsync_NarrowedRequest_SyncsOnlyTheRequestedType()
+    {
+        var fixture = new ServiceFixture(
+            responses: new()
+            {
+                ["/package"] = Json(new TwiistPackage { PwdId = PwdId, Status = new TwiistStatus() })
+            },
+            patientId: PwdId);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.CarbIntake] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        // ItemsSynced carries a key per type the run looked at, so the untouched three must be absent.
+        result.ItemsSynced.Keys.Should().Equal(SyncDataType.CarbIntake);
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_UnfilteredRequest_SyncsEveryEnabledType()
+    {
+        var fixture = new ServiceFixture(
+            responses: new()
+            {
+                ["/package"] = Json(new TwiistPackage { PwdId = PwdId, Status = new TwiistStatus() })
+            },
+            patientId: PwdId);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest(), fixture.Config, CancellationToken.None);
+
+        // Glucose is absent from an empty package either way: it bails before publishing when the
+        // blob decodes to nothing, so it cannot tell a narrowed run from an unfiltered one.
+        result.ItemsSynced.Keys.Should().Contain(
+            [SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals]);
+    }
+
+    [Fact]
     public async Task SyncDataAsync_PackageNotFound_ReportsUnhealthy()
     {
         var overviews = new List<TwiistOverview> { new() { PwdId = PwdId, PwdNickname = "Pat" } };

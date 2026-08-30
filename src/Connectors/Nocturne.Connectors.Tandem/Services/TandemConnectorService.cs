@@ -58,7 +58,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
-        var enabled = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
         var region = TandemConstants.ForRegion(config.Region);
 
         try
@@ -103,9 +103,9 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             var time = new TandemTimeResolver(config.TimezoneOffset);
 
-            await SyncProfilesAsync(device, enabled, result, config, cancellationToken);
+            await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
-            await SyncEventsAsync(region, pumperId, device, enabled, time, result, config, cancellationToken);
+            await SyncEventsAsync(region, pumperId, device, activeTypes, time, result, config, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -124,7 +124,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     private async Task SyncProfilesAsync(
-        TandemBffPump device, HashSet<SyncDataType> enabled, SyncResult result,
+        TandemBffPump device, HashSet<SyncDataType> activeTypes, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details);
@@ -132,13 +132,13 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             return;
 
         await PublishRecordTypeAsync<Nocturne.Core.Models.Profile>(
-            result, SyncDataType.Profiles, enabled, [profile],
+            result, SyncDataType.Profiles, activeTypes, [profile],
             PublishProfileDataAsync, config, cancellationToken);
     }
 
     private async Task SyncEventsAsync(
         TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
-        HashSet<SyncDataType> enabled, TandemTimeResolver time, SyncResult result,
+        HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var end = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
@@ -153,7 +153,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         // LID_DAILY_BASAL (device status) is not in the backend's default event filter, so the full
         // history log must be requested when device status is enabled — matching tconnectsync.
-        var fetchAll = config.FetchAllEventTypes || enabled.Contains(SyncDataType.DeviceStatus);
+        var fetchAll = config.FetchAllEventTypes || activeTypes.Contains(SyncDataType.DeviceStatus);
         var eventIdsFilter = fetchAll ? null : TandemConstants.DefaultEventIds;
 
         var cgm = new TandemCgmMapper(_logger, time);
@@ -194,53 +194,53 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .ToDictionary(g => g.Key, g => g.ToList());
 
         await PublishEventsAsync(
-            groups, enabled, end, cgm, bolus, basal, deviceEvents, systemEvents,
+            groups, activeTypes, end, cgm, bolus, basal, deviceEvents, systemEvents,
             userMode, deviceStatus, result, config, cancellationToken);
     }
 
     private async Task PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> enabled, DateTime windowEnd,
+        HashSet<SyncDataType> activeTypes, DateTime windowEnd,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
         SyncResult result, TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.Bolus, out var bolusEvents))
         {
             var decomposed = bolus.Map(bolusEvents);
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
                 decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
                 decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken);
-            await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
                 decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken);
         }
 
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
                 basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
                 config, cancellationToken);
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
             deviceEvents.Map(devEvents), PublishDeviceEventDataAsync, config, cancellationToken);
 
         var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, enabled,
+        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
             systemEvents.Map(sysEvents), PublishSystemEventDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
-            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
                 userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
-            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, enabled,
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
                 deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
     }
 
@@ -270,7 +270,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
     /// <summary>
     /// Resolves the start of the sync window: the earliest catch-up point across glucose and
-    /// treatments (so no enabled data type is missed), never earlier than the pump's first event.
+    /// treatments (so no active data type is missed), never earlier than the pump's first event.
     /// </summary>
     private async Task<DateTime> ResolveStartAsync(
         TandemConnectorConfiguration config, TandemBffPump device, TandemTimeResolver time)

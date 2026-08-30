@@ -62,7 +62,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
 
         try
         {
@@ -89,27 +89,27 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             }
 
             // Glucose from binary blob
-            if (enabledTypes.Contains(SyncDataType.Glucose))
+            if (activeTypes.Contains(SyncDataType.Glucose))
             {
-                await SyncGlucoseAsync(package.Status, result, enabledTypes, config, cancellationToken);
+                await SyncGlucoseAsync(package.Status, result, activeTypes, config, cancellationToken);
             }
 
             // Boluses from insulin history
-            if (enabledTypes.Contains(SyncDataType.Boluses))
+            if (activeTypes.Contains(SyncDataType.Boluses))
             {
-                await SyncBolusesAsync(package.Status, result, enabledTypes, config, cancellationToken);
+                await SyncBolusesAsync(package.Status, result, activeTypes, config, cancellationToken);
             }
 
             // Carbs from meal history
-            if (enabledTypes.Contains(SyncDataType.CarbIntake))
+            if (activeTypes.Contains(SyncDataType.CarbIntake))
             {
-                await SyncCarbIntakeAsync(package.Status, result, enabledTypes, config, cancellationToken);
+                await SyncCarbIntakeAsync(package.Status, result, activeTypes, config, cancellationToken);
             }
 
             // Temp basals from the insulin-delivery blob (closed-loop enacted rates)
-            if (enabledTypes.Contains(SyncDataType.TempBasals))
+            if (activeTypes.Contains(SyncDataType.TempBasals))
             {
-                await SyncTempBasalsAsync(package.Status, result, enabledTypes, config, cancellationToken);
+                await SyncTempBasalsAsync(package.Status, result, activeTypes, config, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -129,7 +129,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     }
 
     private async Task SyncGlucoseAsync(
-        TwiistStatus status, SyncResult result, HashSet<SyncDataType> enabledTypes,
+        TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var glucoseRecords = TwiistBlobDecoder.ParseGlucoseRecords(status.GlucoseHistory?.Data);
@@ -149,30 +149,30 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             latest.Direction = TwiistGlucoseMapper.ParseTrend(status.Summary.LastGlucoseTrend);
         }
 
-        await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
+        await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
             sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
     }
 
     private async Task SyncBolusesAsync(
-        TwiistStatus status, SyncResult result, HashSet<SyncDataType> enabledTypes,
+        TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.Boluses, enabledTypes,
+        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
             _insulinMapper.MapBoluses(status.InsulinHistory).ToList(), PublishBolusDataAsync,
             config, cancellationToken);
     }
 
     private async Task SyncCarbIntakeAsync(
-        TwiistStatus status, SyncResult result, HashSet<SyncDataType> enabledTypes,
+        TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, enabledTypes,
+        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
             _mealMapper.MapMeals(status.MealHistory).ToList(), PublishCarbIntakeDataAsync,
             config, cancellationToken);
     }
 
     private async Task SyncTempBasalsAsync(
-        TwiistStatus status, SyncResult result, HashSet<SyncDataType> enabledTypes,
+        TwiistStatus status, SyncResult result, HashSet<SyncDataType> activeTypes,
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var scheduledRate = _tempBasalMapper.ParseScheduledRate(status.Details?.BasalRateUnitsPerHour);
@@ -180,7 +180,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory))
             .ToList();
 
-        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, enabledTypes,
+        await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
             tempBasals, PublishTempBasalDataAsync, config, cancellationToken);
     }
 

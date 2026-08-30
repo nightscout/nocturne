@@ -282,10 +282,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 return result;
             }
 
-            if (!request.DataTypes.Any())
-                request.DataTypes = SupportedDataTypes;
-            var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-            var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
+            var activeTypes = ResolveActiveTypes(request, config);
 
             // Resolve the tenant's timezone timeline before mapping any records. The account's home
             // zone (from the V3 profile) seeds the timeline's origin on first sync; thereafter the

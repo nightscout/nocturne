@@ -81,8 +81,8 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes).ToHashSet();
-        if (!enabledTypes.Contains(SyncDataType.Glucose))
+        var activeTypes = ResolveActiveTypes(request, config);
+        if (!activeTypes.Contains(SyncDataType.Glucose))
         {
             result.EndTime = DateTimeOffset.UtcNow;
             return result;
@@ -162,7 +162,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 sg.Mgdl,
                 sg.Timestamp);
 
-            await PublishRecordTypeAsync(result, SyncDataType.Glucose, enabledTypes,
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 [sg], PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (Exception ex)
