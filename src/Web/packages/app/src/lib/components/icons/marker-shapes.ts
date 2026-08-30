@@ -3,8 +3,8 @@
  * icons so the two cannot drift apart.
  *
  * A triangle from trianglePoints is anchored on its apex, which is what a
- * marker points at. The chart's own markers anchor on their base instead — see
- * CARB_MARKER_POINTS.
+ * marker points at. The treatment pair is the exception and anchors on the base
+ * — see <see>CARB_MARKER_POINTS</see>.
  */
 export type MarkerDirection = "down" | "up" | "right";
 
@@ -52,14 +52,16 @@ export function bolusMarkerPoints(height: number): string {
 }
 
 /**
- * Both amount labels stack above the diamond, the carb amount nearest it.
+ * Rows for the two amount labels, the carb amount nearest the diamond. They
+ * rise clear of every treatment glyph, over the glucose track above — the
+ * IOB/COB track is a fifth of the chart (<see>computeTrackLayout</see>), too
+ * shallow to hold them.
  *
- * Below is unusable: the IOB/COB track is 18% of the chart (computeTrackLayout)
- * and holds the baseline at its midpoint, and being the last track its bottom
- * edge is where the chart clips — so a label under the bolus tip is cut off on
- * a short chart. The baseline itself is unusable too: every marker's triangle
- * meets it, and carb markers paint after bolus markers, so a label left there
- * is overdrawn by a neighbouring meal's triangle. Above the diamond is clear.
+ * They may not go below the baseline: that track is the chart's last, so its
+ * bottom edge is where the chart clips. Nor on it, where every triangle meets
+ * and a later-painted marker would overdraw them.
  */
 export const CARB_LABEL_Y = -MARKER_HEIGHT - 2;
+
+/** @see CARB_LABEL_Y */
 export const BOLUS_LABEL_Y = -MARKER_HEIGHT - 12;

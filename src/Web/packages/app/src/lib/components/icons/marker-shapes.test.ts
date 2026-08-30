@@ -9,8 +9,18 @@ import {
   MARKER_HEIGHT_OVERRIDE,
 } from "./marker-shapes";
 
-/** Cap height plus descender of an 8px label, the tallest the markers draw. */
-const LABEL_LINE_HEIGHT = 8;
+/**
+ * Line box of an 8px label, the tallest the markers draw: measured at 8.8px
+ * rendered, rounded up. Two rows closer than this touch.
+ */
+const LABEL_LINE_HEIGHT = 9;
+
+/**
+ * How far above the baseline a label may sit. The rows clear the chart's own
+ * IOB/COB track and hang over the glucose track above it, which is intended and
+ * unclipped; this only pins them to the marker rather than the chart.
+ */
+const LABEL_MAX_RISE = 40;
 
 /** Parse an SVG points string into [x, y] pairs. */
 function parse(points: string): [number, number][] {
@@ -20,7 +30,7 @@ function parse(points: string): [number, number][] {
     .map((pair) => pair.split(",").map(Number) as [number, number]);
 }
 
-describe("trianglePoints", () => {
+describe("marker shapes", () => {
   it("anchors every direction on the apex", () => {
     for (const direction of ["down", "up", "right"] as const) {
       const pts = parse(trianglePoints(direction, 8, 10, 30, 40));
@@ -82,7 +92,11 @@ describe("trianglePoints", () => {
 
     // The bolus row sits a full line clear of the carb row beneath it.
     expect(CARB_LABEL_Y - BOLUS_LABEL_Y).toBeGreaterThanOrEqual(
-      LABEL_LINE_HEIGHT,
+      LABEL_LINE_HEIGHT
     );
+
+    for (const row of [CARB_LABEL_Y, BOLUS_LABEL_Y]) {
+      expect(row).toBeGreaterThan(-LABEL_MAX_RISE);
+    }
   });
 });

@@ -122,12 +122,15 @@ describe("glucose-chart mark registration", () => {
 		expect(units?.getAttribute("text-anchor")).toBe("middle");
 		expect(units?.getAttribute("x")).toBeNull();
 
+		// The meal name is the one label placed beside the diamond rather than
+		// above it, so it is also the only one inside the band the triangles
+		// occupy. dy is pinned with it: it sets the row as much as y does.
 		const meal = byText("Lunch");
 		expect(meal?.getAttribute("x")).toBe(String(MARKER_HALF_WIDTH + 3));
 		expect(meal?.getAttribute("y")).toBe("0");
+		expect(meal?.getAttribute("dy")).toBe("0.35em");
 		expect(meal?.getAttribute("text-anchor")).toBe("start");
 
-		// Only the meal name may sit in the band the triangles occupy.
 		for (const label of [carbs, units]) {
 			expect(Number(label?.getAttribute("y"))).toBeLessThan(-MARKER_HEIGHT);
 		}
