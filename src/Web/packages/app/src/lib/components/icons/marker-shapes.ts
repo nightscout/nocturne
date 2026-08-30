@@ -32,14 +32,15 @@ export const MARKER_HEIGHT = 8;
 export const MARKER_HEIGHT_OVERRIDE = 12;
 
 /**
- * The chart's carb and bolus markers rest their *bases* on the one shared
+ * The chart's carb and bolus markers rest their bases on the one shared
  * baseline — carbs rise above it, a bolus hangs below — so a meal's pair
- * composes into a single diamond rather than an hourglass.
+ * composes into a single diamond.
  *
- * That leaves the baseline as the only band clear of both triangles, so the
- * markers hang their labels off it sideways rather than stacking them above and
- * below: the track is only 18% of the chart, and a label pushed past a marker's
- * outer tip is clipped away on a short chart.
+ * The baseline is therefore the only band clear of both triangles, and it is
+ * where the markers anchor their labels: the IOB/COB track holds the baseline
+ * at its midpoint and is the chart's last track, so the chart clips at the
+ * track's bottom edge and a label placed past the bolus tip is cut off on a
+ * short chart. See computeTrackLayout for the track's share of the chart.
  */
 export function carbMarkerPoints(): string {
   return trianglePoints(
@@ -47,7 +48,7 @@ export function carbMarkerPoints(): string {
     MARKER_HALF_WIDTH,
     MARKER_HEIGHT,
     0,
-    -MARKER_HEIGHT,
+    -MARKER_HEIGHT
   );
 }
 

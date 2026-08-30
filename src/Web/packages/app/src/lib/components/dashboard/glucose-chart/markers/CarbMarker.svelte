@@ -29,7 +29,6 @@
     y={-MARKER_HEIGHT - 2}
     dy="-0.355em"
     text-anchor="middle"
-    pointer-events="none"
     class="text-[8px] fill-carbs font-medium"
   >
     {carbs}g

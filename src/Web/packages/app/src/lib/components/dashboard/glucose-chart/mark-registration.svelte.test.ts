@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
 import Harness from "./MarkRegistrationHarness.test.svelte";
+import { MARKER_HEIGHT } from "$lib/components/icons/marker-shapes";
 
 /**
  * Every layerchart component registers itself with the chart on mount, and
@@ -75,24 +76,52 @@ describe("glucose-chart mark registration", () => {
 	it("keeps marker glyph geometry and classes", async () => {
 		const { container } = await renderAt(1);
 
-		// Bolus override triangle (i % 3 === 0), pointing down at the baseline.
+		// Bolus override triangle (i % 3 === 0), hanging below the baseline.
 		const triangle = container.querySelector<SVGPolygonElement>(
-			"polygon[points='-8,-12 8,-12 0,0']",
+			"polygon[points='-8,0 8,0 0,12']",
 		);
 		expect(triangle).not.toBeNull();
 		expect(triangle?.getAttribute("class")).toBe(
 			"opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity",
 		);
 
-		// Carb triangle, pointing up at the same baseline.
+		// Carb triangle, rising from the baseline off the same base edge.
 		expect(
-			container.querySelector("polygon[points='-8,8 8,8 0,0']"),
+			container.querySelector("polygon[points='-8,0 8,0 0,-8']"),
 		).not.toBeNull();
 
 		// Tracker pill.
 		const pill = container.querySelector<SVGRectElement>("rect[rx='8']");
 		expect(pill?.getAttribute("width")).toBe("48");
 		expect(pill?.getAttribute("class")).toBe("opacity-90");
+	});
+
+	it("hangs the treatment labels off the baseline", async () => {
+		const { container } = await renderAt(1);
+
+		const byText = (value: string) =>
+			Array.from(container.querySelectorAll<SVGTextElement>("text")).find(
+				(t) => t.textContent?.trim() === value,
+			);
+
+		const units = byText("1.5U");
+		expect(units?.getAttribute("x")).toBe("-11");
+		expect(units?.getAttribute("text-anchor")).toBe("end");
+
+		const meal = byText("Lunch");
+		expect(meal?.getAttribute("x")).toBe("11");
+		expect(meal?.getAttribute("text-anchor")).toBe("start");
+
+		const carbs = byText("30g");
+		expect(carbs?.getAttribute("text-anchor")).toBe("middle");
+		expect(Number(carbs?.getAttribute("y"))).toBeLessThan(-MARKER_HEIGHT);
+
+		// None of them may sit below the baseline: the IOB/COB track is the last
+		// one, so the chart clips at its bottom edge and a label past the bolus
+		// tip is cut off on a short chart.
+		for (const label of [units, meal, carbs]) {
+			expect(Number(label?.getAttribute("y"))).toBeLessThanOrEqual(0);
+		}
 	});
 
 	it("draws BasalTrack temp-basal spans and hatched steps without marks", async () => {
