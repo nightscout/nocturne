@@ -66,6 +66,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -128,11 +129,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 entries request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 entries");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -147,6 +143,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> GetEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -154,30 +151,22 @@ public class EntriesController : BaseV3Controller<Entry>
     {
         _logger.LogDebug("V3 entry by ID requested: {Id}", id);
 
-        try
+        var entry = await _entryService.GetEntryByIdAsync(id, cancellationToken);
+
+        if (entry == null)
         {
-            var entry = await _entryService.GetEntryByIdAsync(id, cancellationToken);
-
-            if (entry == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Entry not found",
-                    $"No entry found with ID: {id}"
-                );
-            }
-
-            // Set appropriate headers
-            Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
-            Response.Headers["Cache-Control"] = "public, max-age=60";
-
-            return Ok(entry.ToV3Response());
+            return CreateV3ErrorResponse(
+                404,
+                "Entry not found",
+                $"No entry found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        // Set appropriate headers
+        Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
+        Response.Headers["Cache-Control"] = "public, max-age=60";
+
+        return Ok(entry.ToV3Response());
     }
 
     /// <summary>
@@ -203,6 +192,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(Entry), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> CreateEntry(
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
@@ -280,11 +270,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 entry data");
             return CreateV3ErrorResponse(400, "Invalid entry data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 entry");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -300,6 +285,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(Entry[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry[]>> CreateEntries(
         [FromBody] Entry[] entries,
         CancellationToken cancellationToken = default
@@ -356,11 +342,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 bulk entry data");
             return CreateV3ErrorResponse(400, "Invalid entries data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 bulk entries");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -378,6 +359,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> UpdateEntry(
         string id,
         [FromBody] Entry entry,
@@ -428,11 +410,6 @@ public class EntriesController : BaseV3Controller<Entry>
             _logger.LogWarning(ex, "Invalid V3 entry update data for {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid entry data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -448,6 +425,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -455,28 +433,20 @@ public class EntriesController : BaseV3Controller<Entry>
     {
         _logger.LogDebug("V3 entry deletion requested for {Id}", id);
 
-        try
+        var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Entry not found",
-                    $"No entry found with ID: {id}"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted V3 entry {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Entry not found",
+                $"No entry found with ID: {id}"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting V3 entry {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        _logger.LogDebug("Successfully deleted V3 entry {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -493,6 +463,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -505,40 +476,32 @@ public class EntriesController : BaseV3Controller<Entry>
             limit
         );
 
-        try
+        limit = Math.Min(Math.Max(limit, 1), 1000);
+
+        // Build a find query for entries strictly newer than the cursor. Strictly-greater
+        // (not $gte) so the cursor record AAPS already holds is not re-returned, which
+        // would otherwise loop the incremental sync.
+        var findQuery = $"{{\"date\":{{\"$gt\":{lastModified}}}}}";
+        // Page oldest-first (reverseResults: true -> ascending) so a backlog larger than one
+        // page advances the cursor forward record by record. Newest-first would set the
+        // cursor to the newest of the first page and skip every older unsynced entry.
+        var entries = (await _entryService.GetEntriesWithAdvancedFilterAsync(
+            type: null,
+            count: limit,
+            skip: 0,
+            findQuery: findQuery,
+            dateString: null,
+            reverseResults: true,
+            cancellationToken: cancellationToken
+        )).ToList();
+
+        if (entries.Count > 0)
         {
-            limit = Math.Min(Math.Max(limit, 1), 1000);
-
-            // Build a find query for entries strictly newer than the cursor. Strictly-greater
-            // (not $gte) so the cursor record AAPS already holds is not re-returned, which
-            // would otherwise loop the incremental sync.
-            var findQuery = $"{{\"date\":{{\"$gt\":{lastModified}}}}}";
-            // Page oldest-first (reverseResults: true -> ascending) so a backlog larger than one
-            // page advances the cursor forward record by record. Newest-first would set the
-            // cursor to the newest of the first page and skip every older unsynced entry.
-            var entries = (await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: null,
-                count: limit,
-                skip: 0,
-                findQuery: findQuery,
-                dateString: null,
-                reverseResults: true,
-                cancellationToken: cancellationToken
-            )).ToList();
-
-            if (entries.Count > 0)
-            {
-                SetHistoryCursorHeaders(entries.Max(e => e.Mills));
-            }
-
-            var v3Entries = entries.ToV3Responses().ToList();
-            return CreateV3SuccessResponse(v3Entries);
+            SetHistoryCursorHeaders(entries.Max(e => e.Mills));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving entry history");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        var v3Entries = entries.ToV3Responses().ToList();
+        return CreateV3SuccessResponse(v3Entries);
     }
 
     #region Helper Methods

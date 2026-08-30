@@ -50,6 +50,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetProfiles(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -95,11 +96,6 @@ public class ProfileController : BaseV3Controller<Profile>
             _logger.LogWarning(ex, "Invalid V3 profile request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 profiles");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -120,6 +116,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetProfileHistory(
         long lastModified,
         [FromQuery] int limit = 10,
@@ -132,38 +129,30 @@ public class ProfileController : BaseV3Controller<Profile>
             limit
         );
 
-        try
-        {
-            limit = Math.Min(Math.Max(limit, 1), 100);
+        limit = Math.Min(Math.Max(limit, 1), 100);
 
-            // The projection returns the newest `limit` profiles. A record newer than the
-            // cursor but older than this window is a superseded profile version; AAPS only
-            // activates the newest store in the page, so skipping it loses nothing.
-            var profiles = await _projectionService.GetProfilesAsync(
-                count: limit,
-                skip: 0,
-                ct: cancellationToken
-            );
+        // The projection returns the newest `limit` profiles. A record newer than the
+        // cursor but older than this window is a superseded profile version; AAPS only
+        // activates the newest store in the page, so skipping it loses nothing.
+        var profiles = await _projectionService.GetProfilesAsync(
+            count: limit,
+            skip: 0,
+            ct: cancellationToken
+        );
 
-            // Ascending order: AAPS activates the LAST element of the page.
-            var newerProfiles = profiles
-                .Where(p => p.Mills > lastModified)
-                .OrderBy(p => p.Mills)
-                .ToList();
+        // Ascending order: AAPS activates the LAST element of the page.
+        var newerProfiles = profiles
+            .Where(p => p.Mills > lastModified)
+            .OrderBy(p => p.Mills)
+            .ToList();
 
-            // Echo the request cursor on an empty page so conditional clients always see
-            // a parseable cursor ETag.
-            SetHistoryCursorHeaders(
-                newerProfiles.Count > 0 ? newerProfiles.Max(p => p.Mills) : lastModified
-            );
+        // Echo the request cursor on an empty page so conditional clients always see
+        // a parseable cursor ETag.
+        SetHistoryCursorHeaders(
+            newerProfiles.Count > 0 ? newerProfiles.Max(p => p.Mills) : lastModified
+        );
 
-            return CreateV3SuccessResponse(newerProfiles);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 profile history");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+        return CreateV3SuccessResponse(newerProfiles);
     }
 
     /// <summary>
@@ -178,6 +167,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetProfileById(
         string id,
         CancellationToken cancellationToken = default
@@ -189,31 +179,23 @@ public class ProfileController : BaseV3Controller<Profile>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        var profile = await _projectionService.GetProfileByIdAsync(id, cancellationToken);
+
+        if (profile == null)
         {
-            var profile = await _projectionService.GetProfileByIdAsync(id, cancellationToken);
-
-            if (profile == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Profile not found",
-                    $"Profile with ID '{id}' was not found"
-                );
-            }
-
-            var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-            var result = ApplyFieldSelection(new[] { profile }, parameters.Fields).FirstOrDefault();
-
-            _logger.LogDebug("Successfully returned profile with ID {Id}", id);
-
-            return Ok(result);
+            return CreateV3ErrorResponse(
+                404,
+                "Profile not found",
+                $"Profile with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving profile with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var result = ApplyFieldSelection(new[] { profile }, parameters.Fields).FirstOrDefault();
+
+        _logger.LogDebug("Successfully returned profile with ID {Id}", id);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -229,6 +211,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(Profile[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> CreateProfile(
         [FromBody] JsonElement profileData,
         CancellationToken cancellationToken = default
@@ -272,11 +255,6 @@ public class ProfileController : BaseV3Controller<Profile>
             _logger.LogWarning(ex, "Invalid V3 profile create request");
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 profiles");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -294,6 +272,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> UpdateProfile(
         string id,
         [FromBody] Profile profile,
@@ -343,11 +322,6 @@ public class ProfileController : BaseV3Controller<Profile>
             _logger.LogWarning(ex, "Invalid V3 profile update request for ID {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating profile with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -363,6 +337,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteProfile(
         string id,
         CancellationToken cancellationToken = default
@@ -374,28 +349,20 @@ public class ProfileController : BaseV3Controller<Profile>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Profile not found",
-                    $"Profile with ID '{id}' was not found"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted profile with ID {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Profile not found",
+                $"Profile with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting profile with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        _logger.LogDebug("Successfully deleted profile with ID {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>

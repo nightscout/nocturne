@@ -49,6 +49,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetSettings(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -107,11 +108,6 @@ public class SettingsController : BaseV3Controller<Settings>
             _logger.LogWarning(ex, "Invalid V3 settings request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 settings");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -128,6 +124,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.TherapyRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetSettingsById(
         string id,
         CancellationToken cancellationToken = default
@@ -139,34 +136,26 @@ public class SettingsController : BaseV3Controller<Settings>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        // CHECKME: Should validate admin permissions here
+
+        var settings = await _settings.GetSettingsByIdAsync(id, cancellationToken);
+
+        if (settings == null)
         {
-            // CHECKME: Should validate admin permissions here
-
-            var settings = await _settings.GetSettingsByIdAsync(id, cancellationToken);
-
-            if (settings == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Settings not found",
-                    $"Settings with ID '{id}' was not found"
-                );
-            }
-
-            var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-            var result = ApplyFieldSelection(new[] { settings }, parameters.Fields)
-                .FirstOrDefault();
-
-            _logger.LogDebug("Successfully returned settings with ID {Id}", id);
-
-            return Ok(result);
+            return CreateV3ErrorResponse(
+                404,
+                "Settings not found",
+                $"Settings with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving settings with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var result = ApplyFieldSelection(new[] { settings }, parameters.Fields)
+            .FirstOrDefault();
+
+        _logger.LogDebug("Successfully returned settings with ID {Id}", id);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -184,6 +173,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> CreateSettings(
         [FromBody] JsonElement settingsData,
         CancellationToken cancellationToken = default
@@ -233,11 +223,6 @@ public class SettingsController : BaseV3Controller<Settings>
             _logger.LogWarning(ex, "Invalid V3 settings create request");
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 settings");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -257,6 +242,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> UpdateSettings(
         string id,
         [FromBody] Settings settings,
@@ -308,11 +294,6 @@ public class SettingsController : BaseV3Controller<Settings>
             _logger.LogWarning(ex, "Invalid V3 settings update request for ID {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating settings with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -330,6 +311,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteSettings(
         string id,
         CancellationToken cancellationToken = default
@@ -341,30 +323,22 @@ public class SettingsController : BaseV3Controller<Settings>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        // CHECKME: Should validate admin permissions here
+
+        var deleted = await _settings.DeleteSettingsAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            // CHECKME: Should validate admin permissions here
-
-            var deleted = await _settings.DeleteSettingsAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Settings not found",
-                    $"Settings with ID '{id}' was not found"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted settings with ID {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Settings not found",
+                $"Settings with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting settings with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        _logger.LogDebug("Successfully deleted settings with ID {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>

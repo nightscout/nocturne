@@ -46,6 +46,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetFood(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -116,11 +117,6 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogWarning(ex, "Invalid V3 food request parameters");
             return CreateV3ErrorResponse(400, "Invalid request parameters", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 food");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -142,6 +138,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetFoodHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -154,37 +151,29 @@ public class FoodController : BaseV3Controller<Food>
             limit
         );
 
-        try
-        {
-            limit = Math.Min(Math.Max(limit, 1), 1000);
+        limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            var foodRecords = await _foods.GetFoodWithAdvancedFilterAsync(
-                count: int.MaxValue,
-                skip: 0,
-                findQuery: null,
-                type: null,
-                reverseResults: false,
-                cancellationToken: cancellationToken
-            );
+        var foodRecords = await _foods.GetFoodWithAdvancedFilterAsync(
+            count: int.MaxValue,
+            skip: 0,
+            findQuery: null,
+            type: null,
+            reverseResults: false,
+            cancellationToken: cancellationToken
+        );
 
-            var newerFoods = foodRecords
-                .Select(f => (Food: f, Mills: ParseCreatedAtMills(f.CreatedAt)))
-                .Where(x => x.Mills.HasValue && x.Mills.Value > lastModified)
-                .OrderBy(x => x.Mills)
-                .Take(limit)
-                .ToList();
+        var newerFoods = foodRecords
+            .Select(f => (Food: f, Mills: ParseCreatedAtMills(f.CreatedAt)))
+            .Where(x => x.Mills.HasValue && x.Mills.Value > lastModified)
+            .OrderBy(x => x.Mills)
+            .Take(limit)
+            .ToList();
 
-            SetHistoryCursorHeaders(
-                newerFoods.Count > 0 ? newerFoods.Max(x => x.Mills!.Value) : lastModified
-            );
+        SetHistoryCursorHeaders(
+            newerFoods.Count > 0 ? newerFoods.Max(x => x.Mills!.Value) : lastModified
+        );
 
-            return CreateV3SuccessResponse(newerFoods.Select(x => x.Food).ToList());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving V3 food history");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+        return CreateV3SuccessResponse(newerFoods.Select(x => x.Food).ToList());
     }
 
     /// <summary>
@@ -299,6 +288,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [RequireScope(Scope.FoodRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetFoodById(
         string id,
         CancellationToken cancellationToken = default
@@ -310,31 +300,23 @@ public class FoodController : BaseV3Controller<Food>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        var food = await _foods.GetFoodByIdAsync(id, cancellationToken);
+
+        if (food == null)
         {
-            var food = await _foods.GetFoodByIdAsync(id, cancellationToken);
-
-            if (food == null)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Food not found",
-                    $"Food with ID '{id}' was not found"
-                );
-            }
-
-            var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-            var result = ApplyFieldSelection(new[] { food }, parameters.Fields).FirstOrDefault();
-
-            _logger.LogDebug("Successfully returned food with ID {Id}", id);
-
-            return Ok(result);
+            return CreateV3ErrorResponse(
+                404,
+                "Food not found",
+                $"Food with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving food with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
+        var result = ApplyFieldSelection(new[] { food }, parameters.Fields).FirstOrDefault();
+
+        _logger.LogDebug("Successfully returned food with ID {Id}", id);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -351,6 +333,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(Food[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> CreateFood(
         [FromBody] JsonElement foodData,
         CancellationToken cancellationToken = default
@@ -422,11 +405,6 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogWarning(ex, "Invalid V3 food create request");
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating V3 food");
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
     }
 
     /// <summary>
@@ -445,6 +423,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> UpdateFood(
         string id,
         [FromBody] JsonElement foodData,
@@ -502,11 +481,6 @@ public class FoodController : BaseV3Controller<Food>
         {
             _logger.LogWarning(ex, "Invalid V3 food update request for ID {Id}", id);
             return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating food with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
     }
 
@@ -582,6 +556,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteFood(
         string id,
         CancellationToken cancellationToken = default
@@ -593,28 +568,20 @@ public class FoodController : BaseV3Controller<Food>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        var deleted = await _foods.DeleteFoodAsync(id, cancellationToken);
+
+        if (!deleted)
         {
-            var deleted = await _foods.DeleteFoodAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                return CreateV3ErrorResponse(
-                    404,
-                    "Food not found",
-                    $"Food with ID '{id}' was not found"
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted food with ID {Id}", id);
-
-            return NoContent();
+            return CreateV3ErrorResponse(
+                404,
+                "Food not found",
+                $"Food with ID '{id}' was not found"
+            );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting food with ID {Id}", id);
-            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
-        }
+
+        _logger.LogDebug("Successfully deleted food with ID {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
