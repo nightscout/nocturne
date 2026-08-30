@@ -325,6 +325,28 @@ public class GlucoseStatisticsCharacterisationTests
         result.Percentages.VeryHigh.Should().Be(20);
     }
 
+    /// <summary>
+    /// Custom thresholds where <c>VeryHigh</c> sits below <c>TargetTop</c>. The chain reaches
+    /// <c>&gt; VeryHigh</c> before <c>&gt; TargetTop</c>, so both 120 — which no other bound
+    /// admits — and 200 — which <c>&gt; TargetTop</c> would take first, were the two tested the
+    /// other way round — are very high, in the percentages, the durations and the episode count
+    /// alike.
+    /// </summary>
+    [Fact]
+    public void CalculateTimeInRange_PinsVeryHighAheadOfHighWhenTheThresholdsAreInverted()
+    {
+        var thresholds = new GlycemicThresholds { TargetTop = 180, High = 180, VeryHigh = 100 };
+
+        var result = _service.CalculateTimeInRange(EntriesEveryFiveMinutes([120, 200]), thresholds);
+
+        result.Percentages.VeryHigh.Should().Be(100);
+        result.Percentages.High.Should().Be(0);
+        result.Durations.VeryHigh.Should().Be(10);
+        result.Durations.High.Should().Be(0);
+        result.Episodes.VeryHigh.Should().Be(1);
+        result.Episodes.High.Should().Be(0);
+    }
+
     [Fact]
     public void CalculateTimeInRange_PinsAnEmptyResultForNoReadings()
     {
