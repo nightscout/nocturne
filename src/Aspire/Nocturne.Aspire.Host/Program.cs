@@ -269,6 +269,15 @@ class Program
             secret: false
         );
 
+        // Resend (email alerts). Optional like the other chat-platform
+        // credentials — consumed by the web's bot init (RESEND_API_KEY,
+        // RESEND_FROM_ADDRESS) and the @resend/chat-sdk-adapter
+        // (RESEND_FROM_NAME, RESEND_WEBHOOK_SECRET).
+        var resendApiKey = builder.AddParameter("resend-api-key", "", secret: true);
+        var resendFromAddress = builder.AddParameter("resend-from-address", "", secret: false);
+        var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
+        var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
+
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
         // an empty default means telemetry is collected in-process and dropped
@@ -424,7 +433,14 @@ class Program
                 .WithEnvironment("WHATSAPP_ACCESS_TOKEN", whatsappAccessToken)
                 .WithEnvironment("WHATSAPP_VERIFY_TOKEN", whatsappVerifyToken)
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
-                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
+                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId)
+                // Resend email-alert credentials — documented as env-var
+                // configurable (docs/alerts/email.svx, Option B) and consumed
+                // by the bot init in src/lib/server/bot/index.ts.
+                .WithEnvironment("RESEND_API_KEY", resendApiKey)
+                .WithEnvironment("RESEND_FROM_ADDRESS", resendFromAddress)
+                .WithEnvironment("RESEND_FROM_NAME", resendFromName)
+                .WithEnvironment("RESEND_WEBHOOK_SECRET", resendWebhookSecret);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
             // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
             // dashboard endpoint automatically; in publish mode the operator-
