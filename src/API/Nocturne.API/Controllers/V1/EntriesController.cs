@@ -76,6 +76,7 @@ public class EntriesController : ControllerBase
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
     [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry[]>> GetCurrentEntry(
         CancellationToken cancellationToken = default
     )
@@ -85,78 +86,59 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
-        {
-            var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
+        var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
 
-            // Set Last-Modified header for caching
-            DateTimeOffset lastModified;
-            if (currentEntry == null)
-            {
-                _logger.LogDebug("No current entry found, returning empty array");
-                // Set Last-Modified to current time when no entries exist
-                lastModified = DateTimeOffset.UtcNow;
-                Response.Headers["Last-Modified"] = lastModified.ToString("R");
-                return Ok(Array.Empty<Entry>());
-            }
-            lastModified = DateTimeOffset.FromUnixTimeMilliseconds(currentEntry.Mills);
+        // Set Last-Modified header for caching
+        DateTimeOffset lastModified;
+        if (currentEntry == null)
+        {
+            _logger.LogDebug("No current entry found, returning empty array");
+            // Set Last-Modified to current time when no entries exist
+            lastModified = DateTimeOffset.UtcNow;
             Response.Headers["Last-Modified"] = lastModified.ToString("R");
+            return Ok(Array.Empty<Entry>());
+        }
+        lastModified = DateTimeOffset.FromUnixTimeMilliseconds(currentEntry.Mills);
+        Response.Headers["Last-Modified"] = lastModified.ToString("R");
 
-            // Check If-Modified-Since header
-            if (Request.Headers.IfModifiedSince.Count > 0)
-            {
-                if (
-                    DateTimeOffset.TryParse(
-                        Request.Headers.IfModifiedSince.First(),
-                        out var ifModifiedSince
-                    )
+        // Check If-Modified-Since header
+        if (Request.Headers.IfModifiedSince.Count > 0)
+        {
+            if (
+                DateTimeOffset.TryParse(
+                    Request.Headers.IfModifiedSince.First(),
+                    out var ifModifiedSince
                 )
+            )
+            {
+                if (lastModified <= ifModifiedSince)
                 {
-                    if (lastModified <= ifModifiedSince)
-                    {
-                        _logger.LogDebug(
-                            "Current entry not modified since {IfModifiedSince}, returning 304",
-                            ifModifiedSince
-                        );
-                        return StatusCode(
-                            304,
-                            new
-                            {
-                                status = 304,
-                                message = "Not modified",
-                                type = "internal",
-                            }
-                        );
-                    }
+                    _logger.LogDebug(
+                        "Current entry not modified since {IfModifiedSince}, returning 304",
+                        ifModifiedSince
+                    );
+                    return StatusCode(
+                        304,
+                        new
+                        {
+                            status = 304,
+                            message = "Not modified",
+                            type = "internal",
+                        }
+                    );
                 }
             }
-
-            _logger.LogDebug(
-                "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
-                currentEntry.Id,
-                currentEntry.Mills,
-                currentEntry.Sgv ?? currentEntry.Mgdl
-            );
-
-            // Return as array to match legacy API format with V1 response structure
-            return Ok(new[] { currentEntry }.ToV1Responses());
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving current entry");
 
-            // Return error response in legacy format
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
+        _logger.LogDebug(
+            "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
+            currentEntry.Id,
+            currentEntry.Mills,
+            currentEntry.Sgv ?? currentEntry.Mgdl
+        );
+
+        // Return as array to match legacy API format with V1 response structure
+        return Ok(new[] { currentEntry }.ToV1Responses());
     }
 
     /// <summary>
