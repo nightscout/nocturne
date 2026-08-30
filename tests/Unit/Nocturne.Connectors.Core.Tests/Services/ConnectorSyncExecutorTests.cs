@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -33,6 +34,29 @@ public class ConnectorSyncExecutorTests
             .WithMessage("*ConnectorRegistrationAttribute*");
     }
 
+    [Fact]
+    public void ConnectorId_DerivedConfigurationWithoutItsOwnRegistration_Throws()
+    {
+        // Answering the parent's id here would register a second executor under it, and a trigger
+        // resolves by enumeration order — one vendor's credentials fetching under another's trigger.
+        var build = () => Executor<DerivedWithoutRegistrationConfiguration>();
+
+        build.Should().Throw<InvalidOperationException>()
+            .WithMessage("*ConnectorRegistrationAttribute*");
+    }
+
+    [Fact]
+    public void AddConnectorSyncExecutor_TwoExecutorsClaimingOneId_Throws()
+    {
+        var services = new ServiceCollection()
+            .AddConnectorSyncExecutor<ConnectorSyncExecutor<StubService<AcmeConfiguration>, AcmeConfiguration>>();
+
+        var register = () => services
+            .AddConnectorSyncExecutor<ConnectorSyncExecutor<OtherStubService, AcmeConfiguration>>();
+
+        register.Should().Throw<InvalidOperationException>().WithMessage("*acmepump*");
+    }
+
     private static ConnectorSyncExecutor<StubService<TConfig>, TConfig> Executor<TConfig>()
         where TConfig : BaseConnectorConfiguration => new();
 
@@ -44,7 +68,12 @@ public class ConnectorSyncExecutorTests
 
     private sealed class UnregisteredConfiguration : BaseConnectorConfiguration;
 
-    private sealed class StubService<TConfig> : IConnectorService<TConfig>
+    private sealed class DerivedWithoutRegistrationConfiguration : AcmeConfiguration;
+
+    /// <summary>A second service type over the same config, so two executors answer one id.</summary>
+    private sealed class OtherStubService : StubService<AcmeConfiguration>;
+
+    private class StubService<TConfig> : IConnectorService<TConfig>
         where TConfig : BaseConnectorConfiguration
     {
         public string ServiceName => nameof(StubService<TConfig>);

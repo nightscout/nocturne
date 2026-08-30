@@ -52,7 +52,7 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
             .ConfigureConnectorClient(
                 string.IsNullOrEmpty(nightscoutConfig.Url) ? null : nightscoutConfig.Url);
 
-        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<NightscoutConnectorService, NightscoutConnectorConfiguration>>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<NightscoutConnectorService, NightscoutConnectorConfiguration>>();
 
         // Write-back sinks (circuit breaker is shared singleton, sinks are scoped)
         services.AddSingleton<NightscoutCircuitBreaker>();

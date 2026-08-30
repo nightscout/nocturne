@@ -15,11 +15,16 @@ public class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncExecutor
     where TConfig : BaseConnectorConfiguration
 {
     /// <inheritdoc />
+    /// <remarks>
+    ///     Read without inheritance: a config declared by subclassing another connector's config
+    ///     (Gluroo extends Nightscout) would otherwise answer the parent's id, registering a second
+    ///     executor under it and leaving a trigger to pick whichever DI enumerated first.
+    /// </remarks>
     public string ConnectorId { get; } =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorId
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.ConnectorId
         ?? throw new InvalidOperationException(
-            $"{typeof(TConfig).Name} carries no {nameof(ConnectorRegistrationAttribute)}, so no " +
-            "sync trigger could ever dispatch to it.");
+            $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute)} of its own, " +
+            "so no sync trigger could ever dispatch to it.");
 
     public async Task<SyncResult> ExecuteSyncAsync(
         IServiceProvider scopeProvider,

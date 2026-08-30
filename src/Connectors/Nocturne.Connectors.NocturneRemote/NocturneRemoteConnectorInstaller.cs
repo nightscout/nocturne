@@ -41,6 +41,6 @@ public class NocturneRemoteConnectorInstaller : IConnectorInstaller
         services.AddHttpClient<NocturneRemoteConnectorService>()
             .ConfigureConnectorClient(string.IsNullOrEmpty(config.Url) ? null : config.Url);
 
-        services.AddScoped<IConnectorSyncExecutor, ConnectorSyncExecutor<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>>();
+        services.AddConnectorSyncExecutor<ConnectorSyncExecutor<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>>();
     }
 }

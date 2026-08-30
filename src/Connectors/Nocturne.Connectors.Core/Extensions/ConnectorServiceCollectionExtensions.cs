@@ -223,9 +223,28 @@ public static class ConnectorServiceCollectionExtensions
         ///     Registers a sync executor as a scoped IConnectorSyncExecutor.
         /// </summary>
         /// <typeparam name="TSyncExecutor">Sync executor type</typeparam>
+        /// <exception cref="InvalidOperationException">
+        ///     Another executor type already answers the same
+        ///     <see cref="IConnectorSyncExecutor.ConnectorId"/>. A trigger resolves one executor per id
+        ///     by enumeration order, so the collision would silently run one vendor's sync under the
+        ///     other's trigger.
+        /// </exception>
         public IServiceCollection AddConnectorSyncExecutor<TSyncExecutor>()
-            where TSyncExecutor : class, IConnectorSyncExecutor
+            where TSyncExecutor : class, IConnectorSyncExecutor, new()
         {
+            var connectorId = new TSyncExecutor().ConnectorId;
+
+            var clash = services.FirstOrDefault(descriptor =>
+                descriptor.ServiceType == typeof(IConnectorSyncExecutor)
+                && descriptor.ImplementationType is { } registered
+                && registered != typeof(TSyncExecutor)
+                && ConnectorIdOf(registered) == connectorId);
+
+            if (clash is not null)
+                throw new InvalidOperationException(
+                    $"{typeof(TSyncExecutor).Name} and {clash.ImplementationType!.Name} both dispatch " +
+                    $"on '{connectorId}'.");
+
             services.AddScoped<IConnectorSyncExecutor, TSyncExecutor>();
             return services;
         }
@@ -341,4 +360,9 @@ public static class ConnectorServiceCollectionExtensions
             return services;
         }
     }
+
+    private static string? ConnectorIdOf(Type executorType) =>
+        executorType.GetConstructor(Type.EmptyTypes) is null
+            ? null
+            : ((IConnectorSyncExecutor)Activator.CreateInstance(executorType)!).ConnectorId;
 }
