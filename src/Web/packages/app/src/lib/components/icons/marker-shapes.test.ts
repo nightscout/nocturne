@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { trianglePoints } from "./marker-shapes";
+import {
+  trianglePoints,
+  carbMarkerPoints,
+  bolusMarkerPoints,
+  MARKER_HEIGHT,
+  MARKER_HEIGHT_OVERRIDE,
+} from "./marker-shapes";
 
 /** Parse an SVG points string into [x, y] pairs. */
 function parse(points: string): [number, number][] {
@@ -40,12 +46,24 @@ describe("trianglePoints", () => {
     expect(apex).toEqual([0, 0]);
   });
 
-  it("makes a bolus and a carb marker meet apex to apex on one baseline", () => {
-    // The chart draws both at the same y; they must not overlap.
-    const bolus = parse(trianglePoints("down", 8, 8));
-    const carbs = parse(trianglePoints("up", 8, 8));
+  it("joins a bolus and a carb marker base to base into one diamond", () => {
+    // The chart draws both at the same y, so the pair must share the baseline
+    // edge and lie on opposite sides of it.
+    const carbs = parse(carbMarkerPoints());
+    const bolus = parse(bolusMarkerPoints());
 
-    expect(Math.max(...bolus.map(([, y]) => y))).toBe(0);
-    expect(Math.min(...carbs.map(([, y]) => y))).toBe(0);
+    expect(carbs.slice(0, 2)).toEqual(bolus.slice(0, 2));
+    expect(carbs.every(([, y]) => y <= 0)).toBe(true);
+    expect(bolus.every(([, y]) => y >= 0)).toBe(true);
+    expect(carbs.at(-1)).toEqual([0, -MARKER_HEIGHT]);
+    expect(bolus.at(-1)).toEqual([0, MARKER_HEIGHT]);
+  });
+
+  it("keeps a taller override bolus on the same shared base", () => {
+    const carbs = parse(carbMarkerPoints());
+    const override = parse(bolusMarkerPoints(MARKER_HEIGHT_OVERRIDE));
+
+    expect(override.slice(0, 2)).toEqual(carbs.slice(0, 2));
+    expect(override.at(-1)).toEqual([0, MARKER_HEIGHT_OVERRIDE]);
   });
 });

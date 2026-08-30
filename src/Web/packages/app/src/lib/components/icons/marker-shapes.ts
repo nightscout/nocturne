@@ -2,9 +2,7 @@
  * Treatment marker geometry, shared by the chart markers and the legend/stat
  * icons so the two cannot drift apart.
  *
- * Every triangle is anchored on its apex, which is what the marker points at:
- * a bolus hangs above the baseline pointing down at it, carbs sit below
- * pointing up at it, so a simultaneous pair meets apex to apex.
+ * Every triangle is anchored on its apex, which is what the marker points at.
  */
 export type MarkerDirection = "down" | "up" | "right";
 
@@ -32,3 +30,17 @@ export const MARKER_HEIGHT = 8;
 
 /** A manually overridden bolus keeps the taller silhouette it had before. */
 export const MARKER_HEIGHT_OVERRIDE = 12;
+
+/**
+ * The chart's carb and bolus markers rest their *bases* on the one shared
+ * baseline — carbs rise above it, a bolus hangs below — so a meal's pair
+ * composes into a single diamond rather than an hourglass.
+ */
+export function carbMarkerPoints(height = MARKER_HEIGHT): string {
+  return trianglePoints("up", MARKER_HALF_WIDTH, height, 0, -height);
+}
+
+/** @see carbMarkerPoints */
+export function bolusMarkerPoints(height = MARKER_HEIGHT): string {
+  return trianglePoints("down", MARKER_HALF_WIDTH, height, 0, height);
+}

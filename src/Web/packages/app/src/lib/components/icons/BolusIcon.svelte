@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Bolus marker icon — a triangle pointing down at the baseline. Used for bolus
+   * Bolus marker icon — a triangle hanging below the baseline. Used for bolus
    * treatment markers in legends and stat cards; the chart draws the same shape
    * from <see>marker-shapes</see>. When isOverride is true it is taller, echoing
    * the chart's manual-override marker — scaled to the icon box rather than

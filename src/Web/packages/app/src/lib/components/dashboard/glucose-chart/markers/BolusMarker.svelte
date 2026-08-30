@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
-    trianglePoints,
-    MARKER_HALF_WIDTH,
+    bolusMarkerPoints,
     MARKER_HEIGHT,
     MARKER_HEIGHT_OVERRIDE,
   } from "$lib/components/icons/marker-shapes";
@@ -38,13 +37,8 @@
     bolusType === "AutomaticBolus" || bolusType === "Smb",
   );
 
-  const points = $derived(
-    trianglePoints(
-      "down",
-      MARKER_HALF_WIDTH,
-      isOverride ? MARKER_HEIGHT_OVERRIDE : MARKER_HEIGHT,
-    ),
-  );
+  const height = $derived(isOverride ? MARKER_HEIGHT_OVERRIDE : MARKER_HEIGHT);
+  const points = $derived(bolusMarkerPoints(height));
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -68,8 +62,8 @@
     />
   {/if}
   <text
-    y={-14}
-    dy="-0.355em"
+    y={height + 3}
+    dy="0.8em"
     text-anchor="middle"
     class="text-[8px] fill-insulin-bolus font-medium"
   >

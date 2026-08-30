@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    trianglePoints,
+    carbMarkerPoints,
     MARKER_HALF_WIDTH,
     MARKER_HEIGHT,
   } from "$lib/components/icons/marker-shapes";
@@ -25,28 +25,29 @@
   onclick={() => onMarkerClick(treatmentId)}
   class="cursor-pointer"
 >
-  <!-- Food/meal label above the marker -->
-  {#if label}
-    <text
-      y={-18}
-      dy="-0.355em"
-      text-anchor="middle"
-      class="text-[7px] fill-carbs font-medium opacity-80"
-    >
-      {label}
-    </text>
-  {/if}
-  <polygon
-    points={trianglePoints("up", MARKER_HALF_WIDTH, MARKER_HEIGHT)}
-    fill="var(--carbs)"
-    class="opacity-90 hover:opacity-100 transition-opacity"
-  />
   <text
-    y={18}
+    y={-MARKER_HEIGHT - 2}
     dy="-0.355em"
     text-anchor="middle"
     class="text-[8px] fill-carbs font-medium"
   >
     {carbs}g
   </text>
+  <polygon
+    points={carbMarkerPoints()}
+    fill="var(--carbs)"
+    class="opacity-90 hover:opacity-100 transition-opacity"
+  />
+  <!-- Beside the diamond's waist, clear of the bolus label a meal also carries -->
+  {#if label}
+    <text
+      x={MARKER_HALF_WIDTH + 3}
+      y={0}
+      dy="0.35em"
+      text-anchor="start"
+      class="text-[7px] fill-carbs font-medium opacity-80"
+    >
+      {label}
+    </text>
+  {/if}
 </g>
