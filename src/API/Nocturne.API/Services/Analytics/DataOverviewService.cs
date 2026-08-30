@@ -252,10 +252,7 @@ public class DataOverviewService : IDataOverviewService
         await using var context = await _factory.CreateAsync(cancellationToken);
 
         var tz = await GetUserTimeZoneAsync(cancellationToken);
-        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz);
+        var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
         var startMills = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var endMills = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
@@ -479,11 +476,7 @@ public class DataOverviewService : IDataOverviewService
         // Minimum readings required for a valid GRI calculation (72 = ~6 hours of 5-min CGM data)
         const int minimumReadings = 72;
 
-        // Compute year-level UTC boundaries once
-        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz);
+        var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         // Hoist LinkedRecord subqueries — IQueryable construction is free
         var npSensorGlucoseIds = context
@@ -587,6 +580,21 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
+    /// The half-open UTC interval covering <paramref name="year"/> in <paramref name="tz"/>, so a
+    /// year runs from local midnight to local midnight rather than from midnight UTC.
+    /// </summary>
+    private static (DateTime StartUtc, DateTime EndUtc) LocalYearBoundsUtc(int year, TimeZoneInfo tz)
+    {
+        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+
+        return (
+            TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz),
+            TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz)
+        );
+    }
+
+    /// <summary>
     /// Local month (1-12) for a UTC timestamp, in the user's time zone.
     /// </summary>
     private static int TimestampToMonth(DateTime utcTimestamp, TimeZoneInfo tz)
@@ -664,6 +672,27 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
+    /// The zones the GRI is scored over. These are the consensus bounds rather than the tenant's
+    /// thresholds — <see cref="GetGriTimelineAsync"/> takes no <c>GlycemicThresholds</c>, so no
+    /// caller can move them.
+    /// </summary>
+    private enum GriZone
+    {
+        VeryLow,
+        Low,
+        Target,
+        High,
+        VeryHigh,
+    }
+
+    private static readonly GlucoseZoneScale GriZones = new(
+        GlucoseZoneBound.Under(GlucoseConstants.VeryLowMgdl),
+        GlucoseZoneBound.Under(GlucoseConstants.TargetBottomMgdl),
+        GlucoseZoneBound.UpTo(GlucoseConstants.TargetTopMgdl),
+        GlucoseZoneBound.UpTo(GlucoseConstants.VeryHighMgdl)
+    );
+
+    /// <summary>
     /// Builds one month's GRI timeline period, or null when the month has fewer than
     /// <paramref name="minimumReadings"/> glucose readings.
     /// </summary>
@@ -683,22 +712,17 @@ public class DataOverviewService : IDataOverviewService
         )
             return null;
 
-        // Bucket readings into TIR zones
         var totalCount = glucoseReadings.Count;
-        var veryLowCount = glucoseReadings.Count(v => v < 54);
-        var lowCount = glucoseReadings.Count(v => v >= 54 && v < GlucoseConstants.TargetBottomMgdl);
-        var targetCount = glucoseReadings.Count(
-            v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl);
-        var highCount = glucoseReadings.Count(v => v > GlucoseConstants.TargetTopMgdl && v <= 250);
-        var veryHighCount = glucoseReadings.Count(v => v > 250);
+        var counts = GriZones.Count(glucoseReadings);
+        double Percent(GriZone zone) => (double)counts[(int)zone] / totalCount * 100.0;
 
         var percentages = new TimeInRangePercentages
         {
-            VeryLow = (double)veryLowCount / totalCount * 100.0,
-            Low = (double)lowCount / totalCount * 100.0,
-            Target = (double)targetCount / totalCount * 100.0,
-            High = (double)highCount / totalCount * 100.0,
-            VeryHigh = (double)veryHighCount / totalCount * 100.0,
+            VeryLow = Percent(GriZone.VeryLow),
+            Low = Percent(GriZone.Low),
+            Target = Percent(GriZone.Target),
+            High = Percent(GriZone.High),
+            VeryHigh = Percent(GriZone.VeryHigh),
         };
 
         var timeInRange = new TimeInRangeMetrics { Percentages = percentages };

@@ -22,10 +22,10 @@ namespace Nocturne.API.Services.Sleep;
 /// </remarks>
 public class SleepReportService : ISleepReportService
 {
-    private const double DefaultVeryLow  = 54;
+    private const double DefaultVeryLow  = GlucoseConstants.VeryLowMgdl;
     private const double DefaultLow      = GlucoseConstants.TargetBottomMgdl;
     private const double DefaultHigh     = GlucoseConstants.TargetTopMgdl;
-    private const double DefaultVeryHigh = 250;
+    private const double DefaultVeryHigh = GlucoseConstants.VeryHighMgdl;
 
     private readonly ISleepSessionRepository _sessions;
     private readonly ISensorGlucoseRepository _glucose;
