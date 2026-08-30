@@ -79,7 +79,18 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>()?.SupportedDataTypes
         ?? [SyncDataType.Glucose];
 
-    public abstract Task<bool> AuthenticateAsync();
+    /// <summary>
+    ///     The pre-flight <see cref="RunBackgroundSyncAsync"/> runs before it fetches anything.
+    ///     It carries no configuration, so a connector whose credentials are per-tenant has nothing
+    ///     to authenticate against here and admits the run: it resolves and checks the tenant's
+    ///     credential inside <see cref="PerformSyncInternalAsync"/>, where the config is in hand.
+    ///     Only a connector holding a process-wide credential overrides this.
+    /// </summary>
+    public virtual Task<bool> AuthenticateAsync()
+    {
+        TrackSuccessfulRequest();
+        return Task.FromResult(true);
+    }
 
     /// <inheritdoc />
     public virtual async Task<SyncResult> SyncDataAsync(

@@ -45,13 +45,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     public override string ServiceName => "Tandem Source";
 
 
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Authentication runs per-tenant inside PerformSyncInternalAsync, where the config is available.
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TandemConnectorConfiguration config,

@@ -52,14 +52,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
 
-    /// <inheritdoc />
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in PerformSyncInternalAsync
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     private async Task<bool> AuthenticateWithConfigAsync(CareLinkConnectorConfiguration config)
     {
         // Seed the token provider with persisted secrets so refresh is available immediately

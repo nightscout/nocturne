@@ -42,13 +42,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
     protected override string ConnectorSource => DataSources.EversenseConnector;
     public override string ServiceName => "Eversense Now";
 
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // AuthenticateAsync is a legacy method; actual auth happens per-tenant in sync flow
-        TrackSuccessfulRequest();
-        return true;
-    }
-
     /// <summary>
     ///     Selects the appropriate patient from the patient list.
     ///     If only one patient, auto-selects. If multiple, matches by username (case-insensitive).

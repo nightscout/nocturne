@@ -46,13 +46,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     protected override string ConnectorSource => DataSources.TidepoolConnector;
     public override string ServiceName => "Tidepool";
 
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TidepoolConnectorConfiguration config,

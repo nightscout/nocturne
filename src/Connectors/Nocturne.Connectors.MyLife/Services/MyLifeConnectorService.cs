@@ -39,13 +39,6 @@ public class MyLifeConnectorService(
     public override bool IsHealthy =>
         FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
 
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
     /// is established.

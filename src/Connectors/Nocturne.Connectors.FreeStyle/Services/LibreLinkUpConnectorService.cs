@@ -74,13 +74,6 @@ public class LibreConnectorService(
 
     public override bool IsHealthy => base.IsHealthy && !_tokenProvider.IsTokenExpired;
 
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in sync flow
-        TrackSuccessfulRequest();
-        return true;
-    }
-
     private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
     {
         var token = await _tokenProvider.GetValidTokenAsync(config);

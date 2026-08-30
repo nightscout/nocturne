@@ -36,13 +36,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     public override string ServiceName => "Nocturne Remote";
 
     /// <summary>
-    ///     Legacy no-config overload, carrying no configuration to authenticate against. This
-    ///     connector resolves and checks the run's credential in
-    ///     <see cref="PerformSyncInternalAsync"/>, where both entry points supply their own.
-    /// </summary>
-    public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
-
-    /// <summary>
     ///     Resolves the run's base URL and bearer header, then asks the remote whether it accepts the
     ///     credential. Answers with the result that ends the run, or null for a run that may proceed.
     /// </summary>

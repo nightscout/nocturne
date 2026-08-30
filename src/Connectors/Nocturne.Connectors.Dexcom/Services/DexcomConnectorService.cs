@@ -47,13 +47,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     protected override string ConnectorSource => DataSources.DexcomConnector;
     public override string ServiceName => "Dexcom Share";
 
-    public override async Task<bool> AuthenticateAsync()
-    {
-        // AuthenticateAsync is a legacy method; actual auth happens per-tenant in sync flow
-        TrackSuccessfulRequest();
-        return true;
-    }
-
     /// <summary>
     ///     Fetches SensorGlucose records from the Dexcom Share API.
     /// </summary>

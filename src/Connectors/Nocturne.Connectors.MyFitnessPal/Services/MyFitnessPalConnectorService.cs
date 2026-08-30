@@ -54,14 +54,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     protected override string ConnectorSource => DataSources.MyFitnessPalConnector;
     public override string ServiceName => "MyFitnessPal";
 
-    /// <inheritdoc />
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in PerformSyncInternalAsync
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
     /// <summary>
     /// Entry point for the scheduled sync.
     /// </summary>
