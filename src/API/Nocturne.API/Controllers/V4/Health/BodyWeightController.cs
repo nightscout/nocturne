@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -21,7 +22,8 @@ namespace Nocturne.API.Controllers.V4.Health;
 [Tags("Health")]
 [Route("api/v4/body-weight")]
 [Authorize]
-public class BodyWeightController : ControllerBase, IWriteScopedController
+public class BodyWeightController(IBodyWeightService bodyWeightService)
+    : HealthRecordControllerBase<BodyWeight>, IWriteScopedController
 {
     /// <summary>
     /// The OAuth scope every write action on this controller requires. Body weight has no category
@@ -33,14 +35,22 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     /// </summary>
     public string WriteScope => Scope.TherapyReadWrite;
 
-    private readonly IBodyWeightService _bodyWeightService;
-    private readonly ILogger<BodyWeightController> _logger;
+    protected override string RecordTypeName => "Body weight";
 
-    public BodyWeightController(IBodyWeightService bodyWeightService, ILogger<BodyWeightController> logger)
-    {
-        _bodyWeightService = bodyWeightService;
-        _logger = logger;
-    }
+    protected override Task<IEnumerable<BodyWeight>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
+        bodyWeightService.GetBodyWeightsAsync(count, skip, ct);
+
+    protected override Task<BodyWeight?> ReadAsync(string id, CancellationToken ct) =>
+        bodyWeightService.GetBodyWeightByIdAsync(id, ct);
+
+    protected override Task<IEnumerable<BodyWeight>> WriteManyAsync(IReadOnlyList<BodyWeight> models, CancellationToken ct) =>
+        bodyWeightService.CreateBodyWeightsAsync(models, ct);
+
+    protected override Task<BodyWeight?> WriteAsync(string id, BodyWeight model, CancellationToken ct) =>
+        bodyWeightService.UpdateBodyWeightAsync(id, model, ct);
+
+    protected override Task<bool> EraseAsync(string id, CancellationToken ct) =>
+        bodyWeightService.DeleteBodyWeightAsync(id, ct);
 
     /// <summary>
     /// Get body weight records with optional pagination
@@ -54,18 +64,11 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<BodyWeight>>> GetBodyWeights(
-        [FromQuery] int count = 10,
+    public Task<ActionResult<IEnumerable<BodyWeight>>> GetBodyWeights(
+        [FromQuery] int count = DefaultCount,
         [FromQuery] int skip = 0,
         CancellationToken cancellationToken = default
-    )
-    {
-        count = V4ReadLimits.ClampLimit(count);
-        skip = V4ReadLimits.ClampOffset(skip);
-
-        var records = await _bodyWeightService.GetBodyWeightsAsync(count, skip, cancellationToken);
-        return Ok(records);
-    }
+    ) => ListResponseAsync(count, skip, cancellationToken);
 
     /// <summary>
     /// Get a specific body weight record by ID
@@ -78,17 +81,10 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<BodyWeight>> GetBodyWeight(
+    public Task<ActionResult<BodyWeight>> GetBodyWeight(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var record = await _bodyWeightService.GetBodyWeightByIdAsync(id, cancellationToken);
-        if (record == null)
-            return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(record);
-    }
+    ) => GetResponseAsync(id, cancellationToken);
 
     /// <summary>
     /// Create a single body weight record
@@ -108,56 +104,39 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
         if (bodyWeight == null)
             return Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request");
 
-        var result = await _bodyWeightService.CreateBodyWeightsAsync([bodyWeight], cancellationToken);
+        var result = await WriteManyAsync([bodyWeight], cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result.First());
     }
 
     /// <summary>
     /// Create one or more body weight records (single object or array)
     /// </summary>
+    // Untyped so one route takes either a bare record or an array of them. Seven published SDKs
+    // are generated from this operation, so the request shape cannot be tightened in place.
     [HttpPost("batch")]
     [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<BodyWeight>>> CreateBodyWeights(
+    public Task<ActionResult<IEnumerable<BodyWeight>>> CreateBodyWeights(
         [FromBody] object bodyWeights,
         CancellationToken cancellationToken = default
     )
     {
-        if (bodyWeights == null)
-            return Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request");
+        if (bodyWeights is null)
+            return Task.FromResult<ActionResult<IEnumerable<BodyWeight>>>(
+                Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request"));
 
-        List<BodyWeight> bodyWeightList;
+        if (bodyWeights is not JsonElement json)
+            return Task.FromResult<ActionResult<IEnumerable<BodyWeight>>>(
+                Problem(detail: "Invalid data format", statusCode: 400, title: "Bad Request"));
 
-        if (bodyWeights is System.Text.Json.JsonElement jsonElement)
-        {
-            if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-            {
-                bodyWeightList =
-                    System.Text.Json.JsonSerializer.Deserialize<List<BodyWeight>>(
-                        jsonElement.GetRawText()
-                    ) ?? [];
-            }
-            else
-            {
-                var single = System.Text.Json.JsonSerializer.Deserialize<BodyWeight>(
-                    jsonElement.GetRawText()
-                );
-                bodyWeightList = single != null ? [single] : [];
-            }
-        }
-        else
-        {
-            return Problem(detail: "Invalid data format", statusCode: 400, title: "Bad Request");
-        }
+        List<BodyWeight> models = json.ValueKind == JsonValueKind.Array
+            ? JsonSerializer.Deserialize<List<BodyWeight>>(json.GetRawText()) ?? []
+            : JsonSerializer.Deserialize<BodyWeight>(json.GetRawText()) is { } single ? [single] : [];
 
-        if (bodyWeightList.Count == 0)
-            return Problem(detail: "At least one body weight record is required", statusCode: 400, title: "Bad Request");
-
-        var result = await _bodyWeightService.CreateBodyWeightsAsync(bodyWeightList, cancellationToken);
-        return Ok(result);
+        return CreateResponseAsync(models, cancellationToken);
     }
 
     /// <summary>
@@ -170,18 +149,11 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<BodyWeight>> UpdateBodyWeight(
+    public Task<ActionResult<BodyWeight>> UpdateBodyWeight(
         string id,
         [FromBody] BodyWeight bodyWeight,
         CancellationToken cancellationToken = default
-    )
-    {
-        var updated = await _bodyWeightService.UpdateBodyWeightAsync(id, bodyWeight, cancellationToken);
-        if (updated == null)
-            return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(updated);
-    }
+    ) => UpdateResponseAsync(id, bodyWeight, cancellationToken);
 
     /// <summary>
     /// Delete a body weight record by ID
@@ -193,15 +165,8 @@ public class BodyWeightController : ControllerBase, IWriteScopedController
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult> DeleteBodyWeight(
+    public Task<ActionResult> DeleteBodyWeight(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var deleted = await _bodyWeightService.DeleteBodyWeightAsync(id, cancellationToken);
-        if (!deleted)
-            return Problem(detail: $"Body weight record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(new { message = "Body weight record deleted successfully" });
-    }
+    ) => DeleteResponseAsync(id, cancellationToken);
 }

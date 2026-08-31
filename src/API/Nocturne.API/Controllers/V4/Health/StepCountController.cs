@@ -13,28 +13,50 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// Controller for step count data from diabetes apps and wearables.
 /// </summary>
 /// <remarks>
-/// Step count readings are stored as time-series observations.
-/// All operations delegate to <see cref="IStepCountService"/>. Callers must hold the
-/// appropriate scope (<c>read:health</c> or <c>write:health</c>).
+/// Step count readings are stored as time-series observations. All operations delegate to
+/// <see cref="IStepCountService"/>. Callers must hold the <c>read:health</c>
+/// or <c>write:health</c> scope as appropriate.
 /// </remarks>
 /// <seealso cref="IStepCountService"/>
 [ApiController]
 [Tags("Health")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
-public class StepCountController : ControllerBase
+public class StepCountController(IStepCountService stepCountService)
+    : HealthSeriesControllerBase<StepCount, UpsertStepCountRequest>
 {
-    /// <summary>Records returned when a caller supplies no <c>count</c> and no date range.</summary>
-    private const int DefaultCount = 10;
+    protected override string RecordTypeName => "Step count";
 
-    private readonly IStepCountService _stepCountService;
-    private readonly ILogger<StepCountController> _logger;
+    protected override Task<IEnumerable<StepCount>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
+        stepCountService.GetStepCountsAsync(count, skip, ct);
 
-    public StepCountController(IStepCountService stepCountService, ILogger<StepCountController> logger)
+    protected override Task<IEnumerable<StepCount>> ReadRangeAsync(
+        DateTime from, DateTime to, int count, int skip, CancellationToken ct) =>
+        stepCountService.GetStepCountsByDateRangeAsync(from, to, count, skip, ct);
+
+    protected override Task<StepCount?> ReadAsync(string id, CancellationToken ct) =>
+        stepCountService.GetStepCountByIdAsync(id, ct);
+
+    protected override Task<IEnumerable<StepCount>> WriteManyAsync(IReadOnlyList<StepCount> models, CancellationToken ct) =>
+        stepCountService.CreateStepCountsAsync(models, ct);
+
+    protected override Task<StepCount?> WriteAsync(string id, StepCount model, CancellationToken ct) =>
+        stepCountService.UpdateStepCountAsync(id, model, ct);
+
+    protected override Task<bool> EraseAsync(string id, CancellationToken ct) =>
+        stepCountService.DeleteStepCountAsync(id, ct);
+
+    protected override StepCount ToModel(UpsertStepCountRequest request) => new()
     {
-        _stepCountService = stepCountService;
-        _logger = logger;
-    }
+        Timestamp = request.Timestamp.UtcDateTime,
+        UtcOffset = request.UtcOffset,
+        Metric = request.Metric,
+        Source = request.Source,
+        Device = request.Device,
+        EnteredBy = request.App,
+        DataSource = request.DataSource,
+        SyncIdentifier = request.SyncIdentifier,
+    };
 
     /// <summary>
     /// Get step count records with optional pagination and date filtering
@@ -56,27 +78,13 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
+    public Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
         [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        skip = V4ReadLimits.ClampOffset(skip);
-
-        IEnumerable<StepCount> records;
-        if (from.HasValue && to.HasValue)
-            records = await _stepCountService.GetStepCountsByDateRangeAsync(
-                from.Value, to.Value,
-                V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
-        else
-            records = await _stepCountService.GetStepCountsAsync(
-                V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
-
-        return Ok(records);
-    }
+    ) => ListResponseAsync(count, skip, from, to, cancellationToken);
 
     /// <summary>
     /// Get a specific step count record by ID
@@ -90,17 +98,10 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<StepCount>> GetStepCount(
+    public Task<ActionResult<StepCount>> GetStepCount(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var record = await _stepCountService.GetStepCountByIdAsync(id, cancellationToken);
-        if (record == null)
-            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(record);
-    }
+    ) => GetResponseAsync(id, cancellationToken);
 
     /// <summary>
     /// Create one or more step count records
@@ -111,29 +112,10 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<StepCount>>> CreateStepCounts(
+    public Task<ActionResult<IEnumerable<StepCount>>> CreateStepCounts(
         [FromBody] UpsertStepCountRequest[] requests,
         CancellationToken cancellationToken = default
-    )
-    {
-        if (requests.Length == 0)
-            return Problem(detail: "At least one step count record is required", statusCode: 400, title: "Bad Request");
-
-        var stepCountList = requests.Select(request => new StepCount
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Metric = request.Metric,
-            Source = request.Source,
-            Device = request.Device,
-            EnteredBy = request.App,
-            DataSource = request.DataSource,
-            SyncIdentifier = request.SyncIdentifier,
-        }).ToList();
-
-        var result = await _stepCountService.CreateStepCountsAsync(stepCountList, cancellationToken);
-        return Ok(result);
-    }
+    ) => CreateResponseAsync(requests, cancellationToken);
 
     /// <summary>
     /// Update an existing step count record
@@ -144,30 +126,11 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<StepCount>> UpdateStepCount(
+    public Task<ActionResult<StepCount>> UpdateStepCount(
         string id,
         [FromBody] UpsertStepCountRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
-        var stepCount = new StepCount
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Metric = request.Metric,
-            Source = request.Source,
-            Device = request.Device,
-            EnteredBy = request.App,
-            DataSource = request.DataSource,
-            SyncIdentifier = request.SyncIdentifier,
-        };
-
-        var updated = await _stepCountService.UpdateStepCountAsync(id, stepCount, cancellationToken);
-        if (updated == null)
-            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(updated);
-    }
+    ) => UpdateResponseAsync(id, ToModel(request), cancellationToken);
 
     /// <summary>
     /// Delete a step count record by ID
@@ -178,15 +141,8 @@ public class StepCountController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult> DeleteStepCount(
+    public Task<ActionResult> DeleteStepCount(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var deleted = await _stepCountService.DeleteStepCountAsync(id, cancellationToken);
-        if (!deleted)
-            return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(new { message = "Step count record deleted successfully" });
-    }
+    ) => DeleteResponseAsync(id, cancellationToken);
 }

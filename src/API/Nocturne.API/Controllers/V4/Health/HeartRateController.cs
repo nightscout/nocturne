@@ -22,19 +22,41 @@ namespace Nocturne.API.Controllers.V4.Health;
 [Tags("Health")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
-public class HeartRateController : ControllerBase
+public class HeartRateController(IHeartRateService heartRateService)
+    : HealthSeriesControllerBase<HeartRate, UpsertHeartRateRequest>
 {
-    /// <summary>Records returned when a caller supplies no <c>count</c> and no date range.</summary>
-    private const int DefaultCount = 10;
+    protected override string RecordTypeName => "Heart rate";
 
-    private readonly IHeartRateService _heartRateService;
-    private readonly ILogger<HeartRateController> _logger;
+    protected override Task<IEnumerable<HeartRate>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
+        heartRateService.GetHeartRatesAsync(count, skip, ct);
 
-    public HeartRateController(IHeartRateService heartRateService, ILogger<HeartRateController> logger)
+    protected override Task<IEnumerable<HeartRate>> ReadRangeAsync(
+        DateTime from, DateTime to, int count, int skip, CancellationToken ct) =>
+        heartRateService.GetHeartRatesByDateRangeAsync(from, to, count, skip, ct);
+
+    protected override Task<HeartRate?> ReadAsync(string id, CancellationToken ct) =>
+        heartRateService.GetHeartRateByIdAsync(id, ct);
+
+    protected override Task<IEnumerable<HeartRate>> WriteManyAsync(IReadOnlyList<HeartRate> models, CancellationToken ct) =>
+        heartRateService.CreateHeartRatesAsync(models, ct);
+
+    protected override Task<HeartRate?> WriteAsync(string id, HeartRate model, CancellationToken ct) =>
+        heartRateService.UpdateHeartRateAsync(id, model, ct);
+
+    protected override Task<bool> EraseAsync(string id, CancellationToken ct) =>
+        heartRateService.DeleteHeartRateAsync(id, ct);
+
+    protected override HeartRate ToModel(UpsertHeartRateRequest request) => new()
     {
-        _heartRateService = heartRateService;
-        _logger = logger;
-    }
+        Timestamp = request.Timestamp.UtcDateTime,
+        UtcOffset = request.UtcOffset,
+        Bpm = request.Bpm,
+        Accuracy = request.Accuracy,
+        Device = request.Device,
+        EnteredBy = request.App,
+        DataSource = request.DataSource,
+        SyncIdentifier = request.SyncIdentifier,
+    };
 
     /// <summary>
     /// Get heart rate records with optional pagination and date filtering
@@ -56,27 +78,13 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<HeartRate>), 200)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<HeartRate>>> GetHeartRates(
+    public Task<ActionResult<IEnumerable<HeartRate>>> GetHeartRates(
         [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        skip = V4ReadLimits.ClampOffset(skip);
-
-        IEnumerable<HeartRate> records;
-        if (from.HasValue && to.HasValue)
-            records = await _heartRateService.GetHeartRatesByDateRangeAsync(
-                from.Value, to.Value,
-                V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize), skip, cancellationToken);
-        else
-            records = await _heartRateService.GetHeartRatesAsync(
-                V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, cancellationToken);
-
-        return Ok(records);
-    }
+    ) => ListResponseAsync(count, skip, from, to, cancellationToken);
 
     /// <summary>
     /// Get a specific heart rate record by ID
@@ -90,17 +98,10 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<HeartRate>> GetHeartRate(
+    public Task<ActionResult<HeartRate>> GetHeartRate(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var record = await _heartRateService.GetHeartRateByIdAsync(id, cancellationToken);
-        if (record == null)
-            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(record);
-    }
+    ) => GetResponseAsync(id, cancellationToken);
 
     /// <summary>
     /// Create one or more heart rate records
@@ -111,29 +112,10 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<IEnumerable<HeartRate>>> CreateHeartRates(
+    public Task<ActionResult<IEnumerable<HeartRate>>> CreateHeartRates(
         [FromBody] UpsertHeartRateRequest[] requests,
         CancellationToken cancellationToken = default
-    )
-    {
-        if (requests.Length == 0)
-            return Problem(detail: "At least one heart rate record is required", statusCode: 400, title: "Bad Request");
-
-        var heartRateList = requests.Select(request => new HeartRate
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Bpm = request.Bpm,
-            Accuracy = request.Accuracy,
-            Device = request.Device,
-            EnteredBy = request.App,
-            DataSource = request.DataSource,
-            SyncIdentifier = request.SyncIdentifier,
-        }).ToList();
-
-        var result = await _heartRateService.CreateHeartRatesAsync(heartRateList, cancellationToken);
-        return Ok(result);
-    }
+    ) => CreateResponseAsync(requests, cancellationToken);
 
     /// <summary>
     /// Update an existing heart rate record
@@ -144,30 +126,11 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<HeartRate>> UpdateHeartRate(
+    public Task<ActionResult<HeartRate>> UpdateHeartRate(
         string id,
         [FromBody] UpsertHeartRateRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
-        var heartRate = new HeartRate
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Bpm = request.Bpm,
-            Accuracy = request.Accuracy,
-            Device = request.Device,
-            EnteredBy = request.App,
-            DataSource = request.DataSource,
-            SyncIdentifier = request.SyncIdentifier,
-        };
-
-        var updated = await _heartRateService.UpdateHeartRateAsync(id, heartRate, cancellationToken);
-        if (updated == null)
-            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(updated);
-    }
+    ) => UpdateResponseAsync(id, ToModel(request), cancellationToken);
 
     /// <summary>
     /// Delete a heart rate record by ID
@@ -178,15 +141,8 @@ public class HeartRateController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult> DeleteHeartRate(
+    public Task<ActionResult> DeleteHeartRate(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        var deleted = await _heartRateService.DeleteHeartRateAsync(id, cancellationToken);
-        if (!deleted)
-            return Problem(detail: $"Heart rate record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-        return Ok(new { message = "Heart rate record deleted successfully" });
-    }
+    ) => DeleteResponseAsync(id, cancellationToken);
 }
