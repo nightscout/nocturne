@@ -16,8 +16,7 @@
   } from "$lib/components/treatments";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { MealMatchReviewDialog } from "$lib/components/meal-matching";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import MealsFilterBar from "$lib/components/meals/MealsFilterBar.svelte";
   import MealsTable from "$lib/components/meals/MealsTable.svelte";
   import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
@@ -488,24 +487,16 @@
   onComplete={handleReviewComplete}
 />
 
-<AlertDialog.Root bind:open={showUnlinkConfirm}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Unlink food</AlertDialog.Title>
-      <AlertDialog.Description>
-        Remove "{unlinkTarget?.food.foodName ?? unlinkTarget?.food.note ?? 'this food'}" from this meal? The food will remain in your database.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel
-        disabled={unlink.busy}
-        onclick={() => { showUnlinkConfirm = false; unlinkTarget = null; }}
-      >
-        Cancel
-      </AlertDialog.Cancel>
-      <Button variant="destructive" disabled={unlink.busy} onclick={handleUnlinkFood}>
-        {unlink.busy ? "Removing..." : "Remove"}
-      </Button>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={showUnlinkConfirm}
+  onOpenChange={(o) => { if (!o) unlinkTarget = null; }}
+  title="Unlink food"
+  confirmLabel={unlink.busy ? "Removing..." : "Remove"}
+  destructive
+  busy={unlink.busy}
+  onConfirm={handleUnlinkFood}
+>
+  {#snippet description()}
+    Remove "{unlinkTarget?.food.foodName ?? unlinkTarget?.food.note ?? 'this food'}" from this meal? The food will remain in your database.
+  {/snippet}
+</ConfirmDialog>
