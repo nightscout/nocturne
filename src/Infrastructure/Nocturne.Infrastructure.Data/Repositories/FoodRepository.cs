@@ -182,9 +182,12 @@ public class FoodRepository : IFoodRepository
 
         foreach (var entity in entities)
         {
-            // Check if a food with this ID already exists
+            // Resolve the row the same way reads do: a legacy Mongo _id addresses its row through
+            // OriginalId, which the id-derived key does not reproduce.
+            var entityId = entity.Id;
+            var originalId = entity.OriginalId;
             var existingEntity = await _context.Foods.FirstOrDefaultAsync(
-                f => f.Id == entity.Id,
+                f => f.Id == entityId || (originalId != null && f.OriginalId == originalId),
                 cancellationToken
             );
 

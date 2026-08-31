@@ -139,9 +139,12 @@ public class SettingsRepository : ISettingsRepository
 
         foreach (var entity in entities)
         {
-            // Check if a setting with this ID already exists
+            // Resolve the row the same way reads do: a legacy Mongo _id addresses its row through
+            // OriginalId, which the id-derived key does not reproduce.
+            var entityId = entity.Id;
+            var originalId = entity.OriginalId;
             var existingEntity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Id == entity.Id,
+                s => s.Id == entityId || (originalId != null && s.OriginalId == originalId),
                 cancellationToken
             );
 
