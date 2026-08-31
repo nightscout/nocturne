@@ -457,9 +457,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
     ///     one. An explicit range is answered as asked: it is the shape a manual re-import of one
     ///     window sends, and widening it back to a resume point below re-crawls everything in
-    ///     between. A range naming no lower bound is asking for everything the source still holds,
-    ///     which is <paramref name="historyFloor"/> — the reading the reset-cursor endpoint
-    ///     documents, and the only one under which it resets anything.
+    ///     between. A range naming no lower bound is asking for everything available, so it starts
+    ///     at <paramref name="historyFloor"/> — as far back as the connector reaches, which is the
+    ///     reading the reset-cursor endpoint documents and the only one under which it resets
+    ///     anything.
     /// </summary>
     protected static DateTime ResumeFrom(
         SyncRequest request, DateTime resumePoint, DateTime historyFloor) =>

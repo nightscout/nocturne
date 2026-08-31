@@ -220,7 +220,10 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     /// <summary>
     /// The span of a bounded run's own window. The fetch reaches a day either side of it, and those
     /// days' records belong to the neighbouring windows: only a record assembled or closed across
-    /// the edge is this run's to publish, and it lands inside.
+    /// the edge is this run's to publish, and it lands inside. It bounds the record types whose
+    /// correctness depends on an event across the edge — spans and the bolus family. A record
+    /// complete in one event is published as fetched, so a padded day's own can reach the tenant:
+    /// it upserts on a stable id to the same values whichever window carries it.
     /// </summary>
     private readonly record struct PublishWindow(DateTime From, DateTime Through)
     {

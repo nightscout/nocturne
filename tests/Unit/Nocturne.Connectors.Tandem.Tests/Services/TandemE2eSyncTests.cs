@@ -68,13 +68,21 @@ public class TandemE2eSyncTests
 
     private const string EmptyPumpLogsJson = """{"events": [], "clockChanges": []}""";
 
-    // A basal delivery and an exercise stop on the day AFTER a window ending 2026-05-15: the events
-    // that close a span opened inside it, which only the padded day reaches.
+    // An exercise start inside a window ending 2026-05-15, and — on the day after it — every
+    // shape of record the padded day can carry: the delivery and stop events that close the
+    // window's own span and exercise, and a closed basal pair, a whole bolus and a complete
+    // exercise pair belonging to the day itself.
     private const string NextDayEvents = """
-                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450100, "pumpDateTime": "2026-05-15T10:00:00", "eventProperties": {"currentUserMode": 2, "previousUserMode": 0, "requestedAction": 3, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-15T10:00:00Z"},
-                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 279, "sequenceGroup": 0, "sequenceNumber": 450200, "pumpDateTime": "2026-05-16T09:00:00", "eventProperties": {"commandedRateSource": 1, "reservedA2": 3, "spareA3": 0, "commandedRate": 800, "profileBasalRate": 800, "algorithmRate": 800, "tempRate": 65535}, "estimatedDateTime": "2026-05-16T09:00:00Z"},
-                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 20, "sequenceGroup": 0, "sequenceNumber": 450250, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"completionStatus": 3, "bolusId": 1600, "iob": 1.0, "insulinDelivered": 1.0, "insulinRequested": 1.0}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
-                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450300, "pumpDateTime": "2026-05-16T09:30:00", "eventProperties": {"currentUserMode": 0, "previousUserMode": 2, "requestedAction": 4, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-16T09:30:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450100, "pumpDateTime": "2026-05-15T10:00:00", "eventProperties": {"currentUserMode": 2, "previousUserMode": 0, "requestedAction": 3, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-15T10:00:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 279, "sequenceGroup": 0, "sequenceNumber": 450200, "pumpDateTime": "2026-05-16T09:00:00", "eventProperties": {"commandedRateSource": 1, "reservedA2": 3, "spareA3": 0, "commandedRate": 800, "profileBasalRate": 800, "algorithmRate": 800, "tempRate": 65535}, "estimatedDateTime": "2026-05-16T09:00:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 279, "sequenceGroup": 0, "sequenceNumber": 450210, "pumpDateTime": "2026-05-16T10:00:00", "eventProperties": {"commandedRateSource": 1, "reservedA2": 3, "spareA3": 0, "commandedRate": 900, "profileBasalRate": 900, "algorithmRate": 900, "tempRate": 65535}, "estimatedDateTime": "2026-05-16T10:00:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 64, "sequenceGroup": 0, "sequenceNumber": 450240, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"bolusId": 1600, "bolusType": 3, "correctionBolusIncluded": 0, "carbAmount": 45, "bg": 130, "iob": 0, "carbRatio": 0}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 65, "sequenceGroup": 0, "sequenceNumber": 450241, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"bolusId": 1600, "options": 4, "standardPercent": 100, "duration": 0, "spareB6": 0, "isf": 0, "targetBg": 0, "userOverride": 0, "declinedCorrection": 0, "selectedIob": 1}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 66, "sequenceGroup": 0, "sequenceNumber": 450242, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"bolusId": 1600, "spareA2": 0, "foodBolusSize": 5.0, "correctionBolusSize": 0.0, "totalBolusSize": 5.0}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 20, "sequenceGroup": 0, "sequenceNumber": 450250, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"completionStatus": 3, "bolusId": 1600, "iob": 5.0, "insulinDelivered": 5.0, "insulinRequested": 5.0}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450300, "pumpDateTime": "2026-05-16T09:30:00", "eventProperties": {"currentUserMode": 0, "previousUserMode": 2, "requestedAction": 4, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-16T09:30:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450400, "pumpDateTime": "2026-05-16T11:00:00", "eventProperties": {"currentUserMode": 2, "previousUserMode": 0, "requestedAction": 3, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-16T11:00:00Z"},
+        {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450410, "pumpDateTime": "2026-05-16T11:30:00", "eventProperties": {"currentUserMode": 0, "previousUserMode": 2, "requestedAction": 4, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-16T11:30:00Z"},
         """;
 
     /// <summary>The fixture's events plus <see cref="NextDayEvents"/>.</summary>
@@ -370,7 +378,9 @@ public class TandemE2eSyncTests
     /// <summary>
     /// The days fetched either side of the window are there to complete its edge records, not to
     /// widen what it returns: a record of the padded day's own belongs to the window that covers
-    /// it, and a caller that asked for one window is not handed three.
+    /// it, and a caller that asked for one window is not handed three. Every record type whose
+    /// correctness depends on an event across the edge is bounded, so each is pinned here — the
+    /// padded day carries one of each, complete and publishable but for the bound.
     /// </summary>
     [Fact]
     public async Task Records_of_the_padded_day_are_left_to_the_window_that_covers_them()
@@ -383,12 +393,26 @@ public class TandemE2eSyncTests
         {
             From = Utc(2026, 5, 14, 0, 0, 0),
             To = Utc(2026, 5, 15, 0, 0, 0),
-            DataTypes = [SyncDataType.Boluses],
+            DataTypes =
+            [
+                SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.BolusCalculations,
+                SyncDataType.TempBasals, SyncDataType.StateSpans,
+            ],
         });
 
-        fixture.Publisher.Boluses.Should().ContainSingle()
-            .Which.SyncIdentifier.Should().Be("tandem_bolus_1583",
-                "the padded day's own bolus is the next window's to publish");
+        var publisher = fixture.Publisher;
+        publisher.Boluses.Should().ContainSingle()
+            .Which.SyncIdentifier.Should().Be("tandem_bolus_1583");
+        publisher.CarbIntakes.Should().ContainSingle().Which.Carbs.Should().Be(20);
+        publisher.BolusCalculations.Should().ContainSingle().Which.CarbInput.Should().Be(20);
+
+        // The window's two deliveries, the second closed by the padded day's first; that one's own
+        // span, closed by the delivery an hour after it, belongs to the next window.
+        publisher.TempBasals.Should().HaveCount(2);
+        publisher.TempBasals.Should().OnlyContain(record => record.StartTimestamp < Utc(2026, 5, 16, 0, 0, 0));
+
+        publisher.StateSpans.Should().ContainSingle()
+            .Which.StartTimestamp.Should().Be(Utc(2026, 5, 15, 14, 0, 0));
     }
 
     /// <summary>
