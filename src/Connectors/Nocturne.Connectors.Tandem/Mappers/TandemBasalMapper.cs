@@ -7,15 +7,22 @@ namespace Nocturne.Connectors.Tandem.Mappers;
 /// <summary>
 /// Maps Tandem basal-delivery events (emitted roughly every five minutes) to <see cref="TempBasal"/>
 /// spans. Each span runs from one delivery event to the next, with the final span ending at the
-/// window end. Mirrors <c>tconnectsync</c>'s <c>process_basal.py</c>, including the
-/// <c>IGNORE_ZERO_UNIT_BASAL</c> behaviour.
+/// point the fetch is complete through. Mirrors <c>tconnectsync</c>'s <c>process_basal.py</c>,
+/// including the <c>IGNORE_ZERO_UNIT_BASAL</c> behaviour.
 /// </summary>
 public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TandemTimeResolver _time = time ?? throw new ArgumentNullException(nameof(time));
 
-    public List<TempBasal> Map(IEnumerable<TandemPumpEvent> events, DateTime windowEndUtc, bool ignoreZeroUnitBasal)
+    /// <param name="fetchedThroughUtc">
+    ///     The point the payload is complete through, which closes the final span. A window that
+    ///     stops short of the pump's newest event never fetched that span's successor, so its end
+    ///     is unknown: pass <c>null</c> and the span is left unpublished rather than given an end
+    ///     that would upsert over the one already stored.
+    /// </param>
+    public List<TempBasal> Map(
+        IEnumerable<TandemPumpEvent> events, DateTime? fetchedThroughUtc, bool ignoreZeroUnitBasal)
     {
         var ordered = events
             .Select(ev => (Event: ev, Start: _time.ToUtc(ev.RawTimestampSeconds)))
@@ -28,7 +35,9 @@ public sealed class TandemBasalMapper(ILogger logger, TandemTimeResolver time)
         for (var i = 0; i < ordered.Count; i++)
         {
             var (ev, start) = ordered[i];
-            var end = i < ordered.Count - 1 ? ordered[i + 1].Start : windowEndUtc;
+            var end = i < ordered.Count - 1 ? ordered[i + 1].Start : fetchedThroughUtc;
+            if (end is null)
+                continue;
 
             var rate = TandemMapHelpers.MilliunitsToUnits(ev.Num("Commanded Rate") ?? 0);
             if (ignoreZeroUnitBasal && rate < 0.01)

@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -249,7 +251,8 @@ public class TandemE2eSyncTests
         var fixture = new Fixture(
             pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-04-01T00:00:00"),
             latestEntry: Utc(2026, 4, 10, 0, 0, 0),
-            latestTreatment: Utc(2026, 4, 10, 0, 0, 0));
+            latestTreatment: Utc(2026, 4, 10, 0, 0, 0),
+            servesEveryWindow: true);
 
         var result = await fixture.RunAsync();
 
@@ -280,27 +283,35 @@ public class TandemE2eSyncTests
             .ContainSingle(r => r.Path.Contains("/pump-logs/")).Subject;
         pumpLogs.Path.Should().Contain("startDate=2026-05-16T00%3A00%3A00Z")
             .And.Contain("endDate=2026-05-17T23%3A59%3A59Z");
+
+        // The fixture's CGM readings are two days below the window, and the pump serves only what
+        // is inside it — so the bound is what decides this, not the payload.
+        fixture.Publisher.SensorGlucoses.Should().BeEmpty();
     }
 
     /// <summary>
-    /// A span still open at the end of the window closes at the pump's newest event, not at the
-    /// caller's upper bound: the records upsert on a stable id, so a bounded re-import that ended
-    /// them early would write a shortened end over the real one.
+    /// A basal span ends where the next delivery event begins, so the last one in a bounded window
+    /// has no end: the event that would close it is above the bound and was never fetched. It goes
+    /// unpublished. Ending it at the caller's bound would upsert a shortened end over the real one,
+    /// and ending it at the pump's newest event would invent a span days long — both over a row
+    /// that a full sync already stored correctly, and both visible in IOB.
     /// </summary>
     [Fact]
-    public async Task Explicit_request_window_does_not_shorten_the_last_basal_span()
+    public async Task Explicit_upper_bound_publishes_only_spans_whose_end_was_fetched()
     {
         var fixture = new Fixture();
 
         await fixture.RunAsync(new SyncRequest
         {
-            From = Utc(2026, 5, 15, 0, 0, 0),
-            To = Utc(2026, 5, 17, 0, 0, 0),
+            From = Utc(2026, 5, 14, 0, 0, 0),
+            To = Utc(2026, 5, 15, 0, 0, 0),
             DataTypes = [SyncDataType.TempBasals],
         });
 
-        fixture.Publisher.TempBasals.Should().NotBeEmpty();
-        fixture.Publisher.TempBasals[^1].EndTimestamp.Should().Be(Utc(2026, 5, 18, 14, 19, 55));
+        // The window holds two delivery events; only the first is closed by one the fetch reached.
+        var basal = fixture.Publisher.TempBasals.Should().ContainSingle().Subject;
+        basal.StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
+        basal.EndTimestamp.Should().Be(Utc(2026, 5, 14, 4, 6, 0));
     }
 
     /// <summary>
@@ -354,14 +365,22 @@ public class TandemE2eSyncTests
 
     private sealed record CapturedRequest(string Path, string? Authorization, string? Origin, string? Referer);
 
-    private sealed class CapturingHandler(Dictionary<string, string> responses, List<CapturedRequest> requests)
+    /// <param name="servesEveryWindow">
+    ///     Whether the pump-logs payload is served whole however narrow the requested window is.
+    ///     The real endpoint returns only the events inside it, so a test that asserts on what a
+    ///     window published needs the default; the paging test wants the same events served twice.
+    /// </param>
+    private sealed class CapturingHandler(
+        Dictionary<string, string> responses, List<CapturedRequest> requests,
+        bool servesEveryWindow = false)
         : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var pathAndQuery = request.RequestUri?.PathAndQuery ?? string.Empty;
             requests.Add(new CapturedRequest(
-                request.RequestUri?.PathAndQuery ?? string.Empty,
+                pathAndQuery,
                 request.Headers.Authorization?.ToString(),
                 request.Headers.TryGetValues("Origin", out var origin) ? origin.First() : null,
                 request.Headers.TryGetValues("Referer", out var referer) ? referer.First() : null));
@@ -369,11 +388,61 @@ public class TandemE2eSyncTests
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
             foreach (var (key, json) in responses)
                 if (path.Contains(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    var body = key.Contains("pump-logs", StringComparison.Ordinal) && !servesEveryWindow
+                        ? WithinWindow(json, pathAndQuery)
+                        : json;
+
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                     {
-                        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                        Content = new StringContent(body, Encoding.UTF8, "application/json"),
                     });
+                }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        /// <summary>
+        /// The payload's events that fall inside the query's window, compared on the pump's own
+        /// naive clock — the basis both the events' pumpDateTime and the query's dates are written on.
+        /// </summary>
+        private static string WithinWindow(string json, string pathAndQuery)
+        {
+            var from = QueryDate(pathAndQuery, "startDate");
+            var to = QueryDate(pathAndQuery, "endDate");
+            if (from is null || to is null)
+                return json;
+
+            var payload = JsonNode.Parse(json)!;
+            var kept = new JsonArray();
+            foreach (var node in payload["events"]!.AsArray().ToList())
+            {
+                var at = DateTime.Parse(
+                    node!["pumpDateTime"]!.GetValue<string>(), CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
+                if (at >= from && at <= to)
+                    kept.Add(node.DeepClone());
+            }
+
+            payload["events"] = kept;
+            return payload.ToJsonString();
+        }
+
+        private static DateTime? QueryDate(string pathAndQuery, string key)
+        {
+            var value = pathAndQuery
+                .Split('?', 2).Last()
+                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(pair => pair.Split('=', 2))
+                .Where(pair => pair.Length == 2 && pair[0] == key)
+                .Select(pair => Uri.UnescapeDataString(pair[1]))
+                .FirstOrDefault();
+
+            return DateTime.TryParse(
+                value, CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
+                ? parsed
+                : null;
         }
     }
 
@@ -501,7 +570,8 @@ public class TandemE2eSyncTests
             string pumperJson = PumperJson,
             string pumpLogsJson = PumpLogsJson,
             DateTime? latestEntry = null,
-            DateTime? latestTreatment = null)
+            DateTime? latestTreatment = null,
+            bool servesEveryWindow = false)
         {
             // Default watermarks put the catch-up start just before the pump's available range so
             // the sync window is deterministic (no dependence on "now" via the initial-sync floor).
@@ -522,7 +592,7 @@ public class TandemE2eSyncTests
             {
                 ["/api/reports/bff/pumper/"] = pumperJson,
                 ["/api/reports/bff/pump-logs/"] = pumpLogsJson,
-            }, Requests);
+            }, Requests, servesEveryWindow);
 
             _service = new TandemConnectorService(
                 new HttpClient(handler),

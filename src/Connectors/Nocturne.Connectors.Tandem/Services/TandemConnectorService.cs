@@ -100,6 +100,11 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             await SyncEventsAsync(
                 request, region, pumperId, device, activeTypes, time, result, config, cancellationToken);
+
+            // Assigned here, after everything that can fail: on a run that did, Message is the
+            // failure summary the tenant's card reads and must not be a window notice instead.
+            if (result.Success && ClampNotice(request, device, time) is { } notice)
+                result.Message = notice;
         }
         catch (OperationCanceledException)
         {
@@ -111,10 +116,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             _logger.LogError(ex, "[{Source}] Error during Tandem sync", ConnectorSource);
             result.Success = false;
             result.Errors.Add($"Sync error: {ex.Message}");
-
-            // Message is the failure summary the tenant's card reads, so a window notice recorded
-            // before the throw must not stand in for the failure.
-            result.Message = string.Empty;
         }
 
         result.EndTime = DateTimeOffset.UtcNow;
@@ -139,13 +140,11 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        // The pump's newest event is a hard ceiling: there is nothing above it to ask for, and it
-        // is where a still-open span closes however narrowly the fetch below is bounded — a span
-        // ended at the caller's bound instead would upsert a shortened end over the real one.
+        // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
         var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
         var end = request.To is { } until && until < ceiling ? until : ceiling;
 
-        var start = await ResolveStartAsync(request, config, device, time, result);
+        var start = await ResolveStartAsync(request, config, device, time);
         if (start >= end)
         {
             _logger.LogInformation(
@@ -196,14 +195,18 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .GroupBy(x => x.Class!.Value, x => x.Event)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // What the payload is complete through: the ceiling only when the fetch reached it. A
+        // window bounded below it never fetched the events that would close the last span.
+        var fetchedThrough = end < ceiling ? null : (DateTime?)ceiling;
+
         await PublishEventsAsync(
-            groups, activeTypes, ceiling, cgm, bolus, basal, deviceEvents, systemEvents,
+            groups, activeTypes, fetchedThrough, cgm, bolus, basal, deviceEvents, systemEvents,
             userMode, deviceStatus, result, config, cancellationToken);
     }
 
     private async Task PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> activeTypes, DateTime windowEnd,
+        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
@@ -226,7 +229,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                basal.Map(basalEvents, windowEnd, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
+                basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
                 config, cancellationToken);
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
@@ -274,12 +277,12 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     /// <summary>
     /// Resolves the start of the sync window from the caller's bound and the pump's own resume
     /// point — the earliest catch-up point across glucose and treatments, so no active data type is
-    /// missed — never earlier than the pump's first event. The pump serves nothing below that
-    /// first event, so a caller's bound below it is clamped and the run says so.
+    /// missed — never earlier than the pump's first event, which is where <see cref="ClampNotice"/>
+    /// reports a bound below.
     /// </summary>
     private async Task<DateTime> ResolveStartAsync(
         SyncRequest request, TandemConnectorConfiguration config, TandemBffPump device,
-        TandemTimeResolver time, SyncResult result)
+        TandemTimeResolver time)
     {
         var glucoseSince = await CalculateSinceTimestampAsync(config);
         var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config);
@@ -290,17 +293,22 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var start = ResumeFrom(request, resume);
 
         if (ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } min && min > start)
-        {
-            if (request.From < min)
-                result.Message =
-                    $"The pump holds no data before {min.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC; "
-                    + "the requested window starts there.";
-
             start = min;
-        }
 
         return start;
     }
+
+    /// <summary>
+    /// What the run says when it covered less than it was asked for: the pump serves nothing before
+    /// its available range begins, and a success over a window that was silently narrowed reads the
+    /// same as one that covered it.
+    /// </summary>
+    private static string? ClampNotice(
+        SyncRequest request, TandemBffPump device, TandemTimeResolver time) =>
+        ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } first && request.From < first
+            ? $"The pump holds no data before {first.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC; "
+              + "the requested window starts there."
+            : null;
 
     /// <summary>
     /// Selects the pump to follow: the one matching the configured serial number, or — when none is
