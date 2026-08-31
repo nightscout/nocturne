@@ -282,9 +282,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
         var resume = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
 
-        var start = request.To is null
-            ? ResumeFrom(request.From, resume)
-            : request.From ?? resume;
+        var start = ResumeFrom(request, resume);
 
         if (ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } min && min > start)
         {

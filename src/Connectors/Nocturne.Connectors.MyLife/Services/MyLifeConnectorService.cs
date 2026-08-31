@@ -125,17 +125,11 @@ public class MyLifeConnectorService(
             var needRecords = treatmentSubTypes.Any(t => activeTypes.Contains(t));
             var needStateSpans = activeTypes.Contains(SyncDataType.StateSpans);
 
-            // MyLife streams the source month by month, so every bound below has to be concrete:
-            // a resume point left open by this connector's floor becomes the default initial window.
-            var openEnded = request.To is null;
-            var glucoseSince = Bound(await CalculateSinceTimestampAsync(config));
-            var treatmentSince = Bound(await CalculateTreatmentSinceTimestampAsync(config));
-
-            DateTime Bound(DateTime? resumePoint)
-            {
-                var resume = resumePoint ?? DefaultInitialSyncFloor();
-                return openEnded ? ResumeFrom(request.From, resume) : request.From ?? resume;
-            }
+            // MyLife streams the source month by month, so every bound below has to be concrete.
+            var glucoseSince = ResumeFrom(
+                request, await CalculateSinceTimestampAsync(config) ?? DefaultInitialSyncFloor());
+            var treatmentSince = ResumeFrom(
+                request, await CalculateTreatmentSinceTimestampAsync(config) ?? DefaultInitialSyncFloor());
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var until = request.To ?? DateTime.UtcNow;
