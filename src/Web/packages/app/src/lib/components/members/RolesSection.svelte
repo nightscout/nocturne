@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
@@ -345,26 +345,18 @@
 </Dialog.Root>
 
 <!-- Delete Role Confirmation -->
-<AlertDialog.Root bind:open={isDeleteOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete role</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete the role "{deleteName}"?
-        {#if deleteMemberCount > 0}
-          This role is currently assigned to {deleteMemberCount} member{deleteMemberCount !== 1 ? "s" : ""}.
-          They will lose any permissions granted by this role.
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={handleDelete} disabled={isDeleting}>
-        {#if isDeleting}
-          <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-        {/if}
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={isDeleteOpen}
+  title="Delete role"
+  confirmLabel="Delete"
+  busy={isDeleting}
+  onConfirm={handleDelete}
+>
+  {#snippet description()}
+    Are you sure you want to delete the role "{deleteName}"?
+    {#if deleteMemberCount > 0}
+      This role is currently assigned to {deleteMemberCount} member{deleteMemberCount !== 1 ? "s" : ""}.
+      They will lose any permissions granted by this role.
+    {/if}
+  {/snippet}
+</ConfirmDialog>

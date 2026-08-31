@@ -6,7 +6,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Textarea } from "$lib/components/ui/textarea";
   import {
     Cpu,
@@ -616,29 +616,19 @@
   </Dialog.Root>
 
   <!-- Device Delete Confirmation -->
-  <AlertDialog.Root
+  <ConfirmDialog
     open={deleteId !== null}
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
+    title="Delete Device"
+    confirmLabel="Delete"
+    destructive
+    onConfirm={handleDelete}
   >
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete Device</AlertDialog.Title>
-        <AlertDialog.Description>
-          Are you sure you want to delete this device? This action cannot be
-          undone.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action
-          class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          onclick={handleDelete}
-        >
-          Delete
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Root>
+    {#snippet description()}
+      Are you sure you want to delete this device? This action cannot be
+      undone.
+    {/snippet}
+  </ConfirmDialog>
 {/if}

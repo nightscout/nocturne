@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Weight, Plus, Trash2, Loader2 } from "lucide-svelte";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -144,19 +144,16 @@
   </Card.Root>
 </div>
 
-<AlertDialog.Root open={pendingDelete !== null} onOpenChange={(o) => { if (!o) pendingDelete = null; }}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete this entry?</AlertDialog.Title>
-      <AlertDialog.Description>
-        {#if pendingDelete}
-          Remove the {pendingDelete.weightKg} kg entry from {formatMills(pendingDelete.mills)}.
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={confirmDelete}>Delete</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  open={pendingDelete !== null}
+  onOpenChange={(o) => { if (!o) pendingDelete = null; }}
+  title="Delete this entry?"
+  confirmLabel="Delete"
+  onConfirm={confirmDelete}
+>
+  {#snippet description()}
+    {#if pendingDelete}
+      Remove the {pendingDelete.weightKg} kg entry from {formatMills(pendingDelete.mills)}.
+    {/if}
+  {/snippet}
+</ConfirmDialog>

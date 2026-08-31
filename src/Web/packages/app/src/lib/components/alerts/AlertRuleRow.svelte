@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {
     Loader2,
@@ -168,37 +168,26 @@
              etc. stays available. -->
         {#if canManage && !rule.managedBy}
           <DropdownMenu.Separator />
-          <AlertDialog.Root>
-            <AlertDialog.Trigger>
-              {#snippet child({ props }: { props: Record<string, unknown> })}
-                <DropdownMenu.Item
-                  {...props}
-                  class="text-destructive"
-                  onSelect={(e: Event) => e.preventDefault()}
-                >
-                  <Trash2 class="h-4 w-4 mr-2" /> Delete
-                </DropdownMenu.Item>
-              {/snippet}
-            </AlertDialog.Trigger>
-            <AlertDialog.Content>
-              <AlertDialog.Header>
-                <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
-                <AlertDialog.Description>
-                  This rule will stop firing immediately. Existing alert history
-                  is preserved. This action cannot be undone.
-                </AlertDialog.Description>
-              </AlertDialog.Header>
-              <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onclick={onDelete} disabled={isDeleting}>
-                  {#if isDeleting}
-                    <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-                  {/if}
-                  Delete
-                </AlertDialog.Action>
-              </AlertDialog.Footer>
-            </AlertDialog.Content>
-          </AlertDialog.Root>
+          <ConfirmDialog
+            title={`Delete "${rule.name}"?`}
+            confirmLabel="Delete"
+            busy={isDeleting}
+            onConfirm={onDelete}
+          >
+            {#snippet trigger(props)}
+              <DropdownMenu.Item
+                {...props}
+                class="text-destructive"
+                onSelect={(e: Event) => e.preventDefault()}
+              >
+                <Trash2 class="h-4 w-4 mr-2" /> Delete
+              </DropdownMenu.Item>
+            {/snippet}
+            {#snippet description()}
+              This rule will stop firing immediately. Existing alert history
+              is preserved. This action cannot be undone.
+            {/snippet}
+          </ConfirmDialog>
         {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Root>

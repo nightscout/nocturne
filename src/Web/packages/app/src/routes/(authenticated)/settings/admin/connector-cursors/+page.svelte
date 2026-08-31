@@ -12,7 +12,7 @@
   import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import * as Alert from "$lib/components/ui/alert";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import {
     RefreshCw,
     Loader2,
@@ -429,29 +429,21 @@
 </div>
 
 <!-- Confirmation -->
-<AlertDialog.Root bind:open={confirmOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Reset cursors for {selectedTenant?.slug}?</AlertDialog.Title>
-      <AlertDialog.Description>
-        This re-pulls history for all {connectors?.connectors?.length ?? 0}
-        connector(s) configured on this tenant
-        {#if fromDate}
-          from {fromDate}
-        {:else}
-          from the beginning
-        {/if}. This starts a background job &mdash; you can watch per-connector
-        progress here or leave the page while it runs.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel disabled={resetting}>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={runReset} disabled={resetting}>
-        {#if resetting}
-          <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-        {/if}
-        Reset cursors
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={confirmOpen}
+  title="Reset cursors for {selectedTenant?.slug}?"
+  confirmLabel="Reset cursors"
+  busy={resetting}
+  onConfirm={runReset}
+>
+  {#snippet description()}
+    This re-pulls history for all {connectors?.connectors?.length ?? 0}
+    connector(s) configured on this tenant
+    {#if fromDate}
+      from {fromDate}
+    {:else}
+      from the beginning
+    {/if}. This starts a background job &mdash; you can watch per-connector
+    progress here or leave the page while it runs.
+  {/snippet}
+</ConfirmDialog>

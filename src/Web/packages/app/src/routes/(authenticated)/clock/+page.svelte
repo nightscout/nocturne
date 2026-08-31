@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
   import {
     Clock as ClockIcon,
@@ -261,26 +261,15 @@
 </div>
 
 <!-- Delete Confirmation Dialog -->
-<AlertDialog.Root bind:open={deleteDialogOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete Clock Face</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete "{clockFaceToDelete?.name}"? This action cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel disabled={deleting}>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        onclick={confirmDelete}
-        disabled={deleting}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-      >
-        {#if deleting}
-          <Loader2 class="mr-2 size-4 animate-spin" />
-        {/if}
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={deleteDialogOpen}
+  title="Delete Clock Face"
+  confirmLabel="Delete"
+  destructive
+  busy={deleting}
+  onConfirm={confirmDelete}
+>
+  {#snippet description()}
+    Are you sure you want to delete "{clockFaceToDelete?.name}"? This action cannot be undone.
+  {/snippet}
+</ConfirmDialog>

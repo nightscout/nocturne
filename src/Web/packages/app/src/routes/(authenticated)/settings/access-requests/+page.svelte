@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
@@ -295,41 +295,32 @@
                 Approve
               </Button>
 
-              <AlertDialog.Root>
-                <AlertDialog.Trigger>
-                  {#snippet child({ props }: { props: Record<string, unknown> })}
-                    <Button
-                      {...props}
-                      variant="outline"
-                      size="sm"
-                      class="text-destructive border-destructive/30 hover:bg-destructive/10"
-                      disabled={denyingId === subjectId}
-                    >
-                      {#if denyingId === subjectId}
-                        <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      {:else}
-                        <XCircle class="mr-1.5 h-3.5 w-3.5" />
-                      {/if}
-                      Deny
-                    </Button>
-                  {/snippet}
-                </AlertDialog.Trigger>
-                <AlertDialog.Content>
-                  <AlertDialog.Header>
-                    <AlertDialog.Title>Deny access request</AlertDialog.Title>
-                    <AlertDialog.Description>
-                      Deny the access request from {request.name ?? "this user"}?
-                      They will not be granted access to your data.
-                    </AlertDialog.Description>
-                  </AlertDialog.Header>
-                  <AlertDialog.Footer>
-                    <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                    <AlertDialog.Action onclick={() => handleDeny(subjectId)}>
-                      Deny
-                    </AlertDialog.Action>
-                  </AlertDialog.Footer>
-                </AlertDialog.Content>
-              </AlertDialog.Root>
+              <ConfirmDialog
+                title="Deny access request"
+                confirmLabel="Deny"
+                onConfirm={() => handleDeny(subjectId)}
+              >
+                {#snippet trigger(props)}
+                  <Button
+                    {...props}
+                    variant="outline"
+                    size="sm"
+                    class="text-destructive border-destructive/30 hover:bg-destructive/10"
+                    disabled={denyingId === subjectId}
+                  >
+                    {#if denyingId === subjectId}
+                      <Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    {:else}
+                      <XCircle class="mr-1.5 h-3.5 w-3.5" />
+                    {/if}
+                    Deny
+                  </Button>
+                {/snippet}
+                {#snippet description()}
+                  Deny the access request from {request.name ?? "this user"}?
+                  They will not be granted access to your data.
+                {/snippet}
+              </ConfirmDialog>
             </div>
           </Card.Content>
         </Card.Root>

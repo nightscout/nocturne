@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Globe, Plus, Trash2, Loader2, RefreshCw } from "lucide-svelte";
   import * as tz from "$api/generated/timezoneTimelines.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -192,35 +192,28 @@
   </Card.Root>
 </div>
 
-<AlertDialog.Root open={pendingDelete !== null} onOpenChange={(o) => { if (!o) pendingDelete = null; }}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete this entry?</AlertDialog.Title>
-      <AlertDialog.Description>
-        {#if pendingDelete}
-          Remove {pendingDelete.timezone} ({formatEffective(pendingDelete)}) from your timezone history.
-        {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={confirmDelete}>Delete</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  open={pendingDelete !== null}
+  onOpenChange={(o) => { if (!o) pendingDelete = null; }}
+  title="Delete this entry?"
+  confirmLabel="Delete"
+  onConfirm={confirmDelete}
+>
+  {#snippet description()}
+    {#if pendingDelete}
+      Remove {pendingDelete.timezone} ({formatEffective(pendingDelete)}) from your timezone history.
+    {/if}
+  {/snippet}
+</ConfirmDialog>
 
-<AlertDialog.Root bind:open={recorrectOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Re-import recent data?</AlertDialog.Title>
-      <AlertDialog.Description>
-        This re-pulls your recent Glooko data and re-corrects timestamps using your timezone history.
-        Existing readings are updated in place, not duplicated.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={runRecorrect}>Re-import</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<ConfirmDialog
+  bind:open={recorrectOpen}
+  title="Re-import recent data?"
+  confirmLabel="Re-import"
+  onConfirm={runRecorrect}
+>
+  {#snippet description()}
+    This re-pulls your recent Glooko data and re-corrects timestamps using your timezone history.
+    Existing readings are updated in place, not duplicated.
+  {/snippet}
+</ConfirmDialog>

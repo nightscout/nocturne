@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
@@ -204,42 +204,33 @@
                   <Pencil class="mr-1.5 h-3.5 w-3.5" />
                   Rename
                 </Button>
-                <AlertDialog.Root>
-                  <AlertDialog.Trigger>
-                    {#snippet child({ props }: { props: Record<string, unknown> })}
-                      <Button
-                        {...props}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        class="text-destructive border-destructive/30 hover:bg-destructive/10"
-                        disabled={isRevoking === device.id}
-                      >
-                        {#if isRevoking === device.id}
-                          <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        {:else}
-                          <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-                        {/if}
-                        Revoke
-                      </Button>
-                    {/snippet}
-                  </AlertDialog.Trigger>
-                  <AlertDialog.Content>
-                    <AlertDialog.Header>
-                      <AlertDialog.Title>Revoke device</AlertDialog.Title>
-                      <AlertDialog.Description>
-                        Revoke this device? It will stop receiving alerts until
-                        it re-registers.
-                      </AlertDialog.Description>
-                    </AlertDialog.Header>
-                    <AlertDialog.Footer>
-                      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                      <AlertDialog.Action onclick={() => handleRevoke(device.id!)}>
-                        Revoke
-                      </AlertDialog.Action>
-                    </AlertDialog.Footer>
-                  </AlertDialog.Content>
-                </AlertDialog.Root>
+                <ConfirmDialog
+                  title="Revoke device"
+                  confirmLabel="Revoke"
+                  onConfirm={() => handleRevoke(device.id!)}
+                >
+                  {#snippet trigger(props)}
+                    <Button
+                      {...props}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      class="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      disabled={isRevoking === device.id}
+                    >
+                      {#if isRevoking === device.id}
+                        <LoaderCircle class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      {:else}
+                        <Trash2 class="mr-1.5 h-3.5 w-3.5" />
+                      {/if}
+                      Revoke
+                    </Button>
+                  {/snippet}
+                  {#snippet description()}
+                    Revoke this device? It will stop receiving alerts until
+                    it re-registers.
+                  {/snippet}
+                </ConfirmDialog>
               {/if}
             </div>
           </div>
