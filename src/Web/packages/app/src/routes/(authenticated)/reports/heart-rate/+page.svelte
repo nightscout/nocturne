@@ -7,43 +7,18 @@
   } from "$lib/components/ui/card";
   import { HeartPulse, TrendingDown, TrendingUp, Calendar } from "lucide-svelte";
   import {
-    ACTOGRAM_PADDING_DAYS,
     Actogram,
-    buildDayRange,
     extentOf,
     pointsInRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_DAY, MS_PER_HOUR } from "$lib/components/actogram/actogram";
-  import { getActogramData } from "$api/actogram.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
+  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
 
   const VISIBLE_DAYS = 14;
 
-  const reportsParams = requireDateParamsContext(14);
-
-  /** Padded window the actogram loads, so its double-plot rows have context either side. */
-  const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-  });
-
-  const actogramResource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedRangeMillis.from,
-        to: paddedRangeMillis.to,
-      }),
-    { errorTitle: "Error Loading Heart Rate Report" }
-  );
-
-  const days = $derived(
-    buildDayRange(
-      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      reportsParams.dateRangeMillis.to
-    ).reverse()
-  );
+  const report = useActogramReport("Error Loading Heart Rate Report");
+  const { params: reportsParams, resource: actogramResource } = report;
 
   // HR data as ActogramPoints
   const hrPoints = $derived(
@@ -184,7 +159,7 @@
         <Actogram
           data={hrPoints}
           bgData={bgPoints}
-          {days}
+          days={report.days}
           thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}

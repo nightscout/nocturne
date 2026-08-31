@@ -19,15 +19,13 @@
     Activity,
   } from "lucide-svelte";
   import {
-    ACTOGRAM_PADDING_DAYS,
     Actogram,
     buildDayRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_DAY, MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
-  import { getActogramData } from "$api/actogram.remote";
+  import { MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
   import { getTrends } from "$api/generated/sleepReports.generated.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resolve } from "$app/paths";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
@@ -43,22 +41,8 @@
 
   const VISIBLE_DAYS = 14;
 
-  const reportsParams = requireDateParamsContext(14);
-
-  /** Padded window the actogram loads, so its double-plot rows have context either side. */
-  const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-  });
-
-  const actogramResource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedRangeMillis.from,
-        to: paddedRangeMillis.to,
-      }),
-    { errorTitle: "Error Loading Sleep Report" }
-  );
+  const report = useActogramReport("Error Loading Sleep Report");
+  const { params: reportsParams, resource: actogramResource } = report;
 
   /**
    * "All sources" is a frontend-only sentinel; omitted from the request when
@@ -97,18 +81,6 @@
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
     { errorTitle: "Error Loading Sleep Report" }
-  );
-
-  // Actogram rows run newest-first (most recent night on top), descending into
-  // the past. Anchored at the selected range end — never the future — so padding
-  // days after `to` are not shown as rows; the padded fetch window above still
-  // feeds each row's next-day double-plot. Extends ACTOGRAM_PADDING_DAYS before
-  // the range start for scroll-back context.
-  const days = $derived(
-    buildDayRange(
-      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      reportsParams.dateRangeMillis.to
-    ).reverse()
   );
 
   // Unpadded, user-selected day range for the composition chart — includes
@@ -415,7 +387,7 @@
           <Actogram
             data={sleepPoints}
             bgData={bgPoints}
-            {days}
+            days={report.days}
             thresholds={actogramResource.current?.thresholds}
             rowHeight={48}
             visibleCount={VISIBLE_DAYS}

@@ -7,50 +7,23 @@
   } from "$lib/components/ui/card";
   import { Footprints, TrendingUp, Calendar } from "lucide-svelte";
   import {
-    ACTOGRAM_PADDING_DAYS,
     Actogram,
-    buildDayRange,
     extentOf,
     pointsInRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_DAY, MS_PER_HOUR } from "$lib/components/actogram/actogram";
-  import { getActogramData } from "$api/actogram.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
+  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { computeDayTotals } from './steps.utils';
 
   const VISIBLE_DAYS = 14;
 
-  const reportsParams = requireDateParamsContext(14);
+  const report = useActogramReport("Error Loading Step Count Report");
+  const { params: reportsParams, resource: actogramResource } = report;
 
-  /** Padded window the actogram loads, so its double-plot rows have context either side. */
-  const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-  });
-
-  const actogramResource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedRangeMillis.from,
-        to: paddedRangeMillis.to,
-      }),
-    { errorTitle: "Error Loading Step Count Report" }
+  const dayTotals = $derived(
+    computeDayTotals(actogramResource.current?.stepCounts ?? [], report.days)
   );
-
-  // Rows run newest-first, anchored at the selected range end — never the future —
-  // so padding days after `to` are not shown as rows; the padded fetch window above
-  // still feeds each row's next-day double plot. Extends ACTOGRAM_PADDING_DAYS
-  // before the range start for scroll-back context.
-  const days = $derived(
-    buildDayRange(
-      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      reportsParams.dateRangeMillis.to
-    ).reverse()
-  );
-
-  const dayTotals = $derived(computeDayTotals(actogramResource.current?.stepCounts ?? [], days));
 
   function formatDate(date: Date): string {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -165,7 +138,7 @@
         <Actogram
           data={stepPoints}
           bgData={bgPoints}
-          {days}
+          days={report.days}
           thresholds={actogramResource.current?.thresholds}
           rowHeight={64}
           visibleCount={VISIBLE_DAYS}
