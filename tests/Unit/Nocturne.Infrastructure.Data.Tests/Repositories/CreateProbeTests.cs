@@ -186,6 +186,21 @@ public class CreateProbeTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateSettings_FallsBackToTheLegacyId_WhenNoRowHoldsTheKey()
+    {
+        var storedId = SeedSetting(Guid.CreateVersion7(), LegacyObjectId, "displayUnits", "\"mmol\"");
+
+        await _settings.CreateSettingsAsync(
+            [new Settings { Id = LegacyObjectId, Key = "glucoseUnits", Value = "mg/dl" }]);
+
+        var rows = await ReadSettingsAsync();
+        rows.Should().ContainSingle("the legacy id names an existing row even when its key is being renamed");
+        rows[0].Id.Should().Be(storedId);
+        rows[0].Key.Should().Be("glucoseUnits");
+        rows[0].Value.Should().Be("\"mg/dl\"");
+    }
+
+    [Fact]
     public async Task CreateSettings_InsertsANewKey()
     {
         SeedSetting(Guid.CreateVersion7(), null, "displayUnits", "\"mmol\"");
