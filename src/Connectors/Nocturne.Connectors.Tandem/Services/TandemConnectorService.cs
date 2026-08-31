@@ -98,7 +98,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
-            await SyncEventsAsync(region, pumperId, device, activeTypes, time, result, config, cancellationToken);
+            await SyncEventsAsync(
+                request, region, pumperId, device, activeTypes, time, result, config, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -130,12 +131,16 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     private async Task SyncEventsAsync(
-        TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
+        SyncRequest request, TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
         var end = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
-        var start = await ResolveStartAsync(config, device, time);
+        if (request.To is { } until && until < end)
+            end = until;
+
+        var start = await ResolveStartAsync(request, config, device, time, result);
         if (start >= end)
         {
             _logger.LogInformation(
@@ -262,20 +267,33 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     /// <summary>
-    /// Resolves the start of the sync window: the earliest catch-up point across glucose and
-    /// treatments (so no active data type is missed), never earlier than the pump's first event.
+    /// Resolves the start of the sync window from the caller's bound and the pump's own resume
+    /// point — the earliest catch-up point across glucose and treatments, so no active data type is
+    /// missed — never earlier than the pump's first event. The pump serves nothing below that
+    /// first event, so a caller's bound below it is clamped and the run says so.
     /// </summary>
     private async Task<DateTime> ResolveStartAsync(
-        TandemConnectorConfiguration config, TandemBffPump device, TandemTimeResolver time)
+        SyncRequest request, TandemConnectorConfiguration config, TandemBffPump device,
+        TandemTimeResolver time, SyncResult result)
     {
         var glucoseSince = await CalculateSinceTimestampAsync(config);
         var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config);
 
         var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
-        var start = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+        var resume = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
+
+        var start = request.To is null
+            ? ResumeFrom(request.From, resume)
+            : request.From ?? resume;
 
         if (ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } min && min > start)
+        {
+            if (request.From < min)
+                result.Message =
+                    $"The pump holds no data before {min:yyyy-MM-dd HH:mm} UTC; the requested window starts there.";
+
             start = min;
+        }
 
         return start;
     }

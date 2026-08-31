@@ -260,6 +260,74 @@ public class TandemE2eSyncTests
         fixture.Publisher.TempBasals.Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// A bounded re-import asks the pump for exactly the window it was given. The pump-logs
+    /// endpoint is day-granular, so each bound is the date it falls on.
+    /// </summary>
+    [Fact]
+    public async Task Explicit_request_window_bounds_the_pump_log_request()
+    {
+        var fixture = new Fixture();
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 16, 0, 0, 0),
+            To = Utc(2026, 5, 17, 0, 0, 0),
+            DataTypes = [SyncDataType.Glucose],
+        });
+
+        var pumpLogs = fixture.Requests.Should()
+            .ContainSingle(r => r.Path.Contains("/pump-logs/")).Subject;
+        pumpLogs.Path.Should().Contain("startDate=2026-05-16T00%3A00%3A00Z")
+            .And.Contain("endDate=2026-05-17T23%3A59%3A59Z");
+    }
+
+    /// <summary>
+    /// The pump serves nothing before its available range begins, so a repair request reaching
+    /// further back than that is clamped to it — and the run says so, rather than reporting a
+    /// success that quietly covered a different window than the one asked for.
+    /// </summary>
+    [Fact]
+    public async Task Request_below_the_pumps_available_range_is_clamped_and_reported()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 1, 1, 0, 0, 0),
+            DataTypes = [SyncDataType.Glucose],
+        });
+
+        var pumpLogs = fixture.Requests.Should()
+            .ContainSingle(r => r.Path.Contains("/pump-logs/")).Subject;
+        pumpLogs.Path.Should().Contain("startDate=2026-05-14T00%3A00%3A00Z");
+        result.Message.Should().Contain("2026-05-14 04:01",
+            "a window the pump cannot serve is a clamp the tenant has to be told about");
+    }
+
+    /// <summary>
+    /// On a background cycle the caller's bound is the glucose watermark, and it must not narrow
+    /// the window past a data type that fell behind: the pump is crawled once for every type, so
+    /// the earliest resume point across them is what the run owes.
+    /// </summary>
+    [Fact]
+    public async Task Background_bound_does_not_narrow_a_type_that_fell_behind()
+    {
+        var fixture = new Fixture(
+            latestEntry: Utc(2026, 5, 17, 0, 5, 0),
+            latestTreatment: Utc(2026, 5, 16, 0, 0, 0));
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 17, 0, 0, 0),
+            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses],
+        });
+
+        var pumpLogs = fixture.Requests.Should()
+            .ContainSingle(r => r.Path.Contains("/pump-logs/")).Subject;
+        pumpLogs.Path.Should().Contain("startDate=2026-05-15T00%3A00%3A00Z");
+    }
+
     private static DateTime Utc(int y, int mo, int d, int h, int mi, int s) =>
         new(y, mo, d, h, mi, s, DateTimeKind.Utc);
 
