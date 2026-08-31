@@ -443,6 +443,7 @@
     if (!value) addFoodMeal = null;
   }}
   onSubmit={handleAddFoodSubmit}
+  submitting={addFood.busy}
   totalCarbs={addFoodMeal?.totalCarbs ?? 0}
   unspecifiedCarbs={addFoodMeal?.unspecifiedCarbs ??
     addFoodMeal?.totalCarbs ??

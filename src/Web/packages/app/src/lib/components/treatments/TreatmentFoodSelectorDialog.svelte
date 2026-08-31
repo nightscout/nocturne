@@ -32,6 +32,8 @@
     totalCarbs?: number;
     /** Remaining unspecified carbs */
     unspecifiedCarbs?: number;
+    /** Whether the owner's `onSubmit` is still in flight. */
+    submitting?: boolean;
   }
 
   let {
@@ -40,6 +42,7 @@
     onSubmit,
     totalCarbs = 0,
     unspecifiedCarbs = 0,
+    submitting = false,
   }: Props = $props();
 
   // Food lists
@@ -433,6 +436,7 @@
       (isCreatingNew && foodName.trim()) ||
       (isLoggingWithoutSaving && entryCarbs > 0)) &&
       !isSubmitting &&
+      !submitting &&
       !foodSave.busy
   );
 </script>
@@ -525,9 +529,9 @@
         <Button
           type="button"
           onclick={handleLogWithoutSaving}
-          disabled={!canSubmit || isSubmitting}
+          disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting ? "Logging..." : "Log Carbs"}
+          {isSubmitting || submitting ? "Logging..." : "Log Carbs"}
         </Button>
       {:else if isCreatingNew}
         <!-- Creating new food - submit the create form -->
@@ -578,9 +582,9 @@
         <Button
           type="button"
           onclick={handleAddFood}
-          disabled={!canSubmit || isSubmitting}
+          disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting ? "Adding..." : "Add Food"}
+          {isSubmitting || submitting ? "Adding..." : "Add Food"}
         </Button>
       {:else}
         <!-- No selection yet -->

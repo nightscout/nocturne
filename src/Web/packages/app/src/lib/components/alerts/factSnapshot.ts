@@ -1,5 +1,6 @@
 import type { FactSnapshotPoint } from "$api-clients";
 import type { ConditionNode } from "./types";
+import { formatMinutesDuration } from "$lib/utils/duration";
 
 /**
  * Sparse-time-series lookup over the per-tick numeric fact snapshots emitted by
@@ -73,7 +74,7 @@ export function leafFactBinding(
         format: (v) => `${v.toFixed(2)} mg/dL/min`,
       };
     case "staleness":
-      return { factKey: "staleness_minutes", format: formatMinutes };
+      return { factKey: "staleness_minutes", format: formatMinutesDuration };
     case "iob":
       return { factKey: "iob", format: (v) => `${v.toFixed(2)} U` };
     case "cob":
@@ -85,9 +86,9 @@ export function leafFactBinding(
     case "sensor_age":
       return { factKey: "sensor_age_days", format: (v) => `${v.toFixed(1)}d` };
     case "loop_stale":
-      return { factKey: "loop_stale_minutes", format: formatMinutes };
+      return { factKey: "loop_stale_minutes", format: formatMinutesDuration };
     case "loop_enaction_stale":
-      return { factKey: "loop_enaction_stale_minutes", format: formatMinutes };
+      return { factKey: "loop_enaction_stale_minutes", format: formatMinutesDuration };
     case "pump_battery":
       return {
         factKey: "pump_battery_percent",
@@ -109,22 +110,15 @@ export function leafFactBinding(
     case "sensitivity_ratio":
       return { factKey: "sensitivity_ratio", format: (v) => v.toFixed(2) };
     case "time_since_last_carb":
-      return { factKey: "time_since_last_carb_minutes", format: formatMinutes };
+      return { factKey: "time_since_last_carb_minutes", format: formatMinutesDuration };
     case "time_since_last_bolus":
       return {
         factKey: "time_since_last_bolus_minutes",
-        format: formatMinutes,
+        format: formatMinutesDuration,
       };
     default:
       return null;
   }
-}
-
-function formatMinutes(v: number): string {
-  const m = Math.round(v);
-  if (m >= 60 && m % 60 === 0) return `${m / 60}h`;
-  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
-  return `${m}m`;
 }
 
 function formatHours(v: number): string {

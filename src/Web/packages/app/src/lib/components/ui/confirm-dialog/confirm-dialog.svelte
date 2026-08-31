@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { buttonVariants } from "$lib/components/ui/button";
   import { Loader2 } from "lucide-svelte";
 
   interface Props {
@@ -24,7 +25,7 @@
     cancelLabel?: string;
     /** Colours the confirm button as a destructive action. */
     destructive?: boolean;
-    /** Spins the confirm button and blocks both buttons. */
+    /** Spins and disables the confirm button. */
     busy?: boolean;
     onConfirm?: () => void;
   }
@@ -76,13 +77,11 @@
       {#if footer}
         {@render footer()}
       {:else}
-        <AlertDialog.Cancel disabled={busy}>{cancelLabel}</AlertDialog.Cancel>
+        <AlertDialog.Cancel>{cancelLabel}</AlertDialog.Cancel>
         <AlertDialog.Action
           onclick={onConfirm}
           disabled={busy}
-          class={destructive
-            ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            : undefined}
+          class={destructive ? buttonVariants({ variant: "destructive" }) : undefined}
         >
           {#if busy}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
