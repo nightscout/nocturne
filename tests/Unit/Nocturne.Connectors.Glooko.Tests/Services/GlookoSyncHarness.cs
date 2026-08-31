@@ -193,7 +193,7 @@ internal sealed class GlookoEndpointHandler(
     bool withHistoryMeals = false) : HttpMessageHandler
 {
     private readonly Func<int, int> _recordsPerWindow = recordsPerWindow ?? (_ => 1);
-    private readonly List<string> _windows = [];
+    private readonly List<(string Start, string End)> _windows = [];
     private readonly List<string> _requested = [];
     private readonly Lock _gate = new();
     private bool _forbiddenIssued;
@@ -204,6 +204,12 @@ internal sealed class GlookoEndpointHandler(
     public int WindowCount
     {
         get { lock (_gate) return _windows.Count; }
+    }
+
+    /// <summary>The date windows asked for, in the order the sync first asked for them.</summary>
+    public IReadOnlyList<(string Start, string End)> Windows
+    {
+        get { lock (_gate) return [.. _windows]; }
     }
 
     /// <summary>How many times an endpoint was asked, over every date window and sync pass.</summary>
@@ -289,7 +295,8 @@ internal sealed class GlookoEndpointHandler(
 
     private Window ResolveWindow(string query)
     {
-        var startDate = QueryValue(query, "startDate");
+        var startDate = QueryValue(query, "startDate") ?? string.Empty;
+        var endDate = QueryValue(query, "endDate") ?? string.Empty;
         var start = DateTime.TryParse(startDate, null, System.Globalization.DateTimeStyles.AdjustToUniversal
             | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
             ? parsed
@@ -298,10 +305,10 @@ internal sealed class GlookoEndpointHandler(
         int ordinal;
         lock (_gate)
         {
-            ordinal = _windows.IndexOf(startDate ?? string.Empty);
+            ordinal = _windows.FindIndex(window => window.Start == startDate);
             if (ordinal < 0)
             {
-                _windows.Add(startDate ?? string.Empty);
+                _windows.Add((startDate, endDate));
                 ordinal = _windows.Count - 1;
             }
         }

@@ -289,7 +289,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var from = request.From.HasValue
                 ? context.TimeMapper.ToGlookoTime(request.From.Value).AddDays(-1)
                 : context.TimeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6)).AddDays(-1);
-            var to = context.TimeMapper.ToGlookoTime(DateTime.UtcNow).AddDays(1);
+            var to = context.TimeMapper.ToGlookoTime(request.To ?? DateTime.UtcNow).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, GlookoConstants.SyncChunkSize).ToList();
 
