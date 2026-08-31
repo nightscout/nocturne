@@ -12,7 +12,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
-  import { formatDuration } from "$lib/components/alerts/alertTime";
+  import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
 
@@ -137,7 +137,7 @@
         {/if}
       </div>
       <div class="text-xs text-muted-foreground">
-        {formatDateTimeCompact(h.startedAt) || "—"}{#if h.endedAt} → {formatDateTimeCompact(h.endedAt) || "—"}{/if} · {formatDuration(h.startedAt, h.endedAt) || "—"}
+        {formatDateTimeCompact(h.startedAt) || "—"}{#if h.endedAt} → {formatDateTimeCompact(h.endedAt) || "—"}{/if} · {formatElapsedDuration(h.startedAt, h.endedAt, "—")}
       </div>
     </div>
   </div>

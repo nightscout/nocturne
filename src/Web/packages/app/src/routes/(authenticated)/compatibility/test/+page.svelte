@@ -2,6 +2,7 @@
   import { runCompatibilityTest } from "./data.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { createPatch } from "diff";
+  import { formatElapsedMs } from "$lib/utils/duration";
 
   // UI Components
   import { Button } from "$lib/components/ui/button";
@@ -381,12 +382,6 @@
       isLoading = false;
     }
   }
-
-  function formatDuration(ms: number | undefined) {
-    if (ms === undefined) return "N/A";
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
 </script>
 
 <div class="@container container mx-auto p-6 space-y-6">
@@ -587,7 +582,7 @@
         <Card.Content class="pt-6">
           <p class="text-sm text-muted-foreground mb-1">Nightscout Time</p>
           <p class="text-2xl font-bold">
-            {formatDuration(result.nightscoutResponseTimeMs)}
+            {formatElapsedMs(result.nightscoutResponseTimeMs)}
           </p>
         </Card.Content>
       </Card.Root>
@@ -596,7 +591,7 @@
         <Card.Content class="pt-6">
           <p class="text-sm text-muted-foreground mb-1">Nocturne Time</p>
           <p class="text-2xl font-bold">
-            {formatDuration(result.nocturneResponseTimeMs)}
+            {formatElapsedMs(result.nocturneResponseTimeMs)}
           </p>
         </Card.Content>
       </Card.Root>

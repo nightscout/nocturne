@@ -11,7 +11,7 @@
   import { resolve } from "$app/paths";
   import { SLEEP_COMPOSITION_SEGMENTS } from "$lib/utils/sleep-stages";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
-  import { formatMinutesDuration } from "$lib/utils/sleep-format";
+  import { formatMinutesDuration } from "$lib/utils/duration";
   import type { SleepNightSummary, SleepStageReferenceRangeSet } from "$lib/api";
 
   interface Props {

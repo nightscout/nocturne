@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { getAnalysisDetail } from "../data.remote";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatElapsedMs } from "$lib/utils/duration";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
 
   // Get ID from route params (guaranteed to exist in [id] route)
@@ -31,12 +32,6 @@
     return types[type] || "Unknown";
   }
 
-
-  // Format duration
-  function formatDuration(ms: number) {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
 
   // Group discrepancies by severity
   const discrepanciesBySeverity = $derived({
@@ -138,19 +133,19 @@
         <div class="flex justify-between items-center">
           <span class="text-gray-600 dark:text-gray-400">Nightscout</span>
           <span class="font-mono font-semibold">
-            {formatDuration(analysis.nightscoutResponseTimeMs || 0)}
+            {formatElapsedMs(analysis.nightscoutResponseTimeMs || 0)}
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-gray-600 dark:text-gray-400">Nocturne</span>
           <span class="font-mono font-semibold">
-            {formatDuration(analysis.nocturneResponseTimeMs || 0)}
+            {formatElapsedMs(analysis.nocturneResponseTimeMs || 0)}
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-gray-600 dark:text-gray-400">Total Processing</span>
           <span class="font-mono font-semibold">
-            {formatDuration(analysis.totalProcessingTimeMs || 0)}
+            {formatElapsedMs(analysis.totalProcessingTimeMs || 0)}
           </span>
         </div>
         {#if analysis.nightscoutResponseTimeMs && analysis.nocturneResponseTimeMs}
@@ -160,7 +155,7 @@
           <div class="pt-2 border-t dark:border-gray-700">
             <span class="text-gray-600 dark:text-gray-400">Faster</span>
             <span class="ml-2 font-semibold text-blue-600">
-              {faster} by {formatDuration(Math.abs(diff))}
+              {faster} by {formatElapsedMs(Math.abs(diff))}
             </span>
           </div>
         {/if}

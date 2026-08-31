@@ -11,6 +11,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Clock } from "lucide-svelte";
+  import { formatElapsedDuration } from "$lib/utils/duration";
 
   interface Props {
     history: AlertHistoryResponse | null;
@@ -58,20 +59,6 @@
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-
-  function formatDuration(
-    start: Date | string | undefined,
-    end: Date | string | undefined,
-  ): string {
-    if (!start || !end) return "-";
-    const s = typeof start === "string" ? new Date(start) : start;
-    const e = typeof end === "string" ? new Date(end) : end;
-    const diffMin = Math.round((e.getTime() - s.getTime()) / 60000);
-    if (diffMin < 60) return `${diffMin}m`;
-    const h = Math.floor(diffMin / 60);
-    const m = diffMin % 60;
-    return `${h}h ${m}m`;
   }
 </script>
 
@@ -123,7 +110,7 @@
                   {formatDate(item.startedAt)}
                 </td>
                 <td class="py-2 pr-4 text-muted-foreground">
-                  {formatDuration(item.startedAt, item.endedAt)}
+                  {formatElapsedDuration(item.startedAt, item.endedAt, "-")}
                 </td>
                 <td class="py-2 text-muted-foreground">
                   {#if item.acknowledgedAt}

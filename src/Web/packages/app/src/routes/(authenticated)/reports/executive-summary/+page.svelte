@@ -27,6 +27,7 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
   const bgOr = (mgdl: number | undefined | null) =>
@@ -47,14 +48,6 @@
   const analysis = $derived(reportsResource.current?.analysis);
   const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
   const dayCount = $derived(reportsResource.date.dayCount);
-
-  function formatDuration(minutes: number): string {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  }
 </script>
 
 <svelte:head>
@@ -154,7 +147,7 @@
                 <div class="flex flex-col">
                   <span class="text-green-600 font-medium">In Range</span>
                   <span>
-                    {formatDuration(
+                    {formatMinutesDuration(
                       (durations?.target ?? 0) / dayCount
                     )}
                   </span>
@@ -162,7 +155,7 @@
                 <div class="flex flex-col">
                   <span class="text-red-600 font-medium">Low</span>
                   <span>
-                    {formatDuration(
+                    {formatMinutesDuration(
                       ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
                         dayCount
                     )}
@@ -171,7 +164,7 @@
                 <div class="flex flex-col">
                   <span class="text-orange-500 font-medium">High</span>
                   <span>
-                    {formatDuration(
+                    {formatMinutesDuration(
                       ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
                         dayCount
                     )}

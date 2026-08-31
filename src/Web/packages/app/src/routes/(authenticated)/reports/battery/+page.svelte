@@ -26,6 +26,7 @@
   import { getBatteryReportData } from "$api/battery.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)
@@ -57,15 +58,8 @@
     batteryResource.refresh();
   }
 
-  // Helper functions
-  function formatDuration(minutes?: number | null): string {
-    if (!minutes) return "N/A";
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  }
+  const formatDuration = (minutes?: number | null) =>
+    minutes ? formatMinutesDuration(minutes) : "N/A";
 
   function formatDateShort(mills?: number | null): string {
     if (!mills) return "Unknown";
