@@ -266,12 +266,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<TModel> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted {typeof(TModel).Name} {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
+        var entity = await ctx.RestoreDeletedAsync<TEntity>(id, typeof(TModel).Name, ct);
         // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
         var restored = ToDomain(entity);
         await RaiseBroadcastAsync([restored], [], [], origin, ct);
@@ -282,14 +277,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        var restored = entities.Select(ToDomain).ToList();
+        var restored = (await ctx.RestoreDeletedAsync<TEntity>(ids, ct)).Select(ToDomain).ToList();
         await RaiseBroadcastAsync(restored, [], [], origin, ct);
         return restored;
     }
@@ -298,22 +286,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public async Task<IEnumerable<TModel>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(ToDomain);
+        return (await ctx.GetDeletedAsync<TEntity>(limit, offset, ct)).Select(ToDomain);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountDeletedAsync" />
     public async Task<int> CountDeletedAsync(CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
+        return await ctx.CountDeletedAsync<TEntity>(ct);
     }
 
     /// <summary>
@@ -343,8 +323,26 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(
-            ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, $"legacy_id={legacyId}", ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx, ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), $"legacy_id={legacyId}", origin, ct);
+    }
+
+    /// <summary>
+    /// Soft-deletes <paramref name="rows"/> through the audited helper and broadcasts the removals.
+    /// Exposed so subclasses' type-specific audited deletes (e.g. DeleteBySyncIdentifierAsync) get the
+    /// same audit rows, dedup discriminator and delete events as
+    /// <see cref="DeleteByLegacyIdAsync"/> rather than hand-rolling the pair.
+    /// </summary>
+    /// <param name="ctx">The tenant-scoped context <paramref name="rows"/> was built on.</param>
+    /// <param name="rows">The rows to soft-delete.</param>
+    /// <param name="scope">The key the delete was issued against, recorded on the audit row.</param>
+    /// <param name="origin">Write origin; only <see cref="WriteOrigin.Live"/> broadcasts.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of rows soft-deleted.</returns>
+    protected async Task<int> AuditedSoftDeleteAndBroadcastAsync(
+        NocturneDbContext ctx, IQueryable<TEntity> rows, string scope, WriteOrigin origin, CancellationToken ct)
+    {
+        var result = await ctx.AuditedSoftDeleteWithEntitiesAsync(rows, AuditContext, scope, ct);
 
         if (result.Collapsed)
             await RaiseBulkDeleteBroadcastAsync(result.Count, origin, ct);

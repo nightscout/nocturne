@@ -250,12 +250,7 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<TempBasal> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted TempBasal {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
+        var entity = await ctx.RestoreDeletedAsync<TempBasalEntity>(id, nameof(TempBasal), ct);
         // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
         var restored = TempBasalMapper.ToDomainModel(entity);
         await RaiseBroadcastAsync([restored], [], [], origin, ct);
@@ -266,14 +261,8 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        var restored = entities.Select(TempBasalMapper.ToDomainModel).ToList();
+        var restored = (await ctx.RestoreDeletedAsync<TempBasalEntity>(ids, ct))
+            .Select(TempBasalMapper.ToDomainModel).ToList();
         await RaiseBroadcastAsync(restored, [], [], origin, ct);
         return restored;
     }
@@ -282,22 +271,15 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<IEnumerable<TempBasal>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel);
+        return (await ctx.GetDeletedAsync<TempBasalEntity>(limit, offset, ct))
+            .Select(TempBasalMapper.ToDomainModel);
     }
 
     /// <inheritdoc />
     public async Task<int> CountDeletedAsync(CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
+        return await ctx.CountDeletedAsync<TempBasalEntity>(ct);
     }
 
     /// <summary>
