@@ -164,8 +164,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var window = request.To is null
             ? (PublishWindow?)null
             : new PublishWindow(start.Date, end.Date.AddDays(1).AddTicks(-1));
-        var first = ParseWallClockUtc(device.AvailableDataRange?.Start, time);
-        var fetchFrom = window is null ? start : Later(start.Date.AddDays(-1), first);
+        var fetchFrom = window is null ? start : Later(start.Date.AddDays(-1), FirstEvent(device, time));
         var fetchTo = window is null ? end : Earlier(end.AddDays(1), ceiling);
 
         // LID_DAILY_BASAL (device status) is not in the backend's default event filter, so the full
@@ -227,6 +226,10 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     {
         internal bool Holds(DateTime at) => at >= From && at <= Through;
     }
+
+    /// <summary>The oldest event the pump still holds, or <c>null</c> when it does not say.</summary>
+    private static DateTime? FirstEvent(TandemBffPump device, TandemTimeResolver time) =>
+        ParseWallClockUtc(device.AvailableDataRange?.Start, time);
 
     private static DateTime Later(DateTime value, DateTime? floor) =>
         floor is { } bound && bound > value ? bound : value;
@@ -347,7 +350,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         // The pump's own range is how far back this source goes, and the floor a range naming no
         // lower bound resolves to — named, rather than left to the clamp below to arrive at.
-        var first = ParseWallClockUtc(device.AvailableDataRange?.Start, time);
+        var first = FirstEvent(device, time);
         var start = ResumeFrom(request, resume, first ?? DefaultInitialSyncFloor());
 
         return Later(start, first);
@@ -360,7 +363,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     /// </summary>
     private static string? ClampNotice(
         SyncRequest request, TandemBffPump device, TandemTimeResolver time) =>
-        ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } first && request.From < first
+        FirstEvent(device, time) is { } first && request.From < first
             ? $"The pump holds no data before {first.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC; "
               + "the sync started there."
             : null;
