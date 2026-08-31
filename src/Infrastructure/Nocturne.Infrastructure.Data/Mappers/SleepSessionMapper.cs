@@ -14,9 +14,7 @@ public static class SleepSessionMapper
     /// </summary>
     public static SleepSessionEntity ToEntity(SleepSession session, Guid tenantId)
     {
-        var entityId = string.IsNullOrEmpty(session.Id)
-            ? Guid.CreateVersion7()
-            : MapperHelpers.ParseIdToGuid(session.Id);
+        var entityId = MapperHelpers.ParseIdToGuid(session.Id);
 
         var entity = new SleepSessionEntity
         {

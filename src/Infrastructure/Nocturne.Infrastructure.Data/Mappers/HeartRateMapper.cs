@@ -16,9 +16,7 @@ public static class HeartRateMapper
     {
         return new HeartRateEntity
         {
-            Id = string.IsNullOrEmpty(heartRate.Id)
-                ? Guid.CreateVersion7()
-                : MapperHelpers.ParseIdToGuid(heartRate.Id),
+            Id = MapperHelpers.ParseIdToGuid(heartRate.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(heartRate.Id) ? heartRate.Id : null,
             Timestamp = heartRate.Timestamp,
             Bpm = heartRate.Bpm,

@@ -16,9 +16,7 @@ public static class StepCountMapper
     {
         return new StepCountEntity
         {
-            Id = string.IsNullOrEmpty(stepCount.Id)
-                ? Guid.CreateVersion7()
-                : MapperHelpers.ParseIdToGuid(stepCount.Id),
+            Id = MapperHelpers.ParseIdToGuid(stepCount.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(stepCount.Id) ? stepCount.Id : null,
             Timestamp = stepCount.Timestamp,
             Metric = stepCount.Metric,
