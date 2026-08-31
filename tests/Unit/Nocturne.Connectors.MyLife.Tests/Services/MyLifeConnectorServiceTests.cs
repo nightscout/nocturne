@@ -1,15 +1,10 @@
 using System.Net;
-using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Nocturne.Connectors.Core.Models;
-using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.MyLife.Configurations;
-using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Connectors.MyLife.Services;
-using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 
 namespace Nocturne.Connectors.MyLife.Tests.Services;
@@ -23,14 +18,12 @@ namespace Nocturne.Connectors.MyLife.Tests.Services;
 /// </summary>
 public class MyLifeConnectorServiceTests
 {
-    private const string ServiceUrl = "https://svc.example";
-
     [Fact]
     public async Task SyncDataAsync_EstablishesSession_WithValidCredentials()
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: true));
-        var (service, sessionCache, _) = BuildService(http, tenantId);
+        var (service, sessionCache, _) = MyLifeSyncHarness.BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -46,7 +39,7 @@ public class MyLifeConnectorServiceTests
         var session = sessionCache.Get(tenantId);
         session.Should().NotBeNull("the connector must populate the session cache via the token provider");
         session!.AuthToken.Should().Be("tok-123");
-        session.ServiceUrl.Should().Be(ServiceUrl);
+        session.ServiceUrl.Should().Be(MyLifeSyncHarness.ServiceUrl);
         session.PatientId.Should().Be("patient-1");
     }
 
@@ -55,7 +48,7 @@ public class MyLifeConnectorServiceTests
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: false));
-        var (service, sessionCache, _) = BuildService(http, tenantId);
+        var (service, sessionCache, _) = MyLifeSyncHarness.BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -85,7 +78,7 @@ public class MyLifeConnectorServiceTests
     {
         var tenantId = Guid.NewGuid();
         using var http = new HttpClient(new SoapStubHandler(loginSucceeds: true, syncStatus: syncStatus));
-        var (service, _, tokenProvider) = BuildService(http, tenantId);
+        var (service, _, tokenProvider) = MyLifeSyncHarness.BuildService(http, tenantId);
 
         var config = new MyLifeConnectorConfiguration
         {
@@ -122,7 +115,7 @@ public class MyLifeConnectorServiceTests
                 UploadDateTime = 1767261600000L * 10_000
             }
         };
-        var (service, _, _) = BuildService(http, tenantId,
+        var (service, _, _) = MyLifeSyncHarness.BuildService(http, tenantId,
             soapClient => new StubPumpSettingsSyncService(soapClient, readouts));
 
         var config = new MyLifeConnectorConfiguration
@@ -139,43 +132,6 @@ public class MyLifeConnectorServiceTests
         result.Errors.Should().Contain("StateSpans publish failed");
     }
 
-    private static (MyLifeConnectorService Service, IMyLifeSessionCache SessionCache,
-        MyLifeAuthTokenProvider TokenProvider) BuildService(
-        HttpClient http, Guid tenantId, Func<MyLifeSoapClient, MyLifeSyncService>? syncServiceFactory = null)
-    {
-        var resolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
-
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(tenantId);
-
-        var soapClient = new MyLifeSoapClient(http, NullLogger<MyLifeSoapClient>.Instance);
-        var sessionCache = new MyLifeSessionCache();
-        var tokenProvider = new MyLifeAuthTokenProvider(
-            http,
-            new ConnectorTokenCache(),
-            resolver,
-            tenantAccessor.Object,
-            soapClient,
-            sessionCache,
-            NullLogger<MyLifeAuthTokenProvider>.Instance);
-        var syncService = syncServiceFactory?.Invoke(soapClient)
-            ?? new MyLifeSyncService(soapClient, NullLogger<MyLifeSyncService>.Instance);
-
-        var service = new MyLifeConnectorService(
-            http,
-            resolver,
-            NullLogger<MyLifeConnectorService>.Instance,
-            tokenProvider,
-            new MyLifeEventProcessor(),
-            sessionCache,
-            tenantAccessor.Object,
-            syncService,
-            publisher: null);
-
-        return (service, sessionCache, tokenProvider);
-    }
-
     /// <summary>
     /// Returns fixed pump-settings readouts, bypassing the encrypted-archive fetch.
     /// </summary>
@@ -186,52 +142,5 @@ public class MyLifeConnectorServiceTests
         public override Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsAsync(
             string serviceUrl, string authToken, string patientId, CancellationToken cancellationToken)
             => Task.FromResult(readouts);
-    }
-
-    /// <summary>
-    /// Stubs the MyLife SOAP endpoints, routing by SOAPAction. Returns a valid location, login, and
-    /// single-patient list; events and pump-settings return no result element so the sync completes
-    /// with no data (and never reaches the archive-decryption path).
-    /// </summary>
-    private sealed class SoapStubHandler(
-        bool loginSucceeds, HttpStatusCode syncStatus = HttpStatusCode.OK) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var action = request.Headers.TryGetValues("SOAPAction", out var values)
-                ? values.FirstOrDefault() ?? string.Empty
-                : string.Empty;
-
-            var (status, body) = Respond(action);
-            return Task.FromResult(new HttpResponseMessage(status)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "text/xml")
-            });
-        }
-
-        private (HttpStatusCode Status, string Body) Respond(string action)
-        {
-            if (action.Contains("GetUser20"))
-                return (HttpStatusCode.OK, Envelope("GetUser20Result",
-                    $"{{\"Country20\":{{\"ServiceUrl\":\"{ServiceUrl}\",\"RestServiceUrl\":\"https://rest.example\"}}}}"));
-
-            if (action.Contains("SyncPatientList"))
-                return (HttpStatusCode.OK, Envelope("SyncPatientListResult",
-                    "[{\"OnlinePatientId\":\"patient-1\",\"EmailNewPatient\":\"user@example.com\"}]"));
-
-            if (action.Contains("Login"))
-                return loginSucceeds
-                    ? (HttpStatusCode.OK, Envelope("LoginResult", "{\"UserId\":\"user-1\",\"AuthToken\":\"tok-123\"}"))
-                    : (HttpStatusCode.Unauthorized, string.Empty);
-
-            // SyncEvents / SyncPumpSettings: no result element → treated as "no data".
-            return (syncStatus,
-                "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body/></s:Envelope>");
-        }
-
-        private static string Envelope(string element, string innerJson) =>
-            "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>"
-            + $"<{element}>{innerJson}</{element}></s:Body></s:Envelope>";
     }
 }
