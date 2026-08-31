@@ -64,116 +64,112 @@
   />
 </svelte:head>
 
-{#await actogramResource then actogramData}
-  {#if actogramData}
-  <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-    <!-- Header -->
-    <div>
-      <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
-      <p class="text-muted-foreground">
-        Daily step patterns with glucose overlay
-      </p>
-    </div>
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
+    <p class="text-muted-foreground">
+      Daily step patterns with glucose overlay
+    </p>
+  </div>
 
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Total Steps
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <Footprints class="h-5 w-5 text-primary" />
-            <span class="text-2xl font-bold tabular-nums">
-              {totalSteps.toLocaleString()}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Daily Average
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <TrendingUp class="h-5 w-5 text-primary" />
-            <span class="text-2xl font-bold tabular-nums">
-              {dailyAverage.toLocaleString()}
-            </span>
-            <span class="text-sm text-muted-foreground">steps/day</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Period
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <Calendar class="h-5 w-5 text-muted-foreground" />
-            <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
-            <span class="text-sm text-muted-foreground">days</span>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Actogram -->
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
     <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Footprints class="h-5 w-5 text-muted-foreground" />
-          Step Count Actogram
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Total Steps
         </CardTitle>
       </CardHeader>
-      <CardContent class="w-full overflow-x-auto print:overflow-visible">
-        <Actogram
-          data={stepPoints}
-          bgData={bgPoints}
-          days={report.days}
-          thresholds={actogramResource.current?.thresholds}
-          rowHeight={64}
-          visibleCount={VISIBLE_DAYS}
-        >
-          {#snippet rowLabel({ day })}
-            <div class="text-right pr-2">
-              <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
-              <div class="text-xs font-medium tabular-nums">
-                {(dayTotals.get(day.getTime()) ?? 0).toLocaleString()} <span class="text-muted-foreground font-normal">steps</span>
-              </div>
-            </div>
-          {/snippet}
-          {#snippet tooltipValue({ point })}
-            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
-            <span class="text-muted-foreground">Steps</span>
-            <span class="ml-auto font-mono font-medium tabular-nums">{steps.toLocaleString()}</span>
-          {/snippet}
-          {#snippet row(ctx: ActogramRowContext)}
-            {#each ctx.data as { point, hoursFromStart, isExtended }}
-              {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
-              {@const barHeight = (steps / barScale) * ctx.height}
-              {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
-              <rect
-                {x}
-                y={ctx.height - barHeight}
-                width={3}
-                height={barHeight}
-                fill="var(--primary)"
-                opacity={isExtended ? 0.35 : 0.8}
-              />
-            {/each}
-          {/snippet}
-        </Actogram>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <Footprints class="h-5 w-5 text-primary" />
+          <span class="text-2xl font-bold tabular-nums">
+            {totalSteps.toLocaleString()}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Daily Average
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <TrendingUp class="h-5 w-5 text-primary" />
+          <span class="text-2xl font-bold tabular-nums">
+            {dailyAverage.toLocaleString()}
+          </span>
+          <span class="text-sm text-muted-foreground">steps/day</span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Period
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <Calendar class="h-5 w-5 text-muted-foreground" />
+          <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
+          <span class="text-sm text-muted-foreground">days</span>
+        </div>
       </CardContent>
     </Card>
   </div>
-  {/if}
-{/await}
+
+  <!-- Actogram -->
+  <Card>
+    <CardHeader>
+      <CardTitle class="flex items-center gap-2">
+        <Footprints class="h-5 w-5 text-muted-foreground" />
+        Step Count Actogram
+      </CardTitle>
+    </CardHeader>
+    <CardContent class="w-full overflow-x-auto print:overflow-visible">
+      <Actogram
+        data={stepPoints}
+        bgData={bgPoints}
+        days={report.days}
+        thresholds={actogramResource.current?.thresholds}
+        rowHeight={64}
+        visibleCount={VISIBLE_DAYS}
+      >
+        {#snippet rowLabel({ day })}
+          <div class="text-right pr-2">
+            <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
+            <div class="text-xs font-medium tabular-nums">
+              {(dayTotals.get(day.getTime()) ?? 0).toLocaleString()} <span class="text-muted-foreground font-normal">steps</span>
+            </div>
+          </div>
+        {/snippet}
+        {#snippet tooltipValue({ point })}
+          {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+          <span class="text-muted-foreground">Steps</span>
+          <span class="ml-auto font-mono font-medium tabular-nums">{steps.toLocaleString()}</span>
+        {/snippet}
+        {#snippet row(ctx: ActogramRowContext)}
+          {#each ctx.data as { point, hoursFromStart, isExtended }}
+            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+            {@const barHeight = (steps / barScale) * ctx.height}
+            {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+            <rect
+              {x}
+              y={ctx.height - barHeight}
+              width={3}
+              height={barHeight}
+              fill="var(--primary)"
+              opacity={isExtended ? 0.35 : 0.8}
+            />
+          {/each}
+        {/snippet}
+      </Actogram>
+    </CardContent>
+  </Card>
+</div>

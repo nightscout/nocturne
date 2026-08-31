@@ -7,11 +7,9 @@ import { contextResource } from "./resource-context.svelte";
 /**
  * The date range, fetch and row list every actogram-backed report needs.
  *
- * The fetch window is padded either side of the picker range so each row's
- * double plot has a next day to draw. Rows run newest-first and stop at the
- * range end — never the future — so the padding after `to` feeds the plots
- * without appearing as rows of its own, while the padding before `from` is
- * there to scroll back into.
+ * Rows run newest-first and stop at the picker's range end, so the padding
+ * after `to` feeds each row's next-day double plot without appearing as a row
+ * of its own.
  */
 export function useActogramReport(errorTitle: string, defaultDays = 14) {
   const params = requireDateParamsContext(defaultDays);

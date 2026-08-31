@@ -15,11 +15,10 @@ export interface ToastSubmission {
 /**
  * Failure handling for an action that reports through a toast.
  *
- * The sibling of {@link useSubmission}, which answers with a string for a
- * surface that has somewhere to render one. `fallback` names the action the
- * user took ("Failed to delete bolus") and is what the toast says when the
- * server sent nothing a person can act on; a 4xx that carries a reason shows
- * that reason instead. A second call while one is in flight is ignored.
+ * `fallback` names the action the user took ("Failed to delete bolus") and is
+ * what the toast says when the server sent nothing a person can act on; a 4xx
+ * carrying a reason shows that reason instead. A call made while one is still
+ * in flight is ignored.
  */
 export function useToastSubmission(fallback: string): ToastSubmission {
   const submission = useSubmission({ fallback });

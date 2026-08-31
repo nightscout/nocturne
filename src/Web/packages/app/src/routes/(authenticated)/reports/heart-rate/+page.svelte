@@ -70,124 +70,120 @@
   />
 </svelte:head>
 
-{#await actogramResource then actogramData}
-  {#if actogramData}
-  <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-    <!-- Header -->
-    <div>
-      <h1 class="text-2xl @md:text-3xl font-bold">Heart Rate</h1>
-      <p class="text-muted-foreground">
-        Daily heart rate patterns with glucose overlay
-      </p>
-    </div>
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl @md:text-3xl font-bold">Heart Rate</h1>
+    <p class="text-muted-foreground">
+      Daily heart rate patterns with glucose overlay
+    </p>
+  </div>
 
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Average
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <HeartPulse class="h-5 w-5 text-red-500" />
-            <span class="text-2xl font-bold tabular-nums">{avgBpm}</span>
-            <span class="text-sm text-muted-foreground">bpm</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Resting Estimate
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <TrendingDown class="h-5 w-5 text-blue-500" />
-            <span class="text-2xl font-bold tabular-nums">{restingBpm}</span>
-            <span class="text-sm text-muted-foreground">bpm</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Min / Max
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <TrendingUp class="h-5 w-5 text-muted-foreground" />
-            <span class="text-2xl font-bold tabular-nums">
-              {minBpm}<span class="text-muted-foreground font-normal">/</span>{maxBpm}
-            </span>
-            <span class="text-sm text-muted-foreground">bpm</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Readings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <Calendar class="h-5 w-5 text-muted-foreground" />
-            <span class="text-2xl font-bold tabular-nums">
-              {selectedRates.length.toLocaleString()}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Actogram -->
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
     <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <HeartPulse class="h-5 w-5 text-red-500" />
-          Heart Rate Actogram
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Average
         </CardTitle>
       </CardHeader>
-      <CardContent class="w-full overflow-x-auto print:overflow-visible">
-        <Actogram
-          data={hrPoints}
-          bgData={bgPoints}
-          days={report.days}
-          thresholds={actogramResource.current?.thresholds}
-          rowHeight={48}
-          visibleCount={VISIBLE_DAYS}
-          initialOffset={0}
-        >
-          {#snippet tooltipValue({ point })}
-            {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}
-            <span class="text-muted-foreground">Heart Rate</span>
-            <span class="ml-auto font-mono font-medium tabular-nums">{bpm} bpm</span>
-          {/snippet}
-          {#snippet row(ctx: ActogramRowContext)}
-            {#each ctx.data as { point, hoursFromStart, isExtended }}
-              {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}
-              {@const yNorm = (bpm - bpmMin) / (bpmMax - bpmMin)}
-              {@const y = ctx.height - yNorm * ctx.height}
-              {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
-              <circle
-                cx={x}
-                cy={y}
-                r={1.5}
-                fill="var(--chart-1)"
-                opacity={isExtended ? 0.3 : 0.7}
-              />
-            {/each}
-          {/snippet}
-        </Actogram>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <HeartPulse class="h-5 w-5 text-red-500" />
+          <span class="text-2xl font-bold tabular-nums">{avgBpm}</span>
+          <span class="text-sm text-muted-foreground">bpm</span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Resting Estimate
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <TrendingDown class="h-5 w-5 text-blue-500" />
+          <span class="text-2xl font-bold tabular-nums">{restingBpm}</span>
+          <span class="text-sm text-muted-foreground">bpm</span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Min / Max
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <TrendingUp class="h-5 w-5 text-muted-foreground" />
+          <span class="text-2xl font-bold tabular-nums">
+            {minBpm}<span class="text-muted-foreground font-normal">/</span>{maxBpm}
+          </span>
+          <span class="text-sm text-muted-foreground">bpm</span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Readings
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <Calendar class="h-5 w-5 text-muted-foreground" />
+          <span class="text-2xl font-bold tabular-nums">
+            {selectedRates.length.toLocaleString()}
+          </span>
+        </div>
       </CardContent>
     </Card>
   </div>
-  {/if}
-{/await}
+
+  <!-- Actogram -->
+  <Card>
+    <CardHeader>
+      <CardTitle class="flex items-center gap-2">
+        <HeartPulse class="h-5 w-5 text-red-500" />
+        Heart Rate Actogram
+      </CardTitle>
+    </CardHeader>
+    <CardContent class="w-full overflow-x-auto print:overflow-visible">
+      <Actogram
+        data={hrPoints}
+        bgData={bgPoints}
+        days={report.days}
+        thresholds={actogramResource.current?.thresholds}
+        rowHeight={48}
+        visibleCount={VISIBLE_DAYS}
+        initialOffset={0}
+      >
+        {#snippet tooltipValue({ point })}
+          {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}
+          <span class="text-muted-foreground">Heart Rate</span>
+          <span class="ml-auto font-mono font-medium tabular-nums">{bpm} bpm</span>
+        {/snippet}
+        {#snippet row(ctx: ActogramRowContext)}
+          {#each ctx.data as { point, hoursFromStart, isExtended }}
+            {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}
+            {@const yNorm = (bpm - bpmMin) / (bpmMax - bpmMin)}
+            {@const y = ctx.height - yNorm * ctx.height}
+            {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+            <circle
+              cx={x}
+              cy={y}
+              r={1.5}
+              fill="var(--chart-1)"
+              opacity={isExtended ? 0.3 : 0.7}
+            />
+          {/each}
+        {/snippet}
+      </Actogram>
+    </CardContent>
+  </Card>
+</div>
