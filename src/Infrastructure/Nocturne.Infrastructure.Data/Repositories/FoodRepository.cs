@@ -177,11 +177,11 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = foods.Select(FoodMapper.ToEntity).ToList();
         var resultEntities = new List<FoodEntity>();
 
-        foreach (var entity in entities)
+        foreach (var food in foods)
         {
+            var entity = FoodMapper.ToEntity(food);
             // A legacy Mongo _id addresses its row through OriginalId, not the derived key.
             var entityId = entity.Id;
             var originalId = entity.OriginalId;
@@ -192,14 +192,13 @@ public class FoodRepository : IFoodRepository
 
             if (existingEntity != null)
             {
-                var tenantId = existingEntity.TenantId;
-                _context.Entry(existingEntity).CurrentValues.SetValues(entity);
-                existingEntity.TenantId = tenantId;
+                // Through the mapper rather than CurrentValues.SetValues: a row matched on its
+                // OriginalId has its own primary key, and copying the derived one onto it throws.
+                FoodMapper.UpdateEntity(existingEntity, food);
                 resultEntities.Add(existingEntity);
             }
             else
             {
-                // Add new entity
                 _context.Foods.Add(entity);
                 resultEntities.Add(entity);
             }
