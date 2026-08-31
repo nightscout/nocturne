@@ -125,11 +125,13 @@ public class MyLifeConnectorService(
             var needRecords = treatmentSubTypes.Any(t => activeTypes.Contains(t));
             var needStateSpans = activeTypes.Contains(SyncDataType.StateSpans);
 
-            // MyLife streams the source month by month, so every bound below has to be concrete.
+            // MyLife streams the source month by month, so every bound below has to be concrete;
+            // the initial-sync floor is both the fallback and as far back as this source goes.
+            var floor = InitialSyncFloor ?? DefaultInitialSyncFloor();
             var glucoseSince = ResumeFrom(
-                request, await CalculateSinceTimestampAsync(config) ?? DefaultInitialSyncFloor());
+                request, await CalculateSinceTimestampAsync(config) ?? floor, floor);
             var treatmentSince = ResumeFrom(
-                request, await CalculateTreatmentSinceTimestampAsync(config) ?? DefaultInitialSyncFloor());
+                request, await CalculateTreatmentSinceTimestampAsync(config) ?? floor, floor);
 
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var until = request.To ?? DateTime.UtcNow;

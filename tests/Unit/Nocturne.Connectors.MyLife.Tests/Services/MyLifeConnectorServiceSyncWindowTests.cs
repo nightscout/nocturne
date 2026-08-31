@@ -119,6 +119,29 @@ public class MyLifeConnectorServiceSyncWindowTests
         fixture.Sync.Since.Should().Be(TreatmentWatermark - CatchUpOverlap);
     }
 
+    /// <summary>
+    /// A range naming no lower bound is the reset-cursor shape, and it asks for everything the
+    /// source still holds — which for MyLife is its initial-sync floor. Answering it from the
+    /// resume point resets nothing: the resume point is what it is asking to reset.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenAnExplicitRangeNamesNoLowerBound_CrawlsFromTheHistoryFloor()
+    {
+        // Both watermarks sit well inside the floor, so resuming from either is a different answer.
+        var fixture = new Fixture(
+            glucoseWatermark: DateTime.UtcNow.AddDays(-3),
+            treatmentWatermark: DateTime.UtcNow.AddDays(-5));
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = null,
+            To = DateTime.UtcNow,
+            DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses],
+        });
+
+        fixture.Sync.Since.Should().BeCloseTo(DateTime.UtcNow.AddMonths(-6), TimeSpan.FromMinutes(1));
+    }
+
     private static MyLifeEvent BolusAt(DateTime at) => new()
     {
         EventTypeId = MyLifeEventType.BolusNormal,
@@ -143,12 +166,17 @@ public class MyLifeConnectorServiceSyncWindowTests
         public List<Bolus> Boluses { get; } = [];
 
         public Fixture(params MyLifeEvent[] events)
+            : this(GlucoseWatermark, TreatmentWatermark, events)
+        {
+        }
+
+        public Fixture(DateTime glucoseWatermark, DateTime treatmentWatermark, params MyLifeEvent[] events)
         {
             var treatments = new Mock<ITreatmentPublisher>();
             treatments
                 .Setup(p => p.GetLatestTreatmentTimestampAsync(
                     It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(TreatmentWatermark);
+                .ReturnsAsync(treatmentWatermark);
             treatments
                 .Setup(p => p.PublishBolusesAsync(
                     It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(),
@@ -161,7 +189,7 @@ public class MyLifeConnectorServiceSyncWindowTests
             glucose
                 .Setup(p => p.GetLatestEntryTimestampAsync(
                     It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(GlucoseWatermark);
+                .ReturnsAsync(glucoseWatermark);
 
             var publisher = new Mock<IConnectorPublisher>();
             publisher.Setup(p => p.IsAvailable).Returns(true);

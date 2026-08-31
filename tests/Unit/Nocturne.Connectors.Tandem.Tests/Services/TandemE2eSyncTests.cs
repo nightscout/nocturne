@@ -68,6 +68,33 @@ public class TandemE2eSyncTests
 
     private const string EmptyPumpLogsJson = """{"events": [], "clockChanges": []}""";
 
+    // A basal delivery and an exercise stop on the day AFTER a window ending 2026-05-15: the events
+    // that close a span opened inside it, which only the padded day reaches.
+    private const string NextDayEvents = """
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450100, "pumpDateTime": "2026-05-15T10:00:00", "eventProperties": {"currentUserMode": 2, "previousUserMode": 0, "requestedAction": 3, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-15T10:00:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 279, "sequenceGroup": 0, "sequenceNumber": 450200, "pumpDateTime": "2026-05-16T09:00:00", "eventProperties": {"commandedRateSource": 1, "reservedA2": 3, "spareA3": 0, "commandedRate": 800, "profileBasalRate": 800, "algorithmRate": 800, "tempRate": 65535}, "estimatedDateTime": "2026-05-16T09:00:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 20, "sequenceGroup": 0, "sequenceNumber": 450250, "pumpDateTime": "2026-05-16T09:15:00", "eventProperties": {"completionStatus": 3, "bolusId": 1600, "iob": 1.0, "insulinDelivered": 1.0, "insulinRequested": 1.0}, "estimatedDateTime": "2026-05-16T09:15:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 229, "sequenceGroup": 0, "sequenceNumber": 450300, "pumpDateTime": "2026-05-16T09:30:00", "eventProperties": {"currentUserMode": 0, "previousUserMode": 2, "requestedAction": 4, "spareA3": 0, "sleepStartedByGui": 0, "activeSleepSchedule": [0], "spareB6": 0, "exerciseStoppedByTimer": 0, "exerciseChoice": 0, "exerciseTime": 0, "eatingSoonStoppedByTimer": 0}, "estimatedDateTime": "2026-05-16T09:30:00Z"},
+        """;
+
+    /// <summary>The fixture's events plus <see cref="NextDayEvents"/>.</summary>
+    private static string WithNextDayEvents() =>
+        PumpLogsJson.Replace("\"events\": [", "\"events\": [\n" + NextDayEvents);
+
+    // One bolus whose request messages land on 2026-05-13 and whose completion lands on 2026-05-14:
+    // reassembling it needs both days, and only the completion carries the delivered amount.
+    private const string StraddlingBolusJson = """
+        {
+        "events": [
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 64, "sequenceGroup": 0, "sequenceNumber": 442680, "pumpDateTime": "2026-05-13T23:58:00", "eventProperties": {"bolusId": 1583, "bolusType": 3, "correctionBolusIncluded": 1, "carbAmount": 20, "bg": 116, "iob": 0, "carbRatio": 0}, "estimatedDateTime": "2026-05-13T23:58:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 65, "sequenceGroup": 0, "sequenceNumber": 442681, "pumpDateTime": "2026-05-13T23:58:00", "eventProperties": {"bolusId": 1583, "options": 4, "standardPercent": 100, "duration": 0, "spareB6": 0, "isf": 0, "targetBg": 0, "userOverride": 0, "declinedCorrection": 0, "selectedIob": 1}, "estimatedDateTime": "2026-05-13T23:58:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 66, "sequenceGroup": 0, "sequenceNumber": 442682, "pumpDateTime": "2026-05-13T23:58:00", "eventProperties": {"bolusId": 1583, "spareA2": 0, "foodBolusSize": 3.33, "correctionBolusSize": 0.2, "totalBolusSize": 3.53}, "estimatedDateTime": "2026-05-13T23:58:00Z"},
+                {"deviceAssignmentId": "e2e-device-assignment-id", "eventCode": 20, "sequenceGroup": 0, "sequenceNumber": 442700, "pumpDateTime": "2026-05-14T00:02:00", "eventProperties": {"completionStatus": 3, "bolusId": 1583, "iob": 3.53, "insulinDelivered": 3.53, "insulinRequested": 3.53}, "estimatedDateTime": "2026-05-14T00:02:00Z"}
+            ],
+        "clockChanges": []
+        }
+        """;
+
     [Fact]
     public async Task Full_sync_publishes_expected_records()
     {
@@ -264,11 +291,12 @@ public class TandemE2eSyncTests
     }
 
     /// <summary>
-    /// A bounded re-import asks the pump for exactly the window it was given. The pump-logs
-    /// endpoint is day-granular, so each bound is the date it falls on.
+    /// A bounded re-import asks the pump for a day either side of the window it was given, so the
+    /// events that complete a record at each edge are in hand; the day-granular endpoint means that
+    /// is one more chunk-day at each end, capped at the pump's newest event.
     /// </summary>
     [Fact]
-    public async Task Explicit_request_window_bounds_the_pump_log_request()
+    public async Task Explicit_request_window_fetches_a_day_either_side()
     {
         var fixture = new Fixture();
 
@@ -281,27 +309,147 @@ public class TandemE2eSyncTests
 
         var pumpLogs = fixture.Requests.Should()
             .ContainSingle(r => r.Path.Contains("/pump-logs/")).Subject;
-        pumpLogs.Path.Should().Contain("startDate=2026-05-16T00%3A00%3A00Z")
-            .And.Contain("endDate=2026-05-17T23%3A59%3A59Z");
+        pumpLogs.Path.Should().Contain("startDate=2026-05-15T00%3A00%3A00Z")
+            .And.Contain("endDate=2026-05-18T23%3A59%3A59Z");
 
-        // The fixture's CGM readings are two days below the window, and the pump serves only what
-        // is inside it — so the bound is what decides this, not the payload.
+        // The fixture's CGM readings are below even the padded window, and the pump serves only
+        // what is inside the window asked for — so the bound is what decides this, not the payload.
         fixture.Publisher.SensorGlucoses.Should().BeEmpty();
     }
 
     /// <summary>
-    /// A basal span ends where the next delivery event begins, so the last one in a bounded window
-    /// has no end: the event that would close it is above the bound and was never fetched. It goes
-    /// unpublished. Ending it at the caller's bound would upsert a shortened end over the real one,
-    /// and ending it at the pump's newest event would invent a span days long — both over a row
-    /// that a full sync already stored correctly, and both visible in IOB.
+    /// The event that closes the window's last span sits in the day fetched past it, so the span is
+    /// published with its true end — while the padded day's own span, which nothing closes, is not
+    /// published at all: it belongs to the next window along.
+    /// </summary>
+    [Fact]
+    public async Task Span_closed_in_the_padded_day_is_published_with_its_true_end()
+    {
+        // The pump's range opens before the window, so nothing here is clamped and the run has
+        // nothing to report.
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-05-12T00:00:00"),
+            pumpLogsJson: WithNextDayEvents());
+
+        var result = await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 14, 0, 0, 0),
+            To = Utc(2026, 5, 15, 0, 0, 0),
+            DataTypes = [SyncDataType.TempBasals],
+        });
+
+        fixture.Publisher.TempBasals.Should().HaveCount(2);
+        fixture.Publisher.TempBasals[^1].StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 6, 0));
+        fixture.Publisher.TempBasals[^1].EndTimestamp.Should().Be(Utc(2026, 5, 16, 13, 0, 0));
+        result.Message.Should().BeEmpty("every span inside the window was closed");
+    }
+
+    /// <summary>
+    /// An exercise span is paired from its start and stop events, and a stop in the day fetched past
+    /// the window closes it. Left unpaired it publishes open, under the id an unpaired span carries
+    /// — a second row beside the closed one a full sync stored, rather than an upsert over it.
+    /// </summary>
+    [Fact]
+    public async Task Exercise_span_stopped_in_the_padded_day_is_published_closed()
+    {
+        var fixture = new Fixture(pumpLogsJson: WithNextDayEvents());
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 14, 0, 0, 0),
+            To = Utc(2026, 5, 15, 0, 0, 0),
+            DataTypes = [SyncDataType.StateSpans],
+        });
+
+        var span = fixture.Publisher.StateSpans.Should().ContainSingle().Subject;
+        span.StartTimestamp.Should().Be(Utc(2026, 5, 15, 14, 0, 0));
+        span.EndTimestamp.Should().Be(Utc(2026, 5, 16, 13, 30, 0));
+        span.OriginalId.Should().Be("tandem_usermode_450100_450300");
+    }
+
+    /// <summary>
+    /// The days fetched either side of the window are there to complete its edge records, not to
+    /// widen what it returns: a record of the padded day's own belongs to the window that covers
+    /// it, and a caller that asked for one window is not handed three.
+    /// </summary>
+    [Fact]
+    public async Task Records_of_the_padded_day_are_left_to_the_window_that_covers_them()
+    {
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-05-12T00:00:00"),
+            pumpLogsJson: WithNextDayEvents());
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 14, 0, 0, 0),
+            To = Utc(2026, 5, 15, 0, 0, 0),
+            DataTypes = [SyncDataType.Boluses],
+        });
+
+        fixture.Publisher.Boluses.Should().ContainSingle()
+            .Which.SyncIdentifier.Should().Be("tandem_bolus_1583",
+                "the padded day's own bolus is the next window's to publish");
+    }
+
+    /// <summary>
+    /// A bolus is reassembled from messages that can straddle the window's lower edge: the request
+    /// messages carry the carbs and the calculation, the completion carries the delivery. Fetched
+    /// alone, the completion still publishes — as a bare bolus, under the same stable id, over the
+    /// complete record a full sync stored.
+    /// </summary>
+    [Fact]
+    public async Task Bolus_straddling_the_lower_edge_is_published_complete()
+    {
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-05-12T00:00:00"),
+            pumpLogsJson: StraddlingBolusJson);
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 14, 0, 0, 0),
+            To = Utc(2026, 5, 15, 0, 0, 0),
+            DataTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.BolusCalculations],
+        });
+
+        var bolus = fixture.Publisher.Boluses.Should().ContainSingle().Subject;
+        bolus.Timestamp.Should().Be(Utc(2026, 5, 14, 4, 2, 0));
+        fixture.Publisher.CarbIntakes.Should().ContainSingle().Which.Carbs.Should().Be(20);
+        fixture.Publisher.BolusCalculations.Should().ContainSingle()
+            .Which.InsulinRecommendationForCarbs.Should().Be(3.33);
+    }
+
+    /// <summary>
+    /// A range naming no lower bound is the reset-cursor shape, and it asks for everything the pump
+    /// still holds — the resume point is what it is resetting, so answering from it resets nothing.
+    /// </summary>
+    [Fact]
+    public async Task Explicit_range_without_a_lower_bound_crawls_from_the_pumps_available_range()
+    {
+        var fixture = new Fixture(
+            pumperJson: PumperJson.Replace("2026-05-14T00:01:00", "2026-04-01T00:00:00"));
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = null,
+            To = Utc(2026, 5, 16, 0, 0, 0),
+            DataTypes = [SyncDataType.Glucose],
+        });
+
+        fixture.Requests.First(r => r.Path.Contains("/pump-logs/")).Path
+            .Should().Contain("startDate=2026-04-01T00%3A00%3A00Z");
+    }
+
+    /// <summary>
+    /// A span the day fetched past the window still does not close — one running longer than that
+    /// day — is not published, and the run says so. See
+    /// <see cref="Nocturne.Connectors.Tandem.Mappers.TandemBasalSpans.UnclosedFrom"/>.
     /// </summary>
     [Fact]
     public async Task Explicit_upper_bound_publishes_only_spans_whose_end_was_fetched()
     {
         var fixture = new Fixture();
 
-        await fixture.RunAsync(new SyncRequest
+        var result = await fixture.RunAsync(new SyncRequest
         {
             From = Utc(2026, 5, 14, 0, 0, 0),
             To = Utc(2026, 5, 15, 0, 0, 0),
@@ -312,6 +460,9 @@ public class TandemE2eSyncTests
         var basal = fixture.Publisher.TempBasals.Should().ContainSingle().Subject;
         basal.StartTimestamp.Should().Be(Utc(2026, 5, 14, 4, 1, 0));
         basal.EndTimestamp.Should().Be(Utc(2026, 5, 14, 4, 6, 0));
+
+        result.Message.Should().Contain("2026-05-14 04:06",
+            "a span the run could not publish is the tenant's to chase, not silently absent");
     }
 
     /// <summary>

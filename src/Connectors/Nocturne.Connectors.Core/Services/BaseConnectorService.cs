@@ -454,14 +454,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         ResumeFrom(requested, (DateTime?)resumePoint) ?? resumePoint;
 
     /// <summary>
-    ///     The lower bound a whole request crawls from. An explicit range is answered as asked:
-    ///     it is the shape a manual re-import of one window sends, and widening it back to a
-    ///     resume point below re-crawls everything in between. A range that names no lower bound
-    ///     stands on the resume point — a source that cannot crawl from an open bound has to start
-    ///     somewhere, and the resume point is where the last one left off.
+    ///     The lower bound a whole request crawls from, for a source that cannot crawl from an open
+    ///     one. An explicit range is answered as asked: it is the shape a manual re-import of one
+    ///     window sends, and widening it back to a resume point below re-crawls everything in
+    ///     between. A range naming no lower bound is asking for everything the source still holds,
+    ///     which is <paramref name="historyFloor"/> — the reading the reset-cursor endpoint
+    ///     documents, and the only one under which it resets anything.
     /// </summary>
-    protected static DateTime ResumeFrom(SyncRequest request, DateTime resumePoint) =>
-        request.To is null ? ResumeFrom(request.From, resumePoint) : request.From ?? resumePoint;
+    protected static DateTime ResumeFrom(
+        SyncRequest request, DateTime resumePoint, DateTime historyFloor) =>
+        request.To is null ? ResumeFrom(request.From, resumePoint) : request.From ?? historyFloor;
 
     /// <summary>
     ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp

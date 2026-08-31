@@ -98,13 +98,14 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             await SyncProfilesAsync(device, activeTypes, result, config, cancellationToken);
 
-            await SyncEventsAsync(
+            var unclosed = await SyncEventsAsync(
                 request, region, pumperId, device, activeTypes, time, result, config, cancellationToken);
 
             // Assigned here, after everything that can fail: on a run that did, Message is the
-            // failure summary the tenant's card reads and must not be a window notice instead.
-            if (result.Success && ClampNotice(request, device, time) is { } notice)
-                result.Message = notice;
+            // failure summary the tenant's card reads and must not be a coverage notice instead.
+            if (result.Success)
+                result.Message = string.Join(" ", new[] { ClampNotice(request, device, time), unclosed }
+                    .Where(notice => notice is not null));
         }
         catch (OperationCanceledException)
         {
@@ -135,7 +136,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             PublishProfileDataAsync, config, cancellationToken);
     }
 
-    private async Task SyncEventsAsync(
+    /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
+    private async Task<string?> SyncEventsAsync(
         SyncRequest request, TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
@@ -150,8 +152,21 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             _logger.LogInformation(
                 "[{Source}] Nothing to sync for device {Device} (start {Start} >= end {End})",
                 ConnectorSource, device.AssignmentId, start, end);
-            return;
+            return null;
         }
+
+        // A record at either edge of a bounded window is assembled from, or closed by, events on
+        // the far side of it: a bolus's request messages, a basal span's successor, an exercise
+        // stop. The fetch reaches a day past each edge so those events are in hand — the pump-logs
+        // endpoint is day-granular, so this is one more chunk-day, not a different request shape —
+        // and only the window itself is published. An open-ended run already spans the pump's
+        // whole range and neither pads nor filters.
+        var window = request.To is null
+            ? (PublishWindow?)null
+            : new PublishWindow(start.Date, end.Date.AddDays(1).AddTicks(-1));
+        var first = ParseWallClockUtc(device.AvailableDataRange?.Start, time);
+        var fetchFrom = window is null ? start : Later(start.Date.AddDays(-1), first);
+        var fetchTo = window is null ? end : Earlier(end.AddDays(1), ceiling);
 
         // LID_DAILY_BASAL (device status) is not in the backend's default event filter, so the full
         // history log must be requested when device status is enabled — matching tconnectsync.
@@ -174,7 +189,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         // identity, and the separately-returned clockChanges are not consumed (matching upstream).
         var allEvents = new List<TandemPumpEvent>();
         var seen = new HashSet<(long, uint)>();
-        foreach (var (windowStart, windowEnd) in Chunk(start, end))
+        foreach (var (windowStart, windowEnd) in Chunk(fetchFrom, fetchTo))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -187,7 +202,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         }
 
         if (allEvents.Count == 0)
-            return;
+            return null;
 
         var groups = allEvents
             .Select(e => (Event: e, Class: TandemEventClasses.ForEvent(e)))
@@ -195,23 +210,45 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .GroupBy(x => x.Class!.Value, x => x.Event)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // What the payload is complete through: the ceiling only when the fetch reached it. A
-        // window bounded below it never fetched the events that would close the last span.
-        var fetchedThrough = end < ceiling ? null : (DateTime?)ceiling;
+        // What the payload is complete through: the ceiling only when the fetch reached it.
+        var fetchedThrough = fetchTo < ceiling ? null : (DateTime?)ceiling;
 
-        await PublishEventsAsync(
-            groups, activeTypes, fetchedThrough, cgm, bolus, basal, deviceEvents, systemEvents,
-            userMode, deviceStatus, result, config, cancellationToken);
+        return await PublishEventsAsync(
+            groups, activeTypes, fetchedThrough, window, cgm, bolus, basal, deviceEvents,
+            systemEvents, userMode, deviceStatus, result, config, cancellationToken);
     }
 
-    private async Task PublishEventsAsync(
+    /// <summary>
+    /// The span of a bounded run's own window. The fetch reaches a day either side of it, and those
+    /// days' records belong to the neighbouring windows: only a record assembled or closed across
+    /// the edge is this run's to publish, and it lands inside.
+    /// </summary>
+    private readonly record struct PublishWindow(DateTime From, DateTime Through)
+    {
+        internal bool Holds(DateTime at) => at >= From && at <= Through;
+    }
+
+    private static DateTime Later(DateTime value, DateTime? floor) =>
+        floor is { } bound && bound > value ? bound : value;
+
+    private static DateTime Earlier(DateTime value, DateTime ceiling) =>
+        value < ceiling ? value : ceiling;
+
+    /// <returns>What the run has to say about a span it could not close, or <c>null</c>.</returns>
+    private async Task<string?> PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
-        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough,
+        HashSet<SyncDataType> activeTypes, DateTime? fetchedThrough, PublishWindow? window,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
         TandemDeviceEventMapper deviceEvents, TandemSystemEventMapper systemEvents,
         TandemUserModeMapper userMode, TandemDeviceStatusMapper deviceStatus,
         SyncResult result, TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        // The records a padded day can only complete, rather than carry whole: a bolus reassembled
+        // from messages either side of the edge, a span closed by an event beyond it. The padded
+        // day's own are the neighbouring window's to publish.
+        List<T> Inside<T>(List<T> records, Func<T, DateTime> at) =>
+            window is { } bounds ? records.Where(record => bounds.Holds(at(record))).ToList() : records;
+
         if (groups.TryGetValue(TandemEventClass.CgmReading, out var cgmEvents))
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
                 cgm.Map(cgmEvents), PublishSensorGlucoseDataAsync, config, cancellationToken);
@@ -220,17 +257,32 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         {
             var decomposed = bolus.Map(bolusEvents);
             await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                decomposed.Boluses, PublishBolusDataAsync, config, cancellationToken);
+                Inside(decomposed.Boluses, record => record.Timestamp),
+                PublishBolusDataAsync, config, cancellationToken);
             await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
-                decomposed.CarbIntakes, PublishCarbIntakeDataAsync, config, cancellationToken);
+                Inside(decomposed.CarbIntakes, record => record.Timestamp),
+                PublishCarbIntakeDataAsync, config, cancellationToken);
             await PublishRecordTypeAsync(result, SyncDataType.BolusCalculations, activeTypes,
-                decomposed.BolusCalculations, PublishBolusCalculationDataAsync, config, cancellationToken);
+                Inside(decomposed.BolusCalculations, record => record.Timestamp),
+                PublishBolusCalculationDataAsync, config, cancellationToken);
         }
 
+        string? unclosed = null;
         if (groups.TryGetValue(TandemEventClass.Basal, out var basalEvents))
+        {
+            var spans = basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal);
+
+            // The padded day held no further delivery event, so this span ran longer than the day
+            // the fetch reached past the window and is the tenant's to chase, not silently absent.
+            if (spans.UnclosedFrom is { } unclosedFrom && window is { } bounds && bounds.Holds(unclosedFrom))
+                unclosed =
+                    $"The basal span starting {unclosedFrom.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} "
+                    + "UTC is not published: the delivery event that ends it is more than a day above the window.";
+
             await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
-                basal.Map(basalEvents, fetchedThrough, config.IgnoreZeroUnitBasal), PublishTempBasalDataAsync,
+                Inside(spans.Spans, record => record.StartTimestamp), PublishTempBasalDataAsync,
                 config, cancellationToken);
+        }
 
         var devEvents = Concat(groups, TandemEventClass.Cartridge, TandemEventClass.CgmStartJoinStop,
             TandemEventClass.BasalSuspension, TandemEventClass.BasalResume);
@@ -243,11 +295,14 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
         if (groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
             await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-                userMode.Map(userModeEvents), PublishStateSpanDataAsync, config, cancellationToken);
+                Inside(userMode.Map(userModeEvents), record => record.StartTimestamp),
+                PublishStateSpanDataAsync, config, cancellationToken);
 
         if (groups.TryGetValue(TandemEventClass.DeviceStatus, out var dailyBasal))
             await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
                 deviceStatus.Map(dailyBasal), PublishDeviceStatusAsync, config, cancellationToken);
+
+        return unclosed;
     }
 
     private async Task<TandemPumpLogsResponse?> FetchWindowAsync(
@@ -290,24 +345,24 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
         var resume = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
 
-        var start = ResumeFrom(request, resume);
+        // The pump's own range is how far back this source goes, and the floor a range naming no
+        // lower bound resolves to — named, rather than left to the clamp below to arrive at.
+        var first = ParseWallClockUtc(device.AvailableDataRange?.Start, time);
+        var start = ResumeFrom(request, resume, first ?? DefaultInitialSyncFloor());
 
-        if (ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } min && min > start)
-            start = min;
-
-        return start;
+        return Later(start, first);
     }
 
     /// <summary>
     /// What the run says when it covered less than it was asked for: the pump serves nothing before
-    /// its available range begins, and a success over a window that was silently narrowed reads the
+    /// its available range begins, and a success over a range that was silently narrowed reads the
     /// same as one that covered it.
     /// </summary>
     private static string? ClampNotice(
         SyncRequest request, TandemBffPump device, TandemTimeResolver time) =>
         ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } first && request.From < first
             ? $"The pump holds no data before {first.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC; "
-              + "the requested window starts there."
+              + "the sync started there."
             : null;
 
     /// <summary>
