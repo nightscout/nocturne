@@ -106,12 +106,6 @@ public class BasalInjectionRepositoryTests : IDisposable
         found.Should().BeNull();
     }
 
-    // The end-to-end "soft-delete writes a MutationAuditLogEntity 'delete' entry"
-    // assertion is intentionally NOT made here. The audit interceptor lives outside
-    // the repository and is wired only by the production composition root, so a
-    // unit-test fixture cannot exercise it without duplicating that wiring. The
-    // assertion belongs at integration-test level where the full interceptor stack
-    // is live (Phase 3 / Task 3.3 BasalInjectionIntegrationTests).
     [Fact]
     public async Task DeleteAsync_sets_DeletedAt()
     {

@@ -17,10 +17,10 @@ using Xunit;
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
 /// <summary>
-/// Covers the shared restore quadrant on the two repository shapes that stay off
-/// <c>V4RepositoryBase</c>: TempBasal (span-shaped, keys on StartTimestamp) and PatientDevice
-/// (no timestamp column at all). Both reach it through <c>SoftDeleteRestoreExtensions</c>, so this
-/// pins the tenant scoping and the already-live edge that the extension is responsible for.
+/// Covers the shared restore quadrant on the shapes that stay off <c>V4RepositoryBase</c> —
+/// TempBasal (span-shaped, keys on StartTimestamp) and PatientDevice (no timestamp column at all) —
+/// plus BasalInjection, which reaches the same extension through the base. Pins the tenant scoping
+/// and the already-live edge the extension is responsible for.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Category", "Repository")]
@@ -37,6 +37,8 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
     private readonly TempBasalRepository _tempBasalsB;
     private readonly PatientDeviceRepository _devicesA;
     private readonly PatientDeviceRepository _devicesB;
+    private readonly BasalInjectionRepository _basalInjectionsA;
+    private readonly BasalInjectionRepository _basalInjectionsB;
 
     public SoftDeleteRestoreQuadrantTests()
     {
@@ -70,6 +72,8 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
             new TestTenantDbContextFactory(_contextA), NullLogger<PatientDeviceRepository>.Instance);
         _devicesB = new PatientDeviceRepository(
             new TestTenantDbContextFactory(_contextB), NullLogger<PatientDeviceRepository>.Instance);
+        _basalInjectionsA = new BasalInjectionRepository(new TestTenantDbContextFactory(_contextA), audit);
+        _basalInjectionsB = new BasalInjectionRepository(new TestTenantDbContextFactory(_contextB), audit);
     }
 
     public void Dispose()
@@ -86,6 +90,14 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         UtcOffset = 0,
         Rate = 1.0,
         Origin = TempBasalOrigin.Manual,
+    };
+
+    private static BasalInjection NewBasalInjection(string syncIdentifier) => new()
+    {
+        Timestamp = Base,
+        DataSource = "aaps",
+        SyncIdentifier = syncIdentifier,
+        Units = 10.0,
     };
 
     private static PatientDevice NewDevice(string model) => new()
@@ -144,16 +156,21 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkRestoreAsync_RestoresOnlyTheSoftDeletedIds()
+    public async Task BulkRestoreAsync_RestoresOnlyTheSoftDeletedIdsItWasGiven()
     {
-        var deleted = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var asked = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
         var live = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);
-        SoftDelete<TempBasalEntity>(_contextA, deleted.Id, Base.AddHours(1));
+        var otherDeleted = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(60)), WriteOrigin.Live);
+        SoftDelete<TempBasalEntity>(_contextA, asked.Id, Base.AddHours(1));
+        SoftDelete<TempBasalEntity>(_contextA, otherDeleted.Id, Base.AddHours(1));
 
         var restored = (await _tempBasalsA.BulkRestoreAsync(
-            [deleted.Id, live.Id, Guid.CreateVersion7()], WriteOrigin.Live)).ToList();
+            [asked.Id, live.Id, Guid.CreateVersion7()], WriteOrigin.Live)).ToList();
 
-        restored.Select(r => r.Id).Should().Equal(deleted.Id);
+        restored.Select(r => r.Id).Should().Equal(asked.Id);
+        _contextA.TempBasals.IgnoreQueryFilters()
+            .Single(e => e.Id == otherDeleted.Id).DeletedAt.Should()
+            .NotBeNull("a soft-deleted row the caller did not name must stay deleted");
         _contextA.TempBasals.IgnoreQueryFilters()
             .Count(e => e.DeletedAt == null).Should().Be(2);
     }
@@ -228,6 +245,27 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         restored.Id.Should().Be(created.Id);
         (await _devicesA.CountDeletedAsync()).Should().Be(0);
         (await _devicesA.GetAllAsync()).Select(d => d.Id).Should().Equal(created.Id);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_AndGetDeletedAsync_WorkThroughV4RepositoryBase()
+    {
+        var deleted = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-1"), WriteOrigin.Live);
+        await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-2"), WriteOrigin.Live);
+        var theirs = await _basalInjectionsB.CreateAsync(NewBasalInjection("sync-3"), WriteOrigin.Live);
+        SoftDelete<BasalInjectionEntity>(_contextA, deleted.Id, Base);
+        SoftDelete<BasalInjectionEntity>(_contextB, theirs.Id, Base);
+
+        (await _basalInjectionsA.GetDeletedAsync(limit: 50, offset: 0)).Select(b => b.Id)
+            .Should().Equal(deleted.Id);
+        (await _basalInjectionsA.CountDeletedAsync()).Should().Be(1);
+
+        (await _basalInjectionsA.RestoreAsync(deleted.Id, WriteOrigin.Live)).Id.Should().Be(deleted.Id);
+
+        (await _basalInjectionsA.CountDeletedAsync()).Should().Be(0);
+        (await _basalInjectionsB.CountDeletedAsync()).Should().Be(1);
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => _basalInjectionsA.RestoreAsync(theirs.Id, WriteOrigin.Live));
     }
 
     [Fact]

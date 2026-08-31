@@ -328,8 +328,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// Soft-deletes <paramref name="rows"/> through the audited helper and broadcasts the removals.
-    /// <paramref name="scope"/> is the key the delete was issued against, recorded on the audit row.
+    /// Audited soft-delete of <paramref name="rows"/>, with <paramref name="scope"/> naming the key
+    /// the delete was issued against on the audit row.
     /// </summary>
     /// <returns>The number of rows soft-deleted.</returns>
     protected async Task<int> AuditedSoftDeleteAndBroadcastAsync(

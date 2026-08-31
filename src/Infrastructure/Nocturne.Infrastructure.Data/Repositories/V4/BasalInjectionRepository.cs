@@ -59,7 +59,6 @@ public class BasalInjectionRepository : V4RepositoryBase<BasalInjection, BasalIn
                 BasalInjectionMapper.UpdateEntity(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = BasalInjectionMapper.ToDomainModel(existing);
-                // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct);
                 return upserted;
             }
@@ -101,8 +100,6 @@ public class BasalInjectionRepository : V4RepositoryBase<BasalInjection, BasalIn
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
 
-        // Over-fetches by a Cartesian amount; the partial unique index
-        // on (tenant_id, data_source, sync_identifier) keeps this cheap.
         var existingRows = await ctx.BasalInjections.IgnoreQueryFilters()
             .Where(e => e.TenantId == ctx.TenantId)
             .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
@@ -122,7 +119,6 @@ public class BasalInjectionRepository : V4RepositoryBase<BasalInjection, BasalIn
                 // Update in place — mirror the single-record CreateAsync path via the mapper.
                 BasalInjectionMapper.UpdateEntity(existing, BasalInjectionMapper.ToDomainModel(entity));
                 updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
                 if (HasMaterialChange(ctx, existing))
                     materiallyChanged.Add(existing);
             }
