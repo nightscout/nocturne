@@ -12,8 +12,10 @@ namespace Nocturne.API.Services.Legacy;
 /// <summary>
 /// Abstract base for simple entity CRUD services that use <see cref="NocturneDbContext"/> directly
 /// with document processing and SignalR broadcasting via <see cref="ISignalRBroadcastService"/>.
-/// Eliminates boilerplate for services like <see cref="HeartRateService"/> and <see cref="StepCountService"/>
-/// that follow the same get/create/update/delete + broadcast pattern.
+/// Eliminates boilerplate for services like <see cref="BodyWeightService"/> that follow the same
+/// get/create/update/delete + broadcast pattern. Services whose entity carries an observation
+/// timestamp derive from <see cref="TimeSeriesEntityService{TDomain,TEntity}"/> instead, which
+/// adds the reads that timestamp makes possible.
 /// </summary>
 /// <typeparam name="TDomain">The domain model type (must implement <see cref="IProcessableDocument"/>).</typeparam>
 /// <typeparam name="TEntity">The EF Core entity type stored in the database.</typeparam>
@@ -21,7 +23,7 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDocumentProcessingService"/>
 public abstract class SimpleEntityService<TDomain, TEntity>
     where TDomain : class, IProcessableDocument
-    where TEntity : class
+    where TEntity : class, IOriginalIdentified
 {
     protected readonly NocturneDbContext DbContext;
     protected readonly IDocumentProcessingService DocumentProcessingService;
@@ -82,14 +84,18 @@ public abstract class SimpleEntityService<TDomain, TEntity>
     /// <returns>An <see cref="IOrderedQueryable{TEntity}"/> sorted by timestamp descending.</returns>
     protected abstract IOrderedQueryable<TEntity> OrderByTimestamp(IQueryable<TEntity> query);
 
-    /// <summary>Finds a single entity by its string ID, returning <see langword="null"/> if not found.</summary>
-    /// <param name="id">The string ID to look up.</param>
+    /// <summary>
+    /// Resolves the id in a route to a row. A GUID addresses the primary key; anything else is
+    /// taken for the MongoDB ObjectId the row carried into the migration, so links minted against
+    /// the legacy database keep resolving.
+    /// </summary>
+    /// <param name="id">The route id to look up.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The matching entity, or <see langword="null"/>.</returns>
-    protected abstract Task<TEntity?> FindByIdAsync(
-        string id,
-        CancellationToken cancellationToken
-    );
+    private Task<TEntity?> FindByIdAsync(string id, CancellationToken cancellationToken) =>
+        Guid.TryParse(id, out var guid)
+            ? EntitySet.FirstOrDefaultAsync(e => e.Id == guid, cancellationToken)
+            : EntitySet.FirstOrDefaultAsync(e => e.OriginalId == id, cancellationToken);
 
     /// <summary>
     /// Retrieves a page of entities ordered by timestamp descending.

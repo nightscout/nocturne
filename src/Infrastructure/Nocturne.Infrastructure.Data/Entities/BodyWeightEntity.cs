@@ -7,7 +7,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Body composition measurement recorded by a scale or manual entry.
 /// </summary>
 [Table("body_weights")]
-public class BodyWeightEntity : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped
+public class BodyWeightEntity
+    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified
 {
     /// <summary>Owning tenant for RLS isolation.</summary>
     [Column("tenant_id")]

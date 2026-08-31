@@ -1,37 +1,35 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Legacy;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
-using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
-using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Health;
 
 /// <summary>
 /// Domain service for heart rate record operations. Inherits standard CRUD, SignalR broadcasting,
-/// and document-processing behaviour from <see cref="SimpleEntityService{TModel,TEntity}"/>.
+/// and document-processing behaviour from <see cref="TimeSeriesEntityService{TModel,TEntity}"/>.
 /// </summary>
 /// <seealso cref="IHeartRateService"/>
-/// <seealso cref="SimpleEntityService{TModel,TEntity}"/>
-public class HeartRateService
-    : SimpleEntityService<HeartRate, HeartRateEntity>,
+/// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
+/// <param name="dbContext">EF Core context providing access to the heart rates table.</param>
+/// <param name="documentProcessingService">Service that applies field processing before save.</param>
+/// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
+/// <param name="logger">Logger instance for this service.</param>
+public class HeartRateService(
+    NocturneDbContext dbContext,
+    IDocumentProcessingService documentProcessingService,
+    ISignalRBroadcastService signalRBroadcastService,
+    ILogger<HeartRateService> logger
+)
+    : TimeSeriesEntityService<HeartRate, HeartRateEntity>(
+        dbContext, documentProcessingService, signalRBroadcastService, logger),
         IHeartRateService
 {
-    /// <param name="dbContext">EF Core context providing access to the heart rates table.</param>
-    /// <param name="documentProcessingService">Service that applies field processing before save.</param>
-    /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
-    /// <param name="logger">Logger instance for this service.</param>
-    public HeartRateService(
-        NocturneDbContext dbContext,
-        IDocumentProcessingService documentProcessingService,
-        ISignalRBroadcastService signalRBroadcastService,
-        ILogger<HeartRateService> logger
-    )
-        : base(dbContext, documentProcessingService, signalRBroadcastService, logger) { }
-
     protected override DbSet<HeartRateEntity> EntitySet => DbContext.HeartRates;
     protected override string CollectionName => "heartrate";
     protected override string EntityTypeName => "heart rate";
@@ -45,56 +43,19 @@ public class HeartRateService
     protected override void UpdateEntity(HeartRateEntity entity, HeartRate model) =>
         HeartRateMapper.UpdateEntity(entity, model);
 
-    protected override IOrderedQueryable<HeartRateEntity> OrderByTimestamp(
-        IQueryable<HeartRateEntity> query
-    ) => query.OrderByDescending(h => h.Timestamp);
-
-    protected override Task<HeartRateEntity?> FindByIdAsync(
-        string id,
-        CancellationToken cancellationToken
-    ) =>
-        Guid.TryParse(id, out var guid)
-            ? DbContext.HeartRates.FirstOrDefaultAsync(h => h.Id == guid, cancellationToken)
-            : DbContext.HeartRates.FirstOrDefaultAsync(
-                h => h.OriginalId == id,
-                cancellationToken
-            );
-
     public Task<IEnumerable<HeartRate>> GetHeartRatesAsync(
         int count = 10,
         int skip = 0,
         CancellationToken cancellationToken = default
     ) => GetAllAsync(count, skip, cancellationToken);
 
-    public async Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
+    public Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
         DateTime from,
         DateTime to,
         int? count = null,
         int skip = 0,
         CancellationToken cancellationToken = default
-    )
-    {
-        var query = EntitySet
-            .Where(h => h.Timestamp >= from && h.Timestamp < to)
-            .OrderBy(h => h.Timestamp)
-            .Skip(skip);
-
-        if (count is { } take)
-            query = query.Take(take);
-
-        var entities = await query.ToListAsync(cancellationToken);
-
-        return entities.Select(ToDomainModel);
-    }
-
-    public Task<DateTime?> GetLatestTimestampAsync(
-        string source,
-        CancellationToken cancellationToken = default
-    ) =>
-        EntitySet
-            .AsNoTracking()
-            .Where(h => h.DataSource == source)
-            .MaxAsync(h => (DateTime?)h.Timestamp, cancellationToken);
+    ) => GetByDateRangeAsync(from, to, count, skip, cancellationToken);
 
     public Task<HeartRate?> GetHeartRateByIdAsync(
         string id,
