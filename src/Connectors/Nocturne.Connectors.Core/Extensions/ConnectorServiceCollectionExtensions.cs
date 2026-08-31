@@ -254,13 +254,14 @@ public static class ConnectorServiceCollectionExtensions
         ///     Replaces explicit per-connector AddXxxConnector() calls in Program.cs.
         /// </summary>
         /// <param name="configuration">Application configuration</param>
-        /// <param name="backgroundServiceAssembly">
-        ///     Optional assembly to scan for ConnectorBackgroundService implementations.
-        ///     Typically the API assembly (typeof(Program).Assembly).
+        /// <param name="pollingService">
+        ///     Optional open generic hosted service over a connector's service and configuration
+        ///     types — the API's <c>ConnectorBackgroundService&lt;TService, TConfig&gt;</c>.
+        ///     Supplying it schedules every installed connector.
         /// </param>
         public IServiceCollection AddConnectors(
             IConfiguration configuration,
-            Assembly? backgroundServiceAssembly = null)
+            Type? pollingService = null)
         {
             // Connector assemblies may not be loaded yet since they're no longer
             // directly referenced in Program.cs. Load them from the app's base directory.
@@ -309,56 +310,93 @@ public static class ConnectorServiceCollectionExtensions
                 }
             }
 
-            // Auto-register background services
-            if (backgroundServiceAssembly != null)
+            if (pollingService is null)
+                return services;
+
+            void AddPollerIfEnabled(Type hostedService, Type configType)
             {
-                foreach (var type in backgroundServiceAssembly.GetTypes())
+                // Per-connector section, then the global Settings section, then on by default.
+                var connectorName = ConnectorRegistrationAttribute.DeclaredOn(configType).ConnectorName;
+                var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
+                if (!section.Exists())
+                    section = configuration.GetSection($"Connectors:{connectorName}");
+
+                var isEnabled = section.GetValue<bool?>("Enabled")
+                    ?? configuration.GetValue<bool?>("Parameters:Connectors:Settings:Enabled")
+                    ?? configuration.GetValue<bool?>("Connectors:Settings:Enabled")
+                    ?? true;
+
+                if (isEnabled)
+                    services.TryAddEnumerable(
+                        ServiceDescriptor.Singleton(typeof(IHostedService), hostedService));
+            }
+
+            // Connectors that need more than polling — a realtime listener — subclass the poller and
+            // are registered as written; their configuration types then stand the generic down below.
+            var scheduled = new HashSet<Type>();
+
+            // The abstract half of the poller pair. A subclass that stops there is reached by neither
+            // registration path, so it fails startup rather than leaving its connector polled by the
+            // generic without the overrides it declares.
+            var pollerBase = pollingService.BaseType is { IsGenericType: true } abstractBase
+                ? abstractBase.GetGenericTypeDefinition()
+                : null;
+
+            foreach (var candidate in pollingService.Assembly.GetTypes())
+            {
+                if (candidate is not { IsAbstract: false, IsInterface: false, IsGenericTypeDefinition: false })
+                    continue;
+
+                if (ClosedFormOf(candidate, pollingService) is not { } closed)
                 {
-                    if (type.IsAbstract || type.IsInterface)
-                        continue;
+                    if (pollerBase is not null && ClosedFormOf(candidate, pollerBase) is not null)
+                        throw new InvalidOperationException(
+                            $"{candidate.Name} derives from {pollerBase.Name} without closing " +
+                            $"{pollingService.Name}, so no registration reaches it.");
 
-                    // Check if the type extends ConnectorBackgroundService<TConfig>
-                    var baseType = type.BaseType;
-                    if (baseType is not { IsGenericType: true })
-                        continue;
-
-                    if (baseType.GetGenericTypeDefinition().Name != "ConnectorBackgroundService`1")
-                        continue;
-
-                    // Get TConfig type and check for ConnectorRegistrationAttribute
-                    var configType = baseType.GetGenericArguments()[0];
-                    var registration = configType.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                    if (registration == null)
-                        continue;
-
-                    // Check if the connector is enabled, using the same fallback
-                    // chain as BindConnectorConfiguration: per-connector section
-                    // → global Settings section → default (true)
-                    var connectorName = registration.ConnectorName;
-                    var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
-                    if (!section.Exists())
-                        section = configuration.GetSection($"Connectors:{connectorName}");
-
-                    var isEnabled = section.GetValue<bool?>("Enabled")
-                        ?? configuration.GetValue<bool?>("Parameters:Connectors:Settings:Enabled")
-                        ?? configuration.GetValue<bool?>("Connectors:Settings:Enabled")
-                        ?? true;
-
-                    if (!isEnabled)
-                        continue;
-
-                    // Register the hosted service
-                    var addHostedServiceMethod = typeof(ServiceCollectionHostedServiceExtensions)
-                        .GetMethods()
-                        .First(m => m.Name == "AddHostedService" && m.GetParameters().Length == 1)
-                        .MakeGenericMethod(type);
-
-                    addHostedServiceMethod.Invoke(null, [services]);
+                    continue;
                 }
+
+                var configType = closed.GetGenericArguments()[1];
+                scheduled.Add(configType);
+                AddPollerIfEnabled(candidate, configType);
+            }
+
+            var executors = services
+                .Where(descriptor => descriptor.ServiceType == typeof(IConnectorSyncExecutor))
+                .Select(descriptor => descriptor.ImplementationType)
+                .ToList();
+
+            foreach (var executor in executors)
+            {
+                var closed = ClosedFormOf(executor, typeof(ConnectorSyncExecutor<,>))
+                    ?? throw new InvalidOperationException(
+                        $"{executor?.Name ?? "A factory-registered sync executor"} does not derive from " +
+                        "ConnectorSyncExecutor<TService, TConfig>, so the connector service and " +
+                        "configuration types to poll cannot be read from it.");
+
+                var arguments = closed.GetGenericArguments();
+                if (!scheduled.Add(arguments[1]))
+                    continue;
+
+                AddPollerIfEnabled(pollingService.MakeGenericType(arguments), arguments[1]);
             }
 
             return services;
         }
+    }
+
+    /// <summary>
+    ///     The closed <paramref name="openGeneric"/> in <paramref name="type"/>'s inheritance chain,
+    ///     or <c>null</c> when it derives from no such thing.
+    /// </summary>
+    private static Type? ClosedFormOf(Type? type, Type openGeneric)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == openGeneric)
+                return current;
+
+        return null;
     }
 
     private static string? ConnectorIdOf(Type executorType) =>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
@@ -28,6 +29,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 {
     protected readonly IServiceProvider ServiceProvider;
     protected readonly ILogger Logger;
+
+    private static readonly ConnectorRegistrationAttribute Registration =
+        ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig));
 
     /// <summary>
     /// Tracks the last sync time per tenant so each tenant's configured
@@ -94,9 +98,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     }
 
     /// <summary>
-    /// Gets the connector name for logging
+    /// The connector's configuration-section name; must match the name its stored health state is
+    /// filed under.
     /// </summary>
-    protected abstract string ConnectorName { get; }
+    /// <seealso cref="ConnectorRegistrationAttribute.DeclaredOn"/>
+    protected static string ConnectorName => Registration.ConnectorName;
 
     /// <summary>
     /// Called after the initial startup delay and again every <see cref="RealtimeSupervisionInterval"/>.
@@ -357,9 +363,10 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
         tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
 
-        // Attribute this connector's mutations to the connector rather than to a human actor.
+        // Attribute this connector's mutations to the connector rather than to a human actor, under
+        // the dispatch id so a scheduled sync and one ConnectorSyncService triggered agree.
         using var systemScope = SystemAuditScope.PushForScope(
-            scope.ServiceProvider, $"connector:{ConnectorName}");
+            scope.ServiceProvider, $"connector:{Registration.ConnectorId}");
 
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
@@ -456,4 +463,25 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         );
         await base.StopAsync(cancellationToken);
     }
+}
+
+/// <summary>
+/// Polls <typeparamref name="TService"/> on the schedule <typeparamref name="TConfig"/> configures.
+/// <c>AddConnectors</c> closes this over every connector that registers a sync executor and has no
+/// subclass of its own, so a connector needs no scheduling code to be polled.
+/// </summary>
+public class ConnectorBackgroundService<TService, TConfig>(
+    IServiceProvider serviceProvider,
+    ILogger<ConnectorBackgroundService<TService, TConfig>> logger)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, logger)
+    where TService : class, IConnectorService<TConfig>
+    where TConfig : BaseConnectorConfiguration
+{
+    protected sealed override Task<SyncResult> PerformSyncAsync(
+        IServiceProvider scopeProvider,
+        TConfig config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter = null) =>
+        scopeProvider.GetRequiredService<TService>()
+            .SyncDataAsync(config, cancellationToken, since: null, progressReporter);
 }

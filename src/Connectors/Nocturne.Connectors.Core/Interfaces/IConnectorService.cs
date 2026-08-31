@@ -28,4 +28,10 @@ public interface IConnectorService<in TConfig> : IDisposable
     ///     Perform a granular sync operation
     /// </summary>
     Task<SyncResult> SyncDataAsync(SyncRequest request, TConfig config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null);
+
+    /// <summary>
+    ///     Perform a scheduled sync, resolving the range from the connector's own resume watermark
+    ///     when <paramref name="since"/> is omitted.
+    /// </summary>
+    Task<SyncResult> SyncDataAsync(TConfig config, CancellationToken cancellationToken = default, DateTime? since = null, ISyncProgressReporter? progressReporter = null);
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
@@ -20,8 +21,10 @@ namespace Nocturne.API.Tests.Services.BackgroundServices;
 public class ConnectorBackgroundServiceTests
 {
     /// <summary>
-    /// Minimal IConnectorConfiguration implementation for testing.
+    /// Minimal IConnectorConfiguration implementation for testing. The registration attribute is what
+    /// names the connector in logs, health rows and audit endpoints.
     /// </summary>
+    [ConnectorRegistration("TestConnector", "test-connector", "TESTCONNECTOR", "TestConnector")]
     private class TestConnectorConfig : BaseConnectorConfiguration
     {
         protected override void ValidateSourceSpecificConfiguration() { }
@@ -58,8 +61,6 @@ public class ConnectorBackgroundServiceTests
             _hangFirstNCalls = hangFirstNCalls;
             _onSyncCompleted = onSyncCompleted;
         }
-
-        protected override string ConnectorName => "TestConnector";
 
         protected override TimeSpan PerTenantSyncTimeout => _perTenantTimeout ?? base.PerTenantSyncTimeout;
 
@@ -608,7 +609,7 @@ public class ConnectorBackgroundServiceTests
     }
 
     [Fact]
-    public async Task SyncForTenant_MarksScopedAuditContextAsSystem()
+    public async Task SyncForTenant_SystemAttributesTheScopeToTheConnector()
     {
         // Regression test for the mutation_audit_log firehose: V4 repositories stamp their
         // factory-created DbContexts from the scoped IAuditContext (V4RepositoryBase), not from
@@ -644,17 +645,23 @@ public class ConnectorBackgroundServiceTests
         var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
 
         bool? capturedIsSystem = null;
+        string? capturedEndpoint = null;
         var sut = new TestConnectorBackgroundService(
             serviceProvider,
             syncResult,
             NullLogger<TestConnectorBackgroundService>.Instance,
-            onSyncScope: sp => capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem);
+            onSyncScope: sp =>
+            {
+                capturedIsSystem = sp.GetRequiredService<IAuditContext>().IsSystem;
+                capturedEndpoint = sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint;
+            });
 
         // Act
         await sut.ExecuteOnceAsync(CancellationToken.None);
 
         // Assert — everything written during the sync must carry system attribution.
         Assert.True(capturedIsSystem);
+        Assert.Equal("connector:testconnector", capturedEndpoint);
     }
 
     [Fact]
@@ -981,8 +988,6 @@ public class ConnectorBackgroundServiceTests
 
         public Task SecondSupervisionPass => _secondSupervisionPass.Task;
 
-        protected override string ConnectorName => "TestConnector";
-
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
 
         protected override TimeSpan PollInterval => TimeSpan.FromMilliseconds(20);
@@ -1035,8 +1040,6 @@ public class ConnectorBackgroundServiceTests
         public ConcurrentDictionary<Guid, FakeListenerClient> Clients { get; } = new();
 
         public int StartCount => _startCount;
-
-        protected override string ConnectorName => "TestConnector";
 
         protected override TimeSpan RealtimeSupervisionInterval => supervisionInterval;
 

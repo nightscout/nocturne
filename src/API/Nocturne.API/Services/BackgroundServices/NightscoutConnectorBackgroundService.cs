@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,8 +15,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Optionally connects to each tenant's Nightscout Socket.IO endpoint to trigger
 /// immediate syncs when upstream data changes.
 /// </summary>
-/// <seealso cref="ConnectorBackgroundService{TConfig}"/>
-public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<NightscoutConnectorConfiguration>
+public class NightscoutConnectorBackgroundService
+    : ConnectorBackgroundService<NightscoutConnectorService, NightscoutConnectorConfiguration>
 {
     private readonly ConcurrentDictionary<Guid, SocketIO> _socketClients = new();
 
@@ -48,14 +47,6 @@ public class NightscoutConnectorBackgroundService : ConnectorBackgroundService<N
         ILogger<NightscoutConnectorBackgroundService> logger
     )
         : base(serviceProvider, logger) { }
-
-    protected override string ConnectorName => "Nightscout";
-
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, NightscoutConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
-    {
-        var connectorService = scopeProvider.GetRequiredService<NightscoutConnectorService>();
-        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
-    }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)

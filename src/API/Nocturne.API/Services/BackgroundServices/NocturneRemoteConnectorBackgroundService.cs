@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,8 +15,8 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Optionally connects to each tenant's Nocturne SignalR hub to trigger
 /// immediate syncs when upstream data changes.
 /// </summary>
-/// <seealso cref="ConnectorBackgroundService{TConfig}"/>
-public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundService<NocturneRemoteConnectorConfiguration>
+public class NocturneRemoteConnectorBackgroundService
+    : ConnectorBackgroundService<NocturneRemoteConnectorService, NocturneRemoteConnectorConfiguration>
 {
     private readonly ConcurrentDictionary<Guid, HubConnection> _hubConnections = new();
 
@@ -28,14 +27,6 @@ public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundServi
         ILogger<NocturneRemoteConnectorBackgroundService> logger
     )
         : base(serviceProvider, logger) { }
-
-    protected override string ConnectorName => "NocturneRemote";
-
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, NocturneRemoteConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
-    {
-        var connectorService = scopeProvider.GetRequiredService<NocturneRemoteConnectorService>();
-        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
-    }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)

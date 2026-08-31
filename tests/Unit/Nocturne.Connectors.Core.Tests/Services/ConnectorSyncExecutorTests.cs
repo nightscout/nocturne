@@ -85,5 +85,10 @@ public class ConnectorSyncExecutorTests
             SyncRequest request, TConfig config, CancellationToken cancellationToken,
             ISyncProgressReporter? progressReporter = null) =>
             Task.FromResult(new SyncResult());
+
+        public Task<SyncResult> SyncDataAsync(
+            TConfig config, CancellationToken cancellationToken = default, DateTime? since = null,
+            ISyncProgressReporter? progressReporter = null) =>
+            Task.FromResult(new SyncResult());
     }
 }

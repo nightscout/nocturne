@@ -891,7 +891,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorPublisher, InProcessConnectorPublisher>();
         services.AddConnectors(
             configuration,
-            backgroundServiceAssembly: typeof(Program).Assembly
+            pollingService: typeof(ConnectorBackgroundService<,>)
         );
 
         // Demo service health monitor
