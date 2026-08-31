@@ -61,7 +61,7 @@ public class DeviceAttributionBackstampTests : IDisposable
 
         _boluses = new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance);
         _tempBasals = new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance);
-        _basalInjections = new BasalInjectionRepository(_context, audit, NullLogger<BasalInjectionRepository>.Instance);
+        _basalInjections = new BasalInjectionRepository(factory, audit);
         _meterGlucose = new MeterGlucoseRepository(factory, audit, NullLogger<MeterGlucoseRepository>.Instance);
         _deviceEvents = new DeviceEventRepository(factory, dedup, audit, NullLogger<DeviceEventRepository>.Instance);
     }

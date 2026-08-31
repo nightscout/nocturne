@@ -2,12 +2,12 @@ using System.Data.Common;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
 
@@ -46,9 +46,8 @@ public class BasalInjectionRepositoryTests : IDisposable
         _context.TenantId = TestTenantId;
 
         _repo = new BasalInjectionRepository(
-            _context,
-            new Mock<IAuditContext>().Object,
-            NullLogger<BasalInjectionRepository>.Instance);
+            new TestTenantDbContextFactory(_context),
+            new Mock<IAuditContext>().Object);
     }
 
     public void Dispose()
@@ -167,6 +166,24 @@ public class BasalInjectionRepositoryTests : IDisposable
             .FirstOrDefaultAsync(e => e.Id == created.Id);
         raw.Should().NotBeNull();
         raw!.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteBySyncIdentifierAsync_records_the_delete_and_stamps_the_dedup_flag()
+    {
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-7"), WriteOrigin.Live);
+
+        await _repo.DeleteBySyncIdentifierAsync("aaps", "sync-7", WriteOrigin.Live);
+
+        await using var verify = new NocturneDbContext(_contextOptions) { TenantId = TestTenantId };
+        var raw = await verify.BasalInjections.IgnoreQueryFilters().SingleAsync(e => e.Id == created.Id);
+        verify.Entry(raw).Property("DeletedByUser").CurrentValue.Should().Be(true);
+
+        var audit = await verify.Set<MutationAuditLogEntity>()
+            .Where(a => a.EntityId == created.Id && a.Action == "delete")
+            .ToListAsync();
+        audit.Should().ContainSingle();
+        audit[0].EntityType.Should().Be("BasalInjection");
     }
 
     [Fact]
