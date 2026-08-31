@@ -1,3 +1,4 @@
+using System.Reflection;
 using Nocturne.Connectors.Core.Models;
 
 namespace Nocturne.Connectors.Core.Extensions;
@@ -144,4 +145,21 @@ public class ConnectorRegistrationAttribute(
     ///     Real-time connectors use 60; batch connectors use 360.
     /// </summary>
     public int DefaultStaleThresholdMinutes { get; set; } = 60;
+
+    /// <summary>
+    ///     The registration <paramref name="configType"/> declares itself.
+    /// </summary>
+    /// <remarks>
+    ///     Read without inheritance: a config declared by subclassing another connector's config
+    ///     (Gluroo extends Nightscout) would otherwise answer the parent's registration and be
+    ///     registered under the parent's connector.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    ///     <paramref name="configType"/> carries no registration of its own, so nothing could ever
+    ///     dispatch to it.
+    /// </exception>
+    public static ConnectorRegistrationAttribute DeclaredOn(Type configType) =>
+        configType.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)
+        ?? throw new InvalidOperationException(
+            $"{configType.Name} declares no {nameof(ConnectorRegistrationAttribute)} of its own.");
 }

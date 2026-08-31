@@ -75,8 +75,13 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </summary>
     public virtual List<SyncDataType> SupportedDataTypes => [.. RegisteredDataTypes];
 
+    /// <remarks>
+    ///     Not <see cref="ConnectorRegistrationAttribute.DeclaredOn"/>: a connector service may be
+    ///     closed over a configuration carrying no registration at all, which defaults to glucose
+    ///     rather than failing. The inherit rule is the same one.
+    /// </remarks>
     private static readonly SyncDataType[] RegisteredDataTypes =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>()?.SupportedDataTypes
+        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.SupportedDataTypes
         ?? [SyncDataType.Glucose];
 
     /// <summary>

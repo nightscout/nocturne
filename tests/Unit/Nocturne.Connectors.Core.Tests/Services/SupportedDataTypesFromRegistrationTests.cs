@@ -23,6 +23,8 @@ public class SupportedDataTypesFromRegistrationTests
 
     public class UnregisteredConfig : BaseConnectorConfiguration;
 
+    public class DerivedFromRegisteredConfig : RegisteredConfig;
+
     private class Service<TConfig>(ConnectorServerResolver<TConfig> resolver)
         : BaseConnectorService<TConfig>(new HttpClient(), resolver, NullLogger.Instance)
         where TConfig : BaseConnectorConfiguration
@@ -56,6 +58,15 @@ public class SupportedDataTypesFromRegistrationTests
     public void SupportedDataTypes_FallsBackToGlucoseWithoutARegistration()
     {
         Build<UnregisteredConfig>().SupportedDataTypes.Should().BeEquivalentTo([SyncDataType.Glucose]);
+    }
+
+    [Fact]
+    public void SupportedDataTypes_IgnoresARegistrationInheritedFromAnotherConnector()
+    {
+        // Gluroo's config subclasses Nightscout's. Answering an ancestor's attribute would sync the
+        // data types the other connector declared.
+        Build<DerivedFromRegisteredConfig>().SupportedDataTypes.Should()
+            .BeEquivalentTo([SyncDataType.Glucose]);
     }
 
     [Fact]

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
@@ -15,16 +14,9 @@ public class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncExecutor
     where TConfig : BaseConnectorConfiguration
 {
     /// <inheritdoc />
-    /// <remarks>
-    ///     Read without inheritance: a config declared by subclassing another connector's config
-    ///     (Gluroo extends Nightscout) would otherwise answer the parent's id, registering a second
-    ///     executor under it and leaving a trigger to pick whichever DI enumerated first.
-    /// </remarks>
+    /// <seealso cref="ConnectorRegistrationAttribute.DeclaredOn"/>
     public string ConnectorId { get; } =
-        typeof(TConfig).GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.ConnectorId
-        ?? throw new InvalidOperationException(
-            $"{typeof(TConfig).Name} declares no {nameof(ConnectorRegistrationAttribute)} of its own, " +
-            "so no sync trigger could ever dispatch to it.");
+        ConnectorRegistrationAttribute.DeclaredOn(typeof(TConfig)).ConnectorId;
 
     public async Task<SyncResult> ExecuteSyncAsync(
         IServiceProvider scopeProvider,
