@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as Tabs from "$lib/components/ui/tabs";
   import * as Table from "$lib/components/ui/table";
@@ -527,12 +528,13 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<ConfirmDialog
-  bind:open={showExternalWarning}
-  title="Externally Managed Profile"
-  confirmLabel="I Understand"
-  onConfirm={() => (showExternalWarning = false)}
->
+<ConfirmDialog bind:open={showExternalWarning} title="Externally Managed Profile">
+  {#snippet footer()}
+    <AlertDialog.Action onclick={() => (showExternalWarning = false)}>
+      I Understand
+    </AlertDialog.Action>
+  {/snippet}
+
   {#snippet description()}
     This profile is managed by an external source (e.g., Glooko). <br />
     Any changes made here will
