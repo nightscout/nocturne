@@ -283,6 +283,27 @@ public class TandemE2eSyncTests
     }
 
     /// <summary>
+    /// A span still open at the end of the window closes at the pump's newest event, not at the
+    /// caller's upper bound: the records upsert on a stable id, so a bounded re-import that ended
+    /// them early would write a shortened end over the real one.
+    /// </summary>
+    [Fact]
+    public async Task Explicit_request_window_does_not_shorten_the_last_basal_span()
+    {
+        var fixture = new Fixture();
+
+        await fixture.RunAsync(new SyncRequest
+        {
+            From = Utc(2026, 5, 15, 0, 0, 0),
+            To = Utc(2026, 5, 17, 0, 0, 0),
+            DataTypes = [SyncDataType.TempBasals],
+        });
+
+        fixture.Publisher.TempBasals.Should().NotBeEmpty();
+        fixture.Publisher.TempBasals[^1].EndTimestamp.Should().Be(Utc(2026, 5, 18, 14, 19, 55));
+    }
+
+    /// <summary>
     /// The pump serves nothing before its available range begins, so a repair request reaching
     /// further back than that is clamped to it — and the run says so, rather than reporting a
     /// success that quietly covered a different window than the one asked for.

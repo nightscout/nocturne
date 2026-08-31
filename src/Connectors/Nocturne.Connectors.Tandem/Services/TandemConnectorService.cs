@@ -111,6 +111,10 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             _logger.LogError(ex, "[{Source}] Error during Tandem sync", ConnectorSource);
             result.Success = false;
             result.Errors.Add($"Sync error: {ex.Message}");
+
+            // Message is the failure summary the tenant's card reads, so a window notice recorded
+            // before the throw must not stand in for the failure.
+            result.Message = string.Empty;
         }
 
         result.EndTime = DateTimeOffset.UtcNow;
@@ -135,10 +139,11 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         HashSet<SyncDataType> activeTypes, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        // The pump's newest event is a hard ceiling: there is nothing above it to ask for.
-        var end = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
-        if (request.To is { } until && until < end)
-            end = until;
+        // The pump's newest event is a hard ceiling: there is nothing above it to ask for, and it
+        // is where a still-open span closes however narrowly the fetch below is bounded — a span
+        // ended at the caller's bound instead would upsert a shortened end over the real one.
+        var ceiling = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
+        var end = request.To is { } until && until < ceiling ? until : ceiling;
 
         var start = await ResolveStartAsync(request, config, device, time, result);
         if (start >= end)
@@ -192,7 +197,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .ToDictionary(g => g.Key, g => g.ToList());
 
         await PublishEventsAsync(
-            groups, activeTypes, end, cgm, bolus, basal, deviceEvents, systemEvents,
+            groups, activeTypes, ceiling, cgm, bolus, basal, deviceEvents, systemEvents,
             userMode, deviceStatus, result, config, cancellationToken);
     }
 
@@ -288,7 +293,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         {
             if (request.From < min)
                 result.Message =
-                    $"The pump holds no data before {min:yyyy-MM-dd HH:mm} UTC; the requested window starts there.";
+                    $"The pump holds no data before {min.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC; "
+                    + "the requested window starts there.";
 
             start = min;
         }
