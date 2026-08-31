@@ -10,6 +10,7 @@
     Loader2,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     list as listClockFaces,
@@ -22,7 +23,7 @@
   const clockFacesQuery = listClockFaces();
 
   let creating = $state(false);
-  let deleting = $state(false);
+  const deletion = useToastSubmission("Failed to delete clock face");
   let deleteDialogOpen = $state(false);
   let clockFaceToDelete = $state<{ id: string; name: string } | null>(null);
 
@@ -113,21 +114,16 @@
   }
 
   async function confirmDelete() {
-    if (!clockFaceToDelete) return;
+    const target = clockFaceToDelete;
+    if (!target) return;
 
-    deleting = true;
-    try {
-      await removeClockFace(clockFaceToDelete.id);
+    await deletion.run(async () => {
+      await removeClockFace(target.id);
       await clockFacesQuery.refresh();
       toast.success("Clock face deleted");
       deleteDialogOpen = false;
       clockFaceToDelete = null;
-    } catch (err) {
-      console.error("Failed to delete clock face:", err);
-      toast.error("Failed to delete clock face");
-    } finally {
-      deleting = false;
-    }
+    });
   }
 </script>
 
@@ -266,7 +262,7 @@
   title="Delete Clock Face"
   confirmLabel="Delete"
   destructive
-  busy={deleting}
+  busy={deletion.busy}
   onConfirm={confirmDelete}
 >
   {#snippet description()}

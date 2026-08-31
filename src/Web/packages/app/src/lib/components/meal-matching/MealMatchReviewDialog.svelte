@@ -4,6 +4,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import type {
     InAppNotificationDto,
@@ -30,7 +31,8 @@
   // Form state
   let carbs = $state<number>(0);
   let selectedTime = $state<string>(""); // HH:mm format for time input
-  let isLoading = $state(false);
+  const accept = useToastSubmission("Failed to accept meal match");
+  const dismiss = useToastSubmission("Failed to dismiss meal match");
 
   // Extract data from notification OR match
   const carbIntakeId = $derived(
@@ -127,7 +129,6 @@
     carbs = 0;
     selectedTime = "";
     selectedDate = "";
-    isLoading = false;
     open = false;
     onOpenChange(false);
   }
@@ -138,8 +139,7 @@
       return;
     }
 
-    isLoading = true;
-    try {
+    await accept.run(async () => {
       await acceptMatch({
         foodEntryId,
         carbIntakeId,
@@ -149,12 +149,7 @@
       toast.success("Meal match accepted");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to accept meal match:", err);
-      toast.error("Failed to accept meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   async function handleDismiss() {
@@ -163,18 +158,12 @@
       return;
     }
 
-    isLoading = true;
-    try {
+    await dismiss.run(async () => {
       await dismissMatch({ foodEntryId });
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();
-    } catch (err) {
-      console.error("Failed to dismiss meal match:", err);
-      toast.error("Failed to dismiss meal match");
-    } finally {
-      isLoading = false;
-    }
+    });
   }
 
   // Calculate scale factor based on carbs adjustment
@@ -327,7 +316,7 @@
         type="button"
         variant="outline"
         onclick={handleDismiss}
-        disabled={isLoading}
+        disabled={dismiss.busy || accept.busy}
       >
         Dismiss
       </Button>
@@ -335,8 +324,8 @@
       <Button type="button" variant="outline" onclick={resetAndClose}>
         Cancel
       </Button>
-      <Button type="button" onclick={handleAccept} disabled={isLoading}>
-        {isLoading ? "Saving..." : "Accept"}
+      <Button type="button" onclick={handleAccept} disabled={accept.busy || dismiss.busy}>
+        {accept.busy ? "Saving..." : "Accept"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

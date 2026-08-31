@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Loader2 } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import {
     CarbIntakeFoodInputMode,
     type Food,
@@ -82,14 +83,11 @@
   // Track which submit action to take
   let submitAction = $state<"create" | "update" | "saveAsNew">("create");
 
-  let formSaving = $state(false);
+  const foodSave = useToastSubmission("Failed to save food");
 
   async function handleFoodFormSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (formSaving) return;
-
-    formSaving = true;
-    try {
+    await foodSave.run(async () => {
       const foodPayload: Food = {
         _id: submitAction === "update" ? selectedFood?._id : undefined,
         type: "food",
@@ -132,12 +130,7 @@
         request.foodId = selectedFood._id;
         onSubmit(request, selectedFood?.name ?? "Food");
       }
-    } catch (err) {
-      console.error("Failed to save food:", err);
-      toast.error("Failed to save food");
-    } finally {
-      formSaving = false;
-    }
+    });
   }
 
   // Handle portions change - recalculate carbs
@@ -440,7 +433,7 @@
       (isCreatingNew && foodName.trim()) ||
       (isLoggingWithoutSaving && entryCarbs > 0)) &&
       !isSubmitting &&
-      !formSaving
+      !foodSave.busy
   );
 </script>
 
@@ -541,10 +534,10 @@
         <Button
           type="submit"
           form="food-form"
-          disabled={!canSubmit || formSaving}
+          disabled={!canSubmit || foodSave.busy}
           onclick={() => { submitAction = "create"; }}
         >
-          {#if formSaving}
+          {#if foodSave.busy}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
@@ -557,10 +550,10 @@
           type="submit"
           form="food-form"
           variant="outline"
-          disabled={!canSubmit || formSaving}
+          disabled={!canSubmit || foodSave.busy}
           onclick={() => { submitAction = "saveAsNew"; }}
         >
-          {#if formSaving}
+          {#if foodSave.busy}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
@@ -570,10 +563,10 @@
         <Button
           type="submit"
           form="food-form"
-          disabled={!canSubmit || formSaving}
+          disabled={!canSubmit || foodSave.busy}
           onclick={() => { submitAction = "update"; }}
         >
-          {#if formSaving}
+          {#if foodSave.busy}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Updating...
           {:else}

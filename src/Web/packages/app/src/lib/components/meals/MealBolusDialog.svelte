@@ -11,6 +11,7 @@
     remove as removeBolus,
   } from "$api/generated/bolus.generated.remote";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { Syringe, Plus, Pencil, Trash2, ArrowLeft } from "lucide-svelte";
 
   interface Props {
@@ -26,7 +27,7 @@
   let editingBolus = $state<Bolus | null>(null);
   let isSaving = $state(false);
   let deletingBolusId = $state<string | null>(null);
-  let isDeleting = $state(false);
+  const deletion = useToastSubmission("Failed to delete bolus");
 
   let editForm = $state({
     insulin: null as number | null,
@@ -115,18 +116,14 @@
   }
 
   async function handleDelete(bolus: Bolus) {
-    if (!bolus.id) return;
-    isDeleting = true;
-    try {
-      await removeBolus(bolus.id);
+    const bolusId = bolus.id;
+    if (!bolusId) return;
+    await deletion.run(async () => {
+      await removeBolus(bolusId);
       toast.success("Bolus deleted");
       onSave();
       deletingBolusId = null;
-    } catch {
-      toast.error("Failed to delete bolus");
-    } finally {
-      isDeleting = false;
-    }
+    });
   }
 
   function formatBolusTime(mills: number | undefined): string {
@@ -254,7 +251,7 @@
                       variant="ghost"
                       size="sm"
                       onclick={() => (deletingBolusId = null)}
-                      disabled={isDeleting}
+                      disabled={deletion.busy}
                     >
                       Cancel
                     </Button>
@@ -262,7 +259,7 @@
                       variant="destructive"
                       size="sm"
                       onclick={() => handleDelete(bolus)}
-                      disabled={isDeleting}
+                      disabled={deletion.busy}
                     >
                       Delete
                     </Button>

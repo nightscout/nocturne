@@ -6,6 +6,10 @@ export {
   type AvailabilityQuery,
 } from "./availability.svelte";
 export { useSubmission, type Submission } from "./submission.svelte";
+export {
+  useToastSubmission,
+  type ToastSubmission,
+} from "./toast-submission.svelte";
 export { fieldMessages, type FieldIssues } from "./field-messages";
 export {
   describeSubmitError,

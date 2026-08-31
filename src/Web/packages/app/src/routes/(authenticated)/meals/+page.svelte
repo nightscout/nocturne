@@ -9,6 +9,7 @@
   import { getMeals, addCarbIntakeFood, deleteCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
@@ -60,7 +61,8 @@
   // Unlink food confirmation state
   let showUnlinkConfirm = $state(false);
   let unlinkTarget = $state<{ meal: MealEvent; food: TreatmentFood } | null>(null);
-  let isUnlinking = $state(false);
+  const unlink = useToastSubmission("Failed to unlink food");
+  const addFood = useToastSubmission("Failed to add food");
 
   const queryParams = $derived({
     from: dateRange.from ? localDayStart(dateRange.from).getTime() : undefined,
@@ -294,24 +296,19 @@
     if (!unlinkTarget) return;
     const { meal, food } = unlinkTarget;
     const carbIntakeId = meal.carbIntakes?.[0]?.id;
-    if (!carbIntakeId || !food.id) return;
+    const foodEntryId = food.id;
+    if (!carbIntakeId || !foodEntryId) return;
 
-    isUnlinking = true;
-    try {
+    await unlink.run(async () => {
       await deleteCarbIntakeFood({
         id: carbIntakeId,
-        foodEntryId: food.id,
+        foodEntryId,
       });
       toast.success("Food unlinked");
       showUnlinkConfirm = false;
       unlinkTarget = null;
       mealsQuery.refresh();
-    } catch (err) {
-      console.error("Unlink food error:", err);
-      toast.error("Failed to unlink food");
-    } finally {
-      isUnlinking = false;
-    }
+    });
   }
 
   async function handleFoodEntrySaved() {
@@ -322,7 +319,7 @@
     const carbIntakeId = addFoodMeal?.carbIntakes?.[0]?.id;
     if (!carbIntakeId) return;
 
-    try {
+    await addFood.run(async () => {
       await addCarbIntakeFood({
         id: carbIntakeId,
         request,
@@ -331,10 +328,7 @@
       showAddFoodDialog = false;
       addFoodMeal = null;
       mealsQuery.refresh();
-    } catch (err) {
-      console.error("Add food error:", err);
-      toast.error("Failed to add food");
-    }
+    });
   }
 
 
@@ -504,13 +498,13 @@
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel
-        disabled={isUnlinking}
+        disabled={unlink.busy}
         onclick={() => { showUnlinkConfirm = false; unlinkTarget = null; }}
       >
         Cancel
       </AlertDialog.Cancel>
-      <Button variant="destructive" disabled={isUnlinking} onclick={handleUnlinkFood}>
-        {isUnlinking ? "Removing..." : "Remove"}
+      <Button variant="destructive" disabled={unlink.busy} onclick={handleUnlinkFood}>
+        {unlink.busy ? "Removing..." : "Remove"}
       </Button>
     </AlertDialog.Footer>
   </AlertDialog.Content>

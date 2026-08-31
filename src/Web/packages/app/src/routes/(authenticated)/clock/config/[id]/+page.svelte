@@ -4,6 +4,7 @@
   import { browser } from "$app/environment";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -41,7 +42,7 @@
   // State
   let config = $state<InternalConfig>(initializeInternalConfig());
   let clockName = $state("My Clock Face");
-  let saving = $state(false);
+  const save = useToastSubmission("Failed to save clock face");
   let loading = $state(true);
   let selectedElementId = $state<string | null>(null);
   let addMenuOpen = $state<"top" | "bottom" | null>(null);
@@ -378,19 +379,13 @@
 
   async function saveConfiguration() {
     if (!browser || !clockFaceId) return;
-    saving = true;
-    try {
+    await save.run(async () => {
       await updateClockFace({
         id: clockFaceId,
         request: { name: clockName, config: toApiConfig(config) },
       });
       toast.success("Clock face saved");
-    } catch (err) {
-      console.error("Failed to save clock face:", err);
-      toast.error("Failed to save clock face");
-    } finally {
-      saving = false;
-    }
+    });
   }
 </script>
 
@@ -500,7 +495,7 @@
     <!-- Header -->
     <ClockBuilderHeader
       {clockName}
-      {saving}
+      saving={save.busy}
       canUndo={history.canUndo}
       canRedo={history.canRedo}
       onNameChange={(name) => (clockName = name)}

@@ -7,6 +7,7 @@
   import { Play } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { formatShortDate, time } from "$lib/utils/formatting";
+  import { useToastSubmission } from "$lib/forms";
 
   import { tick } from "svelte";
   import {
@@ -38,7 +39,7 @@
   let startNotes = $state("");
   let startedAtString = $state("");
   let scheduledAtString = $state("");
-  let isSubmitting = $state(false);
+  const submission = useToastSubmission("Failed to start tracker");
 
   // Hidden form for device event creation
   let deviceEventFormRef = $state<HTMLFormElement | null>(null);
@@ -177,12 +178,11 @@
 
   async function handleStart() {
     if (!definition?.id) return;
-    isSubmitting = true;
     const defId = definition.id;
     const startedAt = startedAtString ? new Date(startedAtString) : undefined;
     const scheduledAt = scheduledAtString ? new Date(scheduledAtString) : undefined;
 
-    try {
+    await submission.run(async () => {
       await trackersRemote.startInstance({
         definitionId: defId,
         startNotes: startNotes || undefined,
@@ -201,11 +201,7 @@
 
       open = false;
       onStart?.();
-    } catch (err) {
-      console.error("Failed to start instance:", err);
-    } finally {
-      isSubmitting = false;
-    }
+    });
   }
 
   function handleClose() {
@@ -335,10 +331,10 @@
       {/if}
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={handleClose} disabled={isSubmitting}>
+      <Button variant="outline" onclick={handleClose} disabled={submission.busy}>
         Cancel
       </Button>
-      <Button onclick={handleStart} disabled={isSubmitting}>
+      <Button onclick={handleStart} disabled={submission.busy}>
         <Play class="h-4 w-4 mr-2" />
         {isEventMode ? "Schedule" : "Start"}
       </Button>
