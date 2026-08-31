@@ -182,8 +182,7 @@ public class FoodRepository : IFoodRepository
 
         foreach (var entity in entities)
         {
-            // Resolve the row the same way reads do: a legacy Mongo _id addresses its row through
-            // OriginalId, which the id-derived key does not reproduce.
+            // A legacy Mongo _id addresses its row through OriginalId, not the derived key.
             var entityId = entity.Id;
             var originalId = entity.OriginalId;
             var existingEntity = await _context.Foods.FirstOrDefaultAsync(

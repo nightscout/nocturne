@@ -329,15 +329,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <summary>
     /// Soft-deletes <paramref name="rows"/> through the audited helper and broadcasts the removals.
-    /// Exposed so subclasses' type-specific audited deletes (e.g. DeleteBySyncIdentifierAsync) get the
-    /// same audit rows, dedup discriminator and delete events as
-    /// <see cref="DeleteByLegacyIdAsync"/> rather than hand-rolling the pair.
+    /// <paramref name="scope"/> is the key the delete was issued against, recorded on the audit row.
     /// </summary>
-    /// <param name="ctx">The tenant-scoped context <paramref name="rows"/> was built on.</param>
-    /// <param name="rows">The rows to soft-delete.</param>
-    /// <param name="scope">The key the delete was issued against, recorded on the audit row.</param>
-    /// <param name="origin">Write origin; only <see cref="WriteOrigin.Live"/> broadcasts.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of rows soft-deleted.</returns>
     protected async Task<int> AuditedSoftDeleteAndBroadcastAsync(
         NocturneDbContext ctx, IQueryable<TEntity> rows, string scope, WriteOrigin origin, CancellationToken ct)

@@ -4,12 +4,8 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
-/// The soft-delete restore quadrant — restore one, restore many, page the trash, count it — over the
-/// narrowest constraint it actually needs. Reads and writes only
-/// <see cref="ITenantScoped.TenantId"/>, <see cref="ISoftDeletable.DeletedAt"/> and the key, so the
-/// span-shaped and timestamp-less types that <see cref="IV4TimeSeriesEntity"/> keeps off
-/// <see cref="Repositories.V4.V4RepositoryBase{TModel,TEntity}"/> share the base's implementation
-/// rather than retyping it.
+/// Restore and trash-listing over <see cref="ISoftDeletable.DeletedAt"/>, for every tenant-scoped
+/// soft-deletable row.
 /// </summary>
 /// <remarks>
 /// Parameterless <c>IgnoreQueryFilters()</c> drops <see cref="NocturneDbContext.TenantFilterKey"/>
@@ -23,12 +19,9 @@ public static class SoftDeleteRestoreExtensions
 
     /// <summary>
     /// Clears <see cref="ISoftDeletable.DeletedAt"/> on this tenant's soft-deleted row with the given
-    /// key and returns the tracked entity.
+    /// key and returns the tracked entity. <paramref name="recordType"/> names the domain type in the
+    /// not-found message.
     /// </summary>
-    /// <param name="ctx">Tenant-pinned context.</param>
-    /// <param name="id">Key of the soft-deleted row.</param>
-    /// <param name="recordType">Domain type name, for the not-found message.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <exception cref="KeyNotFoundException">No soft-deleted row with that key in this tenant.</exception>
     public static async Task<TEntity> RestoreDeletedAsync<TEntity>(
         this NocturneDbContext ctx, Guid id, string recordType, CancellationToken ct = default)

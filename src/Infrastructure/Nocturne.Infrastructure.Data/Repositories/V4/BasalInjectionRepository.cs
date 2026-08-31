@@ -12,20 +12,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing <see cref="BasalInjection"/> records (discrete long-acting basal
-/// insulin injections, MDI). A SyncId-upsert type, so it inherits the shared CRUD/soft-delete
-/// surface from <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the sync-key
-/// behaviour as overrides. Never cross-connector dedup-linked, so it takes no
-/// <c>PostCommitDedupAsync</c> override.
+/// Repository for <see cref="BasalInjection"/> records (discrete long-acting basal insulin
+/// injections, MDI). SyncId-upsert keyed; never cross-connector dedup-linked.
 /// </summary>
 public class BasalInjectionRepository : V4RepositoryBase<BasalInjection, BasalInjectionEntity>, IBasalInjectionRepository
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="BasalInjectionRepository"/> class.
-    /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    /// <inheritdoc />
     public BasalInjectionRepository(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
