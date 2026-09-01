@@ -507,7 +507,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// Tables carrying the <see cref="ISyncDedupable"/> upsert key. Listed rather than discovered
-    /// from the interface, which only three of them implement.
+    /// from the interface: some carry the key without it (TempBasal, the snapshots), and
+    /// <see cref="DeviceEventEntity"/> and <see cref="NoteEntity"/> implement it for keyed lookup and
+    /// delete without ever upserting on it, so they need no uniqueness.
     /// </summary>
     internal static readonly Type[] SyncDedupedEntities =
     [
