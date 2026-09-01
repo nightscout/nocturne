@@ -95,3 +95,6 @@ docs/diagrams/er-*.mmd
 AndroidAPS/
 Trio/
 .claude/worktrees/
+
+# Throwaway probes and one-off scripts; never part of a change.
+scratch/
