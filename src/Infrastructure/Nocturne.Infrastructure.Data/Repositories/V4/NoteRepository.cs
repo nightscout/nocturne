@@ -7,7 +7,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -7,7 +6,6 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
