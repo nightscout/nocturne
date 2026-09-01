@@ -22,7 +22,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     where TModel : class, IV4Record
     where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISyncDedupable
 {
-    /// <summary>Initializes the base with the tenant-scoped context factory, audit context, (optional) broadcaster, and (optional) legacy entry sink.</summary>
+    /// <inheritdoc />
     protected SyncUpsertRepositoryBase(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
