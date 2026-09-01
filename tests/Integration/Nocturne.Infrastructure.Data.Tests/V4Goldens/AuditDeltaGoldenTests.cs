@@ -19,6 +19,12 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 ///     is already on the record (data_source); recording it grew mutation_audit_log to 24GB.
 /// The <c>MutationAuditInterceptor</c> never contributes here: the helper detaches the entities and
 /// issues the soft-delete as a bulk update, so every row below comes from the helper itself.
+/// <para>
+/// Delta D8 is D5's twin for <c>DeleteBySyncIdentifierAsync</c>: hoisting it onto
+/// <c>SyncKeyedRepositoryBase</c> put every keyed delete on the broadcasting helper, which has to
+/// materialize the matched rows and therefore audits each one instead of writing the count-only
+/// <c>bulk_delete</c> summary the non-broadcasting helper wrote. Same system skip.
+/// </para>
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]
@@ -111,6 +117,42 @@ public class AuditDeltaGoldenTests
             WriteOrigin.Live, CancellationToken.None);
 
         var deleted = await repo.DeleteByLegacyIdAsync("de-sys-del", WriteOrigin.Live, CancellationToken.None);
+        deleted.Should().Be(1, "the sweep still soft-deletes the row");
+
+        (await AuditRowCountAsync(tenant, "DeviceEvent", created.Id)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task D8_DeviceEvent_DeleteBySyncIdentifier_WritesPerRecordAuditRow()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        AttributeScopeToUser(scope);
+        var repo = scope.ServiceProvider.GetRequiredService<IDeviceEventRepository>();
+
+        var created = await repo.CreateAsync(
+            new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "aaps", SyncIdentifier = "de-sync-del" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        var deleted = await repo.DeleteBySyncIdentifierAsync("aaps", "de-sync-del", WriteOrigin.Live, CancellationToken.None);
+        deleted.Should().Be(1);
+
+        // D8 re-baseline (was one count-only bulk_delete summary row, and none carrying the record id).
+        (await AuditRowCountAsync(tenant, "DeviceEvent", created.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task D8_DeviceEvent_SystemDeleteBySyncIdentifier_WritesNoAuditRow()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IDeviceEventRepository>();
+
+        var created = await repo.CreateAsync(
+            new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "nightscout", SyncIdentifier = "de-sys-sync-del" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        var deleted = await repo.DeleteBySyncIdentifierAsync("nightscout", "de-sys-sync-del", WriteOrigin.Live, CancellationToken.None);
         deleted.Should().Be(1, "the sweep still soft-deletes the row");
 
         (await AuditRowCountAsync(tenant, "DeviceEvent", created.Id)).Should().Be(0);

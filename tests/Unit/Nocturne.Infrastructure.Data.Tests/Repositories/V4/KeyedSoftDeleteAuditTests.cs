@@ -228,44 +228,93 @@ public class TherapySettingsRepositoryPrefixDeleteTests
 }
 
 /// <summary>
-/// The connector-facing note delete. Both halves of the key are load-bearing, so the near misses
-/// vary one at a time: same sync identifier under another source, and another sync identifier under
-/// the same source.
+/// The connector-facing delete keyed on (data source, sync identifier), shared by every repository
+/// that offers one. Both halves of the key are load-bearing, so the near misses vary one at a time.
+/// These deletes materialize their matched rows in order to broadcast them, which also means each row
+/// is audited individually instead of collapsing into a <c>bulk_delete</c> summary.
 /// </summary>
-[Trait("Category", "Unit")]
-[Trait("Category", "Repository")]
-public class NoteRepositorySyncIdentifierDeleteTests : KeyedSoftDeleteAuditTests<NoteEntity>
+public abstract class SyncIdentifierDeleteAuditTests<TModel, TEntity> : KeyedSoftDeleteAuditTests<TEntity>
+    where TModel : class
+    where TEntity : class, ISoftDeletable
 {
-    private const string DataSource = "dexcom";
-    private const string SyncIdentifier = "note-42";
+    protected const string DataSource = "dexcom";
+    protected const string SyncIdentifier = "sync-42";
 
-    private readonly RecordingBroadcaster _broadcaster = new();
-
-    private NoteRepository _repository = null!;
-
-    protected override string AuditEntityType => "Note";
+    /// <summary>Wired into the repository under test so the delete's broadcast can be asserted.</summary>
+    protected readonly RecordingBroadcaster Broadcaster = new();
 
     protected override string ExpectedScope => $"sync_identifier={DataSource}/{SyncIdentifier}";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
-        _repository = new NoteRepository(
-            contextFactory,
-            new Mock<IDeduplicationService>().Object,
-            auditContext,
-            Logger<NoteRepository>(),
-            _broadcaster);
+    /// <summary>A row of the repository's type carrying the given key halves, unsaved.</summary>
+    protected abstract TEntity NewRow(string? dataSource, string? syncIdentifier);
 
-    /// <summary>
-    /// The matched rows are materialized so they can be broadcast, and each one is audited
-    /// individually rather than collapsed into a <c>bulk_delete</c> summary.
-    /// </summary>
+    /// <summary>Issues the keyed delete for <see cref="DataSource"/>/<see cref="SyncIdentifier"/>.</summary>
+    protected abstract Task<int> DeleteAsync(WriteOrigin origin);
+
+    protected override Task<int> DeleteAsync() => DeleteAsync(WriteOrigin.Live);
+
+    protected override Guid SeedMatch() => Add(NewRow(DataSource, SyncIdentifier));
+
+    protected override IReadOnlyList<Guid> SeedNearMisses() =>
+    [
+        Add(NewRow("libre", SyncIdentifier)),
+        Add(NewRow(DataSource, "sync-43")),
+        Add(NewRow(DataSource, null)),
+        Add(NewRow(null, SyncIdentifier)),
+    ];
+
     protected override void AssertUserDeleteAuditRow(MutationAuditLogEntity log, Guid match)
     {
         log.Action.Should().Be("delete");
         log.EntityId.Should().Be(match);
     }
 
-    private NoteEntity NewRow(string? dataSource, string? syncIdentifier) =>
+    [Fact]
+    public async Task Delete_BroadcastsTheRemovedRecord()
+    {
+        var match = SeedMatch();
+        SeedNearMisses();
+
+        await DeleteAsync();
+
+        Broadcaster.Deleted.Should().Equal(match);
+    }
+
+    [Fact]
+    public async Task Delete_Backfill_BroadcastsNothing()
+    {
+        SeedMatch();
+
+        await DeleteAsync(WriteOrigin.Backfill);
+
+        Broadcaster.Deleted.Should().BeEmpty();
+    }
+
+    protected sealed class RecordingBroadcaster : IV4RecordBroadcaster<TModel>
+    {
+        public List<Guid> Deleted { get; } = [];
+
+        public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+        {
+            Deleted.AddRange(ids);
+            return Task.CompletedTask;
+        }
+    }
+}
+
+[Trait("Category", "Unit")]
+[Trait("Category", "Repository")]
+public class NoteRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAuditTests<Note, NoteEntity>
+{
+    private NoteRepository _repository = null!;
+
+    protected override string AuditEntityType => "Note";
+
+    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+        _repository = new NoteRepository(
+            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<NoteRepository>(), Broadcaster);
+
+    protected override NoteEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()
         {
             Id = Guid.CreateVersion7(),
@@ -276,50 +325,89 @@ public class NoteRepositorySyncIdentifierDeleteTests : KeyedSoftDeleteAuditTests
             SyncIdentifier = syncIdentifier,
         };
 
-    protected override Guid SeedMatch() => Add(NewRow(DataSource, SyncIdentifier));
+    protected override Task<int> DeleteAsync(WriteOrigin origin) =>
+        _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, origin);
+}
 
-    protected override IReadOnlyList<Guid> SeedNearMisses() =>
-    [
-        Add(NewRow("libre", SyncIdentifier)),
-        Add(NewRow(DataSource, "note-43")),
-        Add(NewRow(DataSource, null)),
-        Add(NewRow(null, SyncIdentifier)),
-    ];
+[Trait("Category", "Unit")]
+[Trait("Category", "Repository")]
+public class BolusRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAuditTests<Bolus, BolusEntity>
+{
+    private BolusRepository _repository = null!;
 
-    protected override Task<int> DeleteAsync() =>
-        _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, WriteOrigin.Live);
+    protected override string AuditEntityType => "Bolus";
 
-    [Fact]
-    public async Task Delete_BroadcastsTheRemovedRecord()
-    {
-        var match = SeedMatch();
-        SeedNearMisses();
+    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+        _repository = new BolusRepository(
+            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<BolusRepository>(), Broadcaster);
 
-        await DeleteAsync();
-
-        _broadcaster.Deleted.Should().Equal(match);
-    }
-
-    [Fact]
-    public async Task Delete_Backfill_BroadcastsNothing()
-    {
-        SeedMatch();
-
-        await _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, WriteOrigin.Backfill);
-
-        _broadcaster.Deleted.Should().BeEmpty();
-    }
-
-    private sealed class RecordingBroadcaster : IV4RecordBroadcaster<Note>
-    {
-        public List<Guid> Deleted { get; } = [];
-
-        public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+    protected override BolusEntity NewRow(string? dataSource, string? syncIdentifier) =>
+        new()
         {
-            Deleted.AddRange(ids);
-            return Task.CompletedTask;
-        }
-    }
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc),
+            Insulin = 2.5,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+        };
+
+    protected override Task<int> DeleteAsync(WriteOrigin origin) =>
+        _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, origin);
+}
+
+[Trait("Category", "Unit")]
+[Trait("Category", "Repository")]
+public class CarbIntakeRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAuditTests<CarbIntake, CarbIntakeEntity>
+{
+    private CarbIntakeRepository _repository = null!;
+
+    protected override string AuditEntityType => "CarbIntake";
+
+    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+        _repository = new CarbIntakeRepository(
+            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<CarbIntakeRepository>(), Broadcaster);
+
+    protected override CarbIntakeEntity NewRow(string? dataSource, string? syncIdentifier) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc),
+            Carbs = 30,
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+        };
+
+    protected override Task<int> DeleteAsync(WriteOrigin origin) =>
+        _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, origin);
+}
+
+[Trait("Category", "Unit")]
+[Trait("Category", "Repository")]
+public class DeviceEventRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAuditTests<DeviceEvent, DeviceEventEntity>
+{
+    private DeviceEventRepository _repository = null!;
+
+    protected override string AuditEntityType => "DeviceEvent";
+
+    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+        _repository = new DeviceEventRepository(
+            contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<DeviceEventRepository>(), Broadcaster);
+
+    protected override DeviceEventEntity NewRow(string? dataSource, string? syncIdentifier) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            Timestamp = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc),
+            EventType = nameof(DeviceEventType.SiteChange),
+            DataSource = dataSource,
+            SyncIdentifier = syncIdentifier,
+        };
+
+    protected override Task<int> DeleteAsync(WriteOrigin origin) =>
+        _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, origin);
 }
 
 [Trait("Category", "Unit")]

@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// <summary>
 /// Golden tests pinning the CURRENT dedup behaviour of <c>BolusRepository</c> (the hardest case:
 /// SyncId-upsert + DeduplicationService + value-tolerance MatchCriteria). Held identical across the
-/// V4RepositoryBase refactor; intentional deltas (D1–D7) are re-baselined explicitly.
+/// V4RepositoryBase refactor; intentional deltas (D1–D8) are re-baselined explicitly.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]
