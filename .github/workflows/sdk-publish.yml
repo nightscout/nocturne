@@ -427,8 +427,10 @@ jobs:
           # supply OkHttp 3.12.x / gson 2.8.x. The template overrides in
           # sdk/java/templates keep the generated code compatible with both OkHttp majors;
           # this compile gate stops a generator upgrade from silently regressing that.
-          # The classpath mirrors the generated build.gradle's compile dependencies —
-          # a spec change that reaches new generated sources needs its deps added here.
+          # The classpath is the generated build.gradle's declarations with okhttp and
+          # gson pinned DOWN to the floor, plus the transitives javac needs. Do not
+          # "sync" it to build.gradle — raising okhttp or gson here defeats the gate.
+          # New generated sources may need their own dependencies added.
           mkdir -p /tmp/floor
           for dep in \
             com/squareup/okhttp3/okhttp/3.12.13/okhttp-3.12.13.jar \
