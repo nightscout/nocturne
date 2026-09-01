@@ -8,7 +8,7 @@
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
-  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { parseDate } from "@internationalized/date";
   import { untrack } from "svelte";
@@ -56,12 +56,7 @@
   }
 
   function rangeDisplay(from: string, to: string): string {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${startOfDay(from).toLocaleDateString(undefined, opts)} – ${startOfDay(to).toLocaleDateString(undefined, opts)}`;
+    return `${formatShortDate(startOfDay(from), true)} – ${formatShortDate(startOfDay(to), true)}`;
   }
 
   // Presets are built on the local calendar day. Deriving "today" from
@@ -119,8 +114,10 @@
   function readCommitted(): Periods {
     const preset = urlParams.preset ?? DEFAULT_PRESET;
     const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
+    // Day-parted: `isDayString` accepts a longer ISO string by slicing but returns
+    // it whole, and the range picker's `parseDate` throws on everything past the date.
     const day = (value: string | null, fallback: string) =>
-      isDayString(value) ? value : fallback;
+      (isDayString(value) ? value : fallback).slice(0, 10);
     return {
       a: {
         label: urlParams.aLabel ?? fromPreset.a.label,

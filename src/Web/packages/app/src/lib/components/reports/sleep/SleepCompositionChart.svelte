@@ -5,6 +5,7 @@
    * calendar day across the full selected range (gaps for days with no
    * recorded night), plus a compact stage-composition reference panel.
    */
+  import { formatShortDate, formatWeekdayLabel } from "$lib/utils/formatting";
   import { Chart, Svg, Axis, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
   import { goto } from "$app/navigation";
@@ -91,7 +92,7 @@
   function formatDayTick(key: string): string {
     const row = dayRows.find((r) => r.dayKey === key);
     if (!row) return "";
-    return row.date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(row.date);
   }
 
   /** Navigate to a night's drill-down using the backend's authoritative display date. */
@@ -202,7 +203,7 @@
                   role={row.night ? "link" : undefined}
                   tabindex={row.night ? 0 : undefined}
                   aria-label={row.night
-                    ? `Sleep session on ${row.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                    ? `Sleep session on ${formatShortDate(row.date)}`
                     : undefined}
                   class={row.night ? "cursor-pointer" : undefined}
                   onpointermove={(e: PointerEvent) => context.tooltip?.show(e, row)}
@@ -217,7 +218,7 @@
               {#snippet children({ data })}
                 {@const row = data as DayRow}
                 <Tooltip.Header
-                  value={`${row.night?.weekday ?? row.date.toLocaleDateString(undefined, { weekday: "short" })}, ${row.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
+                  value={`${formatWeekdayLabel(row.date)}, ${formatShortDate(row.date)}`}
                 />
                 {#if row.night}
                   {@const night = row.night}

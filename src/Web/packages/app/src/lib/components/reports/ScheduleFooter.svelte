@@ -6,7 +6,7 @@
     ScheduleChangeInfo,
   } from "$lib/api/generated/nocturne-api-client";
   import { History } from "lucide-svelte";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatNumericDate } from "$lib/utils/formatting";
 
   interface Props {
     profile?: ProfileSummary | null;
@@ -102,7 +102,7 @@
   {#if info?.changedDuringPeriod}
     <span
       class="inline-flex items-center text-muted-foreground ml-1"
-      title="Changed {info.lastChangedAt ? new Date(info.lastChangedAt).toLocaleDateString() : 'during period'} ({info.changeCount} change{info.changeCount === 1 ? '' : 's'} during this period)"
+      title="Changed {info.lastChangedAt ? formatNumericDate(new Date(info.lastChangedAt)) : 'during period'} ({info.changeCount} change{info.changeCount === 1 ? '' : 's'} during this period)"
     >
       <History class="w-3 h-3" />
     </span>

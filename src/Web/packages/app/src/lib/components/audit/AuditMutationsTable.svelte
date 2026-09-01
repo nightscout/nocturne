@@ -21,6 +21,7 @@
 </script>
 
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
@@ -75,13 +76,15 @@
   });
 
   // Format functions
-  const compactDateFormatter = new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const compactDateFormatter = $derived(
+    new Intl.DateTimeFormat(formatLocale(), {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  );
 
   function formatCompactDate(date: Date | undefined): string {
     if (!date) return "\u2014";

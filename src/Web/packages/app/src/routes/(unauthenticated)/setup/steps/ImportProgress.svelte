@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import {
     Database,
     Upload,
@@ -76,7 +77,7 @@
   }
 
   function formatCount(n: number): string {
-    return n.toLocaleString();
+    return formatNumber(n);
   }
 
   $effect(() => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
@@ -129,7 +130,7 @@
 
   // Current time in timezone for display
   const currentTime = $derived(
-    new Date(realtimeStore.now).toLocaleTimeString(undefined, {
+    new Date(realtimeStore.now).toLocaleTimeString(formatLocale(), {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",

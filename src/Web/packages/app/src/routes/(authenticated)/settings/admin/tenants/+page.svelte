@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -331,7 +332,7 @@
             <p class="text-sm font-medium text-muted-foreground">Created</p>
             <p class="mt-1 text-sm">
               {tenant.sysCreatedAt
-                ? new Date(tenant.sysCreatedAt).toLocaleDateString()
+                ? formatNumericDate(new Date(tenant.sysCreatedAt))
                 : "---"}
             </p>
           </div>

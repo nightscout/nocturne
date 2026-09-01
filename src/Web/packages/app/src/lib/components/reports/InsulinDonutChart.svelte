@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from "$lib/utils/formatting";
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "$lib/api";
   import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
@@ -71,21 +72,16 @@
         ? carbByCorrelation.get(t.correlationId)
         : undefined;
 
-      const time = t.mills
-        ? new Date(t.mills).toLocaleTimeString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : undefined;
+      const bolusTime = t.mills ? formatClock(t.mills) : undefined;
 
       segments.push({
         key: `bolus-${i}`,
-        label: `Bolus${time ? ` @ ${time}` : ""}`,
+        label: `Bolus${bolusTime ? ` @ ${bolusTime}` : ""}`,
         value: t.insulin ?? 0,
         color: getBolusColor(i, bolusTreatments.length),
         bolus: t,
         linkedCarbs: linkedCarb?.carbs ?? undefined,
-        time,
+        time: bolusTime,
         props: arcProps(3),
       });
     });

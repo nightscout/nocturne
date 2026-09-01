@@ -69,12 +69,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import {
-    formatGlucoseValue,
-    formatGlucoseRange,
-    formatShortDate,
-    getUnitLabel,
-  } from "$lib/utils/formatting";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatNumericDate, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -202,7 +197,7 @@
             Your Glucose Report
           </h1>
           <p class="mt-3 text-lg text-muted-foreground">
-            {entries.length.toLocaleString()} readings analyzed
+            {formatNumber(entries.length)} readings analyzed
           </p>
         </div>
 
@@ -549,12 +544,12 @@
       >
         <p class="text-sm text-muted-foreground">
           <span class="font-medium">
-            {entries.length.toLocaleString()} readings
+            {formatNumber(entries.length)} readings
           </span>
-          from {startDate.toLocaleDateString()} to {endDate.toLocaleDateString()}
+          from {formatNumericDate(startDate)} to {formatNumericDate(endDate)}
           {#if lastUpdated}
             <span class="mx-2 opacity-50">•</span>
-            Last updated {new Date(lastUpdated).toLocaleTimeString([], {
+            Last updated {new Date(lastUpdated).toLocaleTimeString(formatLocale(), {
               hour: "2-digit",
               minute: "2-digit",
             })}

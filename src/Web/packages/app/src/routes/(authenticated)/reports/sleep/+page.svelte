@@ -29,7 +29,7 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resolve } from "$app/paths";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
-  import { bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import SleepSummaryTile, {
     type TileDelta,
   } from "$lib/components/reports/sleep/SleepSummaryTile.svelte";
@@ -124,7 +124,7 @@
   }
 
   function formatRowLabelDate(day: Date): string {
-    return day.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(day);
   }
 
   // --- Empty-state detection -------------------------------------------------

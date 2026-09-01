@@ -3,7 +3,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Activity, Syringe, Pencil } from "lucide-svelte";
-  import { bg, bgLabel, time } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatLocale, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import type { PredictionData } from "$api/predictions.remote";
   import type { BolusCalculation } from "$lib/api";
@@ -232,7 +232,7 @@
       <Dialog.Description>
         {time(timestamp, { seconds: true })}
         &mdash;
-        {timestamp.toLocaleDateString([], {
+        {timestamp.toLocaleDateString(formatLocale(), {
           month: "short",
           day: "numeric",
         })}

@@ -184,10 +184,14 @@ export function prefersHour12(override?: boolean): boolean {
  * @returns Formatted time string (e.g. "2:30 pm" or "14:30")
  */
 export function time(
-  date: Date | number,
+  date: Date | string | number | null | undefined,
   opts: { compact?: boolean; seconds?: boolean } = {}
 ): string {
-  const d = typeof date === "number" ? new Date(date) : date;
+  // Coerced like every sibling helper: NSwag types DTO date fields as `Date` but
+  // the client parses with no reviver, so what arrives is an ISO string.
+  if (date == null) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
   const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
     minute: opts.compact && prefersHour12() ? "numeric" : "2-digit",
@@ -240,7 +244,7 @@ export function lastSeen(
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(formatLocale());
+  return formatNumericDate(d);
 }
 
 /** Format elapsed time as minutes ago in the user's regional format. */
@@ -269,6 +273,24 @@ export function toDate(value: Date | string | undefined | null): Date | null {
 }
 
 /**
+ * A number with the regional format's own group and decimal separators — "1.234"
+ * for a German reader, "1,234" for an American one.
+ */
+export function formatNumber(value: number | undefined | null): string {
+  return (value ?? 0).toLocaleString(formatLocale());
+}
+
+/**
+ * The regional format's own numeric date, e.g. "31/12/2026" or "12/31/2026". The
+ * shape is the locale's; use {@link formatShortDate} or {@link formatMediumDate}
+ * where a named month reads better.
+ */
+export function formatNumericDate(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale());
+}
+
+/**
  * Formats a date string to display date and time
  * @param dateStr - ISO date string or undefined
  * @returns Formatted date and time string, or fallback
@@ -276,11 +298,7 @@ export function toDate(value: Date | string | undefined | null): Date | null {
 export function formatDateTime(dateStr: string | undefined): string {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString(formatLocale()) + " " + date.toLocaleTimeString(formatLocale(), {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: prefersHour12(),
-  });
+  return date.toLocaleDateString(formatLocale()) + " " + time(date);
 }
 
 /**
@@ -288,8 +306,8 @@ export function formatDateTime(dateStr: string | undefined): string {
  * @param date - Date object, ISO date string, or undefined
  * @returns Formatted date and time string, or "N/A"
  */
-export function formatDate(date: Date | string | undefined): string {
-  if (!date) return "N/A";
+export function formatDate(date: Date | string | number | undefined): string {
+  if (date == null || date === "") return "N/A";
   return new Date(date).toLocaleString(formatLocale());
 }
 
@@ -343,6 +361,146 @@ export function formatShortDate(
 }
 
 /**
+ * Date with its weekday, month name and year, e.g. "Saturday, 29 August 2026" —
+ * names and ordering follow the regional format.
+ */
+export function formatLongDate(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/** Date with an abbreviated month and its year, e.g. "29 Aug 2026". */
+export function formatMediumDate(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
+ * {@link formatMediumDate} with the time of day, e.g. "29 Aug 2026, 02:30".
+ * Follows the locale's hour cycle — see {@link formatDayTime}.
+ */
+export function formatMediumDateTime(
+  date: Date | string | number | null | undefined
+): string {
+  if (date == null) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(formatLocale(), {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    ...localeHourFields(),
+  });
+}
+
+/**
+ * The hour fields the locale's own short time uses — zero-padded and 24-hour where
+ * it writes them that way, `2:05 pm` where it doesn't.
+ *
+ * Read off a `timeStyle: "short"` formatter rather than guessed, because the two
+ * shapes HEAD used per site (`hour: "2-digit"` and `"numeric"`) each render wrongly
+ * in half the locales. `timeStyle` itself cannot be combined with date fields, and
+ * formatting the halves separately would hardcode a joiner that ja-JP, zh-CN and
+ * ko-KR write as a space and ar-EG as U+060C — so the fields are extracted and
+ * spread into a single `Intl` call, which lets ICU supply the glue.
+ */
+const localeHourFields = (() => {
+  // 05:05, so a padded locale renders "05" and an unpadded one "5".
+  const probe = new Date(Date.UTC(2020, 0, 1, 5, 5));
+  const cache = new Map<string, Intl.DateTimeFormatOptions>();
+  return (): Intl.DateTimeFormatOptions => {
+    const locale = formatLocale();
+    const cached = cache.get(locale);
+    if (cached) return cached;
+
+    const formatter = new Intl.DateTimeFormat(locale, {
+      timeStyle: "short",
+      timeZone: "UTC",
+    });
+    const hour = formatter.formatToParts(probe).find((part) => part.type === "hour");
+    const fields: Intl.DateTimeFormatOptions = {
+      hour: (hour?.value.length ?? 1) > 1 ? "2-digit" : "numeric",
+      minute: "2-digit",
+      hour12: formatter.resolvedOptions().hour12,
+    };
+    cache.set(locale, fields);
+    return fields;
+  };
+})();
+
+/**
+ * Time of day at the locale's own convention. Deliberately not the 12/24
+ * preference — see {@link formatDayTime}.
+ */
+export function formatClock(
+  date: Date | string | number | null | undefined,
+  opts: { seconds?: boolean } = {}
+): string {
+  if (date == null) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString(formatLocale(), {
+    timeStyle: opts.seconds ? "medium" : "short",
+  });
+}
+
+/**
+ * Day and time with no year, e.g. "30 Aug, 00:05".
+ *
+ * Follows the locale's hour cycle, not the 12/24 preference — which is what these
+ * surfaces did before they were routed through a shared formatter, and changing it
+ * is not the locale sweep's business. The app is inconsistent about this: sibling
+ * surfaces use {@link formatDateTimeCompact} and do follow the preference. Settling
+ * it means giving the preference a "follow the locale" default, which needs the
+ * API's `AllowedTimeFormats` widened to accept it and every direct
+ * `timeFormat.current === "24"` comparison updated.
+ */
+export function formatDayTime(date: Date | string | number | undefined): string {
+  if (date == null) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(formatLocale(), {
+    month: "short",
+    day: "numeric",
+    ...localeHourFields(),
+  });
+}
+
+/** Month name and year with no day, e.g. "August 2026". */
+export function formatMonthYear(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Abbreviated month name alone, for a chart's month band. */
+export function formatMonthLabel(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    month: "short",
+  });
+}
+
+/** Abbreviated weekday name alone, for a chart axis or a row label. */
+export function formatWeekdayLabel(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    weekday: "short",
+  });
+}
+
+/**
  * Formats a date string for use in datetime-local input fields
  * @param dateStr - ISO date string or undefined
  * @returns Date in YYYY-MM-DDTHH:MM format for HTML input
@@ -350,6 +508,10 @@ export function formatShortDate(
 export function formatDateForInput(dateStr: string | undefined): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  // Local getters, deliberately: a `datetime-local` value carries no offset, so
+  // the browser parses it back in its own zone. Rendering it on any other
+  // calendar makes the round trip asymmetric and moves the instant on save.
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const day = date.getDate().toString().padStart(2, "0");

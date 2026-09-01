@@ -5,6 +5,7 @@
  * state that can be shared across settings pages with two-way binding support.
  */
 
+import { formatNumericDate } from "$lib/utils/formatting";
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
 import { getApiClient } from "$lib/api/client";
@@ -354,5 +355,5 @@ export function formatLastSync(date: Date | undefined): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
 
-  return new Date(date).toLocaleDateString();
+  return formatNumericDate(new Date(date));
 }

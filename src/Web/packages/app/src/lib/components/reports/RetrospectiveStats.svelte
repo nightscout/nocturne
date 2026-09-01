@@ -12,7 +12,11 @@
   } from "lucide-svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getDirectionInfo } from "$lib/utils";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import {
+    formatClock,
+    formatGlucoseValue,
+    getUnitLabel,
+  } from "$lib/utils/formatting";
   import { getRetrospectiveData } from "$api/generated/retrospectives.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
 
@@ -31,12 +35,7 @@
   const unitLabel = $derived(getUnitLabel(units));
 
   // Format time for display
-  const timeDisplay = $derived(
-    new Date(time).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  );
+  const timeDisplay = $derived(formatClock(new Date(time)));
 </script>
 
 {#if !retrospectiveQuery.current && !retrospectiveQuery.error}

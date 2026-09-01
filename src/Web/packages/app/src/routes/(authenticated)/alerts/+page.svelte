@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
@@ -299,7 +300,7 @@
                   {a.ruleName ?? "Alert"}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                  Since {a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : "—"}
+                  Since {a.startedAt ? formatClock(a.startedAt, { seconds: true }) : "—"}
                 </p>
               </div>
               {#if a.acknowledgedAt}

@@ -24,7 +24,7 @@
     SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
-  import { lastSeen } from "$lib/utils/formatting";
+  import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
   let {
     open = $bindable(false),
@@ -251,7 +251,7 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
-                    {selectedConnector.totalEntries?.toLocaleString() ?? 0}
+                    {formatNumber(selectedConnector.totalEntries)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
@@ -265,7 +265,7 @@
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">
-                              {count?.toLocaleString()}
+                              {formatNumber(count)}
                             </span>
                           </div>
                         {/each}
@@ -284,7 +284,7 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   <span class="font-mono font-medium cursor-help underline decoration-dotted decoration-muted-foreground/50">
-                    {selectedConnector.entriesLast24Hours?.toLocaleString() ?? 0}
+                    {formatNumber(selectedConnector.entriesLast24Hours)}
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
@@ -298,7 +298,7 @@
                           <div class="flex justify-between gap-4 text-xs">
                             <span>{getDataTypeLabel(type)}</span>
                             <span class="font-mono">
-                              {count?.toLocaleString()}
+                              {formatNumber(count)}
                             </span>
                           </div>
                         {/each}

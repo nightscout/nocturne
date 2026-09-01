@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -182,13 +183,7 @@
   function formatDate(dateStr: Date | string | undefined): string {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatMediumDateTime(date);
   }
 
   // Get state badge

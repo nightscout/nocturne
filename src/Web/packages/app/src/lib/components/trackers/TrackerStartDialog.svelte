@@ -6,7 +6,7 @@
   import { TextareaAutosize } from "$lib/components/ui/textarea";
   import { Play } from "lucide-svelte";
   import { cn } from "$lib/utils";
-  import { formatShortDate, time } from "$lib/utils/formatting";
+  import { formatClock, formatShortDate, time } from "$lib/utils/formatting";
   import { useToastSubmission } from "$lib/forms";
 
   import { tick } from "svelte";
@@ -321,7 +321,7 @@
                     {preview.relativeTime}
                   </span>
                   <span class="text-[10px] opacity-70">
-                    {preview.triggerTime.toLocaleTimeString()}
+                    {formatClock(preview.triggerTime, { seconds: true })}
                   </span>
                 </div>
               </div>

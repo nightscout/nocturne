@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-svelte";
 import { canonicalDirection } from "@nocturne/ui/glucose";
+import { formatLocale } from "$lib/utils/formatting";
 import {
   Direction,
 } from "$lib/api";
@@ -99,11 +100,11 @@ export function getDirectionInfo(direction?: Direction | string): DirectionInfo 
 const getRelativeTimeFormatter = (() => {
   let formatter: Intl.RelativeTimeFormat | null = null;
   return (locale?: string) => {
-    if (
-      !formatter ||
-      (locale && locale !== formatter.resolvedOptions().locale)
-    ) {
-      formatter = new Intl.RelativeTimeFormat(locale || "en", {
+    const wanted = locale || formatLocale();
+    // Compared every call, not only when a locale is passed: the no-argument path
+    // is the common one, and it used to pin whatever the first call resolved.
+    if (!formatter || wanted !== formatter.resolvedOptions().locale) {
+      formatter = new Intl.RelativeTimeFormat(wanted, {
         numeric: "auto",
         style: "long",
       });

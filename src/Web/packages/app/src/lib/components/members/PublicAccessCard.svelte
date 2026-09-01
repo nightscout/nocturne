@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -145,12 +146,7 @@
   function formatDate(date: Date | string | undefined | null): string {
     if (!date) return "never";
     const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 </script>
 

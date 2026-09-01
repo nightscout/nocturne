@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import type { AlertHistoryResponse } from "$api-clients";
   import { AlertConditionType } from "$api-clients";
   import {
@@ -53,12 +54,7 @@
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "-";
     const d = typeof date === "string" ? new Date(date) : date;
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 </script>
 

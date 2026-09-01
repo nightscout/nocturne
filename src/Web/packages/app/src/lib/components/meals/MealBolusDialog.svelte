@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatClock, formatMediumDateTime } from "$lib/utils/formatting";
   import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -66,10 +67,7 @@
 
   let mealTimestamp = $derived(
     meal?.timestamp
-      ? new Date(meal.timestamp).toLocaleString(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
+      ? formatMediumDateTime(meal.timestamp)
       : "",
   );
 
@@ -128,10 +126,7 @@
 
   function formatBolusTime(mills: number | undefined): string {
     if (!mills) return "";
-    return new Date(mills).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatClock(mills);
   }
 </script>
 

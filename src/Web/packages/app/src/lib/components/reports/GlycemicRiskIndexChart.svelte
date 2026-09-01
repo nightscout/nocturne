@@ -2,7 +2,7 @@
   import { Chart, Svg, Axis, Polygon, Points, Legend, Tooltip } from "layerchart";
   import { scaleLinear, scaleOrdinal } from "d3-scale";
   import type { GlycemicRiskIndex, GriTimelinePeriod } from "$lib/api/generated/nocturne-api-client";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatMonthYear, getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
@@ -57,7 +57,7 @@
   function formatPeriodLabel(periodStart?: string): string {
     if (!periodStart) return "";
     const date = new Date(periodStart);
-    return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    return formatMonthYear(date);
   }
 
   // Zone boundaries: diagonal lines where hypo + hyper = GRI score threshold

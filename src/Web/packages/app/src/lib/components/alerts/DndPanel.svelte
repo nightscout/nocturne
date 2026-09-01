@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -82,7 +83,7 @@
   let label = $derived(
     settings?.dndManualActive
       ? settings.dndManualUntil
-        ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+        ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString(formatLocale(), { hour: "numeric", minute: "2-digit" })}`
         : "On"
       : isDndScheduleConfigured(settings)
         ? "Scheduled"

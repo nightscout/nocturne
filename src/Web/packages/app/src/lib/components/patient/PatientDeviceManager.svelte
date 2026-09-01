@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -60,11 +61,7 @@
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "";
     const d = new Date(date);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(d);
   }
 
   // ── Inline variant state ────────────────────────────────────────
@@ -164,11 +161,7 @@
 
   function formatLastSeen(value: string | Date | null | undefined): string {
     if (!value) return "";
-    return new Date(value).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(value);
   }
 
   /**

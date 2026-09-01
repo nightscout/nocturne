@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { untrack } from "svelte";
@@ -215,12 +216,7 @@
     if (!at) return "—";
     const d = at instanceof Date ? at : new Date(at);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 
   // ---- Severity ---------------------------------------------------------

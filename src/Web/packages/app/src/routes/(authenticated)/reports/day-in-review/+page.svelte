@@ -23,7 +23,7 @@
   } from "lucide-svelte";
   import { getDayInReviewData } from "./data.remote";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel, time } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatLongDate, getUnitLabel, time } from "$lib/utils/formatting";
   import {
     getRowTypeStyle,
     mergeTreatmentRows,
@@ -92,14 +92,7 @@
   }
 
   // Format date for display
-  const dateDisplay = $derived.by(() => {
-    return currentDate.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  });
+  const dateDisplay = $derived(formatLongDate(currentDate));
 
   // Get units preference
   const units = $derived(glucoseUnits.current);

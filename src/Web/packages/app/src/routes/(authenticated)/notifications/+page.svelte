@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { startOfDay, toDayString } from "$lib/utils/date-range";
+  import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -80,12 +82,7 @@
   // Format date
   function formatDate(dateStr: Date | undefined): string {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDayTime(dateStr);
   }
 
   // Get level icon
@@ -151,12 +148,9 @@
       const date = new Date(
         instance.completedAt ?? instance.startedAt ?? new Date()
       );
-      const key = date.toLocaleDateString(undefined, {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+      // Keyed on the calendar day, not on a formatted string: a locale-formatted
+      // key re-buckets every group when the region format changes.
+      const key = toDayString(date);
       if (!groups[key]) groups[key] = [];
       groups[key].push(instance);
     }
@@ -347,7 +341,7 @@
                   >
                     <div class="flex items-center gap-2">
                       <Clock class="h-4 w-4 text-muted-foreground" />
-                      <span class="font-medium">{date}</span>
+                      <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
                       <Badge variant="secondary" class="ml-2">
                         {instances.length}
                       </Badge>

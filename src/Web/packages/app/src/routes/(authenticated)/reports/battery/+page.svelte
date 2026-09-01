@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale, formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -63,7 +64,7 @@
 
   function formatDateShort(mills?: number | null): string {
     if (!mills) return "Unknown";
-    return new Date(mills).toLocaleDateString([], {
+    return new Date(mills).toLocaleDateString(formatLocale(), {
       month: "short",
       day: "numeric",
       hour: "2-digit",
@@ -135,9 +136,9 @@
   <div class="flex items-center gap-2 text-sm text-muted-foreground">
     <Calendar class="h-4 w-4" />
     <span>
-      {new Date(dateRange.from).toLocaleDateString()} – {new Date(
+      {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
         dateRange.to
-      ).toLocaleDateString()}
+      ))}
     </span>
     <span class="text-muted-foreground/50">•</span>
     <span>{readings.length} readings</span>

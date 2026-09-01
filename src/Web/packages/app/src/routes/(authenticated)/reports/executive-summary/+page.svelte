@@ -26,7 +26,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatDate, formatNumber } from "$lib/utils/formatting";
   import { formatMinutesDuration } from "$lib/utils/duration";
 
   // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
@@ -477,7 +477,7 @@
 
             <div class="grid grid-cols-2 gap-4 text-sm pt-2 border-t">
               <div>
-                <div class="font-medium">{entries.length.toLocaleString()}</div>
+                <div class="font-medium">{formatNumber(entries.length)}</div>
                 <div class="text-xs text-muted-foreground">Total readings</div>
               </div>
               <div>
@@ -539,7 +539,7 @@
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
       {#if lastUpdated}
-        <p>Report generated: {new Date(lastUpdated).toLocaleString()}</p>
+        <p>Report generated: {formatDate(new Date(lastUpdated))}</p>
       {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your

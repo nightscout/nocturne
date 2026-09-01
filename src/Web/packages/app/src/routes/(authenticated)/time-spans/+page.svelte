@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { parseDate } from "@internationalized/date";
+  import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
@@ -13,7 +15,6 @@
     isDayString,
     resolveDayRange,
     startOfDay,
-    toDayString,
   } from "$lib/utils/date-range";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
@@ -22,13 +23,15 @@
   // `toISOString()` named yesterday for anyone east of UTC.
   const defaults = resolveDayRange({ days: 7 }, 7);
 
+  // Day-parted here rather than at each use: `isDayString` accepts a longer ISO
+  // string by slicing, and `parseDate` throws on everything past the date.
   const fromParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("from");
-    return isDayString(fromUrl) ? fromUrl : defaults.from;
+    return (isDayString(fromUrl) ? fromUrl : defaults.from).slice(0, 10);
   });
   const toParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("to");
-    return isDayString(fromUrl) ? fromUrl : defaults.to;
+    return (isDayString(fromUrl) ? fromUrl : defaults.to).slice(0, 10);
   });
 
   // Fetch data using remote function with date range
@@ -86,13 +89,13 @@
 
   /** Shift the window by whole days, keeping its length. */
   function shiftPeriod(direction: -1 | 1) {
-    const anchor = direction === -1 ? fromDate : toDate;
-    const newFirst = new Date(anchor);
-    newFirst.setDate(newFirst.getDate() + direction * (direction === -1 ? dayCount : 1));
-    const newLast = new Date(newFirst);
-    newLast.setDate(newLast.getDate() + dayCount - 1);
+    // Stepped on the calendar rather than by 24-hour spans, so a window either
+    // side of a DST transition keeps its length in days.
+    const anchor = parseDate(direction === -1 ? fromParam : toParam);
+    const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
+    const newLast = newFirst.add({ days: dayCount - 1 });
     goto(
-      `/time-spans?from=${toDayString(newFirst)}&to=${toDayString(newLast)}`,
+      `/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`,
       { invalidateAll: true }
     );
   }
@@ -103,22 +106,8 @@
 
   // Format date range for display
   const dateRangeDisplay = $derived.by(() => {
-    if (dayCount === 1) {
-      return fromDate.toLocaleDateString(undefined, {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    }
-    return `${fromDate.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    })} - ${toDate.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })} (${dayCount} days)`;
+    if (dayCount === 1) return formatLongDate(fromDate);
+    return `${formatShortDate(fromDate)} - ${formatShortDate(toDate, true)} (${dayCount} days)`;
   });
 </script>
 

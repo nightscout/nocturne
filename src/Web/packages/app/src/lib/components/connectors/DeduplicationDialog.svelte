@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import { onDestroy } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -81,8 +82,8 @@
 
             if (!open || elapsed > twoMinutes) {
               if (status.state === "Completed") {
-                const processed = status.result?.totalRecordsProcessed?.toLocaleString() ?? "0";
-                const groups = status.result?.duplicateGroupsFound?.toLocaleString() ?? "0";
+                const processed = formatNumber(status.result?.totalRecordsProcessed);
+                const groups = formatNumber(status.result?.duplicateGroupsFound);
                 toast.success("Deduplication complete", {
                   description: `Processed ${processed} records, found ${groups} duplicate groups`,
                 });
@@ -172,19 +173,19 @@
               <div class="flex justify-between">
                 <span>Records processed:</span>
                 <span class="font-mono">
-                  {deduplicationStatus.result.totalRecordsProcessed?.toLocaleString() ?? 0}
+                  {formatNumber(deduplicationStatus.result.totalRecordsProcessed)}
                 </span>
               </div>
               <div class="flex justify-between">
                 <span>Groups created:</span>
                 <span class="font-mono">
-                  {deduplicationStatus.result.canonicalGroupsCreated?.toLocaleString() ?? 0}
+                  {formatNumber(deduplicationStatus.result.canonicalGroupsCreated)}
                 </span>
               </div>
               <div class="flex justify-between">
                 <span>Duplicates found:</span>
                 <span class="font-mono">
-                  {deduplicationStatus.result.duplicateGroupsFound?.toLocaleString() ?? 0}
+                  {formatNumber(deduplicationStatus.result.duplicateGroupsFound)}
                 </span>
               </div>
             </div>
@@ -225,11 +226,11 @@
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <div>
-                  Processed: {deduplicationStatus.progress.processedRecords?.toLocaleString() ?? 0}
-                  / {deduplicationStatus.progress.totalRecords?.toLocaleString() ?? 0}
+                  Processed: {formatNumber(deduplicationStatus.progress.processedRecords)}
+                  / {formatNumber(deduplicationStatus.progress.totalRecords)}
                 </div>
                 <div class="text-right">
-                  Groups: {deduplicationStatus.progress.groupsFound?.toLocaleString() ?? 0}
+                  Groups: {formatNumber(deduplicationStatus.progress.groupsFound)}
                 </div>
               </div>
             </div>

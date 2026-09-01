@@ -3,7 +3,7 @@
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatClock, formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import {
     Brain,
     Syringe,
@@ -24,10 +24,7 @@
 
   const snapshotTime = $derived(
     snapshot?.mills
-      ? new Date(snapshot.mills).toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+      ? formatClock(snapshot.mills)
       : null
   );
 

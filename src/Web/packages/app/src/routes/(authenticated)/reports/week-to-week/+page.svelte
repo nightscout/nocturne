@@ -1,13 +1,13 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
+  import { parseDate } from "@internationalized/date";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { toDayString } from "$lib/utils/date-range";
-  import { bg } from "$lib/utils/formatting";
+  import { bg, formatShortDate } from "$lib/utils/formatting";
   import { DAY_KEYS, buildWeekdayBuckets } from "./week-to-week.utils";
 
   const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -29,12 +29,7 @@
   );
 
   const dateRangeDisplay = $derived.by(() => {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${reportsParams.startDate.toLocaleDateString(undefined, opts)} – ${reportsParams.endDate.toLocaleDateString(undefined, opts)}`;
+    return `${formatShortDate(reportsParams.startDate, true)} – ${formatShortDate(reportsParams.endDate, true)}`;
   });
 
   // Each cell is the mean of every reading in that weekday's 5-minute bucket.
@@ -43,20 +38,18 @@
   );
 
   // Navigation helpers
+  // Stepped on the calendar rather than by 24-hour spans, so a week either side of
+  // a DST transition is still seven days on the patient's clock.
   function previousWeek() {
-    const newEnd = new Date(reportsParams.startDate);
-    newEnd.setDate(newEnd.getDate() - 1);
-    const newStart = new Date(newEnd);
-    newStart.setDate(newStart.getDate() - 6);
-    reportsParams.setCustomRange(toDayString(newStart), toDayString(newEnd));
+    const newEnd = parseDate(reportsParams.fromDay).subtract({ days: 1 });
+    const newStart = newEnd.subtract({ days: 6 });
+    reportsParams.setCustomRange(newStart.toString(), newEnd.toString());
   }
 
   function nextWeek() {
-    const newStart = new Date(reportsParams.endDate);
-    newStart.setDate(newStart.getDate() + 1);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newEnd.getDate() + 6);
-    reportsParams.setCustomRange(toDayString(newStart), toDayString(newEnd));
+    const newStart = parseDate(reportsParams.toDay).add({ days: 1 });
+    const newEnd = newStart.add({ days: 6 });
+    reportsParams.setCustomRange(newStart.toString(), newEnd.toString());
   }
 
   function goToCurrentWeek() {

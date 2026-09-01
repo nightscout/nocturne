@@ -35,7 +35,7 @@
 	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
 	import History from 'lucide-svelte/icons/history';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
-	import { time, bg, bgLabel } from '$lib/utils/formatting';
+	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
 
 	const effectivePermissions: string[] = $derived(
@@ -268,9 +268,8 @@
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
 		const nextDay = new Date(date);
 		nextDay.setDate(nextDay.getDate() + 1);
-		const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-		const nextDayStr = nextDay.toLocaleDateString(undefined, { day: 'numeric', year: 'numeric' });
-		return `Night of ${dateStr}-${nextDayStr}`;
+		// `{ day, year }` alone has no CLDR pattern — it fell back to "2026 (day: 30)".
+		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}
 
 	const chartDateRange = $derived.by(() => {
