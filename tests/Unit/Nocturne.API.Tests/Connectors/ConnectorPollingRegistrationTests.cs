@@ -182,41 +182,11 @@ public class ConnectorPollingRegistrationTests
         throw new InvalidOperationException($"{poller.Name} is not a connector poller.");
     }
 
-    private static List<string> InstalledConnectorNames()
-    {
-        // Touch one type per connector assembly so they are loaded before the scan.
-        _ = typeof(ConnectorRegistrationAttribute);
-        foreach (var path in Directory.GetFiles(AppContext.BaseDirectory, "Nocturne.Connectors.*.dll"))
-        {
-            try
-            {
-                Assembly.LoadFrom(path);
-            }
-            catch (BadImageFormatException)
-            {
-                // Not a managed assembly; nothing to scan.
-            }
-        }
-
-        return [.. AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.GetName().Name?.StartsWith("Nocturne.Connectors.", StringComparison.Ordinal) == true)
-            .SelectMany(SafeTypes)
+    private static List<string> InstalledConnectorNames() =>
+        [.. ConnectorInstallers.Types()
             .Select(t => t.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.ConnectorName)
             .Where(name => name is not null)
             .Distinct()!];
-    }
-
-    private static IEnumerable<Type> SafeTypes(Assembly assembly)
-    {
-        try
-        {
-            return assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException ex)
-        {
-            return ex.Types.Where(t => t is not null)!;
-        }
-    }
 
     [ConnectorRegistration("PollingTest", "polling-test", "POLLINGTEST", "PollingTest")]
     private sealed class PollingTestConfiguration : BaseConnectorConfiguration

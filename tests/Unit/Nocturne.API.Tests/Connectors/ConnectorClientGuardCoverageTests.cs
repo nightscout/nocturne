@@ -1,4 +1,3 @@
-using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,7 +35,7 @@ public class ConnectorClientGuardCoverageTests
     public static TheoryData<string> Installers()
     {
         var data = new TheoryData<string>();
-        foreach (var installer in DiscoverInstallers())
+        foreach (var installer in ConnectorInstallers.Discover())
             data.Add(installer.ConnectorName);
         return data;
     }
@@ -46,7 +45,7 @@ public class ConnectorClientGuardCoverageTests
     {
         // Guards the guard: if reflection finds nothing, every theory case below silently vanishes
         // and this file would pass while testing nothing at all.
-        DiscoverInstallers().Should().HaveCountGreaterThan(5,
+        ConnectorInstallers.Discover().Should().HaveCountGreaterThan(5,
             "the connector installers are discovered by reflection; finding none would make the " +
             "coverage theory vacuous");
     }
@@ -70,7 +69,7 @@ public class ConnectorClientGuardCoverageTests
     public void EveryClientAConnectorRegisters_CarriesTheGuardAndNoTransportRedirects(
         string connectorName)
     {
-        var installer = DiscoverInstallers().Single(i => i.ConnectorName == connectorName);
+        var installer = ConnectorInstallers.Discover().Single(i => i.ConnectorName == connectorName);
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -123,46 +122,6 @@ public class ConnectorClientGuardCoverageTests
                 "{0}'s '{1}' client is a connector: private and LAN targets are supported and only " +
                 "link-local is refused",
                 connectorName, clientName);
-        }
-    }
-
-    private static List<IConnectorInstaller> DiscoverInstallers()
-    {
-        // Touch one type per connector assembly so they are loaded before the scan.
-        _ = typeof(LinkLocalGuardHandler);
-        foreach (var path in Directory.GetFiles(
-                     AppContext.BaseDirectory, "Nocturne.Connectors.*.dll"))
-        {
-            try
-            {
-                Assembly.LoadFrom(path);
-            }
-            catch (BadImageFormatException)
-            {
-                // Not a managed assembly; nothing to scan.
-            }
-        }
-
-        return [.. AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => a.GetName().Name?.StartsWith("Nocturne.Connectors.", StringComparison.Ordinal) == true)
-            .SelectMany(SafeTypes)
-            .Where(t => typeof(IConnectorInstaller).IsAssignableFrom(t)
-                        && t is { IsAbstract: false, IsInterface: false }
-                        && t.GetConstructor(Type.EmptyTypes) is not null)
-            .Select(t => (IConnectorInstaller)Activator.CreateInstance(t)!)
-            .GroupBy(i => i.ConnectorName)
-            .Select(g => g.First())];
-    }
-
-    private static IEnumerable<Type> SafeTypes(Assembly assembly)
-    {
-        try
-        {
-            return assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException ex)
-        {
-            return ex.Types.Where(t => t is not null)!;
         }
     }
 
