@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
-	import { remoteErrorMessage } from '$lib/api/remote-error';
+	import { describeRemoteError, PERMISSION_GATED_MUTATION } from '$lib/forms/submit-error';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
@@ -49,6 +49,9 @@
 	);
 	const NEEDS_GLUCOSE_READWRITE =
 		'Reviewing compression lows requires the glucose.readwrite permission.';
+
+	const mutationError = (err: unknown) =>
+		describeRemoteError(err, NEEDS_GLUCOSE_READWRITE, PERMISSION_GATED_MUTATION);
 
 	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
@@ -161,7 +164,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -180,7 +183,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -199,7 +202,7 @@
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}
@@ -234,7 +237,7 @@
 			detectionResult = result;
 			suggestionsResource.refresh();
 		} catch (err) {
-			toast.error(remoteErrorMessage(err, NEEDS_GLUCOSE_READWRITE));
+			toast.error(mutationError(err));
 		} finally {
 			isLoading = false;
 		}

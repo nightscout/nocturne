@@ -7,7 +7,7 @@
     update as updateDnd,
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { describeSubmitError } from "$lib/forms";
   import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
@@ -62,7 +62,7 @@
       settings = r;
       expanded = false;
     } catch (e) {
-      errorMessage = remoteErrorMessage(
+      errorMessage = describeSubmitError(
         e,
         "Couldn't change Do Not Disturb. Please try again.",
       );
