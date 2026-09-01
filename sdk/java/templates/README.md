@@ -1,6 +1,6 @@
 # Java SDK template overrides
 
-Both files are the stock templates from openapi-generator **v7.21.0**
+All three files are the stock templates from openapi-generator **v7.21.0**
 (`modules/openapi-generator/src/main/resources/Java/libraries/okhttp-gson/`)
 with minimal, documented changes. Together with `../.openapi-generator-ignore`
 they replace all post-generation shell edits — the generated project under
@@ -26,6 +26,17 @@ Note: `okHttpVersion` in `config.yaml` is **not** a supported
 openapi-generator option — it was silently ignored (versions ≤ 0.2.3
 shipped requiring OkHttp 4.12.0 despite it). The template override plus the
 CI gate is what actually provides 3.x compatibility.
+
+## `libraries/okhttp-gson/auth/OAuthOkHttpClient.mustache`
+
+The single `RequestBody.create(content, mediaType)` call site is swapped to the
+`RequestBody.create(mediaType, content)` order, for the reason above.
+
+This file is only generated when the spec carries an OAuth2 security scheme,
+which `openapi-v4.json` gained after v0.2.4 — so the `RequestBody` guarantee
+was reached by a source file that no override covered, and the floor gate
+caught it. It also pulls in Apache Oltu (`org.apache.oltu.oauth2.client`,
+declared by the generated `build.gradle`), which the gate's classpath needs.
 
 ## `libraries/okhttp-gson/build.gradle.mustache`
 
