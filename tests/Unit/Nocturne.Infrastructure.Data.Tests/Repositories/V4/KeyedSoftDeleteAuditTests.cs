@@ -1,6 +1,8 @@
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -11,9 +13,8 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 /// The delete contract owed by the repositories whose delete is keyed on something other than the
 /// data source — a legacy-id prefix, a (data source, sync identifier) pair, a correlation id. Each
 /// must reach exactly the rows its key names, and must run through the audited path so a user delete
-/// stamps <c>deleted_by_user</c> and records one <c>bulk_delete</c> summary row while a system sweep
-/// leaves the rows re-importable
-/// (<see cref="Nocturne.Infrastructure.Data.Extensions.SoftDeleteDedupExtensions"/>).
+/// stamps <c>deleted_by_user</c> and records the delete while a system sweep leaves the rows
+/// re-importable (<see cref="Nocturne.Infrastructure.Data.Extensions.SoftDeleteDedupExtensions"/>).
 /// </summary>
 public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTestBase<TEntity>
     where TEntity : class, ISoftDeletable
@@ -30,8 +31,19 @@ public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTest
     /// <summary>Issues the delete for the key <see cref="SeedMatch"/> seeds against.</summary>
     protected abstract Task<int> DeleteAsync();
 
-    /// <summary>The scope string the summary row must carry for that key.</summary>
+    /// <summary>The scope string a collapsed <c>bulk_delete</c> summary row must carry for that key.</summary>
     protected abstract string ExpectedScope { get; }
+
+    /// <summary>
+    /// Asserts the audit row a single-row user delete records. Deletes that materialize their matched
+    /// rows to broadcast them get one per-record <c>delete</c> row instead of the collapsed summary.
+    /// </summary>
+    protected virtual void AssertUserDeleteAuditRow(MutationAuditLogEntity log, Guid match)
+    {
+        log.Action.Should().Be("bulk_delete");
+        log.EntityId.Should().BeNull();
+        ReadSummary(log.ChangesJson).Should().Be((1, ExpectedScope));
+    }
 
     [Fact]
     public async Task Delete_ReachesTheKeyedRow_AndSparesTheNearMisses()
@@ -49,7 +61,7 @@ public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTest
     }
 
     [Fact]
-    public async Task Delete_UserContext_StampsDeletedByUserAndWritesSummaryRow()
+    public async Task Delete_UserContext_StampsDeletedByUserAndWritesAuditRow()
     {
         var match = SeedMatch();
 
@@ -59,11 +71,9 @@ public abstract class KeyedSoftDeleteAuditTests<TEntity> : AuditedSoftDeleteTest
         (await ReadDeleteStateAsync(match)).DeletedByUser.Should().BeTrue();
 
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
-        log.Action.Should().Be("bulk_delete");
         log.EntityType.Should().Be(AuditEntityType);
-        log.EntityId.Should().BeNull();
         log.SubjectName.Should().Be("tester");
-        ReadSummary(log.ChangesJson).Should().Be((1, ExpectedScope));
+        AssertUserDeleteAuditRow(log, match);
     }
 
     [Fact]
@@ -229,6 +239,8 @@ public class NoteRepositorySyncIdentifierDeleteTests : KeyedSoftDeleteAuditTests
     private const string DataSource = "dexcom";
     private const string SyncIdentifier = "note-42";
 
+    private readonly RecordingBroadcaster _broadcaster = new();
+
     private NoteRepository _repository = null!;
 
     protected override string AuditEntityType => "Note";
@@ -240,7 +252,18 @@ public class NoteRepositorySyncIdentifierDeleteTests : KeyedSoftDeleteAuditTests
             contextFactory,
             new Mock<IDeduplicationService>().Object,
             auditContext,
-            Logger<NoteRepository>());
+            Logger<NoteRepository>(),
+            _broadcaster);
+
+    /// <summary>
+    /// The matched rows are materialized so they can be broadcast, and each one is audited
+    /// individually rather than collapsed into a <c>bulk_delete</c> summary.
+    /// </summary>
+    protected override void AssertUserDeleteAuditRow(MutationAuditLogEntity log, Guid match)
+    {
+        log.Action.Should().Be("delete");
+        log.EntityId.Should().Be(match);
+    }
 
     private NoteEntity NewRow(string? dataSource, string? syncIdentifier) =>
         new()
@@ -265,6 +288,38 @@ public class NoteRepositorySyncIdentifierDeleteTests : KeyedSoftDeleteAuditTests
 
     protected override Task<int> DeleteAsync() =>
         _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, WriteOrigin.Live);
+
+    [Fact]
+    public async Task Delete_BroadcastsTheRemovedRecord()
+    {
+        var match = SeedMatch();
+        SeedNearMisses();
+
+        await DeleteAsync();
+
+        _broadcaster.Deleted.Should().Equal(match);
+    }
+
+    [Fact]
+    public async Task Delete_Backfill_BroadcastsNothing()
+    {
+        SeedMatch();
+
+        await _repository.DeleteBySyncIdentifierAsync(DataSource, SyncIdentifier, WriteOrigin.Backfill);
+
+        _broadcaster.Deleted.Should().BeEmpty();
+    }
+
+    private sealed class RecordingBroadcaster : IV4RecordBroadcaster<Note>
+    {
+        public List<Guid> Deleted { get; } = [];
+
+        public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
+        {
+            Deleted.AddRange(ids);
+            return Task.CompletedTask;
+        }
+    }
 }
 
 [Trait("Category", "Unit")]

@@ -16,14 +16,13 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing carbohydrate intake records in the database. A SyncId-upsert +
-/// DeduplicationService participant, so it inherits the shared CRUD/soft-delete surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter + keyset cursor,
-/// SyncId-upsert <c>CreateAsync</c>/<c>BulkCreateAsync</c>, the non-primary-excluding <c>CountAsync</c>,
-/// and audited soft-deletes).
+/// Repository for managing carbohydrate intake records in the database. A DeduplicationService
+/// participant on top of the sync-key upsert and keyed delete of
+/// <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the extended <c>GetAsync</c>
+/// (non-primary LinkedRecords filter + keyset cursor), the read-visibility filter behind
+/// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
-public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
+public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<CarbIntakeRepository> _logger;
@@ -147,44 +146,6 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     }
 
     /// <summary>
-    /// Creates a new carbohydrate intake record. When <c>DataSource</c> and
-    /// <c>SyncIdentifier</c> match an existing row for this tenant, the record is
-    /// updated in place rather than inserted — making the operation idempotent
-    /// for connector replays. Tenant scoping is implicit via the DbContext's
-    /// RLS-equivalent query filter.
-    /// </summary>
-    /// <param name="model">The carbohydrate intake to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created or updated carbohydrate intake.</returns>
-    public override async Task<CarbIntake> CreateAsync(CarbIntake model, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
-        {
-            var existing = await ctx.CarbIntakes
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
-                    ct);
-            if (existing != null)
-            {
-                CarbIntakeMapper.UpdateEntity(existing, model);
-                await ctx.SaveChangesAsync(ct);
-                var upserted = CarbIntakeMapper.ToDomainModel(existing);
-                // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
-                return upserted;
-            }
-        }
-
-        var entity = CarbIntakeMapper.ToEntity(model);
-        ctx.CarbIntakes.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        var created = CarbIntakeMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([created], [], [], origin, ct);
-        return created;
-    }
-
-    /// <summary>
     /// Gets carbohydrate intake records by correlation identifier.
     /// </summary>
     /// <param name="correlationId">The correlation identifier.</param>
@@ -201,95 +162,6 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(CarbIntakeMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes carbohydrate intake records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.CarbIntakes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
-    }
-
-    /// <summary>
-    /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
-    /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
-    /// </summary>
-    protected override async Task<UpsertSplit> SplitUpsertsAsync(
-        NocturneDbContext ctx, List<CarbIntakeEntity> entities, CancellationToken ct)
-    {
-        // Intra-batch SyncIdentifier dedup: keep last occurrence per
-        // (DataSource, SyncIdentifier). Records without both keys keep a
-        // unique grouping key so they're not collapsed.
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
-            .Select(g => g.Last())
-            .ToList();
-
-        // DB-level SyncIdentifier upsert: match any existing rows keyed by
-        // (DataSource, SyncIdentifier) and update them in place. Everything
-        // else falls through to the insert path below.
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        var updatedEntities = new List<CarbIntakeEntity>();
-        var materiallyChanged = new List<CarbIntakeEntity>();
-        if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
-
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        // Over-fetches by a Cartesian amount; the partial unique index
-        // on (tenant_id, data_source, sync_identifier) keeps this cheap.
-        var existingRows = await ctx.CarbIntakes.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var toInsert = new List<CarbIntakeEntity>();
-        foreach (var entity in entities)
-        {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
-            {
-                // Update in place — mirror the single-record CreateAsync path via the mapper.
-                var domain = CarbIntakeMapper.ToDomainModel(entity);
-                CarbIntakeMapper.UpdateEntity(existing, domain);
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (HasMaterialChange(ctx, existing))
-                    materiallyChanged.Add(existing);
-            }
-            else
-            {
-                toInsert.Add(entity);
-            }
-        }
-
-        if (updatedEntities.Count > 0)
-        {
-            // Persist updates before the insert-chunking loop clears the tracker.
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 
     /// <summary>

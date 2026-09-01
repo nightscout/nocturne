@@ -16,13 +16,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing device event records in the database. A DeduplicationService participant,
-/// so it inherits the shared CRUD/soft-delete surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter, dedup
-/// <c>BulkCreateAsync</c>, audited soft-deletes) plus the event-type query helpers.
+/// Repository for managing device event records in the database. A DeduplicationService participant on
+/// top of the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only
+/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
 /// </summary>
-public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
+public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<DeviceEventRepository> _logger;
@@ -141,21 +140,6 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(DeviceEventMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes device event records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.DeviceEvents.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>
