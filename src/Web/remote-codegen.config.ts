@@ -9,6 +9,10 @@ export default {
   },
   nswagClientPath: './generated/nocturne-api-client',
   errorHandling: {
+    // `parseErrorBody` recovers the reason from an error body NSwag left unparsed;
+    // both the 403 and 500 arms read it. See `$lib/api/error-body`.
+    imports: [`import { parseErrorBody } from '$lib/api/error-body';`],
+
     // The default redirects queries to /auth/login on 401. For a public share
     // host ({token}.share.{baseDomain}) the viewer is anonymous by design and has
     // no account to sign into — and the dashboard fetches categories the tenant
@@ -29,7 +33,18 @@ export default {
     // Forward the server's actual error message for 403 so the FE can show
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
-    on403: `throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden')`,
+    //
+    // `detail` is read ahead of `message` because the two have different authors.
+    // A status the operation declares a `ProducesResponseType` for is thrown by
+    // NSwag as the parsed body, so a `Problem(detail: …)` refusal arrives with the
+    // server's sentence on `detail`. An undeclared status is thrown as an
+    // `ApiException` whose `message` is NSwag's own boilerplate and whose body is
+    // left unparsed on `response` — so the boilerplate must lose to anything the
+    // server actually wrote, including a reason recovered from that raw body.
+    on403:
+      `const e403 = err as any;\n` +
+      `      const b403 = parseErrorBody(e403);\n` +
+      `      throw error(403, e403?.detail ?? b403?.detail ?? b403?.title ?? b403?.message ?? e403?.message ?? 'Forbidden')`,
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state
@@ -63,14 +78,18 @@ export default {
     // `err`: `detail` carries the reason and `title` only the status phrase,
     // which is why `detail` is read first. Without a typed schema NSwag throws an
     // ApiException whose `message` is its own boilerplate and whose body is left
-    // unparsed, so that message is the last resort. `err.body.message` belongs to
-    // an `HttpError` — the only other thing this catch can see, thrown by an
-    // invalidated query's refresh.
+    // **unparsed** on `response`. Parsing that raw body is the only way a curated
+    // `Problem(detail: …)` on an undeclared status reaches the user at all — no
+    // ordering of reads off the exception can recover it, because the exception
+    // carries none of it. NSwag's boilerplate is therefore the last resort, behind
+    // everything the server wrote. `err.body.message` belongs to an `HttpError`,
+    // which is what a nested remote call rethrows.
     on500: (functionName: string) =>
       `const e = err as any;\n` +
-      `    const errors = e?.errors;\n` +
+      `    const b = parseErrorBody(e);\n` +
+      `    const errors = e?.errors ?? b?.errors;\n` +
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
-      `    const message = flat ?? e?.body?.message ?? e?.detail ?? e?.title ?? e?.message;\n` +
+      `    const message = flat ?? e?.body?.message ?? e?.detail ?? e?.title ?? b?.detail ?? b?.title ?? b?.message ?? e?.message;\n` +
       `    if (status === 429) throw error(429, 'Too many requests');\n` +
       `    if (status === 404) throw error(404, 'Not found');\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +

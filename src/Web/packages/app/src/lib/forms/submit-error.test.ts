@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
+import { parseErrorBody } from "$lib/api/error-body";
 import {
   describeSubmitError,
   GENERIC_SUBMIT_ERROR,
@@ -12,10 +13,14 @@ import {
  * What a 403 looks like by the time a page sees it: the thrown value put
  * through the generated client's own 403 arm, compiled from the codegen config
  * the build reads, so the body is whichever field that arm picked.
+ *
+ * The arm is spliced into a generated file, so it reaches the helpers that file
+ * imports; they are passed in here for the same reason.
  */
 type ForbidArm = (
   err: unknown,
-  error: typeof import("@sveltejs/kit").error
+  error: typeof import("@sveltejs/kit").error,
+  parseErrorBody: typeof import("$lib/api/error-body").parseErrorBody
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -24,7 +29,7 @@ function compileArm(source: string): ForbidArm {
 
 async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, error) => { ${config.errorHandling.on403}; }`,
+    `(err, error, parseErrorBody) => { ${config.errorHandling.on403}; }`,
     "on403.ts",
     { loader: "ts" }
   );
@@ -32,7 +37,7 @@ async function crossThe403Arm(thrown: unknown): Promise<unknown> {
   const forbid = compileArm(compiled.code.trim().replace(/;$/, ""));
 
   try {
-    forbid(thrown, error);
+    forbid(thrown, error, parseErrorBody);
   } catch (crossed) {
     return crossed;
   }
@@ -45,10 +50,10 @@ const UNDECLARED_STATUS_MESSAGE = "An unexpected server error occurred.";
 const DECLARED_STATUS_MESSAGE = "A server side error occurred.";
 
 /** NSwag's ApiException, as a bare `ForbidResult` arrives. */
-function nswagApiException(status: number, message: string) {
+function nswagApiException(status: number, message: string, response = "") {
   return Object.assign(new Error(message), {
     status,
-    response: "",
+    response,
     result: null,
   });
 }
@@ -137,6 +142,34 @@ describe("describeSubmitError", () => {
 
     expect(describeSubmitError(crossed, "You can't change this setting.")).toBe(
       NEEDS_SCOPE
+    );
+  });
+
+  it("shows a refusal the server worded on a status the operation never declared", async () => {
+    // NSwag parses an error body only for a declared status; otherwise it throws
+    // an ApiException whose message is its own boilerplate and leaves the body
+    // as raw text. The reason exists only there, so an arm that reads the
+    // exception alone reports the boilerplate no matter how it orders its reads.
+    const crossed = await crossThe403Arm(
+      nswagApiException(
+        403,
+        UNDECLARED_STATUS_MESSAGE,
+        JSON.stringify(problemDetails(403, NEEDS_SCOPE))
+      )
+    );
+
+    expect(describeSubmitError(crossed, "You can't change this setting.")).toBe(
+      NEEDS_SCOPE
+    );
+  });
+
+  it("keeps the caller's wording when the undeclared body is not JSON", async () => {
+    const crossed = await crossThe403Arm(
+      nswagApiException(403, UNDECLARED_STATUS_MESSAGE, "<html>403</html>")
+    );
+
+    expect(describeSubmitError(crossed, "You can't change this setting.")).toBe(
+      "You can't change this setting."
     );
   });
 

@@ -8,6 +8,7 @@ import {
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
+import { parseErrorBody } from "./error-body";
 import { TotpSetupFailure } from "$api-clients";
 import {
   describeTotpSetupError,
@@ -30,20 +31,23 @@ import {
  */
 async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, status, error) => { ${config.errorHandling.on500("get invite info")}; }`,
+    `(err, status, error, parseErrorBody) => { ${config.errorHandling.on500("get invite info")}; }`,
     "on500.ts",
     { loader: "ts" }
   );
   const source = compiled.code.trim().replace(/;$/, "");
 
+  // The arm is spliced into a generated file, so it reaches the helpers that
+  // file imports; they are passed in here for the same reason.
   const flatten = new Function(`return ${source}`)() as (
     err: unknown,
     status: unknown,
-    error: typeof import("@sveltejs/kit").error
+    error: typeof import("@sveltejs/kit").error,
+    parseErrorBody: typeof import("./error-body").parseErrorBody
   ) => never;
 
   try {
-    flatten(thrown, (thrown as { status?: number })?.status, error);
+    flatten(thrown, (thrown as { status?: number })?.status, error, parseErrorBody);
   } catch (crossed) {
     return crossed;
   }
@@ -220,6 +224,44 @@ describe("the status a generated remote function lets through", () => {
     expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
       "Another device changed this entry."
     );
+  });
+
+  it("recovers the reason from a body NSwag left unparsed", async () => {
+    // NSwag parses an error body only for a status the operation declares. On any
+    // other status the reason exists solely as raw text on `response`, so no
+    // ordering of reads off the exception can recover it.
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        409,
+        JSON.stringify(problemDetails(409, "Already redeemed.", "Conflict"))
+      )
+    );
+
+    expect((crossed as { status: number }).status).toBe(409);
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "Already redeemed."
+    );
+  });
+
+  it("recovers the validation map from a body NSwag left unparsed", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        400,
+        JSON.stringify({ errors: { Label: ["The Label field is required."] } })
+      )
+    );
+
+    expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
+      "The Label field is required."
+    );
+  });
+
+  it("leaves NSwag's boilerplate in place when the unparsed body is not JSON", async () => {
+    const crossed = await crossTheBoundary(
+      nswagApiException(503, "<html>503 Service Unavailable</html>")
+    );
+
+    expect((crossed as { status: number }).status).toBe(500);
   });
 
   it("still flattens a status it does not forward", async () => {

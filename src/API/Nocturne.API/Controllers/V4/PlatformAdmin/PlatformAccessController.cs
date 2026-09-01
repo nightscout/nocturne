@@ -65,7 +65,7 @@ public class PlatformAccessController(
     public async Task<IActionResult> Access([FromQuery] string? tenant, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(tenant))
-            return BadRequest(new { error = "missing_tenant" });
+            return Problem(detail: "No tenant slug was given.", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
         var auth = HttpContext.GetAuthContext();
 
@@ -84,7 +84,7 @@ public class PlatformAccessController(
                 detailsJson: JsonSerializer.Serialize(new { slug = tenant }));
             logger.LogWarning("Subject {SubjectId} attempted platform access to '{Slug}' without platform_admin",
                 auth.SubjectId, tenant);
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "forbidden" });
+            return Problem(detail: "Platform access requires a platform administrator session.", statusCode: StatusCodes.Status403Forbidden, title: "Forbidden");
         }
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
@@ -94,10 +94,10 @@ public class PlatformAccessController(
             .FirstOrDefaultAsync(ct);
 
         if (target is null)
-            return NotFound(new { error = "tenant_not_found" });
+            return Problem(detail: $"No tenant is registered under the slug '{tenant}'.", statusCode: StatusCodes.Status404NotFound, title: "Not Found");
 
         if (!target.IsActive)
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = "tenant_inactive" });
+            return Problem(detail: $"Tenant '{tenant}' is deactivated.", statusCode: StatusCodes.Status403Forbidden, title: "Forbidden");
 
         // Mint a tenant-pinned, platform-access-marked grant for the operator's real subject.
         var subject = new SubjectInfo
