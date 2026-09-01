@@ -1,12 +1,7 @@
 <script lang="ts">
-  // Test-only harness: mounts a real chart component so the props-to-engine wiring
-  // under test is the production one. A harness that built the engine itself would
-  // pass whether or not the component keeps its `dateRange` prop reactive.
-  //
-  // Both components are covered because each builds its own engine and a fix
-  // applied to one leaves the other frozen. `GlucoseChartCard` is what Day in
-  // Review, the readings report and the dashboard render; `GlucoseChart` is the
-  // shell they wrap, rendered by nothing else today.
+  // Mounts a real chart component so the props-to-engine wiring under test is the
+  // production one. A harness that built the engine itself would pass whether or
+  // not the component keeps its `dateRange` prop reactive.
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import GlucoseChart from "./GlucoseChart.svelte";
   import GlucoseChartCard from "./GlucoseChartCard.svelte";
@@ -39,6 +34,10 @@
   {#if component === "card"}
     <GlucoseChartCard {dateRange} showPredictions={false} />
   {:else}
-    <GlucoseChart {dateRange} enablePredictions={false} enableInspection={false} />
+    <GlucoseChart
+      {dateRange}
+      enablePredictions={false}
+      enableInspection={false}
+    />
   {/if}
 </div>

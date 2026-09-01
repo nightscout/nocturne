@@ -81,9 +81,6 @@
   }: Props = $props();
 
   // ---- Engine ----
-  // Getters, not `{ dateRange, ... }`: a prop read into an object literal is read
-  // once, so an engine built that way freezes on the range it was created with —
-  // stepping the day on Day in Review left the chart drawing the day before.
   const engine = createChartDataEngine({
     get dateRange() { return dateRange; },
     get focusHours() { return focusHours; },
