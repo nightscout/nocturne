@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error, isHttpError } from "@sveltejs/kit";
@@ -8,7 +9,7 @@ import {
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
-import { TotpSetupFailure } from "$api-clients";
+import { TotpSetupFailure, type ReferencingRulesResponse } from "$api-clients";
 import {
   describeTotpSetupError,
   describeTotpSetupStartError,
@@ -20,7 +21,7 @@ import {
  * What a failed API call looks like by the time a page sees it.
  *
  * Every generated remote function ends in the catch block
- * openapi-remote-codegen 0.2.0 writes: the status is read off the thrown value,
+ * openapi-remote-codegen 0.5.0 writes: the status is read off the thrown value,
  * 401 and 403 get a line each, and everything else falls to
  * {@link config.errorHandling.on500} — which is ours. A status `on500` does not
  * name is flattened to a 500 and never reaches the browser, so a page cannot
@@ -314,5 +315,111 @@ describe("an authenticator setup that was refused before it started", () => {
 
     expect(describeTotpSetupStartError(crossed)).toBe(TOTP_SETUP_START_FALLBACK);
     expect(TOTP_SETUP_START_FALLBACK.trim()).not.toBe("");
+  });
+});
+
+/**
+ * The 409 the alert-rule delete sends when other rules point at the target, as
+ * NSwag throws it: the parsed body itself, because the operation declares a
+ * typed schema for that status.
+ */
+const referencingRules: ReferencingRulesResponse = {
+  referencingRuleIds: ["3f2a0000-0000-0000-0000-000000000000"],
+  status: 409,
+  message:
+    "Another alert rule's condition refers to this one. Update that rule first.",
+};
+
+describe("an error body that is not RFC-7807", () => {
+  it("reaches the status arm its endpoint declares", async () => {
+    const crossed = await crossTheBoundary(referencingRules);
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+  });
+
+  it("says which rules are in the way rather than that the delete failed", async () => {
+    const crossed = await crossTheBoundary(referencingRules);
+
+    expect(
+      describeSubmitError(crossed, "Failed to delete the alert rule.")
+    ).toBe(referencingRules.message);
+  });
+
+  it("flattens to a 500 when it declares no status of its own", async () => {
+    const { status: _status, ...withoutStatus } = referencingRules;
+
+    const crossed = await crossTheBoundary(withoutStatus);
+
+    expect((crossed as { status: number }).status).toBe(500);
+  });
+});
+
+/**
+ * The status arms read `err.status`, so a typed error body that declares no
+ * `status` of its own is flattened to a 500 no matter what the response said.
+ * Only a remote operation is covered: a status arm is the only thing that reads
+ * these, and an endpoint the codegen does not wrap is answered by whatever
+ * calls it directly.
+ */
+describe("every typed error body a remote operation declares", () => {
+  const spec = JSON.parse(
+    readFileSync(new URL("./generated/openapi.json", import.meta.url), "utf8")
+  ) as {
+    paths: Record<string, Record<string, RemoteOperation>>;
+    components: {
+      schemas: Record<string, { properties?: Record<string, unknown> }>;
+    };
+  };
+
+  type RemoteOperation = {
+    "x-remote-type"?: string;
+    responses?: Record<
+      string,
+      { content?: Record<string, { schema?: { $ref?: string } }> }
+    >;
+  };
+
+  /** 401 and 403 have arms of their own that never read a body's status. */
+  const READ_BY_A_STATUS_ARM = (code: string) =>
+    /^[45]/.test(code) && code !== "401" && code !== "403";
+
+  function declaredErrorBodies(): { where: string; schema: string }[] {
+    const found: { where: string; schema: string }[] = [];
+
+    for (const [path, methods] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(methods)) {
+        if (!operation?.["x-remote-type"]) continue;
+
+        for (const [code, response] of Object.entries(
+          operation.responses ?? {}
+        )) {
+          if (!READ_BY_A_STATUS_ARM(code)) continue;
+
+          const ref = response.content?.["application/json"]?.schema?.$ref;
+          if (!ref) continue;
+
+          found.push({
+            where: `${code} ${method.toUpperCase()} ${path}`,
+            schema: ref.split("/").pop()!,
+          });
+        }
+      }
+    }
+
+    return found;
+  }
+
+  it("declares a status, so the status arm can forward it", () => {
+    const bodies = declaredErrorBodies();
+    expect(bodies.length).toBeGreaterThan(0);
+
+    const missing = bodies
+      .filter(
+        ({ schema }) =>
+          !("status" in (spec.components.schemas[schema]?.properties ?? {}))
+      )
+      .map(({ where, schema }) => `${where} -> ${schema}`);
+
+    expect(missing).toEqual([]);
   });
 });

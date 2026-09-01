@@ -304,6 +304,7 @@ public class AlertRulesController : ControllerBase
         {
             return Conflict(new
             {
+                status = StatusCodes.Status409Conflict,
                 message = $"This rule is managed by '{rule.ManagedBy}' — delete the tracker notification threshold instead.",
                 managedBy = rule.ManagedBy,
             });
@@ -894,7 +895,21 @@ public class AlertRulesController : ControllerBase
 /// reference the target via <c>alert_state</c>. The FE uses this to either link to those
 /// rules or offer a cascade-delete confirmation.
 /// </summary>
-public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds);
+/// <remarks>
+/// <see cref="Status"/> and <see cref="Message"/> are carried in the body because the generated
+/// client reads both off the thrown value; a body declaring neither is flattened to a 500.
+/// </remarks>
+public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds)
+{
+    /// <summary>The status this body is returned with.</summary>
+    public int Status => StatusCodes.Status409Conflict;
+
+    /// <summary>The reason, worded for the person who asked for the deletion.</summary>
+    public string Message =>
+        ReferencingRuleIds.Count == 1
+            ? "Another alert rule's condition refers to this one. Update that rule first."
+            : $"{ReferencingRuleIds.Count} other alert rules' conditions refer to this one. Update those rules first.";
+}
 
 #region DTOs
 
