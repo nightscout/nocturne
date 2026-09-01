@@ -1,16 +1,17 @@
 /**
  * Server-side resolution of a report's date range.
  *
- * A report's "day" is the patient's day, so the day boundaries are computed in
- * the timezone on their therapy settings rather than the container's timezone.
- * The window is inclusive: it runs from midnight opening `from` to the last
- * millisecond of `to`, both read in that timezone.
+ * A report's "day" is the patient's day, so the day boundaries are computed on
+ * the patient's calendar rather than the container's — see
+ * `$lib/server/patient-timezone`. The window is inclusive: it runs from midnight
+ * opening `from` to the last millisecond of `to`, both read in that timezone.
  */
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
-import { getProfileSummary } from "$api/generated/profiles.generated.remote";
+import { getRequestEvent } from "$app/server";
 import { getLocalDayBoundariesUtc } from "$lib/utils/timezone";
-import { dayCount, isTimeZone, resolveDayRange } from "$lib/utils/date-range";
+import { dayCount, resolveDayRange } from "$lib/utils/date-range";
+import { resolvePatientTimeZone } from "$lib/server/patient-timezone";
 
 /**
  * Input schema for date range queries. Uses nullish() to accept both null and
@@ -32,30 +33,14 @@ export interface ReportRange {
   endDate: Date;
   /** Calendar days the window covers, counting both end days. */
   dayCount: number;
-  /** The patient's IANA timezone, or null when their profile does not set one. */
-  timeZone: string | null;
 }
 
 /**
- * The patient's configured IANA timezone, or null when it is unset, is a value this runtime
- * does not recognise, or the caller may not read it. Null means the day boundaries fall back
- * to UTC.
- *
- * Therapy settings are not a shareable data category, so an anonymous public-share viewer
- * gets 401/403 here; reports must still render for them (nightscout/nocturne#635), just with
- * UTC day boundaries.
+ * The patient's configured IANA timezone, or null when no source names one. See
+ * `$lib/server/patient-timezone` for where it comes from and what null means.
  */
 export async function getPatientTimeZone(): Promise<string | null> {
-  let profile: Awaited<ReturnType<typeof getProfileSummary>>;
-  try {
-    profile = await getProfileSummary(undefined);
-  } catch (err) {
-    const status = (err as { status?: number })?.status;
-    if (status === 401 || status === 403) return null;
-    throw err;
-  }
-  const timeZone = profile?.therapySettings?.[0]?.timezone;
-  return isTimeZone(timeZone) ? timeZone : null;
+  return resolvePatientTimeZone(getRequestEvent().locals);
 }
 
 /** Resolve a report window against the patient's timezone. */
@@ -73,5 +58,5 @@ export async function resolveReportRange(
     throw error(400, "Invalid date parameters provided");
   }
 
-  return { startDate, endDate, dayCount: dayCount(from, to), timeZone };
+  return { startDate, endDate, dayCount: dayCount(from, to) };
 }
