@@ -13,7 +13,7 @@ namespace Nocturne.Connectors.Core.Extensions;
 /// <summary>
 ///     Options for configuring a connector via AddConnector
 /// </summary>
-public abstract class ConnectorOptions
+public sealed class ConnectorOptions
 {
     /// <summary>
     ///     The connector name used in configuration paths (e.g., "Dexcom", "LibreLinkUp")
@@ -91,8 +91,8 @@ public static class ConnectorServiceCollectionExtensions
         }
 
         /// <summary>
-        ///     Registers a connector with its configuration, service, and token provider.
-        ///     This is the preferred method for registering new connectors.
+        ///     Registers a connector with its configuration, service, token provider and sync
+        ///     executor. This is the preferred method for registering new connectors.
         /// </summary>
         /// <typeparam name="TConfig">Configuration type</typeparam>
         /// <typeparam name="TService">Connector service type</typeparam>
@@ -103,7 +103,7 @@ public static class ConnectorServiceCollectionExtensions
         public TConfig? AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
             ConnectorOptions options)
             where TConfig : BaseConnectorConfiguration, new()
-            where TService : class
+            where TService : class, IConnectorService<TConfig>
             where TTokenProvider : class
         {
             // Register configuration
@@ -151,51 +151,8 @@ public static class ConnectorServiceCollectionExtensions
                     options.AddResilience
                 );
 
-            return config;
-        }
-
-        /// <summary>
-        ///     Simplified connector registration for connectors without token providers.
-        /// </summary>
-        public TConfig? AddConnector<TConfig, TService>(IConfiguration configuration,
-            ConnectorOptions options)
-            where TConfig : BaseConnectorConfiguration, new()
-            where TService : class
-        {
-            // Register configuration
-            var config = services.AddConnectorConfiguration<TConfig>(
-                configuration,
-                options.ConnectorName
-            );
-
-            // Skip registration if disabled
-            if (!config.Enabled)
-                return null;
-
-            // Register server resolver
-            services.AddSingleton<IConnectorServerResolver<TConfig>>(
-                new ConnectorServerResolver<TConfig>(
-                    options.ServerMapping,
-                    options.GetServerRegion,
-                    options.DefaultServer));
-
-            // Register config loader
-            services.AddScoped<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
-
-            // Register token cache (shared singleton across all connectors)
-            services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
-            services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
-
-            // Register HttpClient WITHOUT BaseAddress (server resolved per-tenant at call time)
-            services.AddHttpClient<TService>()
-                .ConfigureConnectorClient(
-                    null,
-                    options.AdditionalHeaders,
-                    options.UserAgent,
-                    options.Timeout,
-                    options.ConnectTimeout,
-                    options.AddResilience
-                );
+            services.AddConnectorTokenProvider<TTokenProvider>();
+            services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TService, TConfig>>();
 
             return config;
         }
