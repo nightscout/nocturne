@@ -35,14 +35,19 @@ describe("parseErrorBody", () => {
 
   it("recovers the validation map of an undeclared 400", () => {
     const body = parseErrorBody(
-      apiException(JSON.stringify({ errors: { Label: ["The Label field is required."] } }), 400)
+      apiException(
+        JSON.stringify({ errors: { Label: ["The Label field is required."] } }),
+        400
+      )
     );
 
     expect(body?.errors).toEqual({ Label: ["The Label field is required."] });
   });
 
   it("answers undefined for a body that is not JSON", () => {
-    expect(parseErrorBody(apiException("<html>502 Bad Gateway</html>"))).toBeUndefined();
+    expect(
+      parseErrorBody(apiException("<html>502 Bad Gateway</html>"))
+    ).toBeUndefined();
   });
 
   it("answers undefined for an empty body", () => {
@@ -56,10 +61,24 @@ describe("parseErrorBody", () => {
     expect(parseErrorBody(apiException("null"))).toBeUndefined();
   });
 
+  it("keeps a field the far end sent as the wrong type", () => {
+    // `Object.entries("boom")` is four entries, which would reach someone as
+    // their validation failure.
+    const body = parseErrorBody(
+      apiException(JSON.stringify({ detail: 42, title: "", errors: "boom" }))
+    );
+
+    expect(body?.detail).toBeUndefined();
+    expect(body?.title).toBeUndefined();
+    expect(body?.errors).toBeUndefined();
+  });
+
   it("answers undefined for a thrown value carrying no response at all", () => {
     // A status the operation declares is thrown as the parsed body itself, which
     // has nothing left to recover.
-    expect(parseErrorBody({ status: 409, detail: "Already redeemed." })).toBeUndefined();
+    expect(
+      parseErrorBody({ status: 409, detail: "Already redeemed." })
+    ).toBeUndefined();
     expect(parseErrorBody(new Error("network down"))).toBeUndefined();
     expect(parseErrorBody(undefined)).toBeUndefined();
     expect(parseErrorBody(null)).toBeUndefined();

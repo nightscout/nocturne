@@ -375,6 +375,8 @@ export const setAuthCookies = command(
       const session = await api.oidc.getSession();
       return { success: session?.isAuthenticated ?? false };
     } catch {
+      // A session that will not validate is the answer, not an error to report:
+      // the caller's next step is to sign in either way.
       return { success: false };
     }
   }

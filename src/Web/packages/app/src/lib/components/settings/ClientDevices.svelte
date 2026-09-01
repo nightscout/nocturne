@@ -20,6 +20,7 @@
 
   const now = new Now();
   import { deviceKindLabel } from "$lib/utils/device-kind-labels";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     getDevices,
     getCapabilityCatalog,
@@ -74,8 +75,8 @@
       successMessage = "Device renamed.";
       editingId = null;
       clearMessages();
-    } catch {
-      errorMessage = "Failed to rename device. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to rename device. Please try again.");
       clearMessages();
     } finally {
       isSaving = null;
@@ -89,8 +90,8 @@
       await revoke(id);
       successMessage = "Device revoked.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to revoke device. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to revoke device. Please try again.");
       clearMessages();
     } finally {
       isRevoking = null;

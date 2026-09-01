@@ -79,6 +79,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
@@ -181,8 +182,10 @@
       // The dashboard still reads these through the shared settings store; reload
       // it so the change it renders matches what was persisted.
       await store.reload();
-    } catch {
-      toast.error("Could not save. Check your connection and try again.");
+    } catch (err) {
+      toast.error(
+        describeSubmitError(err, "Could not save. Check your connection and try again.")
+      );
       await uiSettingsQuery?.refresh();
     }
   }

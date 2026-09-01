@@ -34,13 +34,10 @@ export default {
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
     //
-    // `detail` is read ahead of `message` because the two have different authors.
-    // A status the operation declares a `ProducesResponseType` for is thrown by
-    // NSwag as the parsed body, so a `Problem(detail: …)` refusal arrives with the
-    // server's sentence on `detail`. An undeclared status is thrown as an
-    // `ApiException` whose `message` is NSwag's own boilerplate and whose body is
-    // left unparsed on `response` — so the boilerplate must lose to anything the
-    // server actually wrote, including a reason recovered from that raw body.
+    // Read in author order: the server's own sentence, then one recovered from a
+    // body NSwag left unparsed (`$lib/api/error-body`), and only then `message`,
+    // which on an `ApiException` is NSwag's boilerplate rather than anything the
+    // server wrote.
     on403:
       `const e403 = err as any;\n` +
       `      const b403 = parseErrorBody(e403);\n` +
@@ -76,14 +73,10 @@ export default {
     // NSwag throws the parsed error body itself (not wrapped in ApiException) for
     // a response that declares a typed schema, so an RFC-7807 body arrives as
     // `err`: `detail` carries the reason and `title` only the status phrase,
-    // which is why `detail` is read first. Without a typed schema NSwag throws an
-    // ApiException whose `message` is its own boilerplate and whose body is left
-    // **unparsed** on `response`. Parsing that raw body is the only way a curated
-    // `Problem(detail: …)` on an undeclared status reaches the user at all — no
-    // ordering of reads off the exception can recover it, because the exception
-    // carries none of it. NSwag's boilerplate is therefore the last resort, behind
-    // everything the server wrote. `err.body.message` belongs to an `HttpError`,
-    // which is what a nested remote call rethrows.
+    // which is why `detail` is read first. A body NSwag left unparsed is read
+    // next (`$lib/api/error-body`), and its boilerplate `message` last.
+    // `err.body.message` belongs to an `HttpError`, which is what a nested remote
+    // call rethrows.
     on500: (functionName: string) =>
       `const e = err as any;\n` +
       `    const b = parseErrorBody(e);\n` +

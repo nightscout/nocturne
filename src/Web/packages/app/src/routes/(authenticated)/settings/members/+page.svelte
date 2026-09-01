@@ -42,6 +42,7 @@
   import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
   import RolesSection from "$lib/components/members/RolesSection.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -171,8 +172,8 @@
       await membersQuery.refresh();
       successMessage = "Membership request approved.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to approve request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
       clearMessages();
     }
   }
@@ -183,8 +184,8 @@
       await denyRequest(requestId);
       successMessage = "Membership request denied.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to deny request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
       clearMessages();
     }
   }
@@ -363,8 +364,11 @@
               await revokeInvite(inviteId);
               successMessage = "Invite revoked successfully.";
               clearMessages();
-            } catch {
-              errorMessage = "Failed to revoke invite. Please try again.";
+            } catch (err) {
+              errorMessage = describeSubmitError(
+                err,
+                "Failed to revoke invite. Please try again."
+              );
               clearMessages();
             } finally {
               isRevokingInvite = null;

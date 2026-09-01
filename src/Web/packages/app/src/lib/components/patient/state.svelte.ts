@@ -8,7 +8,7 @@ import {
   type DiscoveredSource,
   DiabetesType,
 } from "$api";
-import { FormGuard } from "$lib/forms";
+import { FormGuard, describeSubmitError } from "$lib/forms";
 import { z } from "zod";
 
 /** Convert a date value from the API into a YYYY-MM-DD string for date inputs. */
@@ -214,8 +214,8 @@ export class WeightState {
       });
       this.#initialWeightKg = this.weightKg;
       return true;
-    } catch {
-      this.saveError = "Failed to save weight. Please try again.";
+    } catch (err) {
+      this.saveError = describeSubmitError(err, "Failed to save weight. Please try again.");
       return false;
     } finally {
       this.saving = false;

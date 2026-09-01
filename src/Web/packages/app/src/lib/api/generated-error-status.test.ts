@@ -37,8 +37,7 @@ async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   );
   const source = compiled.code.trim().replace(/;$/, "");
 
-  // The arm is spliced into a generated file, so it reaches the helpers that
-  // file imports; they are passed in here for the same reason.
+  // The helpers are passed in because the real arm reaches them by import.
   const flatten = new Function(`return ${source}`)() as (
     err: unknown,
     status: unknown,
@@ -227,9 +226,7 @@ describe("the status a generated remote function lets through", () => {
   });
 
   it("recovers the reason from a body NSwag left unparsed", async () => {
-    // NSwag parses an error body only for a status the operation declares. On any
-    // other status the reason exists solely as raw text on `response`, so no
-    // ordering of reads off the exception can recover it.
+    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
     const crossed = await crossTheBoundary(
       nswagApiException(
         409,

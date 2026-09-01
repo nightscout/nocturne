@@ -83,6 +83,8 @@
     try {
       await action();
     } catch {
+      // Restoring the card is the report: it reappears, so the alert is still
+      // outstanding and the action can be retried.
       queue = snapshot;
     }
   }

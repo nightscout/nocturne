@@ -146,10 +146,7 @@ describe("describeSubmitError", () => {
   });
 
   it("shows a refusal the server worded on a status the operation never declared", async () => {
-    // NSwag parses an error body only for a declared status; otherwise it throws
-    // an ApiException whose message is its own boilerplate and leaves the body
-    // as raw text. The reason exists only there, so an arm that reads the
-    // exception alone reports the boilerplate no matter how it orders its reads.
+    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
     const crossed = await crossThe403Arm(
       nswagApiException(
         403,

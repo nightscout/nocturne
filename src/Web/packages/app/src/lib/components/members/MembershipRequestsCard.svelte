@@ -9,6 +9,7 @@
     getPendingRequests,
   } from "$api/generated/membershipRequests.generated.remote";
   import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -36,8 +37,11 @@
     pendingAllow = v;
     try {
       await setMembershipRequestSettings({ allowRequests: v });
-    } catch {
-      errorMessage = "Couldn't update membership requests. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(
+        err,
+        "Couldn't update membership requests. Please try again."
+      );
     } finally {
       busy = false;
       pendingAllow = null;

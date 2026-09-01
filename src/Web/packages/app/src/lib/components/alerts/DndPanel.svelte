@@ -37,8 +37,9 @@
   async function load(): Promise<void> {
     try {
       settings = await getDnd().run();
-    } catch {
+    } catch (err) {
       settings = null;
+      errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
     } finally {
       loading = false;
     }

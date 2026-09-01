@@ -11,6 +11,7 @@
   } from "lucide-svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   let {
     jobId,
@@ -106,8 +107,8 @@
               resolvedJobId = completed.id;
             }
           }
-        } catch {
-          error = "Failed to find active migration";
+        } catch (err) {
+          error = remoteErrorMessage(err, "Failed to find active migration");
           loading = false;
           return;
         }
@@ -189,6 +190,8 @@
 
           await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch {
+          // A single failed poll says nothing worth showing; the retry below is
+          // the response, and a run of them gets its own wording.
           if (!active) break;
           consecutiveFailures++;
           // Only give up — and tell the user — once polling has failed repeatedly. The import

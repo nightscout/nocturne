@@ -21,6 +21,7 @@
     deny,
   } from "$lib/api/generated/accessRequests.generated.remote";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   // Queries
   const requestsQuery = getPendingRequests();
@@ -97,8 +98,8 @@
       });
       successMessage = "Access request approved.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to approve request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
       clearMessages();
     } finally {
       approvingId = null;
@@ -112,8 +113,8 @@
       await deny(subjectId);
       successMessage = "Access request denied.";
       clearMessages();
-    } catch {
-      errorMessage = "Failed to deny request. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
       clearMessages();
     } finally {
       denyingId = null;

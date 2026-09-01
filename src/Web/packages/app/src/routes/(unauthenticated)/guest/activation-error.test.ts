@@ -3,8 +3,8 @@ import { classifyActivationError } from "./activation-error";
 
 describe("classifyActivationError", () => {
   it("treats the API's refusal as a refused code", () => {
-    // The API answers a refused code with ProblemDetails, which carries the
-    // status in its own body, so the generated client's parsed throw has one.
+    // ProblemDetails carries the status in its own body, so the parsed throw the
+    // generated client hands back has one.
     expect(
       classifyActivationError({
         type: "https://tools.ietf.org/html/rfc9110#section-15.5.1",
@@ -42,8 +42,7 @@ describe("classifyActivationError", () => {
   });
 
   it("does not read a status-less body as a refused code", () => {
-    // Guards the regression the ProblemDetails change removes the need for: a
-    // body with no status is an outage we cannot classify, not a bad code.
+    // A body with no status is an outage we cannot classify, not a bad code.
     expect(classifyActivationError({ expiresAt: null })).toBe("unavailable");
   });
 });

@@ -63,6 +63,8 @@
       const result = app.id ? await getUploaderSetup(app.id).run() : null;
       setupResponse = result ?? null;
     } catch {
+      // The view renders its own "no setup available" state from a null response,
+      // and there is nowhere on this step to put a reason.
       setupResponse = null;
     }
   }

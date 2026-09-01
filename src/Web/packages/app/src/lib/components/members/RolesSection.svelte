@@ -7,6 +7,7 @@
   import { Label } from "$lib/components/ui/label";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Shield,
     Ban,
@@ -113,8 +114,8 @@
       successMessage = "Role created successfully.";
       resetCreateForm();
       clearMessages();
-    } catch {
-      errorMessage = "Failed to create role. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to create role. Please try again.");
       clearMessages();
     } finally {
       isCreating = false;
@@ -136,8 +137,8 @@
       successMessage = "Role updated successfully.";
       isEditOpen = false;
       clearMessages();
-    } catch {
-      errorMessage = "Failed to update role. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to update role. Please try again.");
       clearMessages();
     } finally {
       isEditing = false;
@@ -152,8 +153,8 @@
       successMessage = "Role deleted successfully.";
       isDeleteOpen = false;
       clearMessages();
-    } catch {
-      errorMessage = "Failed to delete role. Please try again.";
+    } catch (err) {
+      errorMessage = describeSubmitError(err, "Failed to delete role. Please try again.");
       clearMessages();
     } finally {
       isDeleting = false;

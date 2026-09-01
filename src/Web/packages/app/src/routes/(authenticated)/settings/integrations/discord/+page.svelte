@@ -14,6 +14,7 @@
 		revokeLink,
 	} from "$lib/api/generated/chatIdentities.generated.remote";
 	import { getDiscordConfig, initiateDiscordLink } from "./discord.remote";
+	import { describeSubmitError } from "$lib/forms/submit-error";
 
 	// Auth guard
 	$effect(() => {
@@ -58,8 +59,8 @@
 		actionError = null;
 		try {
 			await setDefault(id);
-		} catch {
-			actionError = "Failed to set default link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to set default link.");
 		} finally {
 			isSettingDefault = null;
 		}
@@ -77,8 +78,8 @@
 				},
 			});
 			cancelEdit();
-		} catch {
-			actionError = "Failed to update link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to update link.");
 		} finally {
 			isSavingEdit = false;
 		}
@@ -89,8 +90,8 @@
 		actionError = null;
 		try {
 			await revokeLink(id);
-		} catch {
-			actionError = "Failed to revoke link.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to revoke link.");
 		} finally {
 			isRevoking = null;
 		}
@@ -107,8 +108,8 @@
 				window.location.href = result.redirectUrl;
 				return;
 			}
-		} catch {
-			actionError = "Failed to start Discord link flow.";
+		} catch (err) {
+			actionError = describeSubmitError(err, "Failed to start Discord link flow.");
 		} finally {
 			isLinking = false;
 		}
