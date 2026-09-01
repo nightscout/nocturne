@@ -5,7 +5,6 @@
  * state that can be shared across settings pages with two-way binding support.
  */
 
-import { formatNumericDate } from "$lib/utils/formatting";
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
 import { getApiClient } from "$lib/api/client";
@@ -337,23 +336,4 @@ export function formatTime(time: string | undefined): string {
   const period = hours >= 12 ? "PM" : "AM";
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
-}
-
-/**
- * Helper to format last sync time
- */
-export function formatLastSync(date: Date | undefined): string {
-  if (!date) return "Never";
-  const now = Date.now();
-  const then = new Date(date).getTime();
-  const diff = now - then;
-  const minutes = Math.floor(diff / 60000);
-
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  return formatNumericDate(new Date(date));
 }

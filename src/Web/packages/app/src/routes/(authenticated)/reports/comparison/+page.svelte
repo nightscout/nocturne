@@ -14,7 +14,13 @@
   import { untrack } from "svelte";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
-  import { dayCount, isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
+  import {
+    dayCount,
+    dayPart,
+    isDayString,
+    startOfDay,
+    toDayString,
+  } from "$lib/utils/date-range";
 
   const PRESETS = [
     "last7-prior7",
@@ -114,10 +120,8 @@
   function readCommitted(): Periods {
     const preset = urlParams.preset ?? DEFAULT_PRESET;
     const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
-    // Day-parted: `isDayString` accepts a longer ISO string by slicing but returns
-    // it whole, and the range picker's `parseDate` throws on everything past the date.
     const day = (value: string | null, fallback: string) =>
-      (isDayString(value) ? value : fallback).slice(0, 10);
+      dayPart(isDayString(value) ? value : fallback);
     return {
       a: {
         label: urlParams.aLabel ?? fromPreset.a.label,

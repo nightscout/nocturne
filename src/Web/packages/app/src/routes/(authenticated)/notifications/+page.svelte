@@ -148,8 +148,6 @@
       const date = new Date(
         instance.completedAt ?? instance.startedAt ?? new Date()
       );
-      // Keyed on the calendar day, not on a formatted string: a locale-formatted
-      // key re-buckets every group when the region format changes.
       const key = toDayString(date);
       if (!groups[key]) groups[key] = [];
       groups[key].push(instance);

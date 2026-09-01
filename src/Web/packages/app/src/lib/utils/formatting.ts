@@ -187,8 +187,7 @@ export function time(
   date: Date | string | number | null | undefined,
   opts: { compact?: boolean; seconds?: boolean } = {}
 ): string {
-  // Coerced like every sibling helper: NSwag types DTO date fields as `Date` but
-  // the client parses with no reviver, so what arrives is an ISO string.
+  // Coerced for the reason {@link toDate} gives.
   if (date == null) return "—";
   const d = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(d.getTime())) return "—";
@@ -298,7 +297,8 @@ export function formatNumericDate(date: Date | string | number): string {
 export function formatDateTime(dateStr: string | undefined): string {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString(formatLocale()) + " " + time(date);
+  if (Number.isNaN(date.getTime())) return "—";
+  return formatNumericDate(date) + " " + time(date);
 }
 
 /**
@@ -308,7 +308,8 @@ export function formatDateTime(dateStr: string | undefined): string {
  */
 export function formatDate(date: Date | string | number | undefined): string {
   if (date == null || date === "") return "N/A";
-  return new Date(date).toLocaleString(formatLocale());
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? "N/A" : d.toLocaleString(formatLocale());
 }
 
 /**
@@ -406,11 +407,9 @@ export function formatMediumDateTime(
  * The hour fields the locale's own short time uses — zero-padded and 24-hour where
  * it writes them that way, `2:05 pm` where it doesn't.
  *
- * Read off a `timeStyle: "short"` formatter rather than guessed, because the two
- * shapes HEAD used per site (`hour: "2-digit"` and `"numeric"`) each render wrongly
- * in half the locales. `timeStyle` itself cannot be combined with date fields, and
- * formatting the halves separately would hardcode a joiner that ja-JP, zh-CN and
- * ko-KR write as a space and ar-EG as U+060C — so the fields are extracted and
+ * `timeStyle` cannot be combined with date fields, and formatting the halves
+ * separately would hardcode a joiner that ja-JP, zh-CN and ko-KR write as a space
+ * and ar-EG as U+060C — so the fields are read off a `timeStyle: "short"` probe and
  * spread into a single `Intl` call, which lets ICU supply the glue.
  */
 const localeHourFields = (() => {
@@ -430,7 +429,6 @@ const localeHourFields = (() => {
     const fields: Intl.DateTimeFormatOptions = {
       hour: (hour?.value.length ?? 1) > 1 ? "2-digit" : "numeric",
       minute: "2-digit",
-      hour12: formatter.resolvedOptions().hour12,
     };
     cache.set(locale, fields);
     return fields;
@@ -456,13 +454,9 @@ export function formatClock(
 /**
  * Day and time with no year, e.g. "30 Aug, 00:05".
  *
- * Follows the locale's hour cycle, not the 12/24 preference — which is what these
- * surfaces did before they were routed through a shared formatter, and changing it
- * is not the locale sweep's business. The app is inconsistent about this: sibling
- * surfaces use {@link formatDateTimeCompact} and do follow the preference. Settling
- * it means giving the preference a "follow the locale" default, which needs the
- * API's `AllowedTimeFormats` widened to accept it and every direct
- * `timeFormat.current === "24"` comparison updated.
+ * Follows the locale's hour cycle, not the 12/24 preference; sibling surfaces
+ * ({@link formatDateTimeCompact}) follow the preference. Unifying them needs a
+ * "follow the locale" value in the preference itself.
  */
 export function formatDayTime(date: Date | string | number | undefined): string {
   if (date == null) return "—";

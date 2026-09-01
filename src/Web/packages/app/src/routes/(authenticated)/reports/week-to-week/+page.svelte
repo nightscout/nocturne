@@ -37,9 +37,6 @@
     buildWeekdayBuckets(reportsResource.current?.entries ?? [], (mgdl) => bg(mgdl))
   );
 
-  // Navigation helpers
-  // Stepped on the calendar rather than by 24-hour spans, so a week either side of
-  // a DST transition is still seven days on the patient's clock.
   function previousWeek() {
     const newEnd = parseDate(reportsParams.fromDay).subtract({ days: 1 });
     const newStart = newEnd.subtract({ days: 6 });

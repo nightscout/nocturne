@@ -20,7 +20,13 @@ export type DayRangeInput = {
   to?: string | null;
 };
 
-/** `YYYY-MM-DD` for a Date read in the local calendar, not the UTC calendar. */
+/**
+ * `YYYY-MM-DD` for a Date read in the local calendar, not the UTC calendar.
+ *
+ * This is also the right key for grouping rows by day: a locale-formatted date
+ * groups by whatever shape the region format produces, so changing the format
+ * mid-session re-buckets every group, and two days that format alike merge.
+ */
 export function toDayString(date: Date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -28,8 +34,14 @@ export function toDayString(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Day part of a day string; a longer ISO string keeps only its date. */
-function dayPart(value: string): string {
+/**
+ * Day part of a day string; a longer ISO string keeps only its date.
+ *
+ * {@link isDayString} admits a longer ISO string by day-parting it internally but
+ * returns it whole, so anything handing its result to a bare `parseDate` — a range
+ * picker, a date arrow — has to day-part it first or `parseDate` throws.
+ */
+export function dayPart(value: string): string {
   return value.length > 10 ? value.slice(0, 10) : value;
 }
 

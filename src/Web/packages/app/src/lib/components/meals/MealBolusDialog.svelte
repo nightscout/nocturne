@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatClock, formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatClock, formatLocale } from "$lib/utils/formatting";
   import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -65,9 +65,15 @@
     }
   });
 
+  // The locale's own medium date with a short time. Not the shared
+  // `formatMediumDateTime`, whose explicit field set spells the month out where
+  // this shape stays numeric — de-DE, ja-JP, ko-KR and ar-EG all differ.
   let mealTimestamp = $derived(
     meal?.timestamp
-      ? formatMediumDateTime(meal.timestamp)
+      ? new Date(meal.timestamp).toLocaleString(formatLocale(), {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
       : "",
   );
 

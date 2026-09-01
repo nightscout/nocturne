@@ -196,9 +196,6 @@
       const mills = meal.carbIntakes?.[0]?.mills;
       if (!mills) continue;
 
-      // Keyed on the calendar day, not on a formatted string: a locale-formatted
-      // key groups by whatever shape the region format happens to produce, and
-      // changing the format mid-session would re-bucket every meal.
       const dateKey = toDayString(new Date(mills));
 
       if (!grouped.has(dateKey)) {

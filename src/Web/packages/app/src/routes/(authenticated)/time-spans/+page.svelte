@@ -12,6 +12,7 @@
   import { getTimeSpansData } from "./data.remote";
   import {
     dayCount as countDays,
+    dayPart,
     isDayString,
     resolveDayRange,
     startOfDay,
@@ -23,15 +24,13 @@
   // `toISOString()` named yesterday for anyone east of UTC.
   const defaults = resolveDayRange({ days: 7 }, 7);
 
-  // Day-parted here rather than at each use: `isDayString` accepts a longer ISO
-  // string by slicing, and `parseDate` throws on everything past the date.
   const fromParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("from");
-    return (isDayString(fromUrl) ? fromUrl : defaults.from).slice(0, 10);
+    return dayPart(isDayString(fromUrl) ? fromUrl : defaults.from);
   });
   const toParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("to");
-    return (isDayString(fromUrl) ? fromUrl : defaults.to).slice(0, 10);
+    return dayPart(isDayString(fromUrl) ? fromUrl : defaults.to);
   });
 
   // Fetch data using remote function with date range
@@ -89,8 +88,6 @@
 
   /** Shift the window by whole days, keeping its length. */
   function shiftPeriod(direction: -1 | 1) {
-    // Stepped on the calendar rather than by 24-hour spans, so a window either
-    // side of a DST transition keeps its length in days.
     const anchor = parseDate(direction === -1 ? fromParam : toParam);
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });

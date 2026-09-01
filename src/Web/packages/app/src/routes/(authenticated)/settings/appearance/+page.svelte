@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
@@ -128,14 +128,9 @@
     }
   });
 
-  // Current time in timezone for display
-  const currentTime = $derived(
-    new Date(realtimeStore.now).toLocaleTimeString(formatLocale(), {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  );
+  // Follows the 12/24 preference, which the selector two cards below sets: this
+  // field is the only place a reader sees that choice take effect.
+  const currentTime = $derived(time(realtimeStore.now, { seconds: true }));
 
   /**
    * This page carries two scopes: units, formats, theme, chart style, widgets and language live on

@@ -268,7 +268,7 @@
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
 		const nextDay = new Date(date);
 		nextDay.setDate(nextDay.getDate() + 1);
-		// `{ day, year }` alone has no CLDR pattern — it fell back to "2026 (day: 30)".
+		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
 		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}
 

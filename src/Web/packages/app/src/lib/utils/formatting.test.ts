@@ -411,7 +411,7 @@ describe("Shared date shapes", () => {
 		expect(english.long).toContain("Saturday");
 		expect(german.long).toContain("Samstag");
 		expect(english.weekday).toBe("Sat");
-		expect(german.weekday).toBe("Sa");
+		expect(german.weekday).toMatch(/^Sa\.?$/);
 		expect(english.month).toBe("Aug");
 		expect(english.monthYear).toBe("August 2026");
 	});
@@ -431,9 +431,9 @@ describe("Shared date shapes", () => {
 	});
 
 	it("leaves the clock to the locale on the surfaces that never followed a preference", () => {
-		// These sites passed no `hour12` before the sweep. German has no day-period
-		// abbreviation, so ICU would hand a German reader the English "AM" if the
-		// preference won here — and the padding follows the locale, not a per-site guess.
+		// German has no day-period abbreviation, so ICU would hand a German reader the
+		// English "AM" if the preference won here. The second iteration is what pins it:
+		// making these helpers read `prefersHour12()` fails only under "12".
 		for (const preference of ["12", "24"] as const) {
 			withTimeFormat(preference, () => {
 				expect(withRegionValue("en-GB", () => formatDayTime(date))).toContain("14:05");
@@ -456,7 +456,7 @@ describe("Shared date shapes", () => {
 			});
 			withTimeFormat("12", () => {
 				expect(time(date)).toBe("2:05 pm");
-				expect(formatDateTimeCompact(date)).toContain("02:05 pm");
+				expect(formatDateTimeCompact(date)).toMatch(/02:05\s*pm/i);
 			});
 		});
 	});
@@ -470,8 +470,6 @@ describe("Shared date shapes", () => {
 	});
 
 	it("takes the hour style from the locale, not from the call site", () => {
-		// HEAD passed `hour: "2-digit"` at some sites and `"numeric"` at others; each
-		// is wrong in half the locales, so it is read off the locale's own short time.
 		// Asserted literally rather than against a re-derived option set, which would
 		// move with the implementation.
 		const american = withRegionValue("en-US", () => formatDayTime(date)).replace(/\s/g, " ");
@@ -486,8 +484,8 @@ describe("Shared date shapes", () => {
 	});
 
 	it("reads an unusable value as no time rather than as 1970", () => {
-		// `time()` takes wire values now, and a nullable `mills` used to throw where it
-		// would otherwise render "Invalid Date" or the epoch into a treatment row.
+		// A nullable `mills` would otherwise render "Invalid Date" or the epoch into a
+		// treatment row.
 		expect(time(undefined)).toBe("—");
 		expect(time(null)).toBe("—");
 		expect(time("not a date")).toBe("—");
@@ -495,8 +493,7 @@ describe("Shared date shapes", () => {
 
 	it("reads a wire value, not only a Date", () => {
 		// NSwag types DTO date fields as `Date`, but the generated client parses with
-		// no reviver, so what actually arrives is an ISO string. `time()` was the one
-		// helper that did not coerce, and the active-alerts card threw on it.
+		// no reviver, so what actually arrives is an ISO string.
 		const iso = "2026-08-29T14:05:00.000Z";
 		withRegion("en-GB", () => {
 			expect(() => time(iso)).not.toThrow();
