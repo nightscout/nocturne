@@ -173,6 +173,52 @@ describe("RealtimeStore direction", () => {
   });
 });
 
+describe("RealtimeStore entry create batching", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("coalesces a connector catch-up burst into one entry update", async () => {
+    const store = makeStore();
+
+    for (let index = 0; index < 100; index += 1) {
+      store.handleCreate({
+        colName: "entries",
+        doc: {
+          _id: `reading-${index}`,
+          type: "sgv",
+          sgv: 100 + (index % 20),
+          mills: 1_000_000 + index,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(2);
+    }
+
+    // Preserve the existing duplicate rule when IDs differ but the timestamp
+    // and glucose value identify the same reading.
+    store.handleCreate({
+      colName: "entries",
+      doc: {
+        _id: "duplicate-reading-42",
+        type: "sgv",
+        sgv: 102,
+        mills: 1_000_042,
+      },
+    });
+
+    expect(store.entries).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(store.entries).toHaveLength(100);
+    expect(store.entries[0]._id).toBe("reading-99");
+
+    store.destroy();
+  });
+});
+
 describe("RealtimeStore sync progress", () => {
   beforeEach(() => {
     vi.useFakeTimers();
