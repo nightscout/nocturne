@@ -31,9 +31,13 @@ public readonly record struct AuditedSoftDeleteResult<T>(int Count, List<T> Enti
 /// <remarks>
 /// A soft delete leaves the row in place, so a per-row snapshot would be a verbatim copy of data that
 /// is still readable and the dedup discriminator lives on the row itself
-/// (<see cref="SoftDeleteDedupExtensions"/>) — soft deletes therefore record one <c>bulk_delete</c>
-/// summary row naming the scope they were issued against. A hard delete destroys the row, so its
-/// per-row snapshots are the only surviving copy and are kept.
+/// (<see cref="SoftDeleteDedupExtensions"/>) — <see cref="AuditedSoftDeleteAsync{T}"/> therefore
+/// records one <c>bulk_delete</c> summary row naming the scope it was issued against. A caller that
+/// needs per-record realtime events has to materialize the rows anyway, so
+/// <see cref="AuditedSoftDeleteWithEntitiesAsync{T}"/> spends the snapshot it has already loaded and
+/// writes a row each, collapsing to the summary only past
+/// <see cref="BroadcastMaterializationCap"/>. A hard delete destroys the row, so its per-row snapshots
+/// are the only surviving copy and are kept.
 /// </remarks>
 public static class AuditedBulkDeleteExtensions
 {
