@@ -75,8 +75,8 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
     /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
     /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
-    /// A key held by a row the user deleted is dropped from the batch — neither updated nor inserted
-    /// beside, per <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
+    /// A key held by a row the user deleted drops the record from the batch, per
+    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
     /// </summary>
     protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
@@ -122,9 +122,6 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 && !string.IsNullOrEmpty(entity.SyncIdentifier);
             if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
             {
-                // The user deleted this record, so the re-upload is dropped rather than written into
-                // the tombstone or inserted beside it — as GetBlockingLegacyIdsAsync drops it on the
-                // legacy-id key.
                 if (existing.DeletedAt != null)
                     continue;
 
