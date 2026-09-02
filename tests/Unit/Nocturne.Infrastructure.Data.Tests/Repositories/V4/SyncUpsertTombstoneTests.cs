@@ -219,6 +219,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 
         result.Should().ContainSingle().Which.Id.Should().Be(live.Id);
         broadcaster.Created.Should().ContainSingle(b => b.Id == live.Id, "the single create broadcast once");
+        broadcaster.Updated.Should().ContainSingle(b => b.Id == live.Id);
         await using var verify = NewContext();
         var rows = await verify.Boluses.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         rows.Single(b => b.Id == live.Id).Insulin.Should().Be(9.0);
