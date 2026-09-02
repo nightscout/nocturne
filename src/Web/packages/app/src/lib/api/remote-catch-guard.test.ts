@@ -83,21 +83,27 @@ interface Offence {
 }
 
 function sourceFiles(): string[] {
-  return readdirSync(SRC, { recursive: true, encoding: "utf8" }).filter(
-    (file) =>
-      /\.(svelte|ts)$/.test(file) &&
-      !file.endsWith(".test.ts") &&
-      !/(^|\/)(generated|test-stubs)(\/|$)/.test(file)
-  );
+  // readdirSync yields the platform's separator, so the directory exclusions
+  // below would only bite on posix if the paths were left as they arrive.
+  return readdirSync(SRC, { recursive: true, encoding: "utf8" })
+    .map((file) => file.replaceAll("\\", "/"))
+    .filter(
+      (file) =>
+        /\.(svelte|ts)$/.test(file) &&
+        !file.endsWith(".test.ts") &&
+        !/(^|\/)(generated|test-stubs)(\/|$)/.test(file)
+    );
 }
 
-function offences(): Offence[] {
+function offences(): { found: Offence[]; scanned: number } {
   const found: Offence[] = [];
+  let scanned = 0;
 
   for (const file of sourceFiles()) {
     const source = readFileSync(`${SRC}/${file}`, "utf8");
     const imported = remoteImports(source);
     if (imported.length === 0) continue;
+    scanned++;
 
     for (const match of source.matchAll(/\}\s*catch\s*\{/g)) {
       const index = match.index!;
@@ -111,12 +117,18 @@ function offences(): Offence[] {
     }
   }
 
-  return found;
+  return { found, scanned };
 }
 
 describe("catches around generated remote calls", () => {
   it("bind the error, or say why they do not", () => {
-    expect(offences()).toEqual([]);
+    const { found, scanned } = offences();
+
+    // An empty result is the pass condition, so a walk that read nothing — a
+    // moved source root, a separator the filter did not expect — would pass
+    // for the wrong reason. Assert it found files to judge.
+    expect(scanned).toBeGreaterThan(20);
+    expect(found).toEqual([]);
   });
 
   it("still recognises a discarded reason when it sees one", () => {
