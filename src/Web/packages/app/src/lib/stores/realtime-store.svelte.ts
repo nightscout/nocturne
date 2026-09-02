@@ -675,7 +675,7 @@ export class RealtimeStore {
         break;
 
       case "update":
-      case "ack":
+      case "ack": {
         // Update existing instance
         const updateIndex = this.trackerInstances.findIndex((i) => i.id === instance.id);
         if (updateIndex !== -1) {
@@ -689,6 +689,7 @@ export class RealtimeStore {
           ];
         }
         break;
+      }
 
       case "complete":
       case "delete":
