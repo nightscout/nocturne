@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.CreateBolusRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BolusController"/>
-public class CreateBolusRequest
+public class CreateBolusRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the bolus was delivered.

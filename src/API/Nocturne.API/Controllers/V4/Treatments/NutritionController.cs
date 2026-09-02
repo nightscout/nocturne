@@ -154,17 +154,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateCarbIntakeRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Carb intake data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 intakes per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every intake", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (this.ValidateBulk(requests, "Carb intake", "intake", "intakes") is { } invalid)
+            return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();
         var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);

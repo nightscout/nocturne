@@ -162,14 +162,8 @@ public class BasalInjectionController(
         [FromBody] CreateBasalInjectionRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Basal injection data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 injections per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (this.ValidateBulk(requests, "Basal injection", "injection", "injections") is { } invalid)
+            return invalid;
 
         var models = new List<BasalInjection>(requests.Length);
         foreach (var request in requests)

@@ -7,7 +7,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.CreateBasalInjectionRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BasalInjectionController"/>
-public class CreateBasalInjectionRequest
+public class CreateBasalInjectionRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the basal insulin was injected. Cannot be more than 5 minutes in the future.

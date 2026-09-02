@@ -178,11 +178,8 @@ public class SensorGlucoseController(
         [FromBody] UpsertSensorGlucoseRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Sensor glucose data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 readings per request", statusCode: 400, title: "Bad Request");
+        if (this.ValidateBulk(requests, "Sensor glucose", "reading", "readings") is { } invalid)
+            return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();
 

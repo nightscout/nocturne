@@ -12,7 +12,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// uploader snapshots together.
 /// </remarks>
 /// <seealso cref="Nocturne.API.Controllers.V4.Devices.UploaderSnapshotController"/>
-public class UpsertUploaderSnapshotRequest
+public class UpsertUploaderSnapshotRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the uploader status was read.

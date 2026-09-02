@@ -51,17 +51,8 @@ public class ApsSnapshotController(IApsSnapshotRepository repo)
         [FromBody] UpsertApsSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "APS snapshot data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 snapshots per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every snapshot", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (this.ValidateBulk(requests, "APS snapshot", "snapshot", "snapshots") is { } invalid)
+            return invalid;
 
         var models = requests.Select(MapToModel).ToList();
         var persisted = await Repository.BulkUpsertAsync(models, WriteOrigin.Live, ct);

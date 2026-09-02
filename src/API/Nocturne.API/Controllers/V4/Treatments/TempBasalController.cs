@@ -100,17 +100,8 @@ public class TempBasalController(
         [FromBody] CreateTempBasalRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Temp basal data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 temp basals per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every temp basal", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (this.ValidateBulk(requests, "Temp basal", "temp basal", "temp basals") is { } invalid)
+            return invalid;
 
         if (requests.Any(r => !r.IsCancel && (r.Rate < 0 || r.DurationMinutes < 0)))
             return Problem(detail: "Rate and duration must not be negative", statusCode: 400, title: "Bad Request");
