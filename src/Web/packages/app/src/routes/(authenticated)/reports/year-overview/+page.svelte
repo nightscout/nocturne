@@ -69,11 +69,13 @@
   const ALL_DATA_TYPES = [
     "Glucose",
     "ManualBG",
+    "BGChecks",
     "Boluses",
     "CarbIntake",
     "BolusCalculations",
     "Notes",
     "DeviceEvents",
+    "TempBasals",
     "StateSpans",
     "Activity",
     "DeviceStatus",

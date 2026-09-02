@@ -876,6 +876,132 @@ public class DataOverviewServiceTests : IDisposable
         day.Counts["Boluses"].Should().Be(1);
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_BGChecks_CountedAndFilteredByDataSource()
+    {
+        await SeedTwoBGChecksAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Should().ContainSingle();
+        var day = result.Days[0];
+        day.Counts["BGChecks"].Should().Be(2);
+        day.TotalCount.Should().Be(2);
+
+        var filtered = await _service.GetDailySummaryAsync(2024, ["contour"]);
+
+        filtered.Days.Should().ContainSingle();
+        filtered.Days[0].Counts["BGChecks"].Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_BGChecks_ContributeYearAndDataSources()
+    {
+        await SeedTwoBGChecksAsync();
+
+        var result = await _service.GetAvailableYearsAsync();
+
+        result.Years.Should().ContainSingle().Which.Should().Be(2024);
+        result.AvailableDataSources.Should().BeEquivalentTo(["accu-chek", "contour"]);
+    }
+
+    private async Task SeedTwoBGChecksAsync()
+    {
+        _dbContext.BGChecks.Add(new BGCheckEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Glucose = 96.0,
+            DataSource = "contour"
+        });
+        _dbContext.BGChecks.Add(new BGCheckEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 600000).UtcDateTime,
+            Glucose = 143.0,
+            DataSource = "accu-chek"
+        });
+        await _dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_TempBasals_CountedByStartTimestamp()
+    {
+        _dbContext.TempBasals.Add(new TempBasalEntity
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Scheduled",
+            DataSource = "glooko"
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Should().ContainSingle();
+        var day = result.Days[0];
+        day.Counts["TempBasals"].Should().Be(1);
+        day.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_NonPrimaryBGCheckAndTempBasal_ExcludedFromCounts()
+    {
+        var bgCheckId = Guid.NewGuid();
+        var tempBasalId = Guid.NewGuid();
+
+        _dbContext.BGChecks.Add(new BGCheckEntity
+        {
+            Id = bgCheckId,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Glucose = 96.0,
+            DataSource = "contour"
+        });
+        _dbContext.TempBasals.Add(new TempBasalEntity
+        {
+            Id = tempBasalId,
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Scheduled",
+            DataSource = "glooko"
+        });
+        _dbContext.Notes.Add(new NoteEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Text = "anchors the day",
+            DataSource = "glooko"
+        });
+        AddNonPrimaryLink("bgcheck", bgCheckId);
+        AddNonPrimaryLink("tempbasal", tempBasalId);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Should().ContainSingle();
+        result.Days[0].Counts.Should().NotContainKeys("BGChecks", "TempBasals");
+        result.Days[0].TotalCount.Should().Be(1);
+    }
+
+    private void AddNonPrimaryLink(string recordType, Guid recordId) =>
+        _dbContext.LinkedRecords.Add(new LinkedRecordEntity
+        {
+            Id = Guid.CreateVersion7(),
+            CanonicalId = Guid.NewGuid(),
+            RecordType = recordType,
+            RecordId = recordId,
+            SourceTimestamp = June15_2024_Noon,
+            DataSource = "duplicate",
+            IsPrimary = false,
+            SysCreatedAt = DateTime.UtcNow,
+        });
+
     #endregion
 
     #region Insulin Totals Tests

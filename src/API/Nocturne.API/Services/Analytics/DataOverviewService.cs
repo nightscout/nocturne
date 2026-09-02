@@ -66,141 +66,26 @@ public class DataOverviewService : IDataOverviewService
         await using var context = await _factory.CreateAsync(cancellationToken);
 
         // Run all queries sequentially — DbContext is not thread-safe
-        var minMaxResults = new List<(long? Min, long? Max)>();
-
-        // V4 tables with Timestamp + DataSource
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.SensorGlucose.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.MeterGlucose.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.Boluses.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.CarbIntakes.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.BolusCalculations.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.Notes.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.DeviceEvents.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-
-        // StateSpans uses StartTimestamp
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.StateSpans.Select(e => (DateTime?)e.StartTimestamp),
-                cancellationToken
-            )
-        );
-
-        // APS snapshots (V4 replacement for device statuses)
-        minMaxResults.Add(
-            await GetMinMaxMills(
-                context.ApsSnapshots.Select(e =>
-                    (long?)new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()),
-                cancellationToken
-            )
-        );
-
-        // Collect data sources from tables that have DataSource
-        var allDataSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.SensorGlucose.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.MeterGlucose.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.Boluses.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.CarbIntakes.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context
-                    .BolusCalculations.Where(e => e.DataSource != null)
-                    .Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.Notes.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.DeviceEvents.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        // StateSpans uses Source (not DataSource)
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.StateSpans.Where(e => e.Source != null).Select(e => e.Source!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        // Derive year range from all min/max mills
         long? globalMin = null;
         long? globalMax = null;
+        var allDataSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (min, max) in minMaxResults)
+        foreach (var table in DataOverviewTables.All)
         {
+            var (min, max) = await GetMinMaxTimestamp(
+                table.Timestamps(context),
+                cancellationToken
+            );
             if (min.HasValue && (!globalMin.HasValue || min.Value < globalMin.Value))
                 globalMin = min.Value;
             if (max.HasValue && (!globalMax.HasValue || max.Value > globalMax.Value))
                 globalMax = max.Value;
+
+            if (table.Sources(context) is not { } sources)
+                continue;
+
+            foreach (var ds in await GetDistinctDataSources(sources, cancellationToken))
+                allDataSources.Add(ds);
         }
 
         var tz = await GetUserTimeZoneAsync(cancellationToken);
@@ -253,8 +138,6 @@ public class DataOverviewService : IDataOverviewService
 
         var tz = await GetUserTimeZoneAsync(cancellationToken);
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
-        var startMills = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        var endMills = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
         var hasFilter = dataSources is { Length: > 0 };
 
@@ -262,137 +145,25 @@ public class DataOverviewService : IDataOverviewService
         var dayMap = new Dictionary<string, DailySummaryDay>();
 
         // Run all queries sequentially — DbContext is not thread-safe
-
-        // Exclude non-primary duplicates from cross-connector deduplication
-        var npSensorGlucose = context
-            .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npBolus = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npCarbIntake = context
-            .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npBolusCalc = context
-            .LinkedRecords.Where(lr => lr.RecordType == "boluscalculation" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npNote = context
-            .LinkedRecords.Where(lr => lr.RecordType == "note" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npDeviceEvent = context
-            .LinkedRecords.Where(lr => lr.RecordType == "deviceevent" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npStateSpan = context
-            .LinkedRecords.Where(lr => lr.RecordType == "statespan" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-
-        // V4 tables with Timestamp + DataSource
-        await CollectCountsFromTimestampTable(
-            "Glucose",
-            context
-                .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npSensorGlucose.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "ManualBG",
-            context
-                .MeterGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "Boluses",
-            context
-                .Boluses.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npBolus.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "CarbIntake",
-            context
-                .CarbIntakes.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npCarbIntake.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "BolusCalculations",
-            context
-                .BolusCalculations.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npBolusCalc.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "Notes",
-            context
-                .Notes.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npNote.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "DeviceEvents",
-            context
-                .DeviceEvents.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npDeviceEvent.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        // StateSpans: uses StartTimestamp and Source (not Timestamp/DataSource)
-        await CollectCountsFromTimestampTable(
-            "StateSpans",
-            context
-                .StateSpans.Where(e => e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.Source!))
-                .Where(e => !npStateSpan.Contains(e.Id))
-                .Select(e => e.StartTimestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        // APS snapshots: V4 replacement for device statuses - skip when filter is active
-        if (!hasFilter)
+        foreach (var table in DataOverviewTables.All)
         {
-            var apsStartUtc = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
-            var apsEndUtc = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+            var nonPrimaryIds = table.DedupRecordType is { } recordType
+                ? NonPrimaryRecordIds(context, recordType)
+                : null;
+
+            var timestamps = table.TimestampsInRange(
+                context,
+                startUtc,
+                endUtc,
+                dataSources,
+                nonPrimaryIds
+            );
+            if (timestamps is null)
+                continue;
+
             await CollectCountsFromTimestampTable(
-                "DeviceStatus",
-                context
-                    .ApsSnapshots.Where(e => e.Timestamp >= apsStartUtc && e.Timestamp < apsEndUtc)
-                    .Select(e => e.Timestamp),
+                table.CountsKey,
+                timestamps,
                 dayMap,
                 tz,
                 cancellationToken
@@ -777,29 +548,18 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Gets min and max from an IQueryable of nullable longs, with exception handling per table.
+    /// The ids of records deduplication resolved to a non-primary member of a canonical group, so
+    /// one real-world event contributes once however many connectors reported it.
     /// </summary>
-    private async Task<(long? Min, long? Max)> GetMinMaxMills(
-        IQueryable<long?> millsQuery,
-        CancellationToken cancellationToken
+    private static IQueryable<Guid> NonPrimaryRecordIds(
+        NocturneDbContext context,
+        RecordType recordType
     )
     {
-        try
-        {
-            var min = await millsQuery.MinAsync(cancellationToken);
-            var max = await millsQuery.MaxAsync(cancellationToken);
-            return (min, max);
-        }
-        catch (InvalidOperationException)
-        {
-            // Table is empty - Min/Max on empty sequence
-            return (null, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get min/max mills from table");
-            return (null, null);
-        }
+        var key = recordType.ToString().ToLowerInvariant();
+        return context
+            .LinkedRecords.Where(lr => lr.RecordType == key && !lr.IsPrimary)
+            .Select(lr => lr.RecordId);
     }
 
     /// <summary>
