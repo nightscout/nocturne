@@ -175,8 +175,8 @@ public class SyncUpsertTombstoneTests : IDisposable
     }
 
     /// <remarks>
-    /// The connectors that mint a sync identifier per record reuse it as the legacy id, so the
-    /// legacy-id guard covers this one too — pinned so the sync key alone remains sufficient.
+    /// The connectors that mint a sync identifier per record reuse it as the legacy id, so both
+    /// guards see this one; pinned so they never disagree.
     /// </remarks>
     [Fact]
     public async Task BulkCreate_WhenAUserDeletedTombstoneHoldsTheKeyRepeatedAsLegacyId_DropsTheReupload()
@@ -201,5 +201,27 @@ public class SyncUpsertTombstoneTests : IDisposable
         broadcaster.Updated.Should().BeEmpty();
         await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(
             tombstoneId, e => e.Insulin, deletedValue: 5.0);
+    }
+
+    [Fact]
+    public async Task BulkCreate_WhenALiveRowAndAUserTombstoneShareTheKey_UpdatesTheLiveRow()
+    {
+        var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 }, deletedByUser: true);
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
+        var repository = NewBolusRepository(broadcaster);
+        var live = await repository.CreateAsync(
+            new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = 7.0 },
+            WriteOrigin.Live);
+
+        var result = await repository.BulkCreateAsync(
+            [new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = 9.0 }],
+            WriteOrigin.Live);
+
+        result.Should().ContainSingle().Which.Id.Should().Be(live.Id);
+        broadcaster.Created.Should().ContainSingle(b => b.Id == live.Id, "the single create broadcast once");
+        await using var verify = NewContext();
+        var rows = await verify.Boluses.IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        rows.Single(b => b.Id == live.Id).Insulin.Should().Be(9.0);
+        rows.Single(b => b.Id == tombstoneId).Insulin.Should().Be(5.0, "the tombstone row is left untouched");
     }
 }
