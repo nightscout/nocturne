@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,18 +17,8 @@ public static class SensorGlucoseMapper
     {
         return new SensorGlucoseEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
-            CorrelationId = model.CorrelationId,
             PatientDeviceId = model.PatientDeviceId,
-            LegacyId = model.LegacyId,
             SyncIdentifier = model.SyncIdentifier,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             Mgdl = model.Mgdl,
             Direction = model.Direction?.ToString(),
             TrendRate = model.TrendRate,
@@ -40,10 +29,7 @@ public static class SensorGlucoseMapper
             GlucoseProcessing = model.GlucoseProcessing?.ToString(),
             SmoothedMgdl = model.SmoothedMgdl,
             UnsmoothedMgdl = model.UnsmoothedMgdl,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -55,18 +41,8 @@ public static class SensorGlucoseMapper
     {
         return new SensorGlucose
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
-            CorrelationId = entity.CorrelationId,
             PatientDeviceId = entity.PatientDeviceId,
-            LegacyId = entity.LegacyId,
             SyncIdentifier = entity.SyncIdentifier,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             Mgdl = entity.Mgdl,
             Direction = Enum.TryParse<GlucoseDirection>(entity.Direction, out var dir) ? dir : null,
             TrendRate = entity.TrendRate,
@@ -77,10 +53,7 @@ public static class SensorGlucoseMapper
             GlucoseProcessing = Enum.TryParse<GlucoseProcessing>(entity.GlucoseProcessing, out var gp) ? gp : null,
             SmoothedMgdl = entity.SmoothedMgdl,
             UnsmoothedMgdl = entity.UnsmoothedMgdl,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -90,14 +63,8 @@ public static class SensorGlucoseMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(SensorGlucoseEntity entity, SensorGlucose model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
-        entity.CorrelationId = model.CorrelationId;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.PatientDeviceId = model.PatientDeviceId;
-        entity.LegacyId = model.LegacyId;
         entity.SyncIdentifier = model.SyncIdentifier;
         entity.Mgdl = model.Mgdl;
         entity.Direction = model.Direction?.ToString();
@@ -109,8 +76,5 @@ public static class SensorGlucoseMapper
         entity.GlucoseProcessing = model.GlucoseProcessing?.ToString();
         entity.SmoothedMgdl = model.SmoothedMgdl;
         entity.UnsmoothedMgdl = model.UnsmoothedMgdl;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

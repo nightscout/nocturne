@@ -19,16 +19,6 @@ public static class TherapySettingsMapper
     {
         return new TherapySettingsEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             ProfileName = model.ProfileName,
             Timezone = model.Timezone,
             Units = model.Units,
@@ -49,10 +39,7 @@ public static class TherapySettingsMapper
             EnteredBy = model.EnteredBy,
             IsExternallyManaged = model.IsExternallyManaged,
             StartDate = model.StartDate,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -64,16 +51,6 @@ public static class TherapySettingsMapper
     {
         return new TherapySettings
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             ProfileName = entity.ProfileName,
             Timezone = entity.Timezone,
             Units = entity.Units,
@@ -94,10 +71,7 @@ public static class TherapySettingsMapper
             EnteredBy = entity.EnteredBy,
             IsExternallyManaged = entity.IsExternallyManaged,
             StartDate = entity.StartDate,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -107,13 +81,7 @@ public static class TherapySettingsMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(TherapySettingsEntity entity, TherapySettings model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.ProfileName = model.ProfileName;
         entity.Timezone = model.Timezone;
         entity.Units = model.Units;
@@ -134,8 +102,5 @@ public static class TherapySettingsMapper
         entity.EnteredBy = model.EnteredBy;
         entity.IsExternallyManaged = model.IsExternallyManaged;
         entity.StartDate = model.StartDate;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

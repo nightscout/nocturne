@@ -19,27 +19,14 @@ public static class BasalInjectionMapper
     {
         return new BasalInjectionEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
             SyncIdentifier = model.SyncIdentifier,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
             PatientDeviceId = model.PatientDeviceId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             Units = model.Units,
             Notes = model.Notes,
             InsulinContextJson = model.InsulinContext is not null
                 ? JsonSerializer.Serialize(model.InsulinContext)
                 : null,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -51,27 +38,14 @@ public static class BasalInjectionMapper
     {
         return new BasalInjection
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
             SyncIdentifier = entity.SyncIdentifier,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
             PatientDeviceId = entity.PatientDeviceId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             Units = entity.Units,
             Notes = entity.Notes,
             InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
                 ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
                 : null,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -81,22 +55,13 @@ public static class BasalInjectionMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(BasalInjectionEntity entity, BasalInjection model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.SyncIdentifier = model.SyncIdentifier;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.Units = model.Units;
         entity.Notes = model.Notes;
         entity.InsulinContextJson = model.InsulinContext is not null
             ? JsonSerializer.Serialize(model.InsulinContext)
-            : null;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
             : null;
     }
 }
