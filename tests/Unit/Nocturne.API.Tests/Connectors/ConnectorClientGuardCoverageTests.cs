@@ -36,7 +36,7 @@ public class ConnectorClientGuardCoverageTests
     {
         var data = new TheoryData<string>();
         foreach (var installer in ConnectorInstallers.Discover())
-            data.Add(installer.ConnectorName);
+            data.Add(ConnectorInstallers.NameOf(installer));
         return data;
     }
 
@@ -69,7 +69,8 @@ public class ConnectorClientGuardCoverageTests
     public void EveryClientAConnectorRegisters_CarriesTheGuardAndNoTransportRedirects(
         string connectorName)
     {
-        var installer = ConnectorInstallers.Discover().Single(i => i.ConnectorName == connectorName);
+        var installer = ConnectorInstallers.Discover()
+            .Single(i => ConnectorInstallers.NameOf(i) == connectorName);
 
         var services = new ServiceCollection();
         services.AddLogging();

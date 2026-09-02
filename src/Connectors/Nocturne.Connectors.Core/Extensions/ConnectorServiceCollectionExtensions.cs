@@ -99,8 +99,7 @@ public static class ConnectorServiceCollectionExtensions
         /// <typeparam name="TTokenProvider">Token provider type</typeparam>
         /// <param name="configuration">Configuration</param>
         /// <param name="options">Connector options</param>
-        /// <returns>The configuration if enabled, null otherwise</returns>
-        public TConfig? AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
+        public void AddConnector<TConfig, TService, TTokenProvider>(IConfiguration configuration,
             ConnectorOptions options)
             where TConfig : BaseConnectorConfiguration, new()
             where TService : class, IConnectorService<TConfig>
@@ -114,7 +113,7 @@ public static class ConnectorServiceCollectionExtensions
 
             // Skip registration if disabled
             if (!config.Enabled)
-                return null;
+                return;
 
             // Register server resolver
             services.AddSingleton<IConnectorServerResolver<TConfig>>(
@@ -153,8 +152,6 @@ public static class ConnectorServiceCollectionExtensions
 
             services.AddConnectorTokenProvider<TTokenProvider>();
             services.AddConnectorSyncExecutor<ConnectorSyncExecutor<TService, TConfig>>();
-
-            return config;
         }
 
         /// <summary>

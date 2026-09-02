@@ -9,9 +9,11 @@ namespace Nocturne.Connectors.Core.Services;
 /// <summary>
 ///     Installs a connector whose registration is entirely standard — configuration, service,
 ///     token provider and the generic sync executor — so that all it has to state is
-///     <paramref name="options"/> and its three types. A connector that needs anything else
-///     (a hand-rolled client, extra services, no token provider) implements
-///     <see cref="IConnectorInstaller"/> directly and calls the pieces itself.
+///     <paramref name="options"/> and its three types. A connector that has no token provider and
+///     takes its base URL from per-tenant configuration derives from
+///     <see cref="TenantUrlConnectorInstaller{TConfig,TService}"/>; one that needs anything else
+///     again (a hand-rolled client, extra services) implements <see cref="IConnectorInstaller"/>
+///     directly and calls the pieces itself.
 /// </summary>
 /// <typeparam name="TConfig">Configuration type</typeparam>
 /// <typeparam name="TService">Connector service type</typeparam>
@@ -23,9 +25,6 @@ public abstract class ConnectorInstaller<TConfig, TService, TTokenProvider>(Conn
     where TService : class, IConnectorService<TConfig>
     where TTokenProvider : class
 {
-    /// <inheritdoc />
-    public string ConnectorName => options.ConnectorName;
-
     /// <inheritdoc />
     public void Install(IServiceCollection services, IConfiguration configuration) =>
         services.AddConnector<TConfig, TService, TTokenProvider>(configuration, options);

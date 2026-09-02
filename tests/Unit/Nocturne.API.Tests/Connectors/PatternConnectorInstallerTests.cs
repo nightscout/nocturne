@@ -28,7 +28,7 @@ public class PatternConnectorInstallerTests
     {
         // Also guards the theories: a connector that stops deriving from the base drops out of
         // every case below rather than failing one.
-        PatternInstallers().Select(installer => installer.ConnectorName)
+        PatternInstallers().Select(ConnectorInstallers.NameOf)
             .Should().BeEquivalentTo(Pattern);
     }
 
@@ -44,7 +44,7 @@ public class PatternConnectorInstallerTests
     [MemberData(nameof(PatternConnectors))]
     public void AnEnabledConnector_RegistersItsTokenProviderScoped(string connectorName)
     {
-        var installer = PatternInstallers().Single(i => i.ConnectorName == connectorName);
+        var installer = PatternInstallers().Single(i => ConnectorInstallers.NameOf(i) == connectorName);
 
         var services = new ServiceCollection();
         installer.Install(services, Configuration(connectorName, enabled: true));
@@ -77,7 +77,7 @@ public class PatternConnectorInstallerTests
     [MemberData(nameof(PatternConnectors))]
     public void ADisabledConnector_RegistersOnlyItsFrozenConfiguration(string connectorName)
     {
-        var installer = PatternInstallers().Single(i => i.ConnectorName == connectorName);
+        var installer = PatternInstallers().Single(i => ConnectorInstallers.NameOf(i) == connectorName);
 
         var services = new ServiceCollection();
         installer.Install(services, Configuration(connectorName, enabled: false));
@@ -107,13 +107,6 @@ public class PatternConnectorInstallerTests
     private static Type TypeArgument(IConnectorInstaller installer, int index) =>
         SharedBaseOf(installer.GetType())!.GetGenericArguments()[index];
 
-    private static Type? SharedBaseOf(Type installer)
-    {
-        for (var current = installer; current is not null; current = current.BaseType)
-            if (current.IsGenericType
-                && current.GetGenericTypeDefinition() == typeof(ConnectorInstaller<,,>))
-                return current;
-
-        return null;
-    }
+    private static Type? SharedBaseOf(Type installer) =>
+        ConnectorInstallers.ClosedBaseOf(installer, typeof(ConnectorInstaller<,,>));
 }

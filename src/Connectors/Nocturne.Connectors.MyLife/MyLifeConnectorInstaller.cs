@@ -12,8 +12,6 @@ namespace Nocturne.Connectors.MyLife;
 
 public class MyLifeConnectorInstaller : IConnectorInstaller
 {
-    public string ConnectorName => "MyLife";
-
     public void Install(IServiceCollection services, IConfiguration configuration)
     {
         var config = services.AddConnectorConfiguration<MyLifeConnectorConfiguration>(
