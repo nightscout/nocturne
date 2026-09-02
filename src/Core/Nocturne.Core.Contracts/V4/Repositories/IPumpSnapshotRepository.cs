@@ -15,7 +15,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="IApsSnapshotRepository"/>
 /// <seealso cref="IUploaderSnapshotRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
+public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
 {
     /// <summary>Retrieve a page of <see cref="PumpSnapshot"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
@@ -27,39 +27,6 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<PumpSnapshot>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
-
-    /// <summary>Returns a single <see cref="PumpSnapshot"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<PumpSnapshot?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve a <see cref="PumpSnapshot"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<PumpSnapshot?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="PumpSnapshot"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<PumpSnapshot> CreateAsync(PumpSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="PumpSnapshot"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<PumpSnapshot> UpdateAsync(Guid id, PumpSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete a <see cref="PumpSnapshot"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="PumpSnapshot"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="PumpSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
@@ -92,12 +59,6 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<PumpSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
 
-    /// <summary>Count <see cref="PumpSnapshot"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
-
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="PumpSnapshot"/> for the current tenant,
     /// optionally scoped to a single connector data source, or <c>null</c> if none exist. When
@@ -107,16 +68,6 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="source">Optional connector data source filter.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk-insert <see cref="PumpSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
-    /// </summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
-    Task<IEnumerable<PumpSnapshot>> BulkCreateAsync(
-        IEnumerable<PumpSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk create-or-update by (DataSource, SyncIdentifier): rows matched by that key are updated

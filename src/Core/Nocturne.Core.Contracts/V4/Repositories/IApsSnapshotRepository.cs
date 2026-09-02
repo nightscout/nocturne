@@ -12,7 +12,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </remarks>
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
+public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
 {
     /// <summary>
     /// Retrieve a page of <see cref="ApsSnapshot"/> records filtered by time range, device, and source.
@@ -41,43 +41,6 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
-    /// <summary>Returns a single <see cref="ApsSnapshot"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>
-    /// Retrieve an <see cref="ApsSnapshot"/> by its original MongoDB ObjectId (preserved for migration compatibility).
-    /// </summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<ApsSnapshot?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="ApsSnapshot"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> CreateAsync(ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="ApsSnapshot"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete an <see cref="ApsSnapshot"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>
-    /// Delete the <see cref="ApsSnapshot"/> with the given legacy MongoDB ObjectId.
-    /// </summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -88,12 +51,6 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="limit">Maximum number of records to return (default 1000).</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(long lastModifiedMills, int limit = 1000, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="ApsSnapshot"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant
@@ -138,16 +95,6 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk-insert <see cref="ApsSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
-    /// </summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
-    Task<IEnumerable<ApsSnapshot>> BulkCreateAsync(
-        IEnumerable<ApsSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk create-or-update by (DataSource, SyncIdentifier): rows matched by that key are updated

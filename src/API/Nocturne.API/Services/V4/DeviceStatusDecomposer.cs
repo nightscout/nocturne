@@ -24,7 +24,7 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 /// <seealso cref="IDeviceStatusDecomposer"/>
 /// <seealso cref="IDecomposer{T}"/>
-public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<DeviceStatus>
+public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, IDecomposer<DeviceStatus>
 {
     private readonly IApsSnapshotRepository _apsRepo;
     private readonly IPumpSnapshotRepository _pumpRepo;
@@ -33,7 +33,6 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
     private readonly IAuditContext _auditContext;
-    private readonly ILogger<DeviceStatusDecomposer> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -56,6 +55,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         IDeviceService deviceService,
         IAuditContext auditContext,
         ILogger<DeviceStatusDecomposer> logger)
+        : base(logger)
     {
         _apsRepo = apsRepo;
         _pumpRepo = pumpRepo;
@@ -64,7 +64,6 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
         _auditContext = auditContext;
-        _logger = logger;
     }
 
     /// <summary>
@@ -127,48 +126,32 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
     #region APS Decomposition
 
-    private async Task DecomposeApsFromOpenApsAsync(
+    private Task DecomposeApsFromOpenApsAsync(
         DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, Guid? pumpDeviceId, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = MapToApsSnapshotFromOpenAps(ds, legacyId, source, result.CorrelationId);
+        => UpsertApsSnapshotAsync(
+            ds, legacyId, MapToApsSnapshotFromOpenAps(ds, legacyId, source, result.CorrelationId),
+            pumpDeviceId, result, origin, ct);
 
-        model.DeviceId = pumpDeviceId;
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
-
-        await UpsertApsSnapshotAsync(legacyId, model, result, origin, ct);
-    }
-
-    private async Task DecomposeApsFromLoopAsync(
+    private Task DecomposeApsFromLoopAsync(
         DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, Guid? pumpDeviceId, WriteOrigin origin, CancellationToken ct)
-    {
-        var model = MapToApsSnapshotFromLoop(ds, legacyId, source, result.CorrelationId);
-
-        model.DeviceId = pumpDeviceId;
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
-
-        await UpsertApsSnapshotAsync(legacyId, model, result, origin, ct);
-    }
+        => UpsertApsSnapshotAsync(
+            ds, legacyId, MapToApsSnapshotFromLoop(ds, legacyId, source, result.CorrelationId),
+            pumpDeviceId, result, origin, ct);
 
     private async Task UpsertApsSnapshotAsync(
-        string? legacyId, V4Models.ApsSnapshot model, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, V4Models.ApsSnapshot model, Guid? pumpDeviceId,
+        V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var existing = legacyId != null
-            ? await _apsRepo.GetByLegacyIdAsync(legacyId, ct)
-            : null;
+        model.DeviceId = pumpDeviceId;
 
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _apsRepo.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing ApsSnapshot {Id} from legacy device status {LegacyId}", existing.Id, legacyId);
-        }
-        else
-        {
-            var created = await _apsRepo.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created ApsSnapshot from legacy device status {LegacyId}", legacyId);
-        }
+        await UpsertByLegacyIdAsync(
+            _apsRepo, legacyId, model, result, origin, ct,
+            beforeWrite: async existing =>
+            {
+                model.PatientDeviceId =
+                    await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct)
+                    ?? existing?.PatientDeviceId;
+            });
     }
 
     #endregion
@@ -196,26 +179,15 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             ds.Pump?.Manufacturer,
             PumpDeviceKey(ds),
             ds.Mills, ct);
-        model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, ds.Mills, ct);
 
-        var existing = legacyId != null
-            ? await _pumpRepo.GetByLegacyIdAsync(legacyId, ct)
-            : null;
-
-        V4Models.PumpSnapshot persisted;
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            persisted = await _pumpRepo.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(persisted);
-            _logger.LogDebug("Updated existing PumpSnapshot {Id} from legacy device status {LegacyId}", existing.Id, legacyId);
-        }
-        else
-        {
-            persisted = await _pumpRepo.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(persisted);
-            _logger.LogDebug("Created PumpSnapshot from legacy device status {LegacyId}", legacyId);
-        }
+        var (persisted, _) = await UpsertByLegacyIdAsync(
+            _pumpRepo, legacyId, model, result, origin, ct,
+            beforeWrite: async existing =>
+            {
+                model.PatientDeviceId =
+                    await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, ds.Mills, ct)
+                    ?? existing?.PatientDeviceId;
+            });
 
         await DecomposePumpSuspensionAsync(ds, persisted, result, origin, ct);
         await DecomposePumpModeAsync(ds, persisted, result, origin, ct);
@@ -277,7 +249,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
             if (existingOpen.Any())
             {
-                _logger.LogDebug(
+                Logger.LogDebug(
                     "Skipped opening duplicate PumpMode/Suspended StateSpan for snapshot {SnapshotId}; a suspension is already active",
                     newSnapshot.Id);
                 return;
@@ -295,7 +267,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
             var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
             result.CreatedRecords.Add(upserted);
-            _logger.LogDebug(
+            Logger.LogDebug(
                 "Opened PumpMode/Suspended StateSpan for snapshot {SnapshotId} (legacy {LegacyId})",
                 newSnapshot.Id, newSnapshot.LegacyId);
         }
@@ -318,7 +290,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
                 // anchored at the prior snapshot's timestamp so the suspension timeline is complete.
                 if (prior is null)
                 {
-                    _logger.LogWarning(
+                    Logger.LogWarning(
                         "PumpMode/Suspended transition true→false detected but no prior snapshot or open StateSpan (snapshot {SnapshotId})",
                         newSnapshot.Id);
                     return;
@@ -337,7 +309,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
                 var upserted = await _stateSpanService.UpsertStateSpanAsync(backfilled, ct);
                 result.CreatedRecords.Add(upserted);
-                _logger.LogInformation(
+                Logger.LogInformation(
                     "Backfilled closed PumpMode/Suspended StateSpan from prior snapshot {PriorSnapshotId} to {EndTimestamp} (resume snapshot {SnapshotId})",
                     prior.Id, transitionAt, newSnapshot.Id);
                 return;
@@ -348,7 +320,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
                 openSpan.EndTimestamp = transitionAt;
                 var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
                 result.UpdatedRecords.Add(closed);
-                _logger.LogDebug(
+                Logger.LogDebug(
                     "Closed PumpMode/Suspended StateSpan {SpanId} at {EndTimestamp}",
                     openSpan.Id, transitionAt);
             }
@@ -411,7 +383,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             openSpan.EndTimestamp = transitionAt;
             var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
             result.UpdatedRecords.Add(closed);
-            _logger.LogDebug(
+            Logger.LogDebug(
                 "Closed PumpMode/{Mode} StateSpan {SpanId} at {EndTimestamp}",
                 oppositeMode, openSpan.Id, transitionAt);
         }
@@ -439,7 +411,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
         var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
         result.CreatedRecords.Add(upserted);
-        _logger.LogDebug(
+        Logger.LogDebug(
             "Opened PumpMode/{Mode} StateSpan for snapshot {SnapshotId} (legacy {LegacyId})",
             newMode.Value, newSnapshot.Id, newSnapshot.LegacyId);
     }
@@ -491,23 +463,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             ds.Uploader?.Type ?? "unknown",
             ds.Mills, ct);
 
-        var existing = legacyId != null
-            ? await _uploaderRepo.GetByLegacyIdAsync(legacyId, ct)
-            : null;
-
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _uploaderRepo.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing UploaderSnapshot {Id} from legacy device status {LegacyId}", existing.Id, legacyId);
-        }
-        else
-        {
-            var created = await _uploaderRepo.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created UploaderSnapshot from legacy device status {LegacyId}", legacyId);
-        }
+        await UpsertByLegacyIdAsync(_uploaderRepo, legacyId, model, result, origin, ct);
     }
 
     #endregion
@@ -533,7 +489,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
         var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
         result.CreatedRecords.Add(upserted);
-        _logger.LogDebug("Delegated Override from device status {LegacyId} to IStateSpanService", legacyId);
+        Logger.LogDebug("Delegated Override from device status {LegacyId} to IStateSpanService", legacyId);
     }
 
     #endregion
@@ -581,7 +537,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
         var created = await _extrasRepo.CreateAsync(model, origin, ct);
         result.CreatedRecords.Add(created);
-        _logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
+        Logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
             extras.Count, result.CorrelationId);
     }
 
@@ -685,32 +641,12 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             CollectExtras(ds, correlationId, extrasList);
         }
 
-        // Bulk-insert all snapshot types
         using (SystemAuditScope.Push(_auditContext))
         {
-            if (apsList.Count > 0)
-            {
-                var created = await _apsRepo.BulkCreateAsync(apsList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (pumpList.Count > 0)
-            {
-                var created = await _pumpRepo.BulkCreateAsync(pumpList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (uploaderList.Count > 0)
-            {
-                var created = await _uploaderRepo.BulkCreateAsync(uploaderList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (extrasList.Count > 0)
-            {
-                var created = await _extrasRepo.BulkCreateAsync(extrasList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
+            await BulkCreateAsync(_apsRepo, apsList, result, origin, ct);
+            await BulkCreateAsync(_pumpRepo, pumpList, result, origin, ct);
+            await BulkCreateAsync(_uploaderRepo, uploaderList, result, origin, ct);
+            await BulkCreateAsync(_extrasRepo, extrasList, result, origin, ct);
         }
 
         // Upsert override state spans individually — IStateSpanService only exposes
@@ -1043,7 +979,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             deleted += await _extrasRepo.DeleteByCorrelationIdAsync(correlationId.Value, ct);
 
         if (deleted > 0)
-            _logger.LogDebug("Deleted {Count} v4 snapshot records for legacy device status {LegacyId}", deleted, legacyId);
+            Logger.LogDebug("Deleted {Count} v4 snapshot records for legacy device status {LegacyId}", deleted, legacyId);
 
         return deleted;
     }

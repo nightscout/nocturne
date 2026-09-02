@@ -15,7 +15,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="UploaderSnapshot"/>
 /// <seealso cref="IPumpSnapshotRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
+public interface IUploaderSnapshotRepository : ILegacyKeyedRepository<UploaderSnapshot>
 {
     /// <summary>Retrieve a page of <see cref="UploaderSnapshot"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
@@ -28,49 +28,10 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<UploaderSnapshot>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
-    /// <summary>Returns a single <see cref="UploaderSnapshot"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<UploaderSnapshot?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve an <see cref="UploaderSnapshot"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<UploaderSnapshot?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="UploaderSnapshot"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<UploaderSnapshot> CreateAsync(UploaderSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="UploaderSnapshot"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<UploaderSnapshot> UpdateAsync(Guid id, UploaderSnapshot model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete an <see cref="UploaderSnapshot"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="UploaderSnapshot"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
     /// <summary>Retrieve <see cref="UploaderSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="UploaderSnapshot"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="UploaderSnapshot"/> for the current
@@ -96,16 +57,6 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk-insert <see cref="UploaderSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
-    /// </summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
-    Task<IEnumerable<UploaderSnapshot>> BulkCreateAsync(
-        IEnumerable<UploaderSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk create-or-update by (DataSource, SyncIdentifier): rows matched by that key are updated

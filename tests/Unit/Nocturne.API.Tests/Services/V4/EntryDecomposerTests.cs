@@ -49,6 +49,24 @@ public class EntryDecomposerTests : IDisposable
     #region SGV Decomposition
 
     [Fact]
+    public async Task DecomposeAsync_ReDecomposedSgvEntry_KeepsTheStoredPatientDeviceAttribution()
+    {
+        var entry = new Entry { Id = "sgv-attribution", Type = "sgv", Mills = 1700000000000, Sgv = 120.0, DataSource = "dexcom-connector" };
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+        var patientDeviceId = Guid.CreateVersion7();
+        var stored = _context.SensorGlucose.Single(e => e.LegacyId == "sgv-attribution");
+        stored.PatientDeviceId = patientDeviceId;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        // The stamper resolves nothing on the second pass; the rebuilt model must not wipe the stored link.
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-attribution").PatientDeviceId.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
     public async Task DecomposeAsync_SgvEntry_CreatesSensorGlucoseWithCorrectFields()
     {
         // Arrange

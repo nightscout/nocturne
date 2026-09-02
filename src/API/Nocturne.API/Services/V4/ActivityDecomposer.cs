@@ -5,6 +5,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -120,11 +121,15 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
         if (IsHeartRate(activity))
         {
-            await DecomposeHeartRateAsync(activity, result, origin, ct);
+            await UpsertByOriginalIdAsync(
+                _dbContext.HeartRates, MapToHeartRate(activity), HeartRateMapper.ToEntity,
+                HeartRateMapper.UpdateEntity, HeartRateMapper.ToDomainModel, result, ct);
         }
         else if (IsStepCount(activity))
         {
-            await DecomposeStepCountAsync(activity, result, origin, ct);
+            await UpsertByOriginalIdAsync(
+                _dbContext.StepCounts, MapToStepCount(activity), StepCountMapper.ToEntity,
+                StepCountMapper.UpdateEntity, StepCountMapper.ToDomainModel, result, ct);
         }
         else
         {
@@ -160,69 +165,13 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
                 regularActivities.Add(activity);
         }
 
-        if (heartRateList.Count > 0)
-        {
-            // Filter out records that already exist by OriginalId to avoid duplicates on re-migration
-            var hrOriginalIds = heartRateList
-                .Where(hr => hr.Id != null)
-                .Select(hr => hr.Id!)
-                .ToHashSet();
+        await BulkCreateNewByOriginalIdAsync(
+            _dbContext.HeartRates, heartRateList, HeartRateMapper.ToEntity,
+            HeartRateMapper.ToDomainModel, result, ct);
 
-            var existingHrIds = hrOriginalIds.Count > 0
-                ? (await _dbContext.HeartRates
-                    .Where(h => h.OriginalId != null && hrOriginalIds.Contains(h.OriginalId))
-                    .Select(h => h.OriginalId!)
-                    .ToListAsync(ct))
-                    .ToHashSet()
-                : new HashSet<string>();
-
-            var newHeartRates = heartRateList
-                .Where(hr => hr.Id == null || !existingHrIds.Contains(hr.Id))
-                .ToList();
-
-            if (newHeartRates.Count > 0)
-            {
-                var entities = newHeartRates.Select(HeartRateMapper.ToEntity).ToList();
-                await _dbContext.HeartRates.AddRangeAsync(entities, ct);
-                await _dbContext.SaveChangesAsync(ct);
-                result.CreatedRecords.AddRange(entities.Select(HeartRateMapper.ToDomainModel));
-            }
-
-            if (existingHrIds.Count > 0)
-                _logger.LogDebug("Skipped {Count} duplicate heart rate records by OriginalId", existingHrIds.Count);
-        }
-
-        if (stepCountList.Count > 0)
-        {
-            // Filter out records that already exist by OriginalId to avoid duplicates on re-migration
-            var scOriginalIds = stepCountList
-                .Where(sc => sc.Id != null)
-                .Select(sc => sc.Id!)
-                .ToHashSet();
-
-            var existingScIds = scOriginalIds.Count > 0
-                ? (await _dbContext.StepCounts
-                    .Where(s => s.OriginalId != null && scOriginalIds.Contains(s.OriginalId))
-                    .Select(s => s.OriginalId!)
-                    .ToListAsync(ct))
-                    .ToHashSet()
-                : new HashSet<string>();
-
-            var newStepCounts = stepCountList
-                .Where(sc => sc.Id == null || !existingScIds.Contains(sc.Id))
-                .ToList();
-
-            if (newStepCounts.Count > 0)
-            {
-                var entities = newStepCounts.Select(StepCountMapper.ToEntity).ToList();
-                await _dbContext.StepCounts.AddRangeAsync(entities, ct);
-                await _dbContext.SaveChangesAsync(ct);
-                result.CreatedRecords.AddRange(entities.Select(StepCountMapper.ToDomainModel));
-            }
-
-            if (existingScIds.Count > 0)
-                _logger.LogDebug("Skipped {Count} duplicate step count records by OriginalId", existingScIds.Count);
-        }
+        await BulkCreateNewByOriginalIdAsync(
+            _dbContext.StepCounts, stepCountList, StepCountMapper.ToEntity,
+            StepCountMapper.ToDomainModel, result, ct);
 
         if (regularActivities.Count > 0)
         {
@@ -342,78 +291,84 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     // --- Private decomposition methods ---
 
-    private async Task DecomposeHeartRateAsync(
-        Activity activity,
+    /// <summary>
+    /// Create-or-update keyed on the legacy <c>OriginalId</c>. Heart rates and step counts have no
+    /// V4 repository, so unlike its <see cref="DecomposerBase.UpsertByLegacyIdAsync"/> siblings this
+    /// writes the entity through the context.
+    /// </summary>
+    private async Task UpsertByOriginalIdAsync<TModel, TEntity>(
+        DbSet<TEntity> set,
+        TModel model,
+        Func<TModel, TEntity> toEntity,
+        Action<TEntity, TModel> applyUpdate,
+        Func<TEntity, object> toDomain,
         DecompositionResult result,
-        WriteOrigin origin, CancellationToken ct
-    )
+        CancellationToken ct)
+        where TModel : ProcessableDocumentBase
+        where TEntity : class, IOriginalIdentified
     {
-        var existing =
-            activity.Id != null
-                ? await _dbContext.HeartRates.FirstOrDefaultAsync(
-                    h => h.OriginalId == activity.Id,
-                    ct
-                )
-                : null;
-
-        var heartRate = MapToHeartRate(activity);
+        var recordType = typeof(TModel).Name;
+        var existing = model.Id != null
+            ? await set.FirstOrDefaultAsync(e => e.OriginalId == model.Id, ct)
+            : null;
 
         if (existing != null)
         {
-            HeartRateMapper.UpdateEntity(existing, heartRate);
+            applyUpdate(existing, model);
             await _dbContext.SaveChangesAsync(ct);
-            result.UpdatedRecords.Add(HeartRateMapper.ToDomainModel(existing));
+            result.UpdatedRecords.Add(toDomain(existing));
             _logger.LogDebug(
-                "Updated existing HeartRate {Id} from legacy activity {LegacyId}",
-                existing.Id,
-                activity.Id
-            );
+                "Updated existing {RecordType} {Id} from legacy activity {LegacyId}",
+                recordType, existing.Id, model.Id);
+            return;
         }
-        else
-        {
-            var entity = HeartRateMapper.ToEntity(heartRate);
-            await _dbContext.HeartRates.AddAsync(entity, ct);
-            await _dbContext.SaveChangesAsync(ct);
-            result.CreatedRecords.Add(HeartRateMapper.ToDomainModel(entity));
-            _logger.LogDebug("Created HeartRate from legacy activity {LegacyId}", activity.Id);
-        }
+
+        var entity = toEntity(model);
+        await set.AddAsync(entity, ct);
+        await _dbContext.SaveChangesAsync(ct);
+        result.CreatedRecords.Add(toDomain(entity));
+        _logger.LogDebug("Created {RecordType} from legacy activity {LegacyId}", recordType, model.Id);
     }
 
-    private async Task DecomposeStepCountAsync(
-        Activity activity,
+    /// <summary>
+    /// Inserts the records whose <c>OriginalId</c> is not already stored, skipping the rest so a
+    /// re-migration cannot duplicate them.
+    /// </summary>
+    private async Task BulkCreateNewByOriginalIdAsync<TModel, TEntity>(
+        DbSet<TEntity> set,
+        List<TModel> models,
+        Func<TModel, TEntity> toEntity,
+        Func<TEntity, object> toDomain,
         DecompositionResult result,
-        WriteOrigin origin, CancellationToken ct
-    )
+        CancellationToken ct)
+        where TModel : ProcessableDocumentBase
+        where TEntity : class, IOriginalIdentified
     {
-        var existing =
-            activity.Id != null
-                ? await _dbContext.StepCounts.FirstOrDefaultAsync(
-                    s => s.OriginalId == activity.Id,
-                    ct
-                )
-                : null;
+        if (models.Count == 0)
+            return;
 
-        var stepCount = MapToStepCount(activity);
+        var originalIds = models.Where(m => m.Id != null).Select(m => m.Id!).ToHashSet();
+        var stored = originalIds.Count > 0
+            ? (await set
+                .Where(e => e.OriginalId != null && originalIds.Contains(e.OriginalId))
+                .Select(e => e.OriginalId!)
+                .ToListAsync(ct))
+                .ToHashSet()
+            : new HashSet<string>();
 
-        if (existing != null)
+        var fresh = models.Where(m => m.Id == null || !stored.Contains(m.Id)).ToList();
+        if (fresh.Count > 0)
         {
-            StepCountMapper.UpdateEntity(existing, stepCount);
+            var entities = fresh.Select(toEntity).ToList();
+            await set.AddRangeAsync(entities, ct);
             await _dbContext.SaveChangesAsync(ct);
-            result.UpdatedRecords.Add(StepCountMapper.ToDomainModel(existing));
+            result.CreatedRecords.AddRange(entities.Select(toDomain));
+        }
+
+        if (stored.Count > 0)
             _logger.LogDebug(
-                "Updated existing StepCount {Id} from legacy activity {LegacyId}",
-                existing.Id,
-                activity.Id
-            );
-        }
-        else
-        {
-            var entity = StepCountMapper.ToEntity(stepCount);
-            await _dbContext.StepCounts.AddAsync(entity, ct);
-            await _dbContext.SaveChangesAsync(ct);
-            result.CreatedRecords.Add(StepCountMapper.ToDomainModel(entity));
-            _logger.LogDebug("Created StepCount from legacy activity {LegacyId}", activity.Id);
-        }
+                "Skipped {Count} {RecordType} records already stored by OriginalId",
+                stored.Count, typeof(TModel).Name);
     }
 
     // --- Mapping helpers ---

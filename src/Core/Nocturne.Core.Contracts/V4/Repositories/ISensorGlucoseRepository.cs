@@ -17,7 +17,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="IBGCheckRepository"/>
 /// <seealso cref="ICalibrationRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>, IDeviceAttributedRepository<SensorGlucose>
+public interface ISensorGlucoseRepository : ILegacyKeyedRepository<SensorGlucose>, IDeviceAttributedRepository<SensorGlucose>
 {
     /// <summary>
     /// Retrieve a page of <see cref="SensorGlucose"/> records filtered by time range, device, source, and origin.
@@ -56,60 +56,12 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>, IDevic
         int limit, int offset, bool descending, CancellationToken ct)
         => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
 
-    /// <summary>Returns a single <see cref="SensorGlucose"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<SensorGlucose?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve a <see cref="SensorGlucose"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<SensorGlucose?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="SensorGlucose"/> record and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<SensorGlucose> CreateAsync(SensorGlucose model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="SensorGlucose"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<SensorGlucose> UpdateAsync(Guid id, SensorGlucose model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete a <see cref="SensorGlucose"/> record by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="SensorGlucose"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="SensorGlucose"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
-
     /// <summary>Retrieve all <see cref="SensorGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<SensorGlucose>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
-    );
-
-    /// <summary>Insert multiple <see cref="SensorGlucose"/> records in a single batch operation.</summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
-        IEnumerable<SensorGlucose> records,
-        WriteOrigin origin, CancellationToken ct = default
     );
 
     /// <summary>

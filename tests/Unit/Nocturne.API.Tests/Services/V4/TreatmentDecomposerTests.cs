@@ -2544,6 +2544,24 @@ public class TreatmentDecomposerTests : IDisposable
         bolus.PatientDeviceId.Should().Be(expectedPatientDeviceId);
     }
 
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedBolus_TakesAFreshResolutionOverTheStoredOne()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first)
+            .ReturnsAsync(second);
+        var treatment = new Treatment { Id = "bolus-reattribution", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 3.0 };
+
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.UpdatedRecords.OfType<V4Models.Bolus>().Single().PatientDeviceId.Should().Be(second);
+    }
+
     #endregion
 
     #region ExtractAapsIcfg

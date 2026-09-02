@@ -22,7 +22,7 @@ namespace Nocturne.API.Services.V4;
 /// </summary>
 /// <seealso cref="IEntryDecomposer"/>
 /// <seealso cref="IDecomposer{T}"/>
-public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
+public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
 {
     private readonly NocturneDbContext _dbContext;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
@@ -31,7 +31,6 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly IGlucoseProcessingResolver _glucoseResolver;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IAuditContext _auditContext;
-    private readonly ILogger<EntryDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used for entry bulk-delete operations.</param>
     /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
@@ -49,6 +48,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
         ILogger<EntryDecomposer> logger)
+        : base(logger)
     {
         _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
@@ -57,7 +57,6 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         _glucoseResolver = glucoseResolver;
         _patientDeviceStamper = patientDeviceStamper;
         _auditContext = auditContext;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -82,7 +81,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
                 await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
-                _logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
+                Logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
                 break;
         }
 
@@ -91,10 +90,6 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
     private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var existing = entry.Id != null
-            ? await _sensorGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
-
         var model = MapToSensorGlucose(entry, result.CorrelationId);
 
         // Extract glucose processing hints from v1/v3 additional properties
@@ -113,73 +108,26 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         }
 
         await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
-        // Carry an earlier attribution forward on re-upload: the rebuilt model starts null and a
-        // later ambiguous stamp (e.g. a second device registered since) must not wipe the stored FK.
-        model.PatientDeviceId = existing?.PatientDeviceId;
-        await _patientDeviceStamper.StampAsync([model], DeviceAttributionCategories.SensorGlucose, model.DataSource, ct);
 
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _sensorGlucoseRepository.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing SensorGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _sensorGlucoseRepository.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created SensorGlucose from legacy entry {LegacyId}", entry.Id);
-        }
+        await UpsertByLegacyIdAsync(
+            _sensorGlucoseRepository, entry.Id, model, result, origin, ct,
+            beforeWrite: existing => StampAttributionAsync(
+                _patientDeviceStamper, model, existing, DeviceAttributionCategories.SensorGlucose, ct));
     }
 
     private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var existing = entry.Id != null
-            ? await _meterGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
-
         var model = MapToMeterGlucose(entry, result.CorrelationId);
-        model.PatientDeviceId = existing?.PatientDeviceId;
-        await _patientDeviceStamper.StampAsync([model], DeviceAttributionCategories.MeterGlucose, model.DataSource, ct);
 
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _meterGlucoseRepository.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing MeterGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _meterGlucoseRepository.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created MeterGlucose from legacy entry {LegacyId}", entry.Id);
-        }
+        await UpsertByLegacyIdAsync(
+            _meterGlucoseRepository, entry.Id, model, result, origin, ct,
+            beforeWrite: existing => StampAttributionAsync(
+                _patientDeviceStamper, model, existing, DeviceAttributionCategories.MeterGlucose, ct));
     }
 
     private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
-    {
-        var existing = entry.Id != null
-            ? await _calibrationRepository.GetByLegacyIdAsync(entry.Id, ct)
-            : null;
-
-        var model = MapToCalibration(entry, result.CorrelationId);
-
-        if (existing != null)
-        {
-            model.Id = existing.Id;
-            var updated = await _calibrationRepository.UpdateAsync(existing.Id, model, origin, ct);
-            result.UpdatedRecords.Add(updated);
-            _logger.LogDebug("Updated existing Calibration {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
-        }
-        else
-        {
-            var created = await _calibrationRepository.CreateAsync(model, origin, ct);
-            result.CreatedRecords.Add(created);
-            _logger.LogDebug("Created Calibration from legacy entry {LegacyId}", entry.Id);
-        }
-    }
+        => await UpsertByLegacyIdAsync(
+            _calibrationRepository, entry.Id, MapToCalibration(entry, result.CorrelationId), result, origin, ct);
 
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeBatchAsync(
@@ -228,7 +176,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
                     calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
-                    _logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
+                    Logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
                     break;
             }
         }
@@ -240,23 +188,9 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
         using (SystemAuditScope.Push(_auditContext))
         {
-            if (sgvList.Count > 0)
-            {
-                var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (mbgList.Count > 0)
-            {
-                var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
-
-            if (calList.Count > 0)
-            {
-                var created = await _calibrationRepository.BulkCreateAsync(calList, origin, ct);
-                result.CreatedRecords.AddRange(created);
-            }
+            await BulkCreateAsync(_sensorGlucoseRepository, sgvList, result, origin, ct);
+            await BulkCreateAsync(_meterGlucoseRepository, mbgList, result, origin, ct);
+            await BulkCreateAsync(_calibrationRepository, calList, result, origin, ct);
         }
 
         return result;
@@ -271,7 +205,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         deleted += await _calibrationRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
 
         if (deleted > 0)
-            _logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
+            Logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
 
         return deleted;
     }
@@ -292,7 +226,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         var typeFilter = findQuery.GetEqualityValue("type");
         if (findQuery.HasFieldFiltersExcept("type"))
         {
-            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
             return 0;
         }
 
@@ -305,7 +239,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
         if (hasFind && !hasTimeBounds && typeFilter is null)
         {
-            _logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
+            Logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
             return 0;
         }
 
@@ -324,7 +258,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
-        _logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
+        Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
             total, sgDeleted, mgDeleted, calDeleted, findForLog);
 
         return total;

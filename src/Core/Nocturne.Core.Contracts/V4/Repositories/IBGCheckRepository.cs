@@ -13,7 +13,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </remarks>
 /// <seealso cref="BGCheck"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IBGCheckRepository : IV4Repository<BGCheck>
+public interface IBGCheckRepository : ILegacyKeyedRepository<BGCheck>
 {
     /// <summary>
     /// Retrieve a page of <see cref="BGCheck"/> records filtered by time range, device, source, and origin.
@@ -45,45 +45,6 @@ public interface IBGCheckRepository : IV4Repository<BGCheck>
         int limit, int offset, bool descending, CancellationToken ct)
         => GetAsync(from, to, device, source, limit, offset, descending, false, ct);
 
-    /// <summary>Returns a single <see cref="BGCheck"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<BGCheck?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve a <see cref="BGCheck"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<BGCheck?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="BGCheck"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<BGCheck> CreateAsync(BGCheck model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="BGCheck"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<BGCheck> UpdateAsync(Guid id, BGCheck model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete a <see cref="BGCheck"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="BGCheck"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="BGCheck"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
-
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="BGCheck"/>, optionally scoped to a data source.
     /// </summary>
@@ -98,14 +59,5 @@ public interface IBGCheckRepository : IV4Repository<BGCheck>
     Task<IEnumerable<BGCheck>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
-    );
-
-    /// <summary>Insert multiple <see cref="BGCheck"/> records in a single batch operation.</summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<BGCheck>> BulkCreateAsync(
-        IEnumerable<BGCheck> records,
-        WriteOrigin origin, CancellationToken ct = default
     );
 }

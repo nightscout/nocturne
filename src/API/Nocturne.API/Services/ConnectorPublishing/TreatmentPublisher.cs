@@ -1,4 +1,3 @@
-using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -19,7 +18,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// intakes, BG checks, bolus calculations, and temporary basals.
 /// </summary>
 /// <seealso cref="ITreatmentPublisher"/>
-internal sealed class TreatmentPublisher : ITreatmentPublisher
+internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPublisher
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly ITreatmentService _treatmentService;
@@ -35,8 +34,6 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
-    private readonly IAuditContext _auditContext;
-    private readonly ILogger<TreatmentPublisher> _logger;
 
     public TreatmentPublisher(
         ITenantDbContextFactory contextFactory,
@@ -55,6 +52,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
         ILogger<TreatmentPublisher> logger)
+        : base(auditContext, logger)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _treatmentService = treatmentService ?? throw new ArgumentNullException(nameof(treatmentService));
@@ -70,8 +68,6 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         _basalRateResolver = basalRateResolver ?? throw new ArgumentNullException(nameof(basalRateResolver));
         _therapySettingsResolver = therapySettingsResolver ?? throw new ArgumentNullException(nameof(therapySettingsResolver));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
-        _auditContext = auditContext;
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<bool> PublishTreatmentsAsync(
@@ -87,158 +83,81 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish treatments for {Source}", source);
+            Logger.LogError(ex, "Failed to publish treatments for {Source}", source);
             return false;
         }
     }
 
-    public async Task<bool> PublishBolusesAsync(
+    public Task<bool> PublishBolusesAsync(
         IEnumerable<Bolus> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(
+            records, _bolusRepository, source, origin, cancellationToken,
+            beforeWrite: async recordList =>
+            {
+                await ResolvePatientInsulinsForBolusesAsync(recordList, origin, cancellationToken);
+                await _patientDeviceStamper.StampAsync(
+                    recordList, DeviceAttributionCategories.Bolus, source, cancellationToken);
+            });
 
-            await ResolvePatientInsulinsForBolusesAsync(recordList, origin, cancellationToken);
-            await _patientDeviceStamper.StampAsync(
-                recordList, DeviceAttributionCategories.Bolus, source, cancellationToken);
-            using (SystemAuditScope.Push(_auditContext))
-                await _bolusRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish Bolus records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<bool> PublishCarbIntakesAsync(
+    public Task<bool> PublishCarbIntakesAsync(
         IEnumerable<CarbIntake> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(records, _carbIntakeRepository, source, origin, cancellationToken);
 
-            using (SystemAuditScope.Push(_auditContext))
-                await _carbIntakeRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            _logger.LogDebug("Published {Count} CarbIntake records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish CarbIntake records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<bool> PublishBGChecksAsync(
+    public Task<bool> PublishBGChecksAsync(
         IEnumerable<BGCheck> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(records, _bgCheckRepository, source, origin, cancellationToken);
 
-            using (SystemAuditScope.Push(_auditContext))
-                await _bgCheckRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            _logger.LogDebug("Published {Count} BGCheck records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish BGCheck records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<bool> PublishBolusCalculationsAsync(
+    public Task<bool> PublishBolusCalculationsAsync(
         IEnumerable<BolusCalculation> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(records, _bolusCalculationRepository, source, origin, cancellationToken);
 
-            using (SystemAuditScope.Push(_auditContext))
-                await _bolusCalculationRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            _logger.LogDebug("Published {Count} BolusCalculation records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish BolusCalculation records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<bool> PublishTempBasalsAsync(
+    public Task<bool> PublishTempBasalsAsync(
         IEnumerable<TempBasal> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
+        => PublishAsync(
+            records, _tempBasalRepository, source, origin, cancellationToken,
+            beforeWrite: recordList => ReconcileTempBasalWindowAsync(recordList, source, cancellationToken));
+
+    /// <summary>
+    /// Attributes the incoming temp basals and reconciles the source's window against them:
+    /// soft-delete only the rows this source no longer reports, leaving still-reported rows active
+    /// so <c>BulkCreateAsync</c> (which skips already-active legacy ids) makes an unchanged resync a
+    /// no-op rather than a delete-the-window-then-reinsert sweep.
+    /// </summary>
+    private async Task ReconcileTempBasalWindowAsync(
+        List<TempBasal> recordList, string source, CancellationToken cancellationToken)
     {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        await _patientDeviceStamper.StampAsync(
+            recordList, DeviceAttributionCategories.TempBasal, source, cancellationToken);
 
-            await _patientDeviceStamper.StampAsync(
-                recordList, DeviceAttributionCategories.TempBasal, source, cancellationToken);
+        var incomingLegacyIds = recordList
+            .Select(r => r.LegacyId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Select(id => id!)
+            .ToHashSet();
 
-            var minTimestamp = recordList.Min(r => r.StartTimestamp);
-            var maxTimestamp = recordList.Max(r => r.StartTimestamp);
-            var incomingLegacyIds = recordList
-                .Select(r => r.LegacyId)
-                .Where(id => !string.IsNullOrEmpty(id))
-                .Select(id => id!)
-                .ToHashSet();
+        await _tempBasalRepository.SoftDeleteAbsentBySourceAndDateRangeAsync(
+            source,
+            recordList.Min(r => r.StartTimestamp),
+            recordList.Max(r => r.StartTimestamp),
+            incomingLegacyIds,
+            cancellationToken);
 
-            // Connector resync reconciles the window idempotently rather than deleting it wholesale
-            // and re-inserting: soft-delete only the rows this source no longer reports, leaving
-            // still-reported rows active so BulkCreateAsync (which skips already-active legacy ids)
-            // makes an unchanged resync a no-op. The reconcile delete runs under SystemAuditScope so
-            // its audit rows carry AuthType IS NULL — the dedup discriminator reads the delete, so a
-            // resync invoked under an actor context (e.g. a manual sync) must not write a
-            // user-attributed delete that would permanently block a later re-import of those temps.
-            using (SystemAuditScope.Push(_auditContext))
-            {
-                await _tempBasalRepository.SoftDeleteAbsentBySourceAndDateRangeAsync(
-                    source, minTimestamp, maxTimestamp, incomingLegacyIds, cancellationToken);
-
-                var reclassifiedCount = await ReclassifyScheduledAlgorithmicBasalsAsync(
-                    recordList, cancellationToken);
-                if (reclassifiedCount > 0)
-                    _logger.LogInformation(
-                        "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
-                        + "(rate differs from programmed basal schedule) for {Source}",
-                        reclassifiedCount, recordList.Count, source);
-
-                await _tempBasalRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            }
-            _logger.LogDebug("Published {Count} TempBasal records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish TempBasal records for {Source}", source);
-            return false;
-        }
+        var reclassifiedCount = await ReclassifyScheduledAlgorithmicBasalsAsync(recordList, cancellationToken);
+        if (reclassifiedCount > 0)
+            Logger.LogInformation(
+                "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
+                + "(rate differs from programmed basal schedule) for {Source}",
+                reclassifiedCount, recordList.Count, source);
     }
 
     /// <summary>
@@ -290,56 +209,33 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         return reclassified;
     }
 
-    public async Task<bool> PublishBasalInjectionsAsync(
+    public Task<bool> PublishBasalInjectionsAsync(
         IEnumerable<BasalInjection> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(
+            records, _basalInjectionRepository, source, origin, cancellationToken,
+            beforeWrite: async recordList =>
+            {
+                await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, origin, cancellationToken);
+                await _patientDeviceStamper.StampAsync(
+                    recordList, DeviceAttributionCategories.BasalInjection, source, cancellationToken);
+            });
 
-            await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, origin, cancellationToken);
-            await _patientDeviceStamper.StampAsync(
-                recordList, DeviceAttributionCategories.BasalInjection, source, cancellationToken);
-            using (SystemAuditScope.Push(_auditContext))
-                await _basalInjectionRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-
-            _logger.LogDebug("Published {Count} BasalInjection records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish BasalInjection records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<DateTime?> GetLatestTreatmentTimestampAsync(
+    /// <inheritdoc cref="ConnectorPublisherBase.LatestTimestampAsync" />
+    /// <remarks>The v1 <c>treatments</c> collection spans every decomposed treatment type.</remarks>
+    public Task<DateTime?> GetLatestTreatmentTimestampAsync(
         string source,
         CancellationToken cancellationToken = default)
-    {
-        // The v1 "treatments" collection spans every decomposed treatment type, so the resume
-        // watermark is the latest stored record of any of them for THIS source. Source-scoping is
-        // required for multi-connector catch-up: a tenant-global latest mis-classifies a newly
-        // enabled connector's first sync as incremental and skips its backfill.
-        var candidates = new[]
-        {
-            await _bolusRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _carbIntakeRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _bgCheckRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _bolusCalculationRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _tempBasalRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
-            await _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken),
-        };
-
-        var present = candidates.Where(t => t.HasValue).Select(t => t!.Value).ToList();
-        return present.Count > 0 ? present.Max() : null;
-    }
+        => LatestTimestampAsync(
+            () => _bolusRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _carbIntakeRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _bgCheckRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _bolusCalculationRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _tempBasalRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken));
 
     // ── Patient Insulin resolution helpers ──────────────────────────────
 
@@ -452,12 +348,10 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             IsPrimary = !hasPrimary,
         };
 
-        PatientInsulin created;
-        using (SystemAuditScope.Push(_auditContext))
-            created = await _patientInsulinRepository.CreateAsync(newInsulin, origin, ct);
+        var created = await _patientInsulinRepository.CreateAsync(newInsulin, origin, ct);
         cache.Add(created);
 
-        _logger.LogInformation(
+        Logger.LogInformation(
             "Auto-created PatientInsulin '{Name}' (role={Role}, id={Id}) from connector import",
             created.Name, role, created.Id);
 

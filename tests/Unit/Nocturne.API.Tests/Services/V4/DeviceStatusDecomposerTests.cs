@@ -221,6 +221,57 @@ public class DeviceStatusDecomposerTests : IDisposable
         pump.Clock.Should().Be("2023-11-14T12:00:00Z");
     }
 
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedPumpStatus_TakesAFreshResolutionOverTheStoredOne()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+        var ds = new DeviceStatus
+        {
+            Id = "pump-reattribution",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod 5" }
+        };
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first)
+            .ReturnsAsync(second);
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "pump-reattribution").PatientDeviceId.Should().Be(second);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedPumpStatus_KeepsTheStoredPatientDeviceAttribution()
+    {
+        var patientDeviceId = Guid.CreateVersion7();
+        var ds = new DeviceStatus
+        {
+            Id = "pump-attribution",
+            Mills = 1700000000000,
+            Device = "openaps://Samsung",
+            Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod 5" }
+        };
+
+        // The second resolution is ambiguous (a second pump has been registered since), so it
+        // returns nothing and the stored attribution has to survive the re-decompose.
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(patientDeviceId)
+            .ReturnsAsync((Guid?)null);
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        var stored = _context.PumpSnapshots.Single(p => p.LegacyId == "pump-attribution");
+        stored.PatientDeviceId.Should().Be(patientDeviceId);
+    }
+
     #endregion
 
     #region Uploader → UploaderSnapshot

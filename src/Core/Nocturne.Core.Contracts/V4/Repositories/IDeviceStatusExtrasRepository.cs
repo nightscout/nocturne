@@ -10,7 +10,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// Alpha-phase diagnostic data. Records are created during devicestatus decomposition
 /// and can be queried or deleted by their correlation ID.
 /// </remarks>
-public interface IDeviceStatusExtrasRepository
+public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceStatusExtras>
 {
     /// <summary>Persist a new <see cref="DeviceStatusExtras"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
@@ -27,14 +27,4 @@ public interface IDeviceStatusExtrasRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk-insert <see cref="DeviceStatusExtras"/> records with batch-level and DB-level deduplication by CorrelationId.
-    /// </summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
-    Task<IEnumerable<DeviceStatusExtras>> BulkCreateAsync(
-        IEnumerable<DeviceStatusExtras> records,
-        WriteOrigin origin, CancellationToken ct = default);
 }
