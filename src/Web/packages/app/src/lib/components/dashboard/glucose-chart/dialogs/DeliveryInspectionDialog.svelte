@@ -1,15 +1,13 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Activity, Syringe, Utensils, AlertTriangle } from "lucide-svelte";
-  import { BasalDeliveryOrigin, type ApsSnapshot } from "$lib/api";
+  import { Activity, Syringe, AlertTriangle } from "lucide-svelte";
+  import { BasalDeliveryOrigin } from "$lib/api";
   import { bg, bgLabel, formatLocale, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
-  import type { PredictionData } from "$api/predictions.remote";
-  import { getAll as getApsSnapshots } from "$lib/api/generated/apsSnapshots.generated.remote";
-  import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
-  import GlucoseResponseChart from "./GlucoseResponseChart.svelte";
+  import { useApsPrediction } from "./aps-prediction.svelte";
+  import InspectionChart from "./InspectionChart.svelte";
+  import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
     open: boolean;
@@ -63,8 +61,11 @@
 
   const sourceDisplayName = $derived(getDataSourceDisplayName(dataSource));
 
-  let snapshot: ApsSnapshot | null = $state(null);
-  let predictionData: PredictionData | null = $state(null);
+  const aps = useApsPrediction(
+    () => open,
+    () => timestamp,
+  );
+  const snapshot = $derived(aps.snapshot);
 
   // Derive delivery mode badge from basalOrigin
   const deliveryMode = $derived.by(() => {
@@ -107,20 +108,6 @@
     return `${prefix} (${label})`;
   }
 
-  // Filter glucose data for the prediction chart window (+-30 min)
-  const chartGlucoseData = $derived.by(() => {
-    const centerMs = timestamp.getTime();
-    const minMs = centerMs - 30 * 60 * 1000;
-    const predictionHorizonMs = predictionData?.curves.main.length
-      ? Math.max(...predictionData.curves.main.map((p) => p.timestamp))
-      : centerMs + 30 * 60 * 1000;
-    const maxMs = Math.max(centerMs + 30 * 60 * 1000, predictionHorizonMs);
-    return glucoseData.filter((d) => {
-      const t = d.time.getTime();
-      return t >= minMs && t <= maxMs;
-    });
-  });
-
   // Whether we have active modifiers to show
   const hasActiveModifiers = $derived(
     !!overrideState ||
@@ -128,29 +115,6 @@
       tempBasalRate != null ||
       (activityStates != null && activityStates.length > 0),
   );
-
-  // Fetch nearest APS snapshot on open
-  $effect(() => {
-    if (!open) return;
-    snapshot = null;
-    predictionData = null;
-    let cancelled = false;
-    const from = new Date(timestamp.getTime() - 5 * 60 * 1000);
-    const to = new Date(timestamp.getTime() + 5 * 60 * 1000);
-    getApsSnapshots({ from, to, limit: 1, sort: "timestamp_desc" })
-      .then((result) => {
-        if (!cancelled && result?.data?.length) {
-          snapshot = result.data[0];
-          predictionData = apsSnapshotToPrediction(result.data[0]);
-        }
-      })
-      .catch(() => {
-        /* APS data is optional */
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
 </script>
 
 <Dialog.Root bind:open>
@@ -274,19 +238,15 @@
       </div>
     {/if}
 
-    <!-- Glucose response chart (shows glucose trace, with prediction overlay when available) -->
-    {#if chartGlucoseData.length > 0}
-      <div class="py-2">
-        <p class="text-xs text-muted-foreground mb-1">Glucose Response</p>
-        <GlucoseResponseChart
-          glucoseData={chartGlucoseData}
-          centerTime={timestamp}
-          {predictionData}
-          {highThreshold}
-          {lowThreshold}
-        />
-      </div>
-    {/if}
+    <InspectionChart
+      {glucoseData}
+      centerTime={timestamp}
+      predictionData={aps.predictionData}
+      {highThreshold}
+      {lowThreshold}
+      beforeMs={30 * 60 * 1000}
+      afterMs={30 * 60 * 1000}
+    />
 
     <!-- Active modifiers -->
     {#if hasActiveModifiers}
@@ -349,22 +309,10 @@
       </div>
     {/if}
 
-    <Dialog.Footer class="flex gap-2">
-      {#if hasGlucoseContext && onNavigateGlucose}
-        <Button variant="outline" size="sm" onclick={onNavigateGlucose}>
-          <Activity class="mr-1.5 h-4 w-4" />
-          Glucose
-        </Button>
-      {/if}
-      {#if hasTreatmentContext && onNavigateTreatment}
-        <Button variant="outline" size="sm" onclick={onNavigateTreatment}>
-          <Utensils class="mr-1.5 h-4 w-4" />
-          Treatments
-        </Button>
-      {/if}
-      <Button variant="secondary" size="sm" onclick={onClose}>
-        Close
-      </Button>
-    </Dialog.Footer>
+    <InspectionFooter
+      onNavigateGlucose={hasGlucoseContext ? onNavigateGlucose : undefined}
+      onNavigateTreatment={hasTreatmentContext ? onNavigateTreatment : undefined}
+      {onClose}
+    />
   </Dialog.Content>
 </Dialog.Root>

@@ -1,15 +1,12 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Syringe, Utensils } from "lucide-svelte";
   import { BasalDeliveryOrigin } from "$lib/api";
   import { bg, bgDelta, bgLabel, formatLocale, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
-  import type { PredictionData } from "$api/predictions.remote";
-  import { getAll as getApsSnapshots } from "$lib/api/generated/apsSnapshots.generated.remote";
-  import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
-  import GlucoseResponseChart from "./GlucoseResponseChart.svelte";
+  import { useApsPrediction } from "./aps-prediction.svelte";
+  import InspectionChart from "./InspectionChart.svelte";
+  import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
     open: boolean;
@@ -67,7 +64,10 @@
 
   const sourceDisplayName = $derived(getDataSourceDisplayName(dataSource));
 
-  let predictionData: PredictionData | null = $state(null);
+  const aps = useApsPrediction(
+    () => open,
+    () => timestamp,
+  );
 
   // Determine range status (at-threshold is "In Range", matching getGlucoseColor)
   const rangeStatus = $derived.by(() => {
@@ -95,43 +95,6 @@
       text += ` (sched: ${scheduledBasalRate.toFixed(2)})`;
     }
     return text;
-  });
-
-  // Filter glucose data for the chart window (-15 min to +3 hours, extended by predictions)
-  const chartGlucoseData = $derived.by(() => {
-    const centerMs = timestamp.getTime();
-    const minMs = centerMs - 15 * 60 * 1000;
-    const threeHoursMs = centerMs + 3 * 60 * 60 * 1000;
-    // If we have prediction data, extend the window to cover predictions
-    const predictionHorizonMs = predictionData?.curves.main.length
-      ? Math.max(...predictionData.curves.main.map((p) => p.timestamp))
-      : threeHoursMs;
-    const maxMs = Math.max(threeHoursMs, predictionHorizonMs);
-    return glucoseData.filter((d) => {
-      const t = d.time.getTime();
-      return t >= minMs && t <= maxMs;
-    });
-  });
-
-  // Fetch nearest APS snapshot on open
-  $effect(() => {
-    if (!open) return;
-    predictionData = null;
-    let cancelled = false;
-    const from = new Date(timestamp.getTime() - 5 * 60 * 1000);
-    const to = new Date(timestamp.getTime() + 5 * 60 * 1000);
-    getApsSnapshots({ from, to, limit: 1, sort: "timestamp_desc" })
-      .then((result) => {
-        if (!cancelled && result?.data?.length) {
-          predictionData = apsSnapshotToPrediction(result.data[0]);
-        }
-      })
-      .catch(() => {
-        /* APS data is optional */
-      });
-    return () => {
-      cancelled = true;
-    };
   });
 </script>
 
@@ -208,36 +171,20 @@
       {/if}
     </div>
 
-    <!-- Glucose response chart (shows glucose trace, with prediction overlay when available) -->
-    {#if chartGlucoseData.length > 0}
-      <div class="py-2">
-        <p class="text-xs text-muted-foreground mb-1">Glucose Response</p>
-        <GlucoseResponseChart
-          glucoseData={chartGlucoseData}
-          centerTime={timestamp}
-          {predictionData}
-          {highThreshold}
-          {lowThreshold}
-        />
-      </div>
-    {/if}
+    <InspectionChart
+      {glucoseData}
+      centerTime={timestamp}
+      predictionData={aps.predictionData}
+      {highThreshold}
+      {lowThreshold}
+      beforeMs={15 * 60 * 1000}
+      afterMs={3 * 60 * 60 * 1000}
+    />
 
-    <Dialog.Footer class="flex gap-2">
-      {#if hasDeliveryContext && onNavigateDelivery}
-        <Button variant="outline" size="sm" onclick={onNavigateDelivery}>
-          <Syringe class="mr-1.5 h-4 w-4" />
-          Delivery
-        </Button>
-      {/if}
-      {#if hasTreatmentContext && onNavigateTreatment}
-        <Button variant="outline" size="sm" onclick={onNavigateTreatment}>
-          <Utensils class="mr-1.5 h-4 w-4" />
-          Treatments
-        </Button>
-      {/if}
-      <Button variant="secondary" size="sm" onclick={onClose}>
-        Close
-      </Button>
-    </Dialog.Footer>
+    <InspectionFooter
+      onNavigateDelivery={hasDeliveryContext ? onNavigateDelivery : undefined}
+      onNavigateTreatment={hasTreatmentContext ? onNavigateTreatment : undefined}
+      {onClose}
+    />
   </Dialog.Content>
 </Dialog.Root>
