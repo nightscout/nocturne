@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
@@ -88,11 +87,14 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         return result;
     }
 
-    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    /// <summary>
+    /// Glucose processing type and smoothed/unsmoothed values are resolved from the hints a v1/v3
+    /// entry carries in its additional properties.
+    /// </summary>
+    private async Task<SensorGlucose> BuildSensorGlucoseAsync(Entry entry, Guid? correlationId, CancellationToken ct)
     {
-        var model = MapToSensorGlucose(entry, result.CorrelationId);
+        var model = MapToSensorGlucose(entry, correlationId);
 
-        // Extract glucose processing hints from v1/v3 additional properties
         string? gpHint = null;
         double? smoothedHint = null;
         double? unsmoothedHint = null;
@@ -108,6 +110,12 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         }
 
         await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
+        return model;
+    }
+
+    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
+        var model = await BuildSensorGlucoseAsync(entry, result.CorrelationId, ct);
 
         await UpsertByLegacyIdAsync(
             _sensorGlucoseRepository, entry.Id, model, result, origin, ct,
@@ -148,27 +156,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
-                {
-                    var model = MapToSensorGlucose(entry, correlationId);
-
-                    string? gpHint = null;
-                    double? smoothedHint = null;
-                    double? unsmoothedHint = null;
-
-                    if (entry.AdditionalProperties is { } props)
-                    {
-                        if (TryGetString(props, "glucoseProcessing", out var gpStr))
-                            gpHint = gpStr;
-                        if (TryGetDouble(props, "smoothedMgdl", out var sm))
-                            smoothedHint = sm;
-                        if (TryGetDouble(props, "unsmoothedMgdl", out var um))
-                            unsmoothedHint = um;
-                    }
-
-                    await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
-                    sgvList.Add(model);
+                    sgvList.Add(await BuildSensorGlucoseAsync(entry, correlationId, ct));
                     break;
-                }
                 case "mbg":
                     mbgList.Add(MapToMeterGlucose(entry, correlationId));
                     break;
@@ -186,7 +175,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (mbgList.Count > 0)
             await _patientDeviceStamper.StampAsync(mbgList, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);
 
-        using (SystemAuditScope.Push(_auditContext))
+        using (SystemAttributedBatchWrites(_auditContext))
         {
             await BulkCreateAsync(_sensorGlucoseRepository, sgvList, result, origin, ct);
             await BulkCreateAsync(_meterGlucoseRepository, mbgList, result, origin, ct);

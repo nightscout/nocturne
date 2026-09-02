@@ -1,3 +1,5 @@
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -59,6 +61,11 @@ public abstract class DecomposerBase
     /// stamps whatever is still unattributed. A re-resolution that has since become ambiguous
     /// therefore cannot displace a stored link.
     /// </summary>
+    /// <remarks>
+    /// The source argument is the fallback for records carrying no
+    /// <see cref="IDeviceAttributed.DataSource"/> of their own, so passing the model's own source
+    /// here matches what a batch stamp resolves for the same record with no batch source at all.
+    /// </remarks>
     protected static Task StampAttributionAsync(
         IPatientDeviceStamper stamper,
         IDeviceAttributed model,
@@ -69,6 +76,25 @@ public abstract class DecomposerBase
         model.PatientDeviceId ??= existing?.PatientDeviceId;
         return stamper.StampAsync([model], categories, model.DataSource, ct);
     }
+
+    /// <summary>
+    /// System-attributes the writes made inside the scope, keeping the mutation audit log a human
+    /// mutation trail.
+    /// </summary>
+    /// <remarks>
+    /// Every legacy create reaches a decomposer's batch path — v1 and v3 normalize a lone record
+    /// into a one-element array — so that path carries uploader ingestion (Loop, AAPS, xDrip,
+    /// connectors, the demo seeder) at CGM sample rate. The audit interceptor drops
+    /// system-attributed saves, and provenance for those rows lives on their own
+    /// <see cref="IV4Record.DataSource"/>. The single-record path deliberately keeps caller
+    /// attribution: it is reached from a genuine per-record edit, and since a legacy record
+    /// persists only as its decomposed v4 rows, their audit rows are the whole trail of that edit.
+    /// Connector re-syncs of the single path are system-attributed by the sync scope's own audit
+    /// context rather than here. <see cref="ProfileDecomposer"/> has no batch path at all, so it
+    /// takes no scope.
+    /// </remarks>
+    protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
+        => SystemAuditScope.Push(auditContext);
 
     protected static async Task BulkCreateAsync<TRecord>(
         IBulkCreateRepository<TRecord> repository,

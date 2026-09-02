@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
@@ -22,6 +23,7 @@ public class EntryDecomposerBatchTests : IDisposable
     private readonly Mock<IMeterGlucoseRepository> _mgRepoMock;
     private readonly Mock<ICalibrationRepository> _calRepoMock;
     private readonly IGlucoseProcessingResolver _glucoseResolver;
+    private readonly Mock<IPatientDeviceStamper> _stamperMock = new();
     private readonly EntryDecomposer _decomposer;
 
     public EntryDecomposerBatchTests()
@@ -61,7 +63,7 @@ public class EntryDecomposerBatchTests : IDisposable
             _mgRepoMock.Object,
             _calRepoMock.Object,
             _glucoseResolver,
-            Mock.Of<IPatientDeviceStamper>(),
+            _stamperMock.Object,
             auditContext,
             NullLogger<EntryDecomposer>.Instance);
 
@@ -198,6 +200,41 @@ public class EntryDecomposerBatchTests : IDisposable
 
         auditContext.IsSystem.Should().BeFalse();
         auditContext.SubjectName.Should().Be("uploader");
+    }
+
+    /// <summary>
+    /// Device attribution matches on each record's own <see cref="IDeviceAttributed.DataSource"/> —
+    /// the batch source argument is only the fallback for records that carry none — so a batch
+    /// mixing sources must reach the stamper with every record's source intact.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_StampsRecordsCarryingTheirOwnDataSource()
+    {
+        // Arrange
+        var stamped = new List<IDeviceAttributed>();
+        _stamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyList<IDeviceAttributed> records, IReadOnlyList<DeviceCategory> _, string? _, CancellationToken _) =>
+                stamped.AddRange(records))
+            .Returns(Task.CompletedTask);
+
+        var entries = new List<Entry>
+        {
+            new() { Id = "sgv1", Type = "sgv", Mills = 1700000000000, Sgv = 120.0, DataSource = DataSources.DexcomConnector },
+            new() { Id = "sgv2", Type = "sgv", Mills = 1700000001000, Sgv = 130.0, DataSource = DataSources.LibreConnector },
+            new() { Id = "mbg1", Type = "mbg", Mills = 1700000002000, Mbg = 140.0, DataSource = DataSources.GlookoConnector },
+        };
+
+        // Act
+        await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
+
+        // Assert
+        stamped.Select(r => r.DataSource).Should().BeEquivalentTo(
+            [DataSources.DexcomConnector, DataSources.LibreConnector, DataSources.GlookoConnector]);
     }
 
     [Fact]

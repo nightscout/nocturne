@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -82,9 +81,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             CorrelationId = Guid.CreateVersion7()
         };
 
-        // AAPS sends "date" instead of "mills" — normalize before decomposition
-        if (ds.Mills == 0 && ds.Date is > 0)
-            ds.Mills = ds.Date.Value;
+        NormalizeMills(ds);
 
         var legacyId = ds.Id;
 
@@ -100,13 +97,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             await RegisterCgmDeviceAsync(ds, origin, ct);
         }
 
-        if (ds.OpenAps != null)
+        if (MapToApsSnapshot(ds, legacyId, source, result.CorrelationId) is { } apsModel)
         {
-            await DecomposeApsFromOpenApsAsync(ds, legacyId, source, result, pumpDeviceId, origin, ct);
-        }
-        else if (ds.Loop != null)
-        {
-            await DecomposeApsFromLoopAsync(ds, legacyId, source, result, pumpDeviceId, origin, ct);
+            await UpsertApsSnapshotAsync(ds, legacyId, apsModel, pumpDeviceId, result, origin, ct);
         }
 
         if (ds.Uploader != null || ds.UploaderBattery.HasValue)
@@ -124,19 +117,14 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return result;
     }
 
+    /// <summary>AAPS sends <c>date</c> instead of <c>mills</c>; normalize before decomposition.</summary>
+    private static void NormalizeMills(DeviceStatus ds)
+    {
+        if (ds.Mills == 0 && ds.Date is > 0)
+            ds.Mills = ds.Date.Value;
+    }
+
     #region APS Decomposition
-
-    private Task DecomposeApsFromOpenApsAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, Guid? pumpDeviceId, WriteOrigin origin, CancellationToken ct)
-        => UpsertApsSnapshotAsync(
-            ds, legacyId, MapToApsSnapshotFromOpenAps(ds, legacyId, source, result.CorrelationId),
-            pumpDeviceId, result, origin, ct);
-
-    private Task DecomposeApsFromLoopAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, Guid? pumpDeviceId, WriteOrigin origin, CancellationToken ct)
-        => UpsertApsSnapshotAsync(
-            ds, legacyId, MapToApsSnapshotFromLoop(ds, legacyId, source, result.CorrelationId),
-            pumpDeviceId, result, origin, ct);
 
     private async Task UpsertApsSnapshotAsync(
         DeviceStatus ds, string? legacyId, V4Models.ApsSnapshot model, Guid? pumpDeviceId,
@@ -169,16 +157,28 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             ? ds.Pump?.Serial ?? ds.Pump?.Model
             : ds.Pump?.Model;
 
-    private async Task<Guid?> DecomposePumpAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    /// <summary>
+    /// The patient-device link is left to the caller: only the single path has a stored
+    /// attribution to fall back to when the re-resolution comes back null.
+    /// </summary>
+    private async Task<V4Models.PumpSnapshot> BuildPumpSnapshotAsync(
+        DeviceStatus ds, string? legacyId, string? source, Guid? correlationId, CancellationToken ct)
     {
-        var model = MapToPumpSnapshot(ds, legacyId, source, result.CorrelationId);
+        var model = MapToPumpSnapshot(ds, legacyId, source, correlationId);
 
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump,
             ds.Pump?.Manufacturer,
             PumpDeviceKey(ds),
             ds.Mills, ct);
+
+        return model;
+    }
+
+    private async Task<Guid?> DecomposePumpAsync(
+        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
+        var model = await BuildPumpSnapshotAsync(ds, legacyId, source, result.CorrelationId, ct);
 
         var (persisted, _) = await UpsertByLegacyIdAsync(
             _pumpRepo, legacyId, model, result, origin, ct,
@@ -452,16 +452,24 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     #region Uploader Decomposition
 
-    private async Task DecomposeUploaderAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    private async Task<V4Models.UploaderSnapshot> BuildUploaderSnapshotAsync(
+        DeviceStatus ds, string? legacyId, string? source, Guid? correlationId, CancellationToken ct)
     {
-        var model = MapToUploaderSnapshot(ds, legacyId, source, result.CorrelationId);
+        var model = MapToUploaderSnapshot(ds, legacyId, source, correlationId);
 
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.Uploader,
             ds.Uploader?.Name,
             ds.Uploader?.Type ?? "unknown",
             ds.Mills, ct);
+
+        return model;
+    }
+
+    private async Task DecomposeUploaderAsync(
+        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
+        var model = await BuildUploaderSnapshotAsync(ds, legacyId, source, result.CorrelationId, ct);
 
         await UpsertByLegacyIdAsync(_uploaderRepo, legacyId, model, result, origin, ct);
     }
@@ -470,11 +478,10 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     #region Override Decomposition
 
-    private async Task DecomposeOverrideAsync(
-        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    private static StateSpan BuildOverrideSpan(DeviceStatus ds, string? legacyId)
     {
         var timestamp = ResolveTimestamp(ds);
-        var stateSpan = new StateSpan
+        return new StateSpan
         {
             Category = StateSpanCategory.Override,
             State = OverrideState.Custom.ToString(),
@@ -486,8 +493,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             OriginalId = legacyId,
             Metadata = BuildOverrideMetadata(ds.Override),
         };
+    }
 
-        var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
+    private async Task DecomposeOverrideAsync(
+        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
+        var upserted = await _stateSpanService.UpsertStateSpanAsync(BuildOverrideSpan(ds, legacyId), ct);
         result.CreatedRecords.Add(upserted);
         Logger.LogDebug("Delegated Override from device status {LegacyId} to IStateSpanService", legacyId);
     }
@@ -496,8 +507,11 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     #region Extras Decomposition
 
-    private async Task DecomposeExtrasAsync(
-        DeviceStatus ds, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    /// <summary>
+    /// The sub-objects and unknown top-level keys with no typed snapshot of their own, or
+    /// <see langword="null"/> when the device status carries none.
+    /// </summary>
+    private static V4Models.DeviceStatusExtras? BuildExtras(DeviceStatus ds, Guid correlationId)
     {
         var extras = new Dictionary<string, object?>();
 
@@ -525,20 +539,27 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 extras[kvp.Key] = kvp.Value;
         }
 
-        if (extras.Count == 0 || result.CorrelationId is not { } correlationId)
-            return;
+        if (extras.Count == 0)
+            return null;
 
-        var model = new V4Models.DeviceStatusExtras
+        return new V4Models.DeviceStatusExtras
         {
             CorrelationId = correlationId,
             Timestamp = ResolveTimestamp(ds),
             Extras = extras,
         };
+    }
+
+    private async Task DecomposeExtrasAsync(
+        DeviceStatus ds, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+    {
+        if (result.CorrelationId is not { } correlationId || BuildExtras(ds, correlationId) is not { } model)
+            return;
 
         var created = await _extrasRepo.CreateAsync(model, origin, ct);
         result.CreatedRecords.Add(created);
         Logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
-            extras.Count, result.CorrelationId);
+            model.Extras!.Count, correlationId);
     }
 
     #endregion
@@ -566,9 +587,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
         foreach (var ds in statuses)
         {
-            // AAPS sends "date" instead of "mills" — normalize before decomposition
-            if (ds.Mills == 0 && ds.Date is > 0)
-                ds.Mills = ds.Date.Value;
+            NormalizeMills(ds);
 
             var legacyId = ds.Id;
 
@@ -576,13 +595,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
             if (ds.Pump != null)
             {
-                var pumpModel = MapToPumpSnapshot(ds, legacyId, source, correlationId);
-
-                pumpModel.DeviceId = await _deviceService.ResolveAsync(
-                    V4Models.DeviceCategory.InsulinPump,
-                    ds.Pump.Manufacturer,
-                    PumpDeviceKey(ds),
-                    ds.Mills, ct);
+                var pumpModel = await BuildPumpSnapshotAsync(ds, legacyId, source, correlationId, ct);
                 pumpModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpModel.DeviceId, ds.Mills, ct);
 
                 pumpDeviceId = pumpModel.DeviceId;
@@ -594,16 +607,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 await RegisterCgmDeviceAsync(ds, origin, ct);
             }
 
-            if (ds.OpenAps != null)
+            if (MapToApsSnapshot(ds, legacyId, source, correlationId) is { } apsModel)
             {
-                var apsModel = MapToApsSnapshotFromOpenAps(ds, legacyId, source, correlationId);
-                apsModel.DeviceId = pumpDeviceId;
-                apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
-                apsList.Add(apsModel);
-            }
-            else if (ds.Loop != null)
-            {
-                var apsModel = MapToApsSnapshotFromLoop(ds, legacyId, source, correlationId);
                 apsModel.DeviceId = pumpDeviceId;
                 apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
                 apsList.Add(apsModel);
@@ -611,37 +616,21 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
             if (ds.Uploader != null || ds.UploaderBattery.HasValue)
             {
-                var uploaderModel = MapToUploaderSnapshot(ds, legacyId, source, correlationId);
-                uploaderModel.DeviceId = await _deviceService.ResolveAsync(
-                    V4Models.DeviceCategory.Uploader,
-                    ds.Uploader?.Name,
-                    ds.Uploader?.Type ?? "unknown",
-                    ds.Mills, ct);
-                uploaderList.Add(uploaderModel);
+                uploaderList.Add(await BuildUploaderSnapshotAsync(ds, legacyId, source, correlationId, ct));
             }
 
             if (ds.Override is { Active: true })
             {
-                var timestamp = ResolveTimestamp(ds);
-                var stateSpan = new StateSpan
-                {
-                    Category = StateSpanCategory.Override,
-                    State = OverrideState.Custom.ToString(),
-                    StartTimestamp = timestamp,
-                    EndTimestamp = ds.Override.Duration is > 0
-                        ? timestamp.AddMinutes(ds.Override.Duration.Value)
-                        : null,
-                    Source = ds.Device,
-                    OriginalId = legacyId,
-                    Metadata = BuildOverrideMetadata(ds.Override),
-                };
-                overrideSpans.Add(stateSpan);
+                overrideSpans.Add(BuildOverrideSpan(ds, legacyId));
             }
 
-            CollectExtras(ds, correlationId, extrasList);
+            if (BuildExtras(ds, correlationId) is { } extrasModel)
+            {
+                extrasList.Add(extrasModel);
+            }
         }
 
-        using (SystemAuditScope.Push(_auditContext))
+        using (SystemAttributedBatchWrites(_auditContext))
         {
             await BulkCreateAsync(_apsRepo, apsList, result, origin, ct);
             await BulkCreateAsync(_pumpRepo, pumpList, result, origin, ct);
@@ -681,49 +670,22 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return result;
     }
 
-    /// <summary>
-    /// Collects extras from a DeviceStatus into the provided list without persisting.
-    /// </summary>
-    private static void CollectExtras(
-        DeviceStatus ds, Guid correlationId, List<V4Models.DeviceStatusExtras> extrasList)
-    {
-        var extras = new Dictionary<string, object?>();
-
-        if (ds.XDripJs != null)
-            extras["xdripjs"] = ds.XDripJs;
-        if (ds.RadioAdapter != null)
-            extras["radioAdapter"] = ds.RadioAdapter;
-        if (ds.Connect != null)
-            extras["connect"] = ds.Connect;
-        if (ds.Cgm != null)
-            extras["cgm"] = ds.Cgm;
-        if (ds.Meter != null)
-            extras["meter"] = ds.Meter;
-        if (ds.InsulinPen != null)
-            extras["insulinPen"] = ds.InsulinPen;
-        if (ds.MmTune != null)
-            extras["mmtune"] = ds.MmTune;
-
-        if (ds.ExtensionData != null)
-        {
-            foreach (var kvp in ds.ExtensionData)
-                extras[kvp.Key] = kvp.Value;
-        }
-
-        if (extras.Count == 0)
-            return;
-
-        extrasList.Add(new V4Models.DeviceStatusExtras
-        {
-            CorrelationId = correlationId,
-            Timestamp = ResolveTimestamp(ds),
-            Extras = extras,
-        });
-    }
-
     #endregion
 
     #region Mapping Helpers
+
+    /// <summary>
+    /// An OpenAPS/AAPS/Trio payload wins over a Loop one; <see langword="null"/> when the device
+    /// status carries neither.
+    /// </summary>
+    private static V4Models.ApsSnapshot? MapToApsSnapshot(
+        DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
+    {
+        if (ds.OpenAps != null)
+            return MapToApsSnapshotFromOpenAps(ds, legacyId, source, correlationId);
+
+        return ds.Loop != null ? MapToApsSnapshotFromLoop(ds, legacyId, source, correlationId) : null;
+    }
 
     private static V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
