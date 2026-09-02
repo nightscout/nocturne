@@ -16,14 +16,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// its catch-up window is idempotent and a re-corrected value moves the stored record rather than
 /// doubling it. Tenant scoping is implicit via the DbContext's RLS-equivalent query filter.
 /// </summary>
-/// <remarks>
-/// The two paths disagree on soft-deleted rows: <see cref="CreateAsync"/> reads through the query
-/// filter and so inserts afresh past a tombstone, while <see cref="SplitUpsertsAsync"/> lifts the
-/// filter to restore tenant scoping and matches the tombstone, writing the re-upload into a row that
-/// stays invisible. The snapshot repositories' own copies of the split exclude deleted rows for
-/// exactly that reason. Preserved as-is here — it predates the shared base and correcting it is a
-/// behaviour change, not a refactor.
-/// </remarks>
 /// <typeparam name="TModel">The V4 domain record type.</typeparam>
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
 public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepositoryBase<TModel, TEntity>
@@ -108,8 +100,10 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         // Over-fetches by a Cartesian amount; the partial unique index
         // on (tenant_id, data_source, sync_identifier) keeps this cheap.
+        // Soft-deleted rows are excluded: the index ignores them, so a re-upload after a delete
+        // inserts a fresh row instead of writing into the invisible one.
         var existingRows = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
             .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
             .ToListAsync(ct);
 
