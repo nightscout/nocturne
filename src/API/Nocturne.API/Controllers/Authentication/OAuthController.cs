@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -178,21 +179,16 @@ public class OAuthController : ControllerBase
             return Redirect($"/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         // Normalize the requested scopes
         var normalizedScopes = Scope.Normalize(requestedScopes);
 
         // Check if an active grant exists with sufficient scopes
-        var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId.Value);
+        var existingGrant = await _grantService.GetActiveGrantAsync(client.Id, subjectId);
         if (existingGrant != null)
         {
             var existingSet = new HashSet<string>(existingGrant.Scopes);
@@ -203,7 +199,7 @@ public class OAuthController : ControllerBase
                 // Silent approval: existing grant covers all requested scopes
                 return await IssueAuthorizationCode(
                     client.Id,
-                    subjectId.Value,
+                    subjectId,
                     normalizedScopes,
                     redirect_uri,
                     code_challenge,
@@ -230,23 +226,9 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> ApproveConsent([FromForm] ConsentApprovalRequest request)
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         // Find the client. Resolved before the approval decision is read: every exit from this
@@ -321,7 +303,7 @@ public class OAuthController : ControllerBase
         // Generate authorization code
         return await IssueAuthorizationCode(
             client.Id,
-            subjectId.Value,
+            subjectId,
             normalizedScopes,
             request.RedirectUri,
             request.CodeChallenge,
@@ -576,23 +558,9 @@ public class OAuthController : ControllerBase
         [FromForm] DeviceApprovalRequest request
     )
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         if (string.IsNullOrEmpty(request.UserCode))
@@ -605,7 +573,7 @@ public class OAuthController : ControllerBase
         }
 
         var success = request.Approved
-            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId.Value)
+            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId)
             : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)
@@ -674,6 +642,46 @@ public class OAuthController : ControllerBase
             Homepage = client.ClientUri,
             LogoUri = client.LogoUri,
         });
+    }
+
+    /// <summary>
+    /// Resolves the subject the request is authenticated as.
+    /// </summary>
+    /// <param name="subjectId">The caller's subject, set only when this returns <c>true</c>.</param>
+    /// <param name="error">The response to return in place of the action's own, set only when this returns <c>false</c>.</param>
+    /// <remarks>
+    /// Authentication and a subject are separate questions: a guest, instance-key or dev-auth
+    /// principal is authenticated but carries no subject of its own, and the public share subject is
+    /// the reverse — a subject id on an unauthenticated context. Both are refused here.
+    /// </remarks>
+    private bool TryGetSubject(out Guid subjectId, [NotNullWhen(false)] out ActionResult? error)
+    {
+        subjectId = default;
+
+        if (!HttpContext.IsAuthenticated())
+        {
+            error = Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "User is not authenticated.",
+            });
+            return false;
+        }
+
+        var authenticatedSubjectId = HttpContext.GetSubjectId();
+        if (authenticatedSubjectId == null)
+        {
+            error = Unauthorized(new OAuthError
+            {
+                Error = "access_denied",
+                ErrorDescription = "Could not determine authenticated user.",
+            });
+            return false;
+        }
+
+        subjectId = authenticatedSubjectId.Value;
+        error = null;
+        return true;
     }
 
     private async Task<ActionResult> IssueAuthorizationCode(
@@ -765,26 +773,12 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(typeof(OAuthGrantListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthGrantListResponse>> GetGrants()
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
+            return subjectError;
         }
 
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
-        }
-
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
+        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId);
         var dtos = grants.Select(MapToDto).ToList();
 
         return Ok(new OAuthGrantListResponse { Grants = dtos });
@@ -800,27 +794,13 @@ public class OAuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteGrant(Guid grantId)
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         // Verify ownership: load all grants for the subject and check if grantId is among them
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value);
+        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId);
         if (grants.All(g => g.Id != grantId))
         {
             return NotFound(new OAuthError
@@ -850,30 +830,16 @@ public class OAuthController : ControllerBase
         [FromBody] UpdateGrantRequest request
     )
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var subjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var subjectId = HttpContext.GetSubjectId();
-        if (subjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         try
         {
             var updated = await _grantService.UpdateGrantAsync(
                 grantId,
-                subjectId.Value,
+                subjectId,
                 request.Label,
                 request.Scopes
             );
@@ -928,23 +894,9 @@ public class OAuthController : ControllerBase
         [FromForm] string token,
         [FromForm] string? token_type_hint = null)
     {
-        if (!HttpContext.IsAuthenticated())
+        if (!TryGetSubject(out var callerSubjectId, out var subjectError))
         {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "User is not authenticated.",
-            });
-        }
-
-        var callerSubjectId = HttpContext.GetSubjectId();
-        if (callerSubjectId == null)
-        {
-            return Unauthorized(new OAuthError
-            {
-                Error = "access_denied",
-                ErrorDescription = "Could not determine authenticated user.",
-            });
+            return subjectError;
         }
 
         if (string.IsNullOrEmpty(token))
@@ -981,7 +933,7 @@ public class OAuthController : ControllerBase
                 // resolve its tenant-B token here. A non-pinned token (legacy session JWT, no
                 // TenantId claim) carries no such restriction and is matched on subject alone.
                 var callerTenantId = HttpContext.GetAuthContext()?.TenantId;
-                if (claims.SubjectId != callerSubjectId.Value
+                if (claims.SubjectId != callerSubjectId
                     || (claims.TenantId.HasValue && claims.TenantId != callerTenantId))
                 {
                     return Ok(new TokenIntrospectionResponse { Active = false });
