@@ -62,13 +62,12 @@ export default {
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
     //
-    // The generator inlines this arm as the single statement of its `if`, so the
-    // locals it needs sit in a block: without the braces the `const` would be a
-    // syntax error and the `throw` would run on every status.
+    // The generator emits this arm inside a block of its own, so it may declare
+    // the locals the read order needs.
     on403:
-      `{ const e403 = err as any;\n` +
+      `const e403 = err as any;\n` +
       `      const b403 = parseErrorBody(e403);\n` +
-      `      throw error(403, ${reason('e403', 'b403')} ?? 'Forbidden'); }`,
+      `      throw error(403, ${reason('e403', 'b403')} ?? 'Forbidden')`,
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state

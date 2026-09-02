@@ -35,8 +35,8 @@ importers:
         specifier: 7.0.0-dev.20260513.1
         version: 7.0.0-dev.20260513.1
       openapi-remote-codegen:
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.6.0
+        version: 0.6.0
       prettier:
         specifier: ^3.7.2
         version: 3.7.2
@@ -5412,8 +5412,8 @@ packages:
   one-time@1.0.0:
     resolution: {integrity: sha512-5DXOiRKwuSEcQ/l0kGCF6Q3jcADFv5tSmRaJck/OqkVFcOzutB134KRSfF0xDrL39MNnqxbHBbUUcjZIhTgb2g==}
 
-  openapi-remote-codegen@0.5.0:
-    resolution: {integrity: sha512-T0dC4gxOKqil0llpeEgGfVvYcRSmGqg39u1EpPUEG6ko7VAlJ/nnINasTVVMJatf9xhqsRHjbZiNZpFcRvfNXQ==}
+  openapi-remote-codegen@0.6.0:
+    resolution: {integrity: sha512-1T55p/6TXmRKhvxeweoxvXrrvmiIKb/r6e9sgc/rgYkc8UrTA6KI9yxCKnMIMxv+cacJD3h8Nl+SLRBui/weWw==}
     hasBin: true
 
   openapi-types@12.1.3:
@@ -12041,7 +12041,7 @@ snapshots:
     dependencies:
       fn.name: 1.1.0
 
-  openapi-remote-codegen@0.5.0:
+  openapi-remote-codegen@0.6.0:
     dependencies:
       openapi-types: 12.1.3
 
