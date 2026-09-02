@@ -517,27 +517,6 @@ public class StatisticsServiceTests
     #region Formatting Tests
 
     [Fact]
-    public void FormatInsulinDisplay_WithVariousValues_ShouldFormatCorrectly()
-    {
-        // Arrange & Act & Assert
-        _statisticsService.FormatInsulinDisplay(0).Should().Be("0");
-        _statisticsService.FormatInsulinDisplay(0.05).Should().Be(".05");
-        _statisticsService.FormatInsulinDisplay(0.5).Should().Be(".50");
-        _statisticsService.FormatInsulinDisplay(1.0).Should().Be("1.00");
-        _statisticsService.FormatInsulinDisplay(5.25).Should().Be("5.25");
-    }
-
-    [Fact]
-    public void FormatCarbDisplay_WithVariousValues_ShouldFormatCorrectly()
-    {
-        // Arrange & Act & Assert
-        _statisticsService.FormatCarbDisplay(0).Should().Be("0");
-        _statisticsService.FormatCarbDisplay(0.5).Should().Be(".5");
-        _statisticsService.FormatCarbDisplay(1.0).Should().Be("1.0");
-        _statisticsService.FormatCarbDisplay(15.5).Should().Be("15.5");
-    }
-
-    [Fact]
     public void FormatPercentageDisplay_WithValidValue_ShouldFormatToOneDecimal()
     {
         // Arrange & Act & Assert

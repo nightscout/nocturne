@@ -598,15 +598,6 @@ public class StatisticsServiceTDDTests
     }
 
     [Fact]
-    public void FormatInsulinDisplay_ShouldFormatCorrectly()
-    {
-        _sut.FormatInsulinDisplay(1.0).Should().Be("1.00");
-        // Values < 1 use "shifted" format (no leading zero)
-        _sut.FormatInsulinDisplay(0.05).Should().Be(".05");
-        _sut.FormatInsulinDisplay(10.567).Should().Be("10.57");
-    }
-
-    [Fact]
     public void GetBolusPercentage_WithZeroTotal_ShouldReturnZero()
     {
         var summary = new TreatmentSummary

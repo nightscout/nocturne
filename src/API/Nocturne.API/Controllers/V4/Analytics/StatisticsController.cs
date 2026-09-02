@@ -681,46 +681,6 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
-    /// Format insulin value for display
-    /// </summary>
-    /// <param name="value">Insulin value</param>
-    /// <returns>Formatted insulin string</returns>
-    [HttpGet("format/insulin/{value:double}")]
-    [RequireScope(Scope.ReportsRead)]
-    public ActionResult<string> FormatInsulinDisplay(double value)
-    {
-        try
-        {
-            var result = _statisticsService.FormatInsulinDisplay(value);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Format carb value for display
-    /// </summary>
-    /// <param name="value">Carb value</param>
-    /// <returns>Formatted carb string</returns>
-    [HttpGet("format/carb/{value:double}")]
-    [RequireScope(Scope.ReportsRead)]
-    public ActionResult<string> FormatCarbDisplay(double value)
-    {
-        try
-        {
-            var result = _statisticsService.FormatCarbDisplay(value);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
     /// Validate treatment data for completeness and consistency
     /// </summary>
     /// <param name="treatment">Treatment to validate</param>

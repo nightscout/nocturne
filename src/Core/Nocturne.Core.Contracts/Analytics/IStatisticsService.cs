@@ -127,27 +127,11 @@ public interface IStatisticsService
     double CalculateMAGE(IEnumerable<double> values);
 
     /// <summary>
-    /// Calculate Continuous Overall Net Glycemic Action (CONGA).
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL at regular intervals.</param>
-    /// <param name="hours">CONGA window in hours (default 2).</param>
-    /// <returns>CONGA value.</returns>
-    double CalculateCONGA(IEnumerable<double> values, int hours = 2);
-
-    /// <summary>
     /// Calculate Average Daily Risk Range (ADRR).
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <returns>ADRR value.</returns>
     double CalculateADRR(IEnumerable<double> values);
-
-    /// <summary>
-    /// Calculate the Lability Index from timestamped glucose entries.
-    /// </summary>
-    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <returns>Lability Index value.</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 entries.</exception>
-    double CalculateLabilityIndex(IEnumerable<SensorGlucose> entries);
 
     /// <summary>
     /// Calculate the J-Index (combines mean and variability).
@@ -172,15 +156,6 @@ public interface IStatisticsService
     /// <returns>LBGI value.</returns>
     /// <exception cref="ArgumentException">Thrown when the values collection is empty.</exception>
     double CalculateLBGI(IEnumerable<double> values);
-
-    /// <summary>
-    /// Calculate Glycemic Variability Index (GVI).
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL.</param>
-    /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps.</param>
-    /// <returns>GVI value (1.0 = perfectly stable).</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 values or entries.</exception>
-    double CalculateGVI(IEnumerable<double> values, IEnumerable<SensorGlucose> entries);
 
     /// <summary>
     /// Calculate Patient Glycemic Status (PGS) composite score.
@@ -233,24 +208,6 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// Calculate glucose distribution across bins from raw glucose values.
-    /// </summary>
-    /// <param name="glucoseValues">Glucose values in mg/dL.</param>
-    /// <param name="bins">Optional custom distribution bins. Uses default bins if <c>null</c>.</param>
-    /// <returns>Distribution data points for histogram rendering.</returns>
-    IEnumerable<DistributionDataPoint> CalculateGlucoseDistributionFromValues(
-        IEnumerable<double> glucoseValues,
-        IEnumerable<DistributionBin>? bins = null
-    );
-
-    /// <summary>
-    /// Calculate estimated HbA1c as a formatted string from glucose values.
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL.</param>
-    /// <returns>Formatted estimated HbA1c string (e.g., "6.5%").</returns>
-    string CalculateEstimatedHbA1C(IEnumerable<double> values);
-
-    /// <summary>
     /// Calculate averaged statistics bucketed by time of day from <see cref="SensorGlucose"/> entries.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
@@ -290,13 +247,6 @@ public interface IStatisticsService
     double GetBolusPercentage(TreatmentSummary treatmentSummary);
 
     /// <summary>
-    /// Get basal insulin as a percentage of total daily insulin.
-    /// </summary>
-    /// <param name="treatmentSummary">Treatment summary to read from.</param>
-    /// <returns>Basal percentage (0-100).</returns>
-    double GetBasalPercentage(TreatmentSummary treatmentSummary);
-
-    /// <summary>
     /// Calculate comprehensive insulin delivery statistics.
     /// Basal data comes from TempBasals, algorithmBoluses, and basalInjections (MDI); pass empty collections if none are available.
     /// </summary>
@@ -309,29 +259,6 @@ public interface IStatisticsService
         DateTime endDate,
         IEnumerable<BasalInjection>? basalInjections = null
     );
-
-    // Formatting Utilities
-
-    /// <summary>Format an insulin value for display (e.g., "1.25U").</summary>
-    /// <param name="value">Insulin value in units.</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatInsulinDisplay(double value);
-
-    /// <summary>Format a carb value for display (e.g., "45g").</summary>
-    /// <param name="value">Carb value in grams.</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatCarbDisplay(double value);
-
-    /// <summary>Format a percentage value for display.</summary>
-    /// <param name="value">Percentage value (0-100).</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatPercentageDisplay(double value);
-
-    /// <summary>Round an insulin value to pump delivery precision.</summary>
-    /// <param name="value">Insulin value in units.</param>
-    /// <param name="step">Pump step size in units (default 0.05).</param>
-    /// <returns>Rounded insulin value.</returns>
-    double RoundInsulinToPumpPrecision(double value, double step = 0.05);
 
     // Validation
 
@@ -356,11 +283,6 @@ public interface IStatisticsService
     /// <param name="mmol">Glucose value in mmol/L.</param>
     /// <returns>Glucose value in mg/dL.</returns>
     double MmolToMGDL(double mmol);
-
-    /// <summary>Convert a glucose value from mg/dL to a formatted mmol/L string.</summary>
-    /// <param name="mgdl">Glucose value in mg/dL.</param>
-    /// <returns>Formatted mmol/L string.</returns>
-    string MgdlToMMOLString(double mgdl);
 
     // Comprehensive Analytics
     GlucoseAnalytics AnalyzeGlucoseData(

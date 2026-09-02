@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
@@ -436,17 +435,6 @@ public class DistributionBin
     /// Maximum value for this bin
     /// </summary>
     public double Max { get; set; }
-}
-
-/// <summary>
-/// Averaged statistics for a specific hour
-/// </summary>
-public class HourlyAveragedStats : BasicGlucoseStats
-{
-    /// <summary>
-    /// Hour of the day (0-23)
-    /// </summary>
-    public int Hour { get; set; }
 }
 
 /// <summary>
@@ -1167,192 +1155,6 @@ public class PeriodMetrics
 }
 
 /// <summary>
-/// Analysis of glucose patterns by time of day
-/// </summary>
-public class TimeOfDayAnalysis
-{
-    /// <summary>Overnight period metrics (12:00 AM - 6:00 AM)</summary>
-    public PeriodMetrics Overnight { get; set; } =
-        new()
-        {
-            PeriodName = "Overnight",
-            StartHour = 0,
-            EndHour = 6,
-        };
-
-    /// <summary>Morning period metrics (6:00 AM - 12:00 PM)</summary>
-    public PeriodMetrics Morning { get; set; } =
-        new()
-        {
-            PeriodName = "Morning",
-            StartHour = 6,
-            EndHour = 12,
-        };
-
-    /// <summary>Afternoon period metrics (12:00 PM - 6:00 PM)</summary>
-    public PeriodMetrics Afternoon { get; set; } =
-        new()
-        {
-            PeriodName = "Afternoon",
-            StartHour = 12,
-            EndHour = 18,
-        };
-
-    /// <summary>Evening period metrics (6:00 PM - 12:00 AM)</summary>
-    public PeriodMetrics Evening { get; set; } =
-        new()
-        {
-            PeriodName = "Evening",
-            StartHour = 18,
-            EndHour = 24,
-        };
-
-    /// <summary>Dawn phenomenon detected (rising glucose 3-6 AM)</summary>
-    public bool DawnPhenomenonDetected { get; set; }
-
-    /// <summary>Magnitude of dawn phenomenon rise (mg/dL)</summary>
-    public double DawnPhenomenonMagnitude { get; set; }
-
-    /// <summary>Period with highest variability</summary>
-    public string HighestVariabilityPeriod { get; set; } = string.Empty;
-
-    /// <summary>Period with lowest time in range</summary>
-    public string LowestTIRPeriod { get; set; } = string.Empty;
-
-    /// <summary>Period with most hypoglycemia events</summary>
-    public string MostHypoglycemiaPeriod { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Day-specific metrics for day-of-week analysis
-/// </summary>
-public class DayMetrics : PeriodMetrics
-{
-    /// <summary>Day of week (0 = Sunday, 6 = Saturday)</summary>
-    public DayOfWeek DayOfWeek { get; set; }
-}
-
-/// <summary>
-/// Analysis of glucose patterns by day of week
-/// </summary>
-public class DayOfWeekAnalysis
-{
-    /// <summary>Metrics for each day of the week</summary>
-    public Dictionary<DayOfWeek, DayMetrics> DayMetrics { get; set; } = new();
-
-    /// <summary>Average weekday metrics (Monday-Friday)</summary>
-    public PeriodMetrics WeekdayAverage { get; set; } = new() { PeriodName = "Weekday Average" };
-
-    /// <summary>Average weekend metrics (Saturday-Sunday)</summary>
-    public PeriodMetrics WeekendAverage { get; set; } = new() { PeriodName = "Weekend Average" };
-
-    /// <summary>Day with highest variability</summary>
-    public DayOfWeek? HighestVariabilityDay { get; set; }
-
-    /// <summary>Day with lowest time in range</summary>
-    public DayOfWeek? LowestTIRDay { get; set; }
-
-    /// <summary>Significant difference between weekday and weekend patterns</summary>
-    public bool WeekdayWeekendDifference { get; set; }
-
-    /// <summary>Description of weekday vs weekend pattern</summary>
-    public string PatternDescription { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Individual hypoglycemia episode details
-/// </summary>
-public class HypoglycemiaEpisode
-{
-    /// <summary>Start time of the episode (Unix milliseconds)</summary>
-    public long StartTime { get; set; }
-
-    /// <summary>End time of the episode (Unix milliseconds)</summary>
-    public long EndTime { get; set; }
-
-    /// <summary>Duration of the episode in minutes</summary>
-    public double DurationMinutes { get; set; }
-
-    /// <summary>Lowest glucose value during the episode (mg/dL)</summary>
-    public double NadirValue { get; set; }
-
-    /// <summary>Time of nadir (Unix milliseconds)</summary>
-    public long NadirTime { get; set; }
-
-    /// <summary>Whether this was a severe episode (&lt;54 mg/dL)</summary>
-    public bool IsSevere { get; set; }
-
-    /// <summary>Hour of day when episode started (0-23)</summary>
-    public int HourOfDay { get; set; }
-
-    /// <summary>Day of week when episode occurred</summary>
-    public DayOfWeek DayOfWeek { get; set; }
-
-    /// <summary>Time to recover to >70 mg/dL in minutes</summary>
-    public double RecoveryTimeMinutes { get; set; }
-
-    /// <summary>Glucose value before the episode (mg/dL, if available)</summary>
-    public double? PreEpisodeGlucose { get; set; }
-}
-
-/// <summary>
-/// Comprehensive hypoglycemia analysis
-/// </summary>
-public class HypoglycemiaAnalysis
-{
-    /// <summary>Total number of hypoglycemia episodes (&lt;70 mg/dL)</summary>
-    public int TotalEpisodes { get; set; }
-
-    /// <summary>Number of severe hypoglycemia episodes (&lt;54 mg/dL)</summary>
-    public int SevereEpisodes { get; set; }
-
-    /// <summary>Average episodes per day</summary>
-    public double EpisodesPerDay { get; set; }
-
-    /// <summary>Average duration of episodes in minutes</summary>
-    public double AverageDurationMinutes { get; set; }
-
-    /// <summary>Average nadir (lowest) glucose during episodes</summary>
-    public double AverageNadir { get; set; }
-
-    /// <summary>Lowest glucose recorded</summary>
-    public double LowestGlucose { get; set; }
-
-    /// <summary>Average time to recover above 70 mg/dL</summary>
-    public double AverageRecoveryTimeMinutes { get; set; }
-
-    /// <summary>Time of day distribution of episodes (hour -> count)</summary>
-    public Dictionary<int, int> HourlyDistribution { get; set; } = new();
-
-    /// <summary>Day of week distribution of episodes</summary>
-    public Dictionary<DayOfWeek, int> DayOfWeekDistribution { get; set; } = new();
-
-    /// <summary>Most common hour for hypoglycemia</summary>
-    public int? PeakHour { get; set; }
-
-    /// <summary>Most common day for hypoglycemia</summary>
-    public DayOfWeek? PeakDay { get; set; }
-
-    /// <summary>Whether there's a recurring pattern</summary>
-    public bool HasRecurringPattern { get; set; }
-
-    /// <summary>Description of the recurring pattern if detected</summary>
-    public string PatternDescription { get; set; } = string.Empty;
-
-    /// <summary>List of individual episodes</summary>
-    public List<HypoglycemiaEpisode> Episodes { get; set; } = new();
-
-    /// <summary>Nocturnal hypoglycemia episodes (12 AM - 6 AM)</summary>
-    public int NocturnalEpisodes { get; set; }
-
-    /// <summary>Percentage of total hypos that are nocturnal</summary>
-    public double NocturnalPercentage { get; set; }
-
-    /// <summary>Clinical risk assessment</summary>
-    public string RiskAssessment { get; set; } = string.Empty;
-}
-
-/// <summary>
 /// Individual hyperglycemia episode details
 /// </summary>
 public class HyperglycemiaEpisode
@@ -1449,27 +1251,6 @@ public class HyperglycemiaAnalysis
 }
 
 /// <summary>
-/// Trend direction indicator
-/// </summary>
-public enum TrendDirection
-{
-    /// <summary>Significant improvement</summary>
-    Improving,
-
-    /// <summary>Slight improvement</summary>
-    SlightlyImproving,
-
-    /// <summary>No significant change</summary>
-    Stable,
-
-    /// <summary>Slight decline</summary>
-    SlightlyDeclining,
-
-    /// <summary>Significant decline</summary>
-    Declining,
-}
-
-/// <summary>
 /// Reliability metadata for a statistics analysis block.
 /// Provides raw facts so the frontend can compose a plain-English message
 /// when the data doesn't meet clinical reliability criteria.
@@ -1487,60 +1268,6 @@ public class StatisticReliability
 
     /// <summary>Number of glucose readings used in this analysis</summary>
     public int ReadingCount { get; set; }
-}
-
-/// <summary>
-/// Comparison between two time periods
-/// </summary>
-public class TrendComparison
-{
-    /// <summary>Current period analytics</summary>
-    public GlucoseAnalytics CurrentPeriod { get; set; } = new();
-
-    /// <summary>Previous period analytics</summary>
-    public GlucoseAnalytics PreviousPeriod { get; set; } = new();
-
-    /// <summary>Change in GMI (current - previous)</summary>
-    public double GMIDelta { get; set; }
-
-    /// <summary>Change in time in range (current - previous)</summary>
-    public double TIRDelta { get; set; }
-
-    /// <summary>Change in time below range (current - previous)</summary>
-    public double TBRDelta { get; set; }
-
-    /// <summary>Change in time above range (current - previous)</summary>
-    public double TARDelta { get; set; }
-
-    /// <summary>Change in coefficient of variation (current - previous)</summary>
-    public double CVDelta { get; set; }
-
-    /// <summary>Change in GRI score (current - previous)</summary>
-    public double GRIDelta { get; set; }
-
-    /// <summary>Overall trend direction for GMI</summary>
-    public TrendDirection GMITrend { get; set; }
-
-    /// <summary>Overall trend direction for TIR</summary>
-    public TrendDirection TIRTrend { get; set; }
-
-    /// <summary>Overall trend direction for TBR (improvement = decreasing)</summary>
-    public TrendDirection TBRTrend { get; set; }
-
-    /// <summary>Overall trend direction for CV</summary>
-    public TrendDirection CVTrend { get; set; }
-
-    /// <summary>Overall trend direction for GRI (improvement = decreasing)</summary>
-    public TrendDirection GRITrend { get; set; }
-
-    /// <summary>Number of days in current period with TIR >70%</summary>
-    public int DaysInRangeCurrent { get; set; }
-
-    /// <summary>Number of days in previous period with TIR >70%</summary>
-    public int DaysInRangePrevious { get; set; }
-
-    /// <summary>Summary interpretation of overall trend</summary>
-    public string TrendSummary { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -1698,15 +1425,6 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     /// <summary>Glycemic Risk Index (composite risk score)</summary>
     public GlycemicRiskIndex GRI { get; set; } = new();
 
-    /// <summary>Time-of-day pattern analysis</summary>
-    public TimeOfDayAnalysis TimeOfDayPatterns { get; set; } = new();
-
-    /// <summary>Day-of-week pattern analysis</summary>
-    public DayOfWeekAnalysis DayOfWeekPatterns { get; set; } = new();
-
-    /// <summary>Hypoglycemia event analysis</summary>
-    public HypoglycemiaAnalysis HypoglycemiaAnalysis { get; set; } = new();
-
     /// <summary>Hyperglycemia event analysis</summary>
     public HyperglycemiaAnalysis HyperglycemiaAnalysis { get; set; } = new();
 
@@ -1735,7 +1453,6 @@ public class ReportAnalysisResult
     public IEnumerable<AveragedStats> AveragedStats { get; set; } = [];
 
     /// <summary>Registered devices that contributed readings within the requested window, for device-picker UIs.</summary>
-    [JsonPropertyName("contributingDevices")]
     public List<ContributingDevice> ContributingDevices { get; set; } = new();
 
     /// <summary>
@@ -1777,15 +1494,12 @@ public class PersonalRangeTimeInRange
 public sealed class ContributingDevice
 {
     /// <summary>The registered <see cref="PatientDevice"/> id, or <c>null</c> for the unattributed bucket.</summary>
-    [JsonPropertyName("patientDeviceId")]
     public Guid? PatientDeviceId { get; set; }
 
     /// <summary>Display name of the device, or "Unattributed" for readings with no <see cref="PatientDeviceId"/>.</summary>
-    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Number of readings attributed to this device within the requested window.</summary>
-    [JsonPropertyName("readingCount")]
     public int ReadingCount { get; set; }
 }
 
@@ -1796,39 +1510,30 @@ public sealed class ContributingDevice
 public class SiteChangeImpactDataPoint
 {
     /// <summary>Minutes from site change (negative = before, positive = after)</summary>
-    [JsonPropertyName("minutesFromChange")]
     public int MinutesFromChange { get; set; }
 
     /// <summary>Average glucose at this time offset (mg/dL)</summary>
-    [JsonPropertyName("averageGlucose")]
     public double AverageGlucose { get; set; }
 
     /// <summary>Median glucose at this time offset (mg/dL)</summary>
-    [JsonPropertyName("medianGlucose")]
     public double MedianGlucose { get; set; }
 
     /// <summary>Standard deviation of glucose values</summary>
-    [JsonPropertyName("stdDev")]
     public double StdDev { get; set; }
 
     /// <summary>Number of readings contributing to this data point</summary>
-    [JsonPropertyName("count")]
     public int Count { get; set; }
 
     /// <summary>10th percentile glucose value (mg/dL)</summary>
-    [JsonPropertyName("percentile10")]
     public double Percentile10 { get; set; }
 
     /// <summary>25th percentile glucose value (mg/dL)</summary>
-    [JsonPropertyName("percentile25")]
     public double Percentile25 { get; set; }
 
     /// <summary>75th percentile glucose value (mg/dL)</summary>
-    [JsonPropertyName("percentile75")]
     public double Percentile75 { get; set; }
 
     /// <summary>90th percentile glucose value (mg/dL)</summary>
-    [JsonPropertyName("percentile90")]
     public double Percentile90 { get; set; }
 }
 
@@ -1838,31 +1543,24 @@ public class SiteChangeImpactDataPoint
 public class SiteChangeImpactSummary
 {
     /// <summary>Average glucose before site change (mg/dL)</summary>
-    [JsonPropertyName("avgGlucoseBeforeChange")]
     public double AvgGlucoseBeforeChange { get; set; }
 
     /// <summary>Average glucose after site change (mg/dL)</summary>
-    [JsonPropertyName("avgGlucoseAfterChange")]
     public double AvgGlucoseAfterChange { get; set; }
 
     /// <summary>Percent improvement in glucose after site change</summary>
-    [JsonPropertyName("percentImprovement")]
     public double PercentImprovement { get; set; }
 
     /// <summary>Time in range before site change (%)</summary>
-    [JsonPropertyName("timeInRangeBeforeChange")]
     public double TimeInRangeBeforeChange { get; set; }
 
     /// <summary>Time in range after site change (%)</summary>
-    [JsonPropertyName("timeInRangeAfterChange")]
     public double TimeInRangeAfterChange { get; set; }
 
     /// <summary>Coefficient of variation before site change (%)</summary>
-    [JsonPropertyName("cvBeforeChange")]
     public double CvBeforeChange { get; set; }
 
     /// <summary>Coefficient of variation after site change (%)</summary>
-    [JsonPropertyName("cvAfterChange")]
     public double CvAfterChange { get; set; }
 }
 
@@ -2290,35 +1988,27 @@ public class HourlyInsulinDeliveryResponse
 public class SiteChangeImpactAnalysis
 {
     /// <summary>Number of site changes analyzed</summary>
-    [JsonPropertyName("siteChangeCount")]
     public int SiteChangeCount { get; set; }
 
     /// <summary>Average number of days between site changes</summary>
-    [JsonPropertyName("averageDaysBetweenChanges")]
     public double? AverageDaysBetweenChanges { get; set; }
 
     /// <summary>Time points with averaged glucose data</summary>
-    [JsonPropertyName("dataPoints")]
     public List<SiteChangeImpactDataPoint> DataPoints { get; set; } = new();
 
     /// <summary>Summary statistics comparing before vs after</summary>
-    [JsonPropertyName("summary")]
     public SiteChangeImpactSummary Summary { get; set; } = new();
 
     /// <summary>Hours analyzed before site change</summary>
-    [JsonPropertyName("hoursBeforeChange")]
     public int HoursBeforeChange { get; set; }
 
     /// <summary>Hours analyzed after site change</summary>
-    [JsonPropertyName("hoursAfterChange")]
     public int HoursAfterChange { get; set; }
 
     /// <summary>Bucket size in minutes for averaging</summary>
-    [JsonPropertyName("bucketSizeMinutes")]
     public int BucketSizeMinutes { get; set; }
 
     /// <summary>Whether sufficient data exists for meaningful analysis</summary>
-    [JsonPropertyName("hasSufficientData")]
     public bool HasSufficientData { get; set; }
 }
 
@@ -2329,39 +2019,30 @@ public class SiteChangeImpactAnalysis
 public class AidSystemMetrics
 {
     /// <summary>Comma-separated current CGM device names from catalog</summary>
-    [JsonPropertyName("cgmDeviceNames")]
     public string? CgmDeviceNames { get; set; }
 
     /// <summary>Comma-separated current pump device names from catalog</summary>
-    [JsonPropertyName("pumpDeviceNames")]
     public string? PumpDeviceNames { get; set; }
 
     /// <summary>Time-weighted pump use percentage across segments</summary>
-    [JsonPropertyName("pumpUsePercent")]
     public double? PumpUsePercent { get; set; }
 
     /// <summary>Time-weighted AID active percentage across segments</summary>
-    [JsonPropertyName("aidActivePercent")]
     public double? AidActivePercent { get; set; }
 
     /// <summary>CGM data completeness percentage</summary>
-    [JsonPropertyName("cgmActivePercent")]
     public double? CgmActivePercent { get; set; }
 
     /// <summary>Lower target bound in mg/dL</summary>
-    [JsonPropertyName("targetLow")]
     public double? TargetLow { get; set; }
 
     /// <summary>Upper target bound in mg/dL</summary>
-    [JsonPropertyName("targetHigh")]
     public double? TargetHigh { get; set; }
 
     /// <summary>Number of DeviceEvent SiteChange events in the period</summary>
-    [JsonPropertyName("siteChangeCount")]
     public int? SiteChangeCount { get; set; }
 
     /// <summary>Per-device time segments with individual metrics</summary>
-    [JsonPropertyName("segments")]
     public List<AidTimeSegment> Segments { get; set; } = new();
 }
 
@@ -2372,23 +2053,18 @@ public class AidSystemMetrics
 public class AidTimeSegment
 {
     /// <summary>Which AID algorithm was active during this segment</summary>
-    [JsonPropertyName("algorithm")]
     public AidAlgorithm Algorithm { get; set; }
 
     /// <summary>Start of the segment</summary>
-    [JsonPropertyName("startDate")]
     public DateTime StartDate { get; set; }
 
     /// <summary>End of the segment</summary>
-    [JsonPropertyName("endDate")]
     public DateTime EndDate { get; set; }
 
     /// <summary>Duration of the segment in hours</summary>
-    [JsonPropertyName("durationHours")]
     public double DurationHours { get; set; }
 
     /// <summary>Computed metrics for this segment</summary>
-    [JsonPropertyName("metrics")]
     public AidSegmentMetrics Metrics { get; set; } = new();
 }
 
@@ -2398,19 +2074,15 @@ public class AidTimeSegment
 public class AidSegmentMetrics
 {
     /// <summary>Percentage of time AID was active in this segment</summary>
-    [JsonPropertyName("aidActivePercent")]
     public double? AidActivePercent { get; set; }
 
     /// <summary>Percentage of time pump was in use in this segment</summary>
-    [JsonPropertyName("pumpUsePercent")]
     public double? PumpUsePercent { get; set; }
 
     /// <summary>Number of loop iterations (applicable to open-source AIDs)</summary>
-    [JsonPropertyName("loopCycleCount")]
     public int? LoopCycleCount { get; set; }
 
     /// <summary>Number of enacted suggestions</summary>
-    [JsonPropertyName("enactedCount")]
     public int? EnactedCount { get; set; }
 }
 

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -18,6 +17,12 @@ namespace Nocturne.API.Services.Analytics;
 /// <seealso cref="Treatment"/>
 public class StatisticsService : IStatisticsService
 {
+    /// <summary>
+    /// The divisor the Kovatchev risk transform is published with. It is 18 exactly, not the
+    /// mg/dL-per-mmol/L conversion factor in <see cref="GlucoseConstants.MgdlPerMmol"/>.
+    /// </summary>
+    private const double KovatchevMgdlPerMmol = 18.0;
+
     private static readonly string[] BolusTreatmentTypes = new[]
     {
         "Meal Bolus",
@@ -945,7 +950,7 @@ public class StatisticsService : IStatisticsService
     /// <param name="values">Collection of glucose values</param>
     /// <param name="hours">Number of hours for the window</param>
     /// <returns>CONGA value, or 0 if insufficient data</returns>
-    public double CalculateCONGA(IEnumerable<double> values, int hours = 2)
+    private double CalculateCONGA(IEnumerable<double> values, int hours = 2)
     {
         var valuesList = values.ToList();
         const int interval = 5; // 5-minute intervals
@@ -986,7 +991,7 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
     /// <returns>Lability Index value</returns>
-    public double CalculateLabilityIndex(IEnumerable<SensorGlucose> entries)
+    private double CalculateLabilityIndex(IEnumerable<SensorGlucose> entries)
     {
         var entriesList = entries.ToList();
         if (entriesList.Count < 2)
@@ -1029,28 +1034,8 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
     /// <returns>HBGI value</returns>
-    public double CalculateHBGI(IEnumerable<double> values)
-    {
-        var valuesList = values.ToList();
-        if (!valuesList.Any())
-            throw new ArgumentException(
-                "Not enough data points to calculate HBGI.",
-                nameof(values)
-            );
-
-        var riskSum = valuesList.Sum(glucose =>
-        {
-            // Kovatchev formula: f(BG) = 1.084 * (ln(BG/18)^1.084 - 1.928)
-            var bgInMmol = glucose / 18;
-            var logBG = Math.Log(bgInMmol);
-            var fBG = 1.084 * (Math.Pow(logBG, 1.084) - 1.928);
-
-            var risk = fBG > 0 ? 10 * Math.Pow(fBG, 2) : 0;
-            return risk;
-        });
-
-        return riskSum / valuesList.Count;
-    }
+    public double CalculateHBGI(IEnumerable<double> values) =>
+        KovatchevRisk(values, keepPositive: true, "HBGI");
 
     /// <summary>
     /// Calculate LBGI (Low Blood Glucose Index)
@@ -1059,24 +1044,37 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
     /// <returns>LBGI value</returns>
-    public double CalculateLBGI(IEnumerable<double> values)
+    public double CalculateLBGI(IEnumerable<double> values) =>
+        KovatchevRisk(values, keepPositive: false, "LBGI");
+
+    /// <summary>
+    /// Mean of the Kovatchev risk transform <c>f(BG) = 1.084 * (ln(BG/18)^1.084 - 1.928)</c> over
+    /// <paramref name="values"/>, counting only the readings whose <c>f(BG)</c> falls on one side
+    /// of zero: the hyperglycaemic side when <paramref name="keepPositive"/>, the hypoglycaemic
+    /// side otherwise. <paramref name="indexName"/> names the index in the empty-input message.
+    /// </summary>
+    /// <seealso cref="KovatchevMgdlPerMmol"/>
+    private static double KovatchevRisk(
+        IEnumerable<double> values,
+        bool keepPositive,
+        string indexName
+    )
     {
         var valuesList = values.ToList();
         if (!valuesList.Any())
             throw new ArgumentException(
-                "Not enough data points to calculate LBGI.",
+                $"Not enough data points to calculate {indexName}.",
                 nameof(values)
             );
 
         var riskSum = valuesList.Sum(glucose =>
         {
-            // Kovatchev formula: f(BG) = 1.084 * (ln(BG/18)^1.084 - 1.928)
-            var bgInMmol = glucose / 18;
+            var bgInMmol = glucose / KovatchevMgdlPerMmol;
             var logBG = Math.Log(bgInMmol);
             var fBG = 1.084 * (Math.Pow(logBG, 1.084) - 1.928);
 
-            var risk = fBG < 0 ? 10 * Math.Pow(fBG, 2) : 0;
-            return risk;
+            var onSide = keepPositive ? fBG > 0 : fBG < 0;
+            return onSide ? 10 * Math.Pow(fBG, 2) : 0;
         });
 
         return riskSum / valuesList.Count;
@@ -1090,7 +1088,7 @@ public class StatisticsService : IStatisticsService
     /// <param name="values">Collection of glucose values</param>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
     /// <returns>GVI value</returns>
-    public double CalculateGVI(IEnumerable<double> values, IEnumerable<SensorGlucose> entries)
+    private double CalculateGVI(IEnumerable<double> values, IEnumerable<SensorGlucose> entries)
     {
         var valuesList = values.ToList();
         var entriesList = entries.ToList();
@@ -1246,17 +1244,6 @@ public class StatisticsService : IStatisticsService
         thresholds ??= new GlycemicThresholds();
 
         var entriesList = entries.Where(e => e.Mgdl > 0).OrderBy(e => e.Mills).ToList();
-
-        if (!entriesList.Any())
-        {
-            return new TimeInRangeMetrics
-            {
-                Percentages = new TimeInRangePercentages(),
-                Durations = new TimeInRangeDurations(),
-                Episodes = new TimeInRangeEpisodes(),
-                RangeStats = new TimeInRangeDetailedStats(),
-            };
-        }
 
         var glucoseValues = ExtractGlucoseValues(entriesList).ToList();
         var totalReadings = glucoseValues.Count;
@@ -1485,7 +1472,7 @@ public class StatisticsService : IStatisticsService
     /// <param name="glucoseValues">Collection of glucose values</param>
     /// <param name="bins">Distribution bins (optional, uses defaults if not provided)</param>
     /// <returns>Collection of distribution data points</returns>
-    public IEnumerable<DistributionDataPoint> CalculateGlucoseDistributionFromValues(
+    private IEnumerable<DistributionDataPoint> CalculateGlucoseDistributionFromValues(
         IEnumerable<double> glucoseValues,
         IEnumerable<DistributionBin>? bins = null
     )
@@ -2083,18 +2070,20 @@ public class StatisticsService : IStatisticsService
         var bolusList = boluses.ToList();
         var dailyData = new Dictionary<string, (double Basal, double Bolus)>();
 
+        void Accumulate(long mills, double basal, double bolus)
+        {
+            var dateKey = MillsToLocalDateString(mills, tz);
+            dailyData.TryGetValue(dateKey, out var current);
+            dailyData[dateKey] = (current.Basal + basal, current.Bolus + bolus);
+        }
+
         // Process boluses (all Bolus records are bolus insulin)
         foreach (var bolus in bolusList)
         {
             if (bolus.Insulin <= 0 || bolus.Mills <= 0)
                 continue;
 
-            var dateKey = MillsToLocalDateString(bolus.Mills, tz);
-            if (!dailyData.ContainsKey(dateKey))
-                dailyData[dateKey] = (0, 0);
-
-            var (currentBasal, currentBolus) = dailyData[dateKey];
-            dailyData[dateKey] = (currentBasal, currentBolus + bolus.Insulin);
+            Accumulate(bolus.Mills, 0, bolus.Insulin);
         }
 
         // Process TempBasals — clip overlapping records (loop systems write every ~5 min with longer declared duration)
@@ -2104,12 +2093,7 @@ public class StatisticsService : IStatisticsService
             if (basalInsulin <= 0)
                 continue;
 
-            var dateKey = MillsToLocalDateString(tb.StartMills, tz);
-            if (!dailyData.ContainsKey(dateKey))
-                dailyData[dateKey] = (0, 0);
-
-            var (currentBasal, currentBolus) = dailyData[dateKey];
-            dailyData[dateKey] = (currentBasal + basalInsulin, currentBolus);
+            Accumulate(tb.StartMills, basalInsulin, 0);
         }
 
         // Process algorithm boluses (basal side)
@@ -2118,12 +2102,7 @@ public class StatisticsService : IStatisticsService
             if (ab.Insulin <= 0 || ab.Mills <= 0)
                 continue;
 
-            var dateKey = MillsToLocalDateString(ab.Mills, tz);
-            if (!dailyData.ContainsKey(dateKey))
-                dailyData[dateKey] = (0, 0);
-
-            var (currentBasal, currentBolus) = dailyData[dateKey];
-            dailyData[dateKey] = (currentBasal + ab.Insulin, currentBolus);
+            Accumulate(ab.Mills, ab.Insulin, 0);
         }
 
         // Process basal injections (MDI long-acting insulin — treated as basal)
@@ -2134,12 +2113,7 @@ public class StatisticsService : IStatisticsService
                 if (bi.Units <= 0)
                     continue;
 
-                var dateKey = MillsToLocalDateString(bi.Mills, tz);
-                if (!dailyData.ContainsKey(dateKey))
-                    dailyData[dateKey] = (0, 0);
-
-                var (currentBasal, currentBolus) = dailyData[dateKey];
-                dailyData[dateKey] = (currentBasal + bi.Units, currentBolus);
+                Accumulate(bi.Mills, bi.Units, 0);
             }
         }
 
@@ -2514,54 +2488,6 @@ public class StatisticsService : IStatisticsService
     #endregion
 
     #region Formatting Utilities
-
-    /// <summary>
-    /// Format insulin values for display with appropriate precision
-    /// Uses "shifted" display format where values like 0.05 display as ".05"
-    /// </summary>
-    /// <param name="value">Insulin value</param>
-    /// <returns>Formatted insulin string</returns>
-    public string FormatInsulinDisplay(double value)
-    {
-        if (value == 0)
-        {
-            return "0";
-        }
-
-        var formattedValue = value.ToString("F2");
-
-        // Apply shift formatting - remove leading zero for values less than 1
-        if (value < 1 && value > 0)
-        {
-            formattedValue = Regex.Replace(formattedValue, "^0", "");
-        }
-
-        return formattedValue;
-    }
-
-    /// <summary>
-    /// Format carb values for display with appropriate precision
-    /// Uses "shifted" display format where values like 0.5 display as ".5"
-    /// </summary>
-    /// <param name="value">Carb value</param>
-    /// <returns>Formatted carb string</returns>
-    public string FormatCarbDisplay(double value)
-    {
-        if (value == 0)
-        {
-            return "0";
-        }
-
-        var formattedValue = value.ToString("F1");
-
-        // Apply shift formatting - remove leading zero for values less than 1
-        if (value < 1 && value > 0)
-        {
-            formattedValue = Regex.Replace(formattedValue, "^0", "");
-        }
-
-        return formattedValue;
-    }
 
     /// <summary>
     /// Format percentage values for display
@@ -2997,11 +2923,6 @@ public class StatisticsService : IStatisticsService
         result.HasSufficientData =
             dataPoints.Count >= 10 && beforeValues.Count >= 50 && afterValues.Count >= 50;
 
-        if (!result.HasSufficientData)
-        {
-            // Insufficient data flag already set
-        }
-
         // Calculate summary statistics
         if (beforeValues.Count > 0 && afterValues.Count > 0)
         {
@@ -3015,11 +2936,15 @@ public class StatisticsService : IStatisticsService
                 (double)afterValues.Count(v => v >= GlucoseConstants.TargetBottomMgdl && v <= GlucoseConstants.TargetTopMgdl) / afterValues.Count * 100;
 
             // Calculate CV (coefficient of variation)
-            var stdDevBefore = Math.Sqrt(
-                beforeValues.Sum(v => Math.Pow(v - avgBefore, 2)) / beforeValues.Count
+            var stdDevBefore = GlucoseStatistics.StandardDeviation(
+                beforeValues,
+                avgBefore,
+                VarianceMode.Population
             );
-            var stdDevAfter = Math.Sqrt(
-                afterValues.Sum(v => Math.Pow(v - avgAfter, 2)) / afterValues.Count
+            var stdDevAfter = GlucoseStatistics.StandardDeviation(
+                afterValues,
+                avgAfter,
+                VarianceMode.Population
             );
             var cvBefore = avgBefore > 0 ? (stdDevBefore / avgBefore) * 100 : 0;
             var cvAfter = avgAfter > 0 ? (stdDevAfter / avgAfter) * 100 : 0;
