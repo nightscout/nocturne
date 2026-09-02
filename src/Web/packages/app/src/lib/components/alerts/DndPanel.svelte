@@ -9,6 +9,7 @@
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
   import { describeSubmitError } from "$lib/forms";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 

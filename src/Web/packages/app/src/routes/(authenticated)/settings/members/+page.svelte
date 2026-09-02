@@ -42,7 +42,6 @@
   import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
   import RolesSection from "$lib/components/members/RolesSection.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
