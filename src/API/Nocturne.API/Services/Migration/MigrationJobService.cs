@@ -727,15 +727,15 @@ internal class MigrationJob
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
         // Build the list of collections to migrate
-        var allCollections = new (string name, Func<HttpClient, NocturneDbContext, CancellationToken, Task> migrate)[]
+        var allCollections = new (string name, Func<HttpClient, CancellationToken, Task> migrate)[]
         {
-            ("subjects", MigrateSubjectsViaApiAsync),
-            ("entries", MigrateEntriesViaApiAsync),
-            ("treatments", MigrateTreatmentsViaApiAsync),
-            ("devicestatus", MigrateDeviceStatusViaApiAsync),
+            ("subjects", (client, token) => MigrateSubjectsViaApiAsync(client, dbContext, token)),
+            ("entries", (client, token) => MigratePagedCollectionAsync(client, s_entriesCollection, token)),
+            ("treatments", (client, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, token)),
+            ("devicestatus", (client, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, token)),
             ("profile", MigrateProfilesViaApiAsync),
-            ("food", MigrateFoodViaApiAsync),
-            ("activity", MigrateActivityViaApiAsync),
+            ("food", (client, token) => MigrateFoodViaApiAsync(client, dbContext, token)),
+            ("activity", (client, token) => MigratePagedCollectionAsync(client, s_activityCollection, token)),
         };
 
         var collectionsToMigrate = allCollections
@@ -760,9 +760,9 @@ internal class MigrationJob
             _totalDocumentsAllCollections += count;
         }
 
-        foreach (var (name, migrate) in collectionsToMigrate)
+        foreach (var (_, migrate) in collectionsToMigrate)
         {
-            await migrate(httpClient, dbContext, ct);
+            await migrate(httpClient, ct);
         }
     }
 
@@ -842,231 +842,160 @@ internal class MigrationJob
     /// </summary>
     private static DateTime FirstPageAnchor => DateTime.UtcNow;
 
-    private async Task MigrateEntriesViaApiAsync(
+    /// <summary>
+    ///     Page size for every legacy-API pull. The merged v1 reads (devicestatus, activity) clamp
+    ///     to <see cref="LegacyReadLimits.MaxMergedCount"/>, and the loops terminate on a short
+    ///     page, so a larger value here would silently end those pulls after one page.
+    /// </summary>
+    private const int ApiPageSize = LegacyReadLimits.MaxMergedCount;
+
+    /// <summary>
+    ///     How a paged pull bounds and advances its time cursor: <paramref name="Filter"/> is the
+    ///     query-string fragment restricting a page to records at or before the cursor, and
+    ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
+    ///     page carries no usable timestamp to page back from.
+    /// </summary>
+    private sealed record PageCursor(
+        Func<DateTime, string> Filter,
+        Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Oldest
+    );
+
+    /// <summary>Entries page on the numeric <c>date</c> field, which mirrors mills exactly.</summary>
+    private static readonly PageCursor s_dateCursor = new(
+        to => $"&find[date][$lte]={new DateTimeOffset(to, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
+        page =>
+        {
+            var oldestMs = page.Min(d => d.Mills);
+            return oldestMs <= 0
+                ? null
+                : DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime;
+        });
+
+    /// <summary>Every other collection pages on the ISO-8601 <c>created_at</c> string.</summary>
+    private static readonly PageCursor s_createdAtCursor = new(
+        to => $"&find[created_at][$lte]={to.ToUniversalTime():o}",
+        page => page
+            .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
+            .Where(dt => dt.HasValue)
+            .Min());
+
+    /// <summary>
+    ///     A legacy collection pulled page by page over a time cursor. <paramref name="Name"/> is
+    ///     both the v1 route segment and the progress key; <paramref name="Label"/> names the
+    ///     records in operation and log text; <paramref name="Decompose"/> resolves the
+    ///     collection's decomposer from the migration's tenant scope once per pull.
+    /// </summary>
+    private sealed record PagedCollection<T>(
+        string Name,
+        string Label,
+        PageCursor Cursor,
+        Func<IServiceProvider, Func<T[], CancellationToken, Task>> Decompose
+    ) where T : ProcessableDocumentBase;
+
+    private static readonly PagedCollection<Entry> s_entriesCollection = new(
+        "entries", "entries", s_dateCursor,
+        sp =>
+        {
+            var decomposer = sp.GetRequiredService<IEntryDecomposer>();
+            return (page, ct) => decomposer.DecomposeBatchAsync(page, WriteOrigin.Backfill, ct);
+        });
+
+    private static readonly PagedCollection<Treatment> s_treatmentsCollection = new(
+        "treatments", "treatments", s_createdAtCursor,
+        sp =>
+        {
+            var decomposer = sp.GetRequiredService<ITreatmentDecomposer>();
+            return (page, ct) => decomposer.DecomposeBatchAsync(page, WriteOrigin.Backfill, ct);
+        });
+
+    private static readonly PagedCollection<DeviceStatus> s_deviceStatusCollection = new(
+        "devicestatus", "device statuses", s_createdAtCursor,
+        sp =>
+        {
+            var decomposer = sp.GetRequiredService<IDeviceStatusDecomposer>();
+            return (page, ct) => decomposer.DecomposeBatchAsync(page, source: null, WriteOrigin.Backfill, ct);
+        });
+
+    private static readonly PagedCollection<Activity> s_activityCollection = new(
+        "activity", "activities", s_createdAtCursor,
+        sp =>
+        {
+            var decomposer = sp.GetRequiredService<IActivityDecomposer>();
+            return (page, ct) => decomposer.DecomposeBatchAsync(page, WriteOrigin.Backfill, ct);
+        });
+
+    private async Task MigratePagedCollectionAsync<T>(
         HttpClient httpClient,
-        NocturneDbContext dbContext,
+        PagedCollection<T> collection,
         CancellationToken ct
-    )
+    ) where T : ProcessableDocumentBase
     {
-        _currentOperation = "Migrating entries";
-        const string collectionName = "entries";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+        _currentOperation = $"Migrating {collection.Label}";
+        var knownTotal = _collectionProgress.TryGetValue(collection.Name, out var existing)
             ? existing.TotalDocuments : 0;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
         DateTime? currentTo = FirstPageAnchor;
-        const int pageSize = 10000;
 
         using var scope = CreateTenantScope();
-        var decomposer = scope.ServiceProvider.GetRequiredService<IEntryDecomposer>();
+        var decompose = collection.Decompose(scope.ServiceProvider);
 
         while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            var url = $"/api/v1/entries.json?count={pageSize}";
+            var url = $"/api/v1/{collection.Name}.json?count={ApiPageSize}";
             if (currentTo.HasValue)
-            {
-                var toMs = new DateTimeOffset(currentTo.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                url += $"&find[date][$lte]={toMs}";
-            }
+                url += collection.Cursor.Filter(currentTo.Value);
 
             var response = await httpClient.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Failed to fetch entries: {StatusCode}", response.StatusCode);
+                _logger.LogError(
+                    "Failed to fetch {Collection}: {StatusCode}", collection.Label, response.StatusCode);
                 break;
             }
 
             var content = await response.Content.ReadAsStringAsync(ct);
-            var entries = System.Text.Json.JsonSerializer.Deserialize<Entry[]>(content) ?? [];
+            var page = System.Text.Json.JsonSerializer.Deserialize<T[]>(content) ?? [];
 
-            if (entries.Length == 0) break;
+            if (page.Length == 0) break;
 
             try
             {
-                await decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, ct);
-                totalMigrated += entries.Length;
+                await decompose(page, ct);
+                totalMigrated += page.Length;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to decompose entries page");
-                totalFailed += entries.Length;
+                _logger.LogError(ex, "Failed to decompose {Collection} page", collection.Label);
+                totalFailed += page.Length;
             }
 
-            UpdateCollectionProgress(collectionName,
+            UpdateCollectionProgress(collection.Name,
                 Math.Max(knownTotal, totalMigrated + totalFailed),
                 totalMigrated, totalFailed, false);
             UpdateOverallProgress();
 
-            if (entries.Length < pageSize) break;
+            if (page.Length < ApiPageSize) break;
 
-            var oldestMs = entries.Min(e => e.Mills);
-            if (oldestMs <= 0) break;
-
-            var oldestDate = DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime;
-            if (currentTo.HasValue && oldestDate >= currentTo.Value) break;
-            currentTo = oldestDate.AddMilliseconds(-1);
-        }
-
-        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
-            totalMigrated, totalFailed, true);
-        UpdateOverallProgress();
-        _logger.LogInformation("Migrated {Count} entries via API", totalMigrated);
-    }
-
-    private async Task MigrateTreatmentsViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating treatments";
-        const string collectionName = "treatments";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
-            ? existing.TotalDocuments : 0;
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-        DateTime? currentTo = FirstPageAnchor;
-        const int pageSize = 10000;
-
-        using var scope = CreateTenantScope();
-        var decomposer = scope.ServiceProvider.GetRequiredService<ITreatmentDecomposer>();
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var url = $"/api/v1/treatments.json?count={pageSize}";
-            if (currentTo.HasValue)
-                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
-
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch treatments: {StatusCode}", response.StatusCode);
-                break;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var treatments = System.Text.Json.JsonSerializer.Deserialize<Treatment[]>(content) ?? [];
-
-            if (treatments.Length == 0) break;
-
-            try
-            {
-                await decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Backfill, ct);
-                totalMigrated += treatments.Length;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to decompose treatments page");
-                totalFailed += treatments.Length;
-            }
-
-            UpdateCollectionProgress(collectionName,
-                Math.Max(knownTotal, totalMigrated + totalFailed),
-                totalMigrated, totalFailed, false);
-            UpdateOverallProgress();
-
-            if (treatments.Length < pageSize) break;
-
-            var oldestDate = treatments
-                .Select(t => DateTimeOffset.TryParse(t.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
+            var oldestDate = collection.Cursor.Oldest(page);
 
             if (!oldestDate.HasValue) break;
             if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
             currentTo = oldestDate.Value.AddMilliseconds(-1);
         }
 
-        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+        UpdateCollectionProgress(collection.Name, Math.Max(knownTotal, totalMigrated + totalFailed),
             totalMigrated, totalFailed, true);
         UpdateOverallProgress();
-        _logger.LogInformation("Migrated {Count} treatments via API", totalMigrated);
-    }
-
-    private async Task MigrateDeviceStatusViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating device statuses";
-        const string collectionName = "devicestatus";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
-            ? existing.TotalDocuments : 0;
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-        DateTime? currentTo = FirstPageAnchor;
-        // The v1 read clamps to this, and the loop below terminates on a short page, so a larger
-        // page size here would silently end the pull after one page.
-        const int pageSize = LegacyReadLimits.MaxMergedCount;
-
-        using var scope = CreateTenantScope();
-        var decomposer = scope.ServiceProvider.GetRequiredService<IDeviceStatusDecomposer>();
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var url = $"/api/v1/devicestatus.json?count={pageSize}";
-            if (currentTo.HasValue)
-                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
-
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch device statuses: {StatusCode}", response.StatusCode);
-                break;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var statuses = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus[]>(content) ?? [];
-
-            if (statuses.Length == 0) break;
-
-            try
-            {
-                await decomposer.DecomposeBatchAsync(statuses, source: null, WriteOrigin.Backfill, ct);
-                totalMigrated += statuses.Length;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to decompose device status page");
-                totalFailed += statuses.Length;
-            }
-
-            UpdateCollectionProgress(collectionName,
-                Math.Max(knownTotal, totalMigrated + totalFailed),
-                totalMigrated, totalFailed, false);
-            UpdateOverallProgress();
-
-            if (statuses.Length < pageSize) break;
-
-            var oldestDate = statuses
-                .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
-
-            if (!oldestDate.HasValue) break;
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
-        }
-
-        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
-            totalMigrated, totalFailed, true);
-        UpdateOverallProgress();
-        _logger.LogInformation("Migrated {Count} device statuses via API", totalMigrated);
+        _logger.LogInformation(
+            "Migrated {Count} {Collection} via API", totalMigrated, collection.Label);
     }
 
     private async Task MigrateProfilesViaApiAsync(
         HttpClient httpClient,
-        NocturneDbContext dbContext,
         CancellationToken ct
     )
     {
@@ -1141,7 +1070,6 @@ internal class MigrationJob
         var totalMigrated = 0L;
         var totalFailed = 0L;
         var totalSkipped = 0;
-        const int pageSize = 10000;
 
         try
         {
@@ -1149,7 +1077,7 @@ internal class MigrationJob
             {
                 ct.ThrowIfCancellationRequested();
 
-                var url = $"/api/v1/food.json?count={pageSize}&skip={totalSkipped}";
+                var url = $"/api/v1/food.json?count={ApiPageSize}&skip={totalSkipped}";
 
                 var response = await httpClient.GetAsync(url, ct);
                 if (!response.IsSuccessStatusCode)
@@ -1212,7 +1140,7 @@ internal class MigrationJob
                     totalMigrated, totalFailed, false);
                 UpdateOverallProgress();
 
-                if (foods.Length < pageSize) break;
+                if (foods.Length < ApiPageSize) break;
             }
 
             UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
@@ -1225,81 +1153,6 @@ internal class MigrationJob
         }
 
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
-    }
-
-    private async Task MigrateActivityViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating activities";
-        const string collectionName = "activity";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
-            ? existing.TotalDocuments : 0;
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-        DateTime? currentTo = FirstPageAnchor;
-        // The v1 read clamps to this, and the loop below terminates on a short page, so a larger
-        // page size here would silently end the pull after one page.
-        const int pageSize = LegacyReadLimits.MaxMergedCount;
-
-        using var scope = CreateTenantScope();
-        var decomposer = scope.ServiceProvider.GetRequiredService<IActivityDecomposer>();
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var url = $"/api/v1/activity.json?count={pageSize}";
-            if (currentTo.HasValue)
-                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
-
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch activities: {StatusCode}", response.StatusCode);
-                break;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var activities = System.Text.Json.JsonSerializer.Deserialize<Activity[]>(content) ?? [];
-
-            if (activities.Length == 0) break;
-
-            try
-            {
-                await decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill, ct);
-                totalMigrated += activities.Length;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to decompose activity page");
-                totalFailed += activities.Length;
-            }
-
-            UpdateCollectionProgress(collectionName,
-                Math.Max(knownTotal, totalMigrated + totalFailed),
-                totalMigrated, totalFailed, false);
-            UpdateOverallProgress();
-
-            if (activities.Length < pageSize) break;
-
-            var oldestDate = activities
-                .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
-
-            if (!oldestDate.HasValue) break;
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
-        }
-
-        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
-            totalMigrated, totalFailed, true);
-        UpdateOverallProgress();
-        _logger.LogInformation("Migrated {Count} activities via API", totalMigrated);
     }
 
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
