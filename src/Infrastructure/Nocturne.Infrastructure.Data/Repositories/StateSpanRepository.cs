@@ -150,7 +150,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         // Exclude non-primary duplicates from cross-connector deduplication
         query = query.Where(s => !_context.LinkedRecords
-            .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id));
+            .Any(lr => lr.RecordType == RecordTypeKeys.StateSpan && !lr.IsPrimary && lr.RecordId == s.Id));
 
         return query;
     }
@@ -412,7 +412,7 @@ public class StateSpanRepository : IStateSpanRepository
         var latest = await _context.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
             .Where(s => !_context.LinkedRecords
-                .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id))
+                .Any(lr => lr.RecordType == RecordTypeKeys.StateSpan && !lr.IsPrimary && lr.RecordId == s.Id))
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)

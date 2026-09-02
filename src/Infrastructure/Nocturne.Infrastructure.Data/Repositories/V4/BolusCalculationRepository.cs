@@ -61,7 +61,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
     /// </summary>
     protected override IQueryable<BolusCalculationEntity> ApplyReadVisibility(IQueryable<BolusCalculationEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "boluscalculation" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.BolusCalculation && !lr.IsPrimary && lr.RecordId == b.Id));
 
     /// <summary>
     /// Gets bolus calculation records based on filter criteria.
@@ -101,7 +101,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
 
         // Exclude non-primary duplicates from cross-connector deduplication
         query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "boluscalculation" && !lr.IsPrimary && lr.RecordId == b.Id));
+            .Any(lr => lr.RecordType == RecordTypeKeys.BolusCalculation && !lr.IsPrimary && lr.RecordId == b.Id));
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

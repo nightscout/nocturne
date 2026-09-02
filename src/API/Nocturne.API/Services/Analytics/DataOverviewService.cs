@@ -547,7 +547,7 @@ public class DataOverviewService : IDataOverviewService
         RecordType recordType
     )
     {
-        var key = recordType.ToString().ToLowerInvariant();
+        var key = RecordTypeKeys.Key(recordType);
         return context
             .LinkedRecords.Where(lr => lr.RecordType == key && !lr.IsPrimary)
             .Select(lr => lr.RecordId);

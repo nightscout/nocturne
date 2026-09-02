@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -154,27 +155,6 @@ public class DeduplicationService : IDeduplicationService
     /// tenant in the process, so status and cancellation are matched against this before answering.
     /// </summary>
     private static readonly ConcurrentDictionary<Guid, Guid> _jobTenants = new();
-
-    /// <summary>
-    /// Event types that should be grouped together for deduplication.
-    /// When a Basal and Temp Basal occur at the same time, they represent
-    /// the same underlying event and should be deduplicated together.
-    /// </summary>
-    private static readonly HashSet<string> BasalRelatedTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Basal",
-        "Temp Basal"
-    };
-
-    /// <summary>
-    /// Priority order for basal-related types. Higher priority types
-    /// are preferred when merging duplicates.
-    /// </summary>
-    private static readonly Dictionary<string, int> BasalTypePriority = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "Temp Basal", 1 },  // Highest priority - most specific
-        { "Basal", 0 }       // Lower priority - generic
-    };
 
     /// <inheritdoc cref="IDeduplicationService" />
     public DeduplicationService(
@@ -373,7 +353,7 @@ public class DeduplicationService : IDeduplicationService
         if (records.Count == 0)
             return new DeduplicationBatchResult(0, 0, 0, 0);
 
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
         var wideEligible = WideMatchableTypes.Contains(recordType);
 
         // 1. Compute union time window. Wide-eligible types load the wider window so the wide
@@ -699,7 +679,7 @@ public class DeduplicationService : IDeduplicationService
         IReadOnlySet<Guid>? candidateCanonicalIds,
         CancellationToken ct)
     {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
         var wideEligible = WideMatchableTypes.Contains(recordType);
 
         // The span the candidate-bounded path actually loaded. Groups whose extent reaches within a
@@ -1353,7 +1333,7 @@ public class DeduplicationService : IDeduplicationService
         Guid recordId,
         CancellationToken cancellationToken = default)
     {
-        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+        var recordTypeStr = RecordTypeKeys.Key(recordType);
 
         var entity = await _context.LinkedRecords
             .FirstOrDefaultAsync(lr =>
@@ -1382,7 +1362,7 @@ public class DeduplicationService : IDeduplicationService
         CancellationToken cancellationToken = default)
     {
         var linkedRecords = await _context.LinkedRecords
-            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == "statespan")
+            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == RecordTypeKeys.StateSpan)
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
@@ -1406,6 +1386,91 @@ public class DeduplicationService : IDeduplicationService
         return MergeStateSpans(sortedStateSpans, canonicalId);
     }
 
+    private delegate Task<(int processed, int groups, int linked, int duplicates)> PhaseRunner(
+        DeduplicationService service,
+        int totalRecords,
+        int startOffset,
+        IProgress<DeduplicationProgress>? progress,
+        CancellationToken ct);
+
+    /// <summary>
+    /// One record type's <see cref="DeduplicateAllAsync"/> phase. <see cref="Name"/> is reported as
+    /// <see cref="DeduplicationProgress.CurrentPhase"/>, so callers observe it.
+    /// </summary>
+    private sealed record TypePhase(
+        RecordType RecordType,
+        string Name,
+        Func<NocturneDbContext, CancellationToken, Task<int>> CountAsync,
+        PhaseRunner RunAsync);
+
+    /// <summary>
+    /// Builds one <see cref="TypePhase"/>. <paramref name="timestamp"/> both orders the query and
+    /// supplies the event time, so a type whose event time is not <c>Timestamp</c> states it once.
+    /// </summary>
+    private static TypePhase Phase<TEntity>(
+        RecordType recordType,
+        string name,
+        Func<NocturneDbContext, IQueryable<TEntity>> set,
+        Expression<Func<TEntity, DateTime>> timestamp,
+        Func<TEntity, Guid> id,
+        Func<TEntity, string?> dataSource,
+        Func<TEntity, MatchCriteria> criteria) where TEntity : class
+    {
+        var eventTime = timestamp.Compile();
+
+        return new TypePhase(
+            recordType,
+            name,
+            (context, ct) => set(context).CountAsync(ct),
+            (service, totalRecords, startOffset, progress, ct) => service.DeduplicateTypeAsync(
+                recordType,
+                set(service._context).OrderBy(timestamp),
+                e => new DeduplicationInput(
+                    id(e),
+                    new DateTimeOffset(eventTime(e), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    dataSource(e) ?? DeduplicationInput.UnknownDataSource,
+                    criteria(e)),
+                name, totalRecords, startOffset, progress, ct));
+    }
+
+    /// <summary>
+    /// Every record type <see cref="DeduplicateAllAsync"/> passes over, in processing order.
+    /// MeterGlucose was previously processed via DeduplicateEntriesAsync alongside SensorGlucose,
+    /// but there is no <see cref="RecordType"/> value for it, and the old code also double-processed
+    /// SensorGlucose (once in Entries, once standalone). MeterGlucose dedup is intentionally
+    /// dropped; add a <see cref="RecordType"/> if it is needed in the future.
+    /// </summary>
+    private static readonly TypePhase[] TypePhases =
+    [
+        Phase(RecordType.SensorGlucose, "SensorGlucose",
+            static c => c.SensorGlucose, static e => e.Timestamp,
+            static e => e.Id, static e => e.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.Bolus, "Boluses",
+            static c => c.Boluses, static b => b.Timestamp,
+            static b => b.Id, static b => b.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.CarbIntake, "CarbIntakes",
+            static c => c.CarbIntakes, static c => c.Timestamp,
+            static c => c.Id, static c => c.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.BGCheck, "BGChecks",
+            static c => c.BGChecks, static bg => bg.Timestamp,
+            static bg => bg.Id, static bg => bg.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.DeviceEvent, "DeviceEvents",
+            static c => c.DeviceEvents, static d => d.Timestamp,
+            static d => d.Id, static d => d.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.Note, "Notes",
+            static c => c.Notes, static n => n.Timestamp,
+            static n => n.Id, static n => n.DataSource, static _ => MatchCriteriaMapper.ForNote()),
+        Phase(RecordType.BolusCalculation, "BolusCalculations",
+            static c => c.BolusCalculations, static bc => bc.Timestamp,
+            static bc => bc.Id, static bc => bc.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.TempBasal, "TempBasals",
+            static c => c.TempBasals, static t => t.StartTimestamp,
+            static t => t.Id, static t => t.DataSource, MatchCriteriaMapper.From),
+        Phase(RecordType.StateSpan, "StateSpans",
+            static c => c.StateSpans, static s => s.StartTimestamp,
+            static s => s.Id, static s => s.Source, MatchCriteriaMapper.From)
+    ];
+
     /// <inheritdoc />
     public async Task<DeduplicationResult> DeduplicateAllAsync(
         IProgress<DeduplicationProgress>? progress = null,
@@ -1415,161 +1480,27 @@ public class DeduplicationService : IDeduplicationService
 
         try
         {
-            var stateSpanCount = await _context.StateSpans.CountAsync(cancellationToken);
-            var sensorGlucoseCount = await _context.SensorGlucose.CountAsync(cancellationToken);
-            var bolusCount = await _context.Boluses.CountAsync(cancellationToken);
-            var carbIntakeCount = await _context.CarbIntakes.CountAsync(cancellationToken);
-            var bgCheckCount = await _context.BGChecks.CountAsync(cancellationToken);
-            var deviceEventCount = await _context.DeviceEvents.CountAsync(cancellationToken);
-            var noteCount = await _context.Notes.CountAsync(cancellationToken);
-            var bolusCalcCount = await _context.BolusCalculations.CountAsync(cancellationToken);
-            var tempBasalCount = await _context.TempBasals.CountAsync(cancellationToken);
-            // NOTE: MeterGlucose was previously processed via DeduplicateEntriesAsync alongside
-            // SensorGlucose, but there is no RecordType.MeterGlucose enum value. The old code also
-            // double-processed SensorGlucose (once in Entries, once standalone). MeterGlucose dedup
-            // is intentionally dropped; add a RecordType if it's needed in the future.
-            var totalRecords = stateSpanCount + sensorGlucoseCount + bolusCount + carbIntakeCount
-                + bgCheckCount + deviceEventCount + noteCount + bolusCalcCount + tempBasalCount;
+            var totalRecords = 0;
+            foreach (var phase in TypePhases)
+            {
+                totalRecords += await phase.CountAsync(_context, cancellationToken);
+            }
 
             var processed = 0;
             var groupsCreated = 0;
             var recordsLinked = 0;
             var duplicateGroups = 0;
+            var processedByType = new Dictionary<RecordType, int>();
 
-            // --- SensorGlucose ---
-            var sensorGlucoseResult = await DeduplicateTypeAsync(
-                RecordType.SensorGlucose,
-                _context.SensorGlucose.OrderBy(e => e.Timestamp),
-                e => new DeduplicationInput(
-                    e.Id,
-                    new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(e)),
-                "SensorGlucose", totalRecords, processed, progress, cancellationToken);
-            processed += sensorGlucoseResult.processed;
-            groupsCreated += sensorGlucoseResult.groups;
-            recordsLinked += sensorGlucoseResult.linked;
-            duplicateGroups += sensorGlucoseResult.duplicates;
-
-            // --- Boluses ---
-            var bolusResult = await DeduplicateTypeAsync(
-                RecordType.Bolus,
-                _context.Boluses.OrderBy(b => b.Timestamp),
-                b => new DeduplicationInput(
-                    b.Id,
-                    new DateTimeOffset(b.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    b.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(b)),
-                "Boluses", totalRecords, processed, progress, cancellationToken);
-            processed += bolusResult.processed;
-            groupsCreated += bolusResult.groups;
-            recordsLinked += bolusResult.linked;
-            duplicateGroups += bolusResult.duplicates;
-
-            // --- CarbIntakes ---
-            var carbIntakeResult = await DeduplicateTypeAsync(
-                RecordType.CarbIntake,
-                _context.CarbIntakes.OrderBy(c => c.Timestamp),
-                c => new DeduplicationInput(
-                    c.Id,
-                    new DateTimeOffset(c.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    c.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(c)),
-                "CarbIntakes", totalRecords, processed, progress, cancellationToken);
-            processed += carbIntakeResult.processed;
-            groupsCreated += carbIntakeResult.groups;
-            recordsLinked += carbIntakeResult.linked;
-            duplicateGroups += carbIntakeResult.duplicates;
-
-            // --- BGChecks ---
-            var bgCheckResult = await DeduplicateTypeAsync(
-                RecordType.BGCheck,
-                _context.BGChecks.OrderBy(bg => bg.Timestamp),
-                bg => new DeduplicationInput(
-                    bg.Id,
-                    new DateTimeOffset(bg.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    bg.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(bg)),
-                "BGChecks", totalRecords, processed, progress, cancellationToken);
-            processed += bgCheckResult.processed;
-            groupsCreated += bgCheckResult.groups;
-            recordsLinked += bgCheckResult.linked;
-            duplicateGroups += bgCheckResult.duplicates;
-
-            // --- DeviceEvents ---
-            var deviceEventResult = await DeduplicateTypeAsync(
-                RecordType.DeviceEvent,
-                _context.DeviceEvents.OrderBy(d => d.Timestamp),
-                d => new DeduplicationInput(
-                    d.Id,
-                    new DateTimeOffset(d.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    d.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(d)),
-                "DeviceEvents", totalRecords, processed, progress, cancellationToken);
-            processed += deviceEventResult.processed;
-            groupsCreated += deviceEventResult.groups;
-            recordsLinked += deviceEventResult.linked;
-            duplicateGroups += deviceEventResult.duplicates;
-
-            // --- Notes ---
-            var noteResult = await DeduplicateTypeAsync(
-                RecordType.Note,
-                _context.Notes.OrderBy(n => n.Timestamp),
-                n => new DeduplicationInput(
-                    n.Id,
-                    new DateTimeOffset(n.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    n.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.ForNote()),
-                "Notes", totalRecords, processed, progress, cancellationToken);
-            processed += noteResult.processed;
-            groupsCreated += noteResult.groups;
-            recordsLinked += noteResult.linked;
-            duplicateGroups += noteResult.duplicates;
-
-            // --- BolusCalculations ---
-            var bolusCalcResult = await DeduplicateTypeAsync(
-                RecordType.BolusCalculation,
-                _context.BolusCalculations.OrderBy(bc => bc.Timestamp),
-                bc => new DeduplicationInput(
-                    bc.Id,
-                    new DateTimeOffset(bc.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    bc.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(bc)),
-                "BolusCalculations", totalRecords, processed, progress, cancellationToken);
-            processed += bolusCalcResult.processed;
-            groupsCreated += bolusCalcResult.groups;
-            recordsLinked += bolusCalcResult.linked;
-            duplicateGroups += bolusCalcResult.duplicates;
-
-            // --- TempBasals ---
-            var tempBasalResult = await DeduplicateTypeAsync(
-                RecordType.TempBasal,
-                _context.TempBasals.OrderBy(t => t.StartTimestamp),
-                t => new DeduplicationInput(
-                    t.Id,
-                    new DateTimeOffset(t.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    t.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(t)),
-                "TempBasals", totalRecords, processed, progress, cancellationToken);
-            processed += tempBasalResult.processed;
-            groupsCreated += tempBasalResult.groups;
-            recordsLinked += tempBasalResult.linked;
-            duplicateGroups += tempBasalResult.duplicates;
-
-            // --- StateSpans ---
-            var stateSpanResult = await DeduplicateTypeAsync(
-                RecordType.StateSpan,
-                _context.StateSpans.OrderBy(s => s.StartTimestamp),
-                s => new DeduplicationInput(
-                    s.Id,
-                    new DateTimeOffset(s.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    s.Source ?? DeduplicationInput.UnknownDataSource,
-                    MatchCriteriaMapper.From(s)),
-                "StateSpans", totalRecords, processed, progress, cancellationToken);
-            processed += stateSpanResult.processed;
-            groupsCreated += stateSpanResult.groups;
-            recordsLinked += stateSpanResult.linked;
-            duplicateGroups += stateSpanResult.duplicates;
+            foreach (var phase in TypePhases)
+            {
+                var result = await phase.RunAsync(this, totalRecords, processed, progress, cancellationToken);
+                processedByType[phase.RecordType] = result.processed;
+                processed += result.processed;
+                groupsCreated += result.groups;
+                recordsLinked += result.linked;
+                duplicateGroups += result.duplicates;
+            }
 
             stopwatch.Stop();
 
@@ -1584,17 +1515,15 @@ public class DeduplicationService : IDeduplicationService
                 RecordsLinked = recordsLinked,
                 DuplicateGroupsFound = duplicateGroups,
                 Duration = stopwatch.Elapsed,
-                EntriesProcessed = sensorGlucoseResult.processed,
-                TreatmentsProcessed = 0,
-                StateSpansProcessed = stateSpanResult.processed,
-                SensorGlucoseProcessed = sensorGlucoseResult.processed,
-                BolusesProcessed = bolusResult.processed,
-                CarbIntakesProcessed = carbIntakeResult.processed,
-                BGChecksProcessed = bgCheckResult.processed,
-                DeviceEventsProcessed = deviceEventResult.processed,
-                NotesProcessed = noteResult.processed,
-                BolusCalculationsProcessed = bolusCalcResult.processed,
-                TempBasalsProcessed = tempBasalResult.processed,
+                StateSpansProcessed = processedByType[RecordType.StateSpan],
+                SensorGlucoseProcessed = processedByType[RecordType.SensorGlucose],
+                BolusesProcessed = processedByType[RecordType.Bolus],
+                CarbIntakesProcessed = processedByType[RecordType.CarbIntake],
+                BGChecksProcessed = processedByType[RecordType.BGCheck],
+                DeviceEventsProcessed = processedByType[RecordType.DeviceEvent],
+                NotesProcessed = processedByType[RecordType.Note],
+                BolusCalculationsProcessed = processedByType[RecordType.BolusCalculation],
+                TempBasalsProcessed = processedByType[RecordType.TempBasal],
                 Success = true
             };
         }
@@ -1801,82 +1730,6 @@ public class DeduplicationService : IDeduplicationService
         return (totalProcessed, totalGroups, totalLinked, totalDuplicates);
     }
 
-    private static Treatment MergeTreatments(List<Treatment> treatments, Guid canonicalId)
-    {
-        if (treatments.Count == 0)
-            throw new ArgumentException("Cannot merge empty list of treatments");
-
-        // For basal-related treatments, prefer the highest priority type (e.g., Temp Basal over Basal)
-        var primary = treatments[0];
-        var preferredEventType = GetPreferredEventType(treatments);
-
-        // When the preferred event type differs from the primary (e.g., Temp Basal preferred but
-        // Basal is first by timestamp), use basal-related fields from the preferred-type treatment
-        // so Duration/Percent/Rate come from the correct source.
-        var basalSource = primary;
-        if (preferredEventType != null && preferredEventType != primary.EventType)
-        {
-            basalSource = treatments.FirstOrDefault(t => t.EventType == preferredEventType) ?? primary;
-        }
-
-        var merged = new Treatment
-        {
-            Id = primary.Id,
-            Mills = primary.Mills,
-            Created_at = primary.Created_at,
-            EventType = preferredEventType,
-            Insulin = primary.Insulin,
-            Carbs = primary.Carbs,
-            Protein = primary.Protein,
-            Fat = primary.Fat,
-            Duration = basalSource.Duration,
-            EnteredBy = primary.EnteredBy,
-            Notes = primary.Notes,
-            Reason = primary.Reason,
-            Glucose = primary.Glucose,
-            GlucoseType = primary.GlucoseType,
-            Profile = primary.Profile,
-            Percent = basalSource.Percent,
-            Rate = basalSource.Rate,
-            DataSource = primary.DataSource,
-            AdditionalProperties = primary.AdditionalProperties != null
-                ? new Dictionary<string, object>(primary.AdditionalProperties)
-                : new(),
-            CanonicalId = canonicalId,
-            Sources = treatments.Select(t => t.DataSource).Where(s => s != null).Distinct().ToArray()!
-        };
-
-        // Enrich with data from other sources
-        foreach (var treatment in treatments.Skip(1))
-        {
-            merged.Notes ??= treatment.Notes;
-            merged.Reason ??= treatment.Reason;
-            merged.Glucose ??= treatment.Glucose;
-            merged.GlucoseType ??= treatment.GlucoseType;
-            merged.Profile ??= treatment.Profile;
-            merged.Protein ??= treatment.Protein;
-            merged.Fat ??= treatment.Fat;
-
-            // Enrich basal-related fields
-            merged.Duration ??= treatment.Duration;
-            merged.Percent ??= treatment.Percent;
-            merged.Rate ??= treatment.Rate;
-            merged.Carbs ??= treatment.Carbs;
-            merged.Insulin ??= treatment.Insulin;
-
-            // Merge additional properties
-            if (treatment.AdditionalProperties != null)
-            {
-                foreach (var kvp in treatment.AdditionalProperties)
-                {
-                    merged.AdditionalProperties.TryAdd(kvp.Key, kvp.Value);
-                }
-            }
-        }
-
-        return merged;
-    }
-
     private static StateSpan MergeStateSpans(List<StateSpan> stateSpans, Guid canonicalId)
     {
         if (stateSpans.Count == 0)
@@ -1919,49 +1772,6 @@ public class DeduplicationService : IDeduplicationService
         }
 
         return merged;
-    }
-
-    /// <summary>
-    /// Gets the priority for a basal-related type.
-    /// Higher values indicate higher priority (preferred when deduplicating).
-    /// </summary>
-    private static int GetBasalTypePriority(string? eventType)
-    {
-        if (string.IsNullOrEmpty(eventType))
-            return -1;
-
-        return BasalTypePriority.TryGetValue(eventType, out var priority) ? priority : -1;
-    }
-
-    /// <summary>
-    /// Gets the preferred event type when merging treatments.
-    /// For basal-related types, returns the highest priority type among all treatments.
-    /// For other types, returns the primary treatment's event type.
-    /// </summary>
-    private static string? GetPreferredEventType(List<Treatment> treatments)
-    {
-        if (treatments.Count == 0)
-            return null;
-
-        var primary = treatments[0];
-
-        // Check if any treatment is a basal-related type
-        var basalTypes = treatments
-            .Where(t => !string.IsNullOrEmpty(t.EventType) && BasalRelatedTypes.Contains(t.EventType))
-            .Select(t => t.EventType!)
-            .Distinct()
-            .ToList();
-
-        if (basalTypes.Count == 0)
-        {
-            // No basal-related types, use primary's event type
-            return primary.EventType;
-        }
-
-        // Return the highest priority basal type
-        return basalTypes
-            .OrderByDescending(GetBasalTypePriority)
-            .First();
     }
 
     /// <summary>

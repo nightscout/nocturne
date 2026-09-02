@@ -59,7 +59,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
     /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
     /// </summary>
     protected override IQueryable<DeviceEventEntity> ApplyReadVisibility(IQueryable<DeviceEventEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "deviceevent" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.DeviceEvent && !lr.IsPrimary && lr.RecordId == b.Id));
 
     /// <summary>
     /// Routes the base 7-arg form through the extended device-event query (non-primary LinkedRecords
@@ -116,7 +116,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
 
         // Exclude non-primary duplicates from cross-connector deduplication
         query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "deviceevent" && !lr.IsPrimary && lr.RecordId == b.Id));
+            .Any(lr => lr.RecordType == RecordTypeKeys.DeviceEvent && !lr.IsPrimary && lr.RecordId == b.Id));
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
