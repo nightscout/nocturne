@@ -51,7 +51,7 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
         [FromBody] UpsertUploaderSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Uploader snapshot", "snapshot", "snapshots") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Uploader snapshot", "snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();

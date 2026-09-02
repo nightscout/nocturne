@@ -162,7 +162,7 @@ public class BasalInjectionController(
         [FromBody] CreateBasalInjectionRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Basal injection", "injection", "injections") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Basal injection", "injection", "injections", ct) is { } invalid)
             return invalid;
 
         var models = new List<BasalInjection>(requests.Length);

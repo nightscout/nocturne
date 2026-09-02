@@ -178,7 +178,7 @@ public class SensorGlucoseController(
         [FromBody] UpsertSensorGlucoseRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Sensor glucose", "reading", "readings") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Sensor glucose", "reading", "readings", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();

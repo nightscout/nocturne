@@ -100,7 +100,7 @@ public class TempBasalController(
         [FromBody] CreateTempBasalRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Temp basal", "temp basal", "temp basals") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Temp basal", "temp basal", "temp basals", ct) is { } invalid)
             return invalid;
 
         if (requests.Any(r => !r.IsCancel && (r.Rate < 0 || r.DurationMinutes < 0)))

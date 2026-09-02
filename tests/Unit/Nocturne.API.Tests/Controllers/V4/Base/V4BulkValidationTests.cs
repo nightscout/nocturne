@@ -1,6 +1,9 @@
 using FluentAssertions;
+using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Devices;
@@ -9,6 +12,7 @@ using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
@@ -199,7 +203,100 @@ public class V4BulkValidationTests
             Times.Never);
     }
 
+    // ── The per-item validators auto-validation cannot reach ────────
+
+    [Fact]
+    public async Task SensorGlucoseBulk_RejectsAReadingOutsideTheMgdlRange()
+    {
+        var repo = new Mock<ISensorGlucoseRepository>();
+
+        var result = await WithValidators(SensorGlucose(repo)).CreateSensorGlucoseBulk(
+            [new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = -1 }]);
+
+        Rejected(result.Result, "Sensor glucose at index 0 is invalid: Mgdl: Mgdl must be between 0 and 10000");
+        repo.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<Core.Models.V4.SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseBulk_NamesTheIndexOfTheOffendingReading()
+    {
+        var result = await WithValidators(SensorGlucose()).CreateSensorGlucoseBulk(
+        [
+            new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = 120 },
+            new UpsertSensorGlucoseRequest { Timestamp = T0.AddMinutes(5), Mgdl = 115 },
+            new UpsertSensorGlucoseRequest { Timestamp = T0.AddMinutes(10), Mgdl = 1_000_000 },
+        ]);
+
+        Rejected(result.Result, "Sensor glucose at index 2 is invalid: Mgdl: Mgdl must be between 0 and 10000");
+    }
+
+    [Fact]
+    public async Task SensorGlucoseBulk_AcceptsReadingsEveryRulePasses()
+    {
+        var repo = new Mock<ISensorGlucoseRepository>();
+        repo.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<Core.Models.V4.SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Core.Models.V4.SensorGlucose> models, WriteOrigin _, CancellationToken _) => [.. models]);
+
+        var result = await WithValidators(SensorGlucose(repo)).CreateSensorGlucoseBulk(
+        [
+            new UpsertSensorGlucoseRequest
+            {
+                Timestamp = T0,
+                Mgdl = 120,
+                Direction = GlucoseDirection.Flat,
+                Device = "dexcom-g7",
+                App = "xdrip",
+                DataSource = "xdrip",
+                GlucoseProcessing = "Smoothed",
+            },
+            new UpsertSensorGlucoseRequest { Timestamp = T0.AddMinutes(5), Mgdl = 0 },
+        ]);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(201);
+    }
+
+    [Fact]
+    public async Task ApsSnapshotBulk_HasNoValidator_SoNothingNewRejectsIt()
+    {
+        Validators.GetService<IValidator<UpsertApsSnapshotRequest>>().Should().BeNull();
+        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
+
+        var result = await WithValidators(ApsController()).CreateApsSnapshots(Snapshots(3));
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(201);
+    }
+
     // ── Controllers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// The validators as <c>Program</c> registers them: scanned off the API assembly, so a request
+    /// type nobody wrote a validator for resolves to nothing here too. MVC comes with them because
+    /// a request-services-bearing controller resolves its <see cref="ProblemDetailsFactory"/> from
+    /// there rather than falling back to the built-in one.
+    /// </summary>
+    private static readonly IServiceProvider Validators = BuildValidatorProvider();
+
+    private static IServiceProvider BuildValidatorProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddMvcCore();
+        services.AddValidatorsFromAssemblyContaining<UpsertSensorGlucoseRequestValidator>();
+        return services.BuildServiceProvider();
+    }
+
+    private static TController WithValidators<TController>(TController controller)
+        where TController : ControllerBase
+    {
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { RequestServices = Validators },
+        };
+        return controller;
+    }
 
     private static TRequest[] Fill<TRequest>(int count, Func<TRequest> item) =>
         [.. Enumerable.Range(0, count).Select(_ => item())];

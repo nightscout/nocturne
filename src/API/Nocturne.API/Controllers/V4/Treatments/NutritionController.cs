@@ -154,7 +154,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateCarbIntakeRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Carb intake", "intake", "intakes") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Carb intake", "intake", "intakes", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();

@@ -181,7 +181,7 @@ public class BolusController(
         [FromBody] CreateBolusRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "Bolus", "bolus", "boluses") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "Bolus", "bolus", "boluses", ct) is { } invalid)
             return invalid;
 
         var models = new List<Bolus>(requests.Length);

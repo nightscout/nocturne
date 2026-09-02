@@ -51,7 +51,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo)
         [FromBody] UpsertApsSnapshotRequest[] requests,
         CancellationToken ct = default)
     {
-        if (this.ValidateBulk(requests, "APS snapshot", "snapshot", "snapshots") is { } invalid)
+        if (await this.ValidateBulkAsync(requests, "APS snapshot", "snapshot", "snapshots", ct) is { } invalid)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();

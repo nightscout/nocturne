@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// event time, and the (<see cref="DataSource"/>, <see cref="SyncIdentifier"/>) pair the upsert
 /// keys on.
 /// </summary>
-/// <seealso cref="Controllers.V4.Base.V4BulkValidation.ValidateBulk{TRequest}"/>
+/// <seealso cref="Controllers.V4.Base.V4BulkValidation.ValidateBulkAsync{TRequest}"/>
 public interface IBulkUpsertRequest
 {
     /// <summary>When the event this record describes happened.</summary>
