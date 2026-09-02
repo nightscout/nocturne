@@ -372,6 +372,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         ConfigureEntities(modelBuilder);
 
+        ConfigureCurrentTimestampDefaults(modelBuilder);
+
         // The TOTP shared secret is a permanent second factor, so the column holds a Data
         // Protection payload rather than the seed. Configured here rather than in the static
         // ConfigureEntities because the converter closes over a runtime-resolved protector.
@@ -524,6 +526,97 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(TempBasalEntity),
         .. V4SnapshotEntities,
     ];
+
+    /// <summary>
+    /// The timestamp columns whose database default is <c>CURRENT_TIMESTAMP</c>, grouped by the
+    /// column the default lands on. Listed rather than discovered from the
+    /// <see cref="ISystemCreated"/>, <see cref="ISystemTimestamped"/>, <see cref="IEntityCreated"/>
+    /// and <see cref="IEntityTimestamped"/> markers <see cref="UpdateTimestamps"/> switches on,
+    /// which neither imply the default nor are implied by it: the record, snapshot and schedule
+    /// tables declare the sys_* markers with no default behind them, while the alert, audit and
+    /// tenant-config tables carry the default without declaring a marker at all. The three
+    /// off-convention column names each govern a single table. <see cref="TenantRoleEntity"/> and
+    /// <see cref="TenantMemberRoleEntity"/> are absent because their defaults are spelled
+    /// <c>now()</c>. Adding a table here is a migration.
+    /// </summary>
+    internal static readonly (string Property, Type[] Entities)[] CurrentTimestampDefaults =
+    [
+        (nameof(IEntityCreated.CreatedAt),
+        [
+            typeof(AlertCustomSoundEntity),
+            typeof(AlertDeliveryEntity),
+            typeof(AlertInviteEntity),
+            typeof(AlertRuleChannelEntity),
+            typeof(AlertRuleEntity),
+            typeof(AuthAuditLogEntity),
+            typeof(ClientDeviceEntity),
+            typeof(ClockFaceEntity),
+            typeof(DndWindowEntity),
+            typeof(InAppNotificationEntity),
+            typeof(MutationAuditLogEntity),
+            typeof(OAuthAuthorizationCodeEntity),
+            typeof(OAuthClientEntity),
+            typeof(OAuthDeviceCodeEntity),
+            typeof(OAuthGrantEntity),
+            typeof(OidcProviderEntity),
+            typeof(ReadAccessLogEntity),
+            typeof(RefreshTokenEntity),
+            typeof(RoleEntity),
+            typeof(SubjectAvatarEntity),
+            typeof(SubjectEntity),
+            typeof(TenantAlertSettingsEntity),
+            typeof(TenantDataRetentionConfigEntity),
+        ]),
+        (nameof(IEntityTimestamped.UpdatedAt),
+        [
+            typeof(AlertRuleEntity),
+            typeof(AlertTrackerStateEntity),
+            typeof(ClientDeviceEntity),
+            typeof(ClockFaceEntity),
+            typeof(OAuthClientEntity),
+            typeof(OidcProviderEntity),
+            typeof(RefreshTokenEntity),
+            typeof(RoleEntity),
+            typeof(SubjectEntity),
+            typeof(TenantAlertSettingsEntity),
+            typeof(TenantDataRetentionConfigEntity),
+        ]),
+        (nameof(ISystemCreated.SysCreatedAt),
+        [
+            typeof(ClockFaceEntity),
+            typeof(LinkedRecordEntity),
+            typeof(TenantAuditConfigEntity),
+            typeof(UserFoodFavoriteEntity),
+        ]),
+        (nameof(ISystemTimestamped.SysUpdatedAt),
+        [
+            typeof(ClockFaceEntity),
+            typeof(ConnectorFoodEntryEntity),
+            typeof(FoodEntity),
+            typeof(HeartRateEntity),
+            typeof(SettingsEntity),
+            typeof(StepCountEntity),
+            typeof(TenantAuditConfigEntity),
+            typeof(TreatmentFoodEntity),
+        ]),
+        (nameof(SubjectRoleEntity.AssignedAt), [typeof(SubjectRoleEntity)]),
+        (nameof(OAuthRefreshTokenEntity.IssuedAt), [typeof(OAuthRefreshTokenEntity)]),
+        (nameof(ClientDeviceEntity.LastSeenAt), [typeof(ClientDeviceEntity)]),
+    ];
+
+    /// <summary>
+    /// Applies <see cref="CurrentTimestampDefaults"/>.
+    /// </summary>
+    private static void ConfigureCurrentTimestampDefaults(ModelBuilder modelBuilder)
+    {
+        foreach (var (property, entities) in CurrentTimestampDefaults)
+        {
+            foreach (var entity in entities.Select(t => modelBuilder.Entity(t)))
+            {
+                entity.Property(property).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            }
+        }
+    }
 
     /// <summary>
     /// The index shapes the record tables share, where only the table-name stem differs.
@@ -1815,49 +1908,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder
-            .Entity<FoodEntity>()
-            .Property(f => f.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
             .Property(e => e.Status)
             .HasConversion<string>();
 
         modelBuilder
             .Entity<ConnectorFoodEntryEntity>()
-            .Property(e => e.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<ConnectorFoodEntryEntity>()
             .Property(e => e.Status)
             .HasDefaultValue(ConnectorFoodEntryStatus.Pending);
-
-        modelBuilder
-            .Entity<TreatmentFoodEntity>()
-            .Property(tf => tf.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<UserFoodFavoriteEntity>()
-            .Property(f => f.SysCreatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<SettingsEntity>()
-            .Property(s => s.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<StepCountEntity>()
-            .Property(s => s.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-        modelBuilder
-            .Entity<HeartRateEntity>()
-            .Property(h => h.SysUpdatedAt)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         modelBuilder.Entity<FoodEntity>().Property(f => f.Type).HasDefaultValue("food");
 
@@ -1904,9 +1962,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<RefreshTokenEntity>(entity =>
         {
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity
                 .HasOne(e => e.Subject)
                 .WithMany(s => s.RefreshTokens)
@@ -1917,8 +1972,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<SubjectEntity>(entity =>
         {
             entity.Property(e => e.IsActive).HasDefaultValue(true);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Per-user display preferences stored as a JSONB blob (semantic comparison is
             // applied by the relational jsonb-string value-comparer configured above).
@@ -1928,7 +1981,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<SubjectAvatarEntity>(entity =>
         {
             entity.ToTable("subject_avatars");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.SubjectId).IsUnique().HasDatabaseName("ix_subject_avatars_subject_id");
             entity.HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -1936,15 +1988,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RoleEntity>(entity =>
         {
             entity.Property(e => e.IsSystemRole).HasDefaultValue(false);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<SubjectRoleEntity>(entity =>
         {
             entity.HasKey(e => new { e.SubjectId, e.RoleId });
-
-            entity.Property(e => e.AssignedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
                 .HasOne(e => e.Subject)
@@ -1970,14 +2018,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.ClaimMappingsJson).HasDefaultValue("{}");
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.DisplayOrder).HasDefaultValue(0);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<AuthAuditLogEntity>(entity =>
         {
             entity.Property(e => e.Success).HasDefaultValue(true);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
                 .HasOne(e => e.Subject)
@@ -2000,8 +2045,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<MutationAuditLogEntity>(entity =>
         {
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity.HasIndex(e => new { e.TenantId, e.EntityType, e.EntityId })
                 .HasDatabaseName("ix_mutation_audit_log_entity");
 
@@ -2018,8 +2061,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<ReadAccessLogEntity>(entity =>
         {
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_subject");
 
@@ -2037,8 +2078,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantAuditConfigEntity>(entity =>
         {
             entity.Property(e => e.ReadAuditEnabled).HasDefaultValue(false);
-            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.SysUpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasIndex(e => e.TenantId)
                 .IsUnique()
@@ -2047,9 +2086,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<TenantDataRetentionConfigEntity>(entity =>
         {
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity.HasIndex(e => e.TenantId)
                 .IsUnique()
                 .HasDatabaseName("ix_tenant_data_retention_config_tenant_id");
@@ -2058,7 +2094,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<LinkedRecordEntity>(entity =>
         {
             entity.Property(e => e.IsPrimary).HasDefaultValue(false);
-            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         // One row per tenant, keyed on the tenant id rather than an Id of its own.
@@ -2070,7 +2105,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<InAppNotificationEntity>(entity =>
         {
             entity.Property(e => e.IsArchived).HasDefaultValue(false);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.Property(e => e.Category).HasConversion<string>();
             entity.Property(e => e.Urgency).HasConversion<string>();
@@ -2081,14 +2115,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.Property(e => e.RedirectUris).HasDefaultValue("[]");
             entity.Property(e => e.IsKnown).HasDefaultValue(false);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<OAuthGrantEntity>(entity =>
         {
             entity.Property(e => e.GrantType).HasDefaultValue(OAuthGrantTypes.App);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
                 .HasOne(e => e.Client)
@@ -2114,8 +2145,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<OAuthRefreshTokenEntity>(entity =>
         {
-            entity.Property(e => e.IssuedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity
                 .HasOne<TenantEntity>()
                 .WithMany()
@@ -2138,7 +2167,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<OAuthDeviceCodeEntity>(entity =>
         {
             entity.Property(e => e.Interval).HasDefaultValue(5);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity
                 .HasOne(e => e.Grant)
@@ -2149,8 +2177,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<OAuthAuthorizationCodeEntity>(entity =>
         {
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
             entity
                 .HasOne(e => e.Client)
                 .WithMany()
@@ -2189,10 +2215,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<ClockFaceEntity>(entity =>
         {
             entity.Property(e => e.ConfigJson).HasDefaultValue("{}");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.SysUpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<TenantMemberEntity>()
@@ -2250,17 +2272,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 new Converters.EnumMemberValueConverter<Core.Models.Alerts.RuleScopeClass>());
             entity.Property(e => e.ClientConfiguration).HasColumnType("jsonb").HasDefaultValue("{}");
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<ClientDeviceEntity>(entity =>
         {
             entity.ToTable("client_devices");
             entity.Property(e => e.Capabilities).HasColumnType("text[]");
-            entity.Property(e => e.LastSeenAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Revoke-cascade: removing the OAuth grant removes the device. The FK is nullable and
             // unpopulated until the device-management flow resolves the grant, so existing rows are
@@ -2288,7 +2305,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasKey(e => e.AlertRuleId);
             entity.Property(e => e.AlertRuleId).ValueGeneratedNever();
             entity.Property(e => e.State).HasDefaultValue("idle");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasOne(e => e.AlertRule)
                 .WithOne(r => r.TrackerState)
@@ -2329,7 +2345,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.Status).HasDefaultValue("pending");
             entity.Property(e => e.ChannelType).HasConversion(
                 new Converters.EnumMemberValueConverter<Core.Models.Alerts.ChannelType>());
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.RetryCount).HasDefaultValue(0);
 
             entity.HasOne(e => e.AlertInstance)
@@ -2347,7 +2362,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.ToTable("alert_invites");
             entity.Property(e => e.PermissionScope).HasDefaultValue("view_acknowledge");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasOne(e => e.AlertRuleChannel)
                 .WithMany()
@@ -2358,13 +2372,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<AlertCustomSoundEntity>(entity =>
         {
             entity.ToTable("alert_custom_sounds");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<AlertRuleChannelEntity>(entity =>
         {
             entity.ToTable("alert_rule_channels");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.ChannelType).HasConversion(
                 new Converters.EnumMemberValueConverter<Core.Models.Alerts.ChannelType>());
 
@@ -2377,8 +2389,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantAlertSettingsEntity>(entity =>
         {
             entity.ToTable("tenant_alert_settings");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             // Unique on TenantId enforces the one-row-per-tenant invariant. Named explicitly
             // so it isn't merged with the FK-driven auto-index on tenant_id.
             entity.HasIndex(e => e.TenantId)
@@ -2393,7 +2403,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             // conventional v7 default only applies if a caller omits one.
             entity.Property(e => e.Scope).HasConversion(
                 new Converters.EnumMemberValueConverter<Core.Models.Alerts.DndScope>());
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             // Scope-keyed lookups for the gate/supersede only ever read uncleared windows,
             // so a partial index over active windows (WHERE cleared_at IS NULL) keeps the
             // cleared/expired audit history out of the hot path (ADR 0004 D5).

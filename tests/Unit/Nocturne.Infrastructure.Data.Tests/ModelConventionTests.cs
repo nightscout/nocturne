@@ -156,6 +156,30 @@ public class ModelConventionTests
             .Should().BeEmpty("a purge has to lift the soft-delete filter without lifting tenant isolation");
     }
 
+    /// <summary>
+    /// A list, not the model, drives the loop, and no convention would put an entry back: a
+    /// dropped one silently returns its column to a database default of NULL. A wrongly grouped
+    /// entry throws while the model is built, so only the value and the mapping are asserted here.
+    /// </summary>
+    [Fact]
+    public void EveryListedTimestampColumn_KeepsItsCurrentTimestampDefault()
+    {
+        var listed = NocturneDbContext.CurrentTimestampDefaults
+            .SelectMany(g => g.Entities.Select(t => (Entity: t, g.Property)))
+            .ToList();
+
+        listed.Should().HaveCountGreaterThan(40,
+            "a loop over an empty list emits nothing, and the assertion below would then pass vacuously");
+
+        var model = Model();
+
+        listed
+            .Where(p => model.FindEntityType(p.Entity)?.FindProperty(p.Property) is not { } property
+                || property.GetDefaultValueSql() != "CURRENT_TIMESTAMP")
+            .Select(p => $"{p.Entity.Name}.{p.Property}")
+            .Should().BeEmpty("every listed column needs the default on its own mapped property");
+    }
+
     private static void AssertFamily(
         IReadOnlyList<Type> entities,
         string suffix,
