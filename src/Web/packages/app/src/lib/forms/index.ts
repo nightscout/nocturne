@@ -16,6 +16,7 @@ export {
   errorMessage,
   errorStatus,
   GENERIC_SUBMIT_ERROR,
+  permissionGatedMutationError,
 } from "./submit-error";
 export { default as FormField, type FormFieldControl } from "./FormField.svelte";
 export { default as FormError } from "./FormError.svelte";

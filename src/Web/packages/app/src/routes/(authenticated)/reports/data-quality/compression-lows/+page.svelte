@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
-	import { describeRemoteError, PERMISSION_GATED_MUTATION } from '$lib/forms/submit-error';
+	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
@@ -51,7 +51,7 @@
 		'Reviewing compression lows requires the glucose.readwrite permission.';
 
 	const mutationError = (err: unknown) =>
-		describeRemoteError(err, NEEDS_GLUCOSE_READWRITE, PERMISSION_GATED_MUTATION);
+		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
 	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(

@@ -7,9 +7,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Covers the 409 body <c>DELETE /api/v4/alert-rules/{id}</c> sends when other rules reference the
-/// target. The generated client reads the status and the reason off the thrown value, so both have
-/// to be on the wire and the reason has to read as a sentence for whichever count it describes.
+/// Covers the 409 body <c>DELETE /api/v4/alert-rules/{id}</c> sends, for both conflict branches:
+/// other rules reference the target, or the rule is managed by a source feature. The generated
+/// client reads the status and the reason off the thrown value, so both have to be on the wire
+/// and the reason has to read as a sentence for whichever branch it describes.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ReferencingRulesResponseTests
@@ -41,6 +42,13 @@ public class ReferencingRulesResponseTests
     }
 
     [Fact]
+    public void Names_the_owning_feature_when_the_rule_is_managed()
+    {
+        new ReferencingRulesResponse([], "tracker").Message.Should()
+            .Be("This rule is managed by 'tracker' — delete the tracker notification threshold instead.");
+    }
+
+    [Fact]
     public void Puts_the_status_the_reason_and_the_ids_on_the_wire()
     {
         var wire = JsonSerializer.SerializeToNode(
@@ -50,5 +58,18 @@ public class ReferencingRulesResponseTests
         wire["status"]!.GetValue<int>().Should().Be(StatusCodes.Status409Conflict);
         wire["message"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
         wire["referencingRuleIds"]!.AsArray().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Keeps_the_ids_array_on_the_wire_for_a_managed_conflict()
+    {
+        // Serde-strict generated clients (rust) deserialize every declared field, so the
+        // referencing-ids array must be present (empty) even when the conflict is ownership.
+        var wire = JsonSerializer.SerializeToNode(
+            new ReferencingRulesResponse([], "tracker"),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        wire["referencingRuleIds"]!.AsArray().Should().BeEmpty();
+        wire["managedBy"]!.GetValue<string>().Should().Be("tracker");
     }
 }

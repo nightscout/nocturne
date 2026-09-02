@@ -3,10 +3,7 @@
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import {
-    describeRemoteError,
-    PERMISSION_GATED_MUTATION,
-  } from "$lib/forms/submit-error";
+  import { permissionGatedMutationError } from "$lib/forms";
   import {
     getRules,
     deleteRule,
@@ -56,7 +53,7 @@
     "Changing alerts requires the alerts.readwrite permission.";
 
   const mutationError = (err: unknown) =>
-    describeRemoteError(err, NEEDS_ALERTS_READWRITE, PERMISSION_GATED_MUTATION);
+    permissionGatedMutationError(err, NEEDS_ALERTS_READWRITE);
 
   // ---- Queries ----
   const rulesQuery = getRules();

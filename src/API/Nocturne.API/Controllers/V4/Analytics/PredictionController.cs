@@ -60,7 +60,6 @@ public class PredictionController : ControllerBase
     [RemoteQuery]
     [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
-    [ProducesResponseType(typeof(ProblemDetails), 400)]
     [ProducesResponseType(typeof(ProblemDetails), 404)]
     [ProducesResponseType(typeof(ProblemDetails), 500)]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(

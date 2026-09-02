@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error, isHttpError } from "@sveltejs/kit";
@@ -360,11 +361,20 @@ describe("an error body that is not RFC-7807", () => {
  * Only a remote operation is covered: a status arm is the only thing that reads
  * these, and an endpoint the codegen does not wrap is answered by whatever
  * calls it directly.
+ *
+ * This guards the DECLARED spec only. The generated client casts the raw wire
+ * body (`typeStyle: "Interface"`, no DTO wrapping), so an action whose real
+ * body diverges from its declaration — an anonymous `BadRequest(new { error })`
+ * under an autofilled `ProblemDetails` declaration, or an undeclared status —
+ * passes here and still flattens at runtime. Keeping declarations truthful is
+ * on the controller and its tests.
  */
 describe("every typed error body a remote operation declares", () => {
-  const spec = JSON.parse(
-    readFileSync(new URL("./generated/openapi.json", import.meta.url), "utf8")
-  ) as {
+  const SPEC_URL = new URL("./generated/openapi.json", import.meta.url);
+  const SPEC_ABSENT =
+    "src/lib/api/generated/openapi.json is not present — run `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true` first.";
+
+  type Spec = {
     paths: Record<string, Record<string, RemoteOperation>>;
     components: {
       schemas: Record<string, { properties?: Record<string, unknown> }>;
@@ -383,7 +393,7 @@ describe("every typed error body a remote operation declares", () => {
   const READ_BY_A_STATUS_ARM = (code: string) =>
     /^[45]/.test(code) && code !== "401" && code !== "403";
 
-  function declaredErrorBodies(): { where: string; schema: string }[] {
+  function declaredErrorBodies(spec: Spec): { where: string; schema: string }[] {
     const found: { where: string; schema: string }[] = [];
 
     for (const [path, methods] of Object.entries(spec.paths)) {
@@ -409,8 +419,11 @@ describe("every typed error body a remote operation declares", () => {
     return found;
   }
 
-  it("declares a status, so the status arm can forward it", () => {
-    const bodies = declaredErrorBodies();
+  it("declares a status, so the status arm can forward it", (ctx) => {
+    if (!existsSync(fileURLToPath(SPEC_URL))) ctx.skip(SPEC_ABSENT);
+    const spec = JSON.parse(readFileSync(SPEC_URL, "utf8")) as Spec;
+
+    const bodies = declaredErrorBodies(spec);
     expect(bodies.length).toBeGreaterThan(0);
 
     const missing = bodies

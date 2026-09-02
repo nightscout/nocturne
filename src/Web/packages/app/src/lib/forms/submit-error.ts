@@ -150,9 +150,9 @@ const WRITE_SURFACE: RemoteErrorPolicy = {
  * is gated on rather than the action. Everywhere the write half would answer
  * with that sentence and the failure is not a refusal — a stale id, a server
  * fault — it would tell someone who holds the permission that they lack it, so
- * those two answers are fixed instead. Pass it to {@link describeRemoteError}
- * directly; `describeSubmitError` covers every mutation whose fallback names
- * the action.
+ * those two answers are fixed instead. Reach it through
+ * {@link permissionGatedMutationError}; `describeSubmitError` covers every
+ * mutation whose fallback names the action.
  */
 export const PERMISSION_GATED_MUTATION: RemoteErrorPolicy = {
   missing: MISSING_ITEM_ERROR,
@@ -160,6 +160,15 @@ export const PERMISSION_GATED_MUTATION: RemoteErrorPolicy = {
   serverError: false,
   fault: GENERIC_SUBMIT_ERROR,
 };
+
+/**
+ * Message for a rejected mutation whose fallback names the missing permission.
+ * @see PERMISSION_GATED_MUTATION
+ */
+export const permissionGatedMutationError = (
+  err: unknown,
+  fallback: string
+): string => describeRemoteError(err, fallback, PERMISSION_GATED_MUTATION);
 
 /** @see RemoteErrorPolicy */
 export const READ_SURFACE: RemoteErrorPolicy = {
