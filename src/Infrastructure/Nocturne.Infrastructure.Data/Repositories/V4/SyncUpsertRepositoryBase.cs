@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
@@ -74,6 +75,8 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
     /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
     /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
+    /// A key held by a row the user deleted is dropped from the batch — neither updated nor inserted
+    /// beside, per <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
     /// </summary>
     protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
@@ -99,16 +102,18 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
 
         // Over-fetches by a Cartesian amount; the partial unique index on
-        // (tenant_id, data_source, sync_identifier) keeps this cheap. Tombstones are excluded as
-        // the index excludes them, so a re-upload after a delete inserts afresh.
+        // (tenant_id, data_source, sync_identifier) keeps this cheap. Tombstones follow
+        // WhereBlocksRecreation: a user delete holds the key, a system sweep does not.
         var existingRows = await ctx.Set<TEntity>().IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
+            .Where(e => e.TenantId == ctx.TenantId)
+            .WhereBlocksRecreation()
             .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
             .ToListAsync(ct);
 
+        // The unique index counts live rows only, so a user tombstone and a live row can share a key.
         var existingByKey = existingRows
             .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(g => g.Key, g => g.FirstOrDefault(e => e.DeletedAt == null) ?? g.First());
 
         var toInsert = new List<TEntity>();
         foreach (var entity in entities)
@@ -117,6 +122,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                 && !string.IsNullOrEmpty(entity.SyncIdentifier);
             if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
             {
+                // The user deleted this record, so the re-upload is dropped rather than written into
+                // the tombstone or inserted beside it — as GetBlockingLegacyIdsAsync drops it on the
+                // legacy-id key.
+                if (existing.DeletedAt != null)
+                    continue;
+
                 ApplyUpdate(existing, ToDomain(entity));
                 updatedEntities.Add(existing);
                 // Capture material changes now, before SaveChanges clears the modified flags.

@@ -1,5 +1,4 @@
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;

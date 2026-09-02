@@ -2,7 +2,6 @@ using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
@@ -62,7 +61,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 
     private NocturneDbContext NewContext() => new(_options) { TenantId = Tenant };
 
-    private Guid SeedTombstone<TEntity>(TEntity entity)
+    private Guid SeedTombstone<TEntity>(TEntity entity, bool deletedByUser)
         where TEntity : class, IV4TimeSeriesEntity, ISyncDedupable
     {
         entity.Id = Guid.CreateVersion7();
@@ -73,10 +72,18 @@ public class SyncUpsertTombstoneTests : IDisposable
         entity.DeletedAt = DeletedOn;
 
         using var ctx = NewContext();
-        ctx.Set<TEntity>().Add(entity);
+        var entry = ctx.Set<TEntity>().Add(entity);
+        entry.Property("DeletedByUser").CurrentValue = deletedByUser;
         ctx.SaveChanges();
         return entity.Id;
     }
+
+    private BolusRepository NewBolusRepository(RecordingV4RecordBroadcaster<Bolus> broadcaster) =>
+        new(new TestTenantDbContextFactory(_context),
+            new Mock<IDeduplicationService>().Object,
+            new Mock<IAuditContext>().Object,
+            NullLogger<BolusRepository>.Instance,
+            broadcaster);
 
     private async Task AssertInsertedPastTombstoneAsync<TEntity>(
         Guid tombstoneId, Func<TEntity, double> value, double deletedValue, double reuploaded)
@@ -86,7 +93,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 
         var tombstone = await verify.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
             .SingleAsync(e => e.Id == tombstoneId);
-        tombstone.DeletedAt.Should().Be(DeletedOn, "the delete the member made still stands");
+        tombstone.DeletedAt.Should().Be(DeletedOn, "the tombstone row is left untouched");
         value(tombstone).Should().Be(deletedValue, "the re-upload must not be written into the tombstone");
 
         var live = await verify.Set<TEntity>().AsNoTracking().SingleAsync();
@@ -94,19 +101,29 @@ public class SyncUpsertTombstoneTests : IDisposable
         value(live).Should().Be(reuploaded, "a filtered read returns the re-uploaded record");
     }
 
-    [Fact]
-    public async Task BulkCreate_WhenTheKeyIsHeldByASoftDeletedRow_InsertsPastTheTombstone()
+    private async Task AssertTombstoneStillHoldsTheKeyAsync<TEntity>(
+        Guid tombstoneId, Func<TEntity, double> value, double deletedValue)
+        where TEntity : class, IV4TimeSeriesEntity
     {
-        var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 });
-        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
-        var repo = new BolusRepository(
-            new TestTenantDbContextFactory(_context),
-            new Mock<IDeduplicationService>().Object,
-            new Mock<IAuditContext>().Object,
-            NullLogger<BolusRepository>.Instance,
-            broadcaster);
+        await using var verify = NewContext();
 
-        var result = await repo.BulkCreateAsync(
+        var row = (await verify.Set<TEntity>().IgnoreQueryFilters().AsNoTracking().ToListAsync())
+            .Should().ContainSingle("the re-upload was dropped, not inserted beside the tombstone").Subject;
+        row.Id.Should().Be(tombstoneId);
+        row.DeletedAt.Should().Be(DeletedOn, "the tombstone row is left untouched");
+        value(row).Should().Be(deletedValue, "the re-upload must not be written into the tombstone");
+
+        (await verify.Set<TEntity>().AsNoTracking().ToListAsync())
+            .Should().BeEmpty("the record the user deleted stays deleted");
+    }
+
+    [Fact]
+    public async Task BulkCreate_WhenASystemSweptTombstoneHoldsTheKey_InsertsPastIt()
+    {
+        var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 }, deletedByUser: false);
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
+
+        var result = await NewBolusRepository(broadcaster).BulkCreateAsync(
             [new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = 9.0 }],
             WriteOrigin.Live);
 
@@ -118,9 +135,9 @@ public class SyncUpsertTombstoneTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkCreate_WhenAGlucoseKeyIsHeldByASoftDeletedRow_InsertsPastTheTombstone()
+    public async Task BulkCreate_WhenASystemSweptGlucoseTombstoneHoldsTheKey_InsertsPastIt()
     {
-        var tombstoneId = SeedTombstone(new SensorGlucoseEntity { Mgdl = 120 });
+        var tombstoneId = SeedTombstone(new SensorGlucoseEntity { Mgdl = 120 }, deletedByUser: false);
         var broadcaster = new RecordingV4RecordBroadcaster<SensorGlucose>();
         var repo = new SensorGlucoseRepository(
             new TestTenantDbContextFactory(_context),
@@ -140,4 +157,49 @@ public class SyncUpsertTombstoneTests : IDisposable
             tombstoneId, e => e.Mgdl, deletedValue: 120, reuploaded: 180);
     }
 
+    [Fact]
+    public async Task BulkCreate_WhenAUserDeletedTombstoneHoldsTheKey_DropsTheReupload()
+    {
+        var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 }, deletedByUser: true);
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
+
+        var result = await NewBolusRepository(broadcaster).BulkCreateAsync(
+            [new Bolus { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = 9.0 }],
+            WriteOrigin.Live);
+
+        result.Should().BeEmpty();
+        broadcaster.Created.Should().BeEmpty();
+        broadcaster.Updated.Should().BeEmpty();
+        await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(
+            tombstoneId, e => e.Insulin, deletedValue: 5.0);
+    }
+
+    /// <remarks>
+    /// The connectors that mint a sync identifier per record reuse it as the legacy id, so the
+    /// legacy-id guard covers this one too — pinned so the sync key alone remains sufficient.
+    /// </remarks>
+    [Fact]
+    public async Task BulkCreate_WhenAUserDeletedTombstoneHoldsTheKeyRepeatedAsLegacyId_DropsTheReupload()
+    {
+        var tombstoneId = SeedTombstone(
+            new BolusEntity { Insulin = 5.0, LegacyId = SyncIdentifier }, deletedByUser: true);
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
+
+        var result = await NewBolusRepository(broadcaster).BulkCreateAsync(
+            [new Bolus
+            {
+                Timestamp = T0,
+                DataSource = DataSource,
+                SyncIdentifier = SyncIdentifier,
+                LegacyId = SyncIdentifier,
+                Insulin = 9.0,
+            }],
+            WriteOrigin.Live);
+
+        result.Should().BeEmpty();
+        broadcaster.Created.Should().BeEmpty();
+        broadcaster.Updated.Should().BeEmpty();
+        await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(
+            tombstoneId, e => e.Insulin, deletedValue: 5.0);
+    }
 }
