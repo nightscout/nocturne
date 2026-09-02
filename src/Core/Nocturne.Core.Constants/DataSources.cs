@@ -226,65 +226,6 @@ public static class DataSources
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if the data source represents data fetched by a CGM or
-    /// device connector service.
-    /// </summary>
-    /// <param name="dataSource">The data source identifier to check, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if <paramref name="dataSource"/> is a connector source; otherwise <see langword="false"/>.</returns>
-    /// <seealso cref="ConnectorEnvironmentVariables"/>
-    public static bool IsConnector(string? dataSource)
-    {
-        return dataSource
-            is DexcomConnector
-                or LibreConnector
-                or MiniMedConnector
-                or CareLinkConnector
-                or GlookoConnector
-                or NightscoutConnector
-                or GlurooConnector
-                or TidepoolConnector
-                or TConnectSyncConnector
-                or HomeAssistantConnector
-                or EversenseConnector
-                or NocturneRemoteConnector
-                or TwiistConnector;
-    }
-
-    /// <summary>
-    /// Returns <see langword="true"/> if the data source represents manually entered data
-    /// from the web UI, Careportal, or an API client.
-    /// </summary>
-    /// <param name="dataSource">The data source identifier to check, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if <paramref name="dataSource"/> is a manual entry source; otherwise <see langword="false"/>.</returns>
-    public static bool IsManualEntry(string? dataSource)
-    {
-        return dataSource is ManualEntry or Careportal or ApiClient;
-    }
-
-    /// <summary>
-    /// Returns <see langword="true"/> if the data source represents data imported or migrated
-    /// from an external system (MongoDB, CSV, Tidepool export).
-    /// </summary>
-    /// <param name="dataSource">The data source identifier to check, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if <paramref name="dataSource"/> is an import source; otherwise <see langword="false"/>.</returns>
-    public static bool IsImported(string? dataSource)
-    {
-        return dataSource is MongoDbImport or CsvImport or TidepoolImport;
-    }
-
-    /// <summary>
-    /// Returns <see langword="true"/> if the data source represents data from an automated insulin delivery
-    /// (AID) or closed-loop system such as <see cref="Loop"/>, <see cref="OpenAps"/>,
-    /// <see cref="AndroidAps"/>, <see cref="IAps"/>, or <see cref="Trio"/>.
-    /// </summary>
-    /// <param name="dataSource">The data source identifier to check, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if <paramref name="dataSource"/> is an AID system source; otherwise <see langword="false"/>.</returns>
-    public static bool IsAidSystem(string? dataSource)
-    {
-        return dataSource is Loop or OpenAps or AndroidAps or IAps or Trio;
-    }
-
-    /// <summary>
     /// Returns the default CGM update interval in minutes for a given data source.
     /// Used as fallback when no PatientDevice is registered.
     /// </summary>
