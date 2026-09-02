@@ -442,7 +442,11 @@ app.MapScalarApiReference((options, httpContext) =>
     }
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
-// Add root endpoint to serve a basic info page
+// Add root endpoint to serve a basic info page. The payload includes the tenant's latest
+// entry (sgv/mbg/direction), and on an ordinary tenant host the share RLS does not restrict
+// the read (app.is_share is not 'true'), so the endpoint gate is the only protection for that
+// PHI. No AllowAnonymous: the HasPermissions fallback policy applies, as on the rest of the
+// API surface. A public info page would need the latest_entry payload stripped first.
 app.MapGet(
     "/",
     async (IEntryStore entryStore) =>
@@ -498,7 +502,7 @@ app.MapGet(
             }
         );
     }
-).AllowAnonymous();
+);
 
 app.MapDefaultEndpoints();
 

@@ -103,6 +103,26 @@ public class PublicAccessIntegrationTests : AspireIntegrationTestBase
         response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task RootInfoPage_NoAuth_Returns401()
+    {
+        // The root info page embeds the tenant's latest entry (sgv/mbg/direction), so it
+        // follows the same login-only contract as every other bare-host read.
+        var response = await ApiClient.GetAsync("/");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task RootInfoPage_AuthenticatedMember_Returns200()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+
+        var response = await client.GetAsync("/");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     #region Helpers
 
     private async Task EnablePublicAccessAsync()
