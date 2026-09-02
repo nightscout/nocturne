@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -151,28 +152,10 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
         _context.ApsSnapshots.Count().Should().Be(0);
     }
 
-    private sealed class RecordingBroadcaster : Core.Contracts.Events.IV4RecordBroadcaster<ApsSnapshot>
-    {
-        public List<ApsSnapshot> Created { get; } = [];
-        public List<ApsSnapshot> Updated { get; } = [];
-
-        public Task BroadcastCreatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
-        {
-            Created.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastUpdatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
-        {
-            Updated.AddRange(items);
-            return Task.CompletedTask;
-        }
-    }
-
     [Fact]
     public async Task BulkUpsertAsync_ByteIdenticalRetry_DoesNotBroadcastUpdates()
     {
-        var broadcaster = new RecordingBroadcaster();
+        var broadcaster = new RecordingV4RecordBroadcaster<ApsSnapshot>();
         var repository = new ApsSnapshotRepository(
             new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
 

@@ -6,6 +6,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -241,7 +242,7 @@ public abstract class SyncIdentifierDeleteAuditTests<TModel, TEntity> : KeyedSof
     protected const string SyncIdentifier = "sync-42";
 
     /// <summary>Wired into the repository under test so the delete's broadcast can be asserted.</summary>
-    protected readonly RecordingBroadcaster Broadcaster = new();
+    protected readonly RecordingV4RecordBroadcaster<TModel> Broadcaster = new();
 
     protected override string ExpectedScope => $"sync_identifier={DataSource}/{SyncIdentifier}";
 
@@ -288,17 +289,6 @@ public abstract class SyncIdentifierDeleteAuditTests<TModel, TEntity> : KeyedSof
         await DeleteAsync(WriteOrigin.Backfill);
 
         Broadcaster.Deleted.Should().BeEmpty();
-    }
-
-    protected sealed class RecordingBroadcaster : IV4RecordBroadcaster<TModel>
-    {
-        public List<Guid> Deleted { get; } = [];
-
-        public Task BroadcastDeletedAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
-        {
-            Deleted.AddRange(ids);
-            return Task.CompletedTask;
-        }
     }
 }
 

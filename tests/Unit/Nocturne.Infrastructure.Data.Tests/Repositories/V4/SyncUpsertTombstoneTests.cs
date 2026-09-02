@@ -9,20 +9,14 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
-/// <summary>
-/// The soft-delete guard on <c>SyncUpsertRepositoryBase.SplitUpsertsAsync</c>. A connector replaying
-/// its catch-up window re-uploads records the member has since deleted; the split must not match the
-/// tombstone, or the re-upload lands in a row no read returns and the record is lost while the sync
-/// reports success. Matches the single-record <c>CreateAsync</c> path, which reads through the query
-/// filter and inserts afresh.
-/// </summary>
 /// <remarks>
-/// Deliberately a unit test on SQLite rather than the in-memory provider: <c>EnsureCreated</c> builds
-/// the partial unique index filtered to <c>deleted_at IS NULL</c>, so the insert past the tombstone
-/// is only proven legal against a store that enforces it.
+/// SQLite rather than the in-memory provider: <c>EnsureCreated</c> builds the partial unique index
+/// filtered to <c>deleted_at IS NULL</c>, so the insert past the tombstone is proven legal against a
+/// store that enforces it.
 /// </remarks>
 [Trait("Category", "Unit")]
 [Trait("Category", "Repository")]
@@ -68,7 +62,6 @@ public class SyncUpsertTombstoneTests : IDisposable
 
     private NocturneDbContext NewContext() => new(_options) { TenantId = Tenant };
 
-    /// <summary>Persists <paramref name="entity"/> already soft-deleted and returns its id.</summary>
     private Guid SeedTombstone<TEntity>(TEntity entity)
         where TEntity : class, IV4TimeSeriesEntity, ISyncDedupable
     {
@@ -85,10 +78,6 @@ public class SyncUpsertTombstoneTests : IDisposable
         return entity.Id;
     }
 
-    /// <summary>
-    /// Asserts the re-upload inserted a fresh live row carrying <paramref name="reuploaded"/> and left
-    /// the tombstone deleted and carrying <paramref name="deletedValue"/>.
-    /// </summary>
     private async Task AssertInsertedPastTombstoneAsync<TEntity>(
         Guid tombstoneId, Func<TEntity, double> value, double deletedValue, double reuploaded)
         where TEntity : class, IV4TimeSeriesEntity
@@ -109,7 +98,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     public async Task BulkCreate_WhenTheKeyIsHeldByASoftDeletedRow_InsertsPastTheTombstone()
     {
         var tombstoneId = SeedTombstone(new BolusEntity { Insulin = 5.0 });
-        var broadcaster = new RecordingBroadcaster<Bolus>();
+        var broadcaster = new RecordingV4RecordBroadcaster<Bolus>();
         var repo = new BolusRepository(
             new TestTenantDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
@@ -132,7 +121,7 @@ public class SyncUpsertTombstoneTests : IDisposable
     public async Task BulkCreate_WhenAGlucoseKeyIsHeldByASoftDeletedRow_InsertsPastTheTombstone()
     {
         var tombstoneId = SeedTombstone(new SensorGlucoseEntity { Mgdl = 120 });
-        var broadcaster = new RecordingBroadcaster<SensorGlucose>();
+        var broadcaster = new RecordingV4RecordBroadcaster<SensorGlucose>();
         var repo = new SensorGlucoseRepository(
             new TestTenantDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
@@ -151,22 +140,4 @@ public class SyncUpsertTombstoneTests : IDisposable
             tombstoneId, e => e.Mgdl, deletedValue: 120, reuploaded: 180);
     }
 
-    private sealed class RecordingBroadcaster<TModel> : IV4RecordBroadcaster<TModel>
-        where TModel : class
-    {
-        public List<TModel> Created { get; } = [];
-        public List<TModel> Updated { get; } = [];
-
-        public Task BroadcastCreatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-        {
-            Created.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastUpdatedAsync(IReadOnlyList<TModel> items, CancellationToken ct = default)
-        {
-            Updated.AddRange(items);
-            return Task.CompletedTask;
-        }
-    }
 }

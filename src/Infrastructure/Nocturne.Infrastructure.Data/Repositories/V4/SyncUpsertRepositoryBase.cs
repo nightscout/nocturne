@@ -98,10 +98,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
 
-        // Over-fetches by a Cartesian amount; the partial unique index
-        // on (tenant_id, data_source, sync_identifier) keeps this cheap.
-        // Soft-deleted rows are excluded: the index ignores them, so a re-upload after a delete
-        // inserts a fresh row instead of writing into the invisible one.
+        // Over-fetches by a Cartesian amount; the partial unique index on
+        // (tenant_id, data_source, sync_identifier) keeps this cheap. Tombstones are excluded as
+        // the index excludes them, so a re-upload after a delete inserts afresh.
         var existingRows = await ctx.Set<TEntity>().IgnoreQueryFilters()
             .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
             .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
