@@ -18,7 +18,7 @@
     DailySummaryDay,
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
-  import { getUnitLabel } from "$lib/utils/formatting";
+  import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
   import {
     GLUCOSE_HEATMAP_LEGEND_STOPS,
     getGlucoseHeatmapFill,
@@ -462,12 +462,7 @@
   function formatSelectedDate(dateStr: string): string {
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return formatLongDate(date);
   }
 
   function formatUnits(value: number | null): string {

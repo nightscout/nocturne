@@ -12,7 +12,7 @@
   import DawnPhenomenonCard from "$lib/components/reports/sleep/single-night/DawnPhenomenonCard.svelte";
   import BiometricsCard from "$lib/components/reports/sleep/single-night/BiometricsCard.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
-  import { bg, bgLabel, time, toDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatLocale, time, toDate } from "$lib/utils/formatting";
 
   const date = $derived(page.params.date ?? "");
 
@@ -27,7 +27,7 @@
 
   const dateDisplay = $derived(
     startTime
-      ? new Intl.DateTimeFormat(undefined, {
+      ? new Intl.DateTimeFormat(formatLocale(), {
           weekday: "long",
           month: "long",
           day: "numeric",

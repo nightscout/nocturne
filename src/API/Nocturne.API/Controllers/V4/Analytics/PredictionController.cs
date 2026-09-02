@@ -60,9 +60,8 @@ public class PredictionController : ControllerBase
     [RemoteQuery]
     [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead)]
     [ProducesResponseType(typeof(GlucosePredictionResponse), 200)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 400)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 404)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 500)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    [ProducesResponseType(typeof(ProblemDetails), 500)]
     public async Task<ActionResult<GlucosePredictionResponse>> GetPredictions(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
@@ -133,7 +132,7 @@ public class PredictionController : ControllerBase
     [RequireScope(Scope.TherapyRead)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSnapshotResponse), 200)]
-    [ProducesResponseType(typeof(PredictionErrorResponse), 500)]
+    [ProducesResponseType(typeof(ProblemDetails), 500)]
     public async Task<ActionResult<ProfileSnapshotResponse>> GetProfileSnapshot(
         [FromQuery] string? profileId = null,
         CancellationToken cancellationToken = default)
@@ -215,15 +214,6 @@ public class PredictionStatusResponse
 
     /// <summary>Configured prediction source (None, DeviceStatus, OrefWasm)</summary>
     public string Source { get; set; } = "None";
-}
-
-/// <summary>
-/// Error response for prediction failures.
-/// </summary>
-public class PredictionErrorResponse
-{
-    /// <summary>Error message</summary>
-    public string Error { get; set; } = string.Empty;
 }
 
 /// <summary>

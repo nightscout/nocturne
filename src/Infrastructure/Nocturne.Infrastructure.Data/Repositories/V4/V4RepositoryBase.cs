@@ -214,7 +214,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
-    /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
+    /// <remarks>Virtual: <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/> overrides it to upsert in place.</remarks>
     public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -373,8 +373,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         List<TEntity> MateriallyChanged,
         List<TEntity> ToInsert);
 
-    /// <summary>SyncId-upsert types override: match existing rows by (DataSource, SyncIdentifier), update them in
-    /// place, and return the upserted rows, those that changed materially, and the rows still to insert.
+    /// <summary>Upsert participants override: match existing rows by their key, update them in place, and
+    /// return the upserted rows, those that changed materially, and the rows still to insert.
     /// Default: nothing upserted.</summary>
     protected virtual Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)

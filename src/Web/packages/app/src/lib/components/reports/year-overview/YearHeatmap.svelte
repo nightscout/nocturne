@@ -5,7 +5,7 @@
   import { Loader2 } from "lucide-svelte";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
@@ -126,9 +126,7 @@
                         font-size="12"
                         class="fill-muted-foreground hover:fill-primary cursor-pointer"
                       >
-                        {monthDate.toLocaleString(undefined, {
-                          month: "short",
-                        })}
+                        {formatMonthLabel(monthDate)}
                       </text>
                     </a>
                   {/each}
@@ -190,11 +188,7 @@
                   <div class="text-xs min-w-40">
                     <!-- Date header -->
                     <div class="mb-1.5 font-semibold">
-                      {d.date.toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatWeekdayDate(d.date)}
                     </div>
 
                     <!-- Average glucose -->

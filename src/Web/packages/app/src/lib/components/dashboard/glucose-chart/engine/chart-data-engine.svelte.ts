@@ -176,6 +176,13 @@ export const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
 // ===== Options & Interfaces =====
 
 export interface ChartDataEngineOptions {
+  /**
+   * Pass as a getter (`get dateRange() { … }`) wherever this can change while the
+   * engine lives: read into a plain object literal it is captured once, and the
+   * engine goes on fetching and drawing the window it was constructed with. A
+   * consumer that instead re-creates the engine per window — `{#key}` around an
+   * `{@const}` — may pass the value directly.
+   */
   dateRange?: { from: Date | string; to: Date | string };
   focusHours?: number;
   initialChartData?: TransformedChartData | null;

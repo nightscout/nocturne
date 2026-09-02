@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
@@ -116,7 +117,7 @@
           {/if}
         </div>
         <span class="text-xs text-muted-foreground">
-          {totalReadings.toLocaleString()} readings
+          {formatNumber(totalReadings)} readings
         </span>
       </div>
 

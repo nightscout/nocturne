@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -24,13 +25,7 @@
 
   function formatMills(mills: number | undefined): string {
     if (!mills) return "";
-    return new Date(mills).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatMediumDateTime(mills);
   }
 
   async function addEntry() {

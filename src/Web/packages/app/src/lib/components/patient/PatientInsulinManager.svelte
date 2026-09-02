@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
@@ -39,11 +40,7 @@
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "";
     const d = new Date(date);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(d);
   }
 
   /** Get formulations matching the selected category */

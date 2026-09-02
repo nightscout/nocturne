@@ -16,13 +16,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing bolus records. A SyncId-upsert + DeduplicationService participant, so it
-/// inherits the shared CRUD/soft-delete surface from <see cref="V4RepositoryBase{TModel,TEntity}"/>
-/// and keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
-/// non-primary LinkedRecords filter + keyset cursor, SyncId-upsert <c>CreateAsync</c>/
-/// <c>BulkCreateAsync</c>, and audited soft-deletes).
+/// Repository for managing bolus records. A DeduplicationService participant on top of the sync-key
+/// upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
+/// the extended <c>GetAsync</c> (non-primary LinkedRecords filter + keyset cursor), the read-visibility
+/// filter behind <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
-public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepository
+public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<BolusRepository> _logger;
@@ -149,58 +148,6 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
     }
 
     /// <summary>
-    /// Creates a new bolus record. When <c>DataSource</c> and <c>SyncIdentifier</c>
-    /// match an existing row for this tenant, the record is updated in place rather
-    /// than inserted — making the operation idempotent for connector replays.
-    /// Tenant scoping is implicit via the DbContext's RLS-equivalent query filter.
-    /// </summary>
-    /// <param name="model">The bolus to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created or updated bolus record.</returns>
-    public override async Task<Bolus> CreateAsync(Bolus model, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
-        {
-            var existing = await ctx.Boluses
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
-                    ct);
-            if (existing != null)
-            {
-                BolusMapper.UpdateEntity(existing, model);
-                await ctx.SaveChangesAsync(ct);
-                var upserted = BolusMapper.ToDomainModel(existing);
-                // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
-                return upserted;
-            }
-        }
-
-        var entity = BolusMapper.ToEntity(model);
-        ctx.Boluses.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        var created = BolusMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([created], [], [], origin, ct);
-        return created;
-    }
-
-    /// <summary>
-    /// Deletes bolus records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.Boluses.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
-    }
-
-    /// <summary>
     /// Gets bolus records by correlation identifier.
     /// </summary>
     /// <param name="correlationId">The correlation identifier.</param>
@@ -217,80 +164,6 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
-    /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
-    /// </summary>
-    protected override async Task<UpsertSplit> SplitUpsertsAsync(
-        NocturneDbContext ctx, List<BolusEntity> entities, CancellationToken ct)
-    {
-        // Intra-batch SyncIdentifier dedup: keep last occurrence per
-        // (DataSource, SyncIdentifier). Records without both keys keep a
-        // unique grouping key so they're not collapsed.
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
-            .Select(g => g.Last())
-            .ToList();
-
-        // DB-level SyncIdentifier upsert: match any existing rows keyed by
-        // (DataSource, SyncIdentifier) and update them in place. Everything
-        // else falls through to the insert path below.
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        var updatedEntities = new List<BolusEntity>();
-        var materiallyChanged = new List<BolusEntity>();
-        if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
-
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        // Over-fetches by a Cartesian amount; the partial unique index
-        // on (tenant_id, data_source, sync_identifier) keeps this cheap.
-        var existingRows = await ctx.Boluses.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId)
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var toInsert = new List<BolusEntity>();
-        foreach (var entity in entities)
-        {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
-            {
-                // Update in place — mirror the single-record CreateAsync path via the mapper.
-                var domain = BolusMapper.ToDomainModel(entity);
-                BolusMapper.UpdateEntity(existing, domain);
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (HasMaterialChange(ctx, existing))
-                    materiallyChanged.Add(existing);
-            }
-            else
-            {
-                toInsert.Add(entity);
-            }
-        }
-
-        if (updatedEntities.Count > 0)
-        {
-            // Persist updates before the insert-chunking loop clears the tracker.
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 
     /// <summary>

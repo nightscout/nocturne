@@ -4,7 +4,7 @@
   import type { ScaleTime } from "d3-scale";
   import { getActogramData } from "$api/actogram.remote";
   import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
-  import { bg, bgLabel, toDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
   import { resolveChartColor } from "$lib/utils/chart-colors";
   import {
     laneForStage,
@@ -30,7 +30,9 @@
   // Nearest CGM reading counts as "at" the hovered time within this window.
   const GLUCOSE_STALENESS_MS = 15 * 60 * 1000;
 
-  const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+  const timeFormatter = $derived(
+    new Intl.DateTimeFormat(formatLocale(), { hour: "2-digit", minute: "2-digit" })
+  );
 
   // Chart window: session ±30min so the glucose trace shows lead-in/lead-out context.
   const windowStart = $derived(new Date(startTime.getTime() - WINDOW_PADDING_MS));

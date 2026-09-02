@@ -13,7 +13,7 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import type { SyncProgressEvent } from "$lib/websocket/types";
-  import { lastSeen as formatAge } from "$lib/utils/formatting";
+  import { formatNumber, formatNumericDate, lastSeen as formatAge } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
     | "active"
@@ -143,7 +143,7 @@
     if (diffDays < 7)
       return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
 
-    return d.toLocaleDateString();
+    return formatNumericDate(d);
   }
 
   const iconColors = $derived(getIconColors(status));
@@ -263,7 +263,7 @@
                 <span
                   class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
                 >
-                  {(totalEntries ?? 0).toLocaleString()} records
+                  {formatNumber(totalEntries)} records
                 </span>
               </Tooltip.Trigger>
               <Tooltip.Portal>
@@ -278,7 +278,7 @@
                       <div class="flex justify-between gap-4 text-xs">
                         <span>{getDataTypeLabel(type)}</span>
                         <span class="font-mono">
-                          {count?.toLocaleString()}
+                          {formatNumber(count)}
                         </span>
                       </div>
                     {/each}
@@ -287,7 +287,7 @@
               </Tooltip.Portal>
             </Tooltip.Root>
           {:else}
-            {(totalEntries ?? 0).toLocaleString()} records
+            {formatNumber(totalEntries)} records
           {/if}
 
           {#if (entriesLast24h ?? 0) > 0}
@@ -298,7 +298,7 @@
                   <span
                     class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
                   >
-                    {(entriesLast24h ?? 0).toLocaleString()} in 24h
+                    {formatNumber(entriesLast24h)} in 24h
                   </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
@@ -315,7 +315,7 @@
                         <div class="flex justify-between gap-4 text-xs">
                           <span>{getDataTypeLabel(type)}</span>
                           <span class="font-mono">
-                            {count?.toLocaleString()}
+                            {formatNumber(count)}
                           </span>
                         </div>
                       {/each}
@@ -324,7 +324,7 @@
                 </Tooltip.Portal>
               </Tooltip.Root>
             {:else}
-              {(entriesLast24h ?? 0).toLocaleString()} in 24h
+              {formatNumber(entriesLast24h)} in 24h
             {/if}
           {/if}
 

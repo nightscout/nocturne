@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -152,7 +153,7 @@
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
       <Calendar class="h-4 w-4" />
       <span>
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
+        {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
       <span class="text-muted-foreground/50">•</span>
       <span>{dayCount} days</span>
@@ -470,8 +471,8 @@
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {(insulinStats.bolusCount ?? 0).toLocaleString()} boluses between
-      {startDate.toLocaleDateString()} and {endDate.toLocaleDateString()}
+      Report generated from {formatNumber(insulinStats.bolusCount)} boluses between
+      {formatNumericDate(startDate)} and {formatNumericDate(endDate)}
     </p>
     <p class="text-muted-foreground/60">
       This report is for informational purposes only. Always consult your

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatShortDate } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -93,7 +94,7 @@
   function formatDateDisplay(mills: number): string {
     if (!mills) return "";
     const date = new Date(mills);
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(date);
   }
 
   // Track selected date separately

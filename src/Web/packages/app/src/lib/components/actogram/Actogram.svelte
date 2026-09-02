@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatShortDate } from "$lib/utils/formatting";
   import type { Snippet } from 'svelte';
   import type {
     ActogramPoint,
@@ -88,7 +89,7 @@
   }
 
   function formatDate(date: Date): string {
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatShortDate(date);
   }
 </script>
 

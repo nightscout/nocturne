@@ -21,7 +21,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatDate, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -93,12 +93,12 @@
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
       <Calendar class="w-4 h-4" />
       <span>
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
+        {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
       <span class="text-muted-foreground/50">•</span>
       <span>{dayCount} days</span>
       <span class="text-muted-foreground/50">•</span>
-      <span>{entries.length.toLocaleString()} readings</span>
+      <span>{formatNumber(entries.length)} readings</span>
     </div>
   </div>
 
@@ -329,9 +329,9 @@
   </Card>
 
   <div class="text-xs text-muted-foreground text-center">
-    Data from {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}.
+    Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
-      Last updated {new Date(lastUpdated).toLocaleString()}.
+      Last updated {formatDate(new Date(lastUpdated))}.
     {/if}
   </div>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
@@ -211,9 +212,9 @@
                   <Card.Title class="font-semibold">{face.name}</Card.Title>
                   <Card.Description class="text-xs">
                     {#if face.updatedAt}
-                      Updated {new Date(face.updatedAt).toLocaleDateString()}
+                      Updated {formatNumericDate(new Date(face.updatedAt))}
                     {:else if face.createdAt}
-                      Created {new Date(face.createdAt).toLocaleDateString()}
+                      Created {formatNumericDate(new Date(face.createdAt))}
                     {/if}
                   </Card.Description>
                 </div>

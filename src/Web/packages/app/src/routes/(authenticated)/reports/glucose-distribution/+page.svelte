@@ -8,7 +8,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -85,8 +85,7 @@
   const dateRangeDisplay = $derived.by(() => {
     const dateRange = reportsResource.current?.dateRange;
     if (!dateRange) return "";
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-    return `${new Date(dateRange.from).toLocaleDateString(undefined, options)} – ${new Date(dateRange.to).toLocaleDateString(undefined, options)}`;
+    return `${formatShortDate(dateRange.from, true)} – ${formatShortDate(dateRange.to, true)}`;
   });
 </script>
 

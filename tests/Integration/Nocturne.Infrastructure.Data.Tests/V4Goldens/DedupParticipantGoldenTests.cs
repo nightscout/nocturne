@@ -11,7 +11,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// DeduplicationService participants (Bolus is covered in <see cref="BolusGoldenTests"/>). Each type
 /// links two within-window records that match its per-type MatchCriteria into a single canonical
 /// group; the SyncId-upsert types also upsert in place on replay. Held identical across the
-/// V4RepositoryBase refactor; intentional deltas (D1–D7) are re-baselined explicitly.
+/// V4RepositoryBase refactor; intentional deltas (D1–D8) are re-baselined explicitly.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]

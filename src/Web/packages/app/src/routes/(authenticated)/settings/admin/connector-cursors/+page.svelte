@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -199,13 +200,7 @@
 
   function formatTimestamp(value: string | Date | null | undefined): string {
     if (!value) return "Never";
-    return new Date(value).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatMediumDateTime(value);
   }
 
   const hasConnectors = $derived((connectors?.connectors?.length ?? 0) > 0);

@@ -7,7 +7,6 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -16,13 +15,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing note records in the database. A DeduplicationService participant, so it
-/// inherits the shared CRUD/soft-delete surface from <see cref="V4RepositoryBase{TModel,TEntity}"/>
-/// and keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
-/// non-primary LinkedRecords filter, dedup <c>BulkCreateAsync</c>). Soft-deletes inherit the base's
-/// audited path.
+/// Repository for managing note records in the database. A DeduplicationService participant on top of
+/// the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only the
+/// extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
-public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepository
+public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<NoteRepository> _logger;
@@ -137,21 +135,6 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(NoteMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes note records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            AuditContext, $"sync_identifier={dataSource}/{syncIdentifier}", ct);
     }
 
     /// <summary>

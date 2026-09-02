@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-svelte";
 import { canonicalDirection } from "@nocturne/ui/glucose";
+import { formatLocale } from "$lib/utils/formatting";
 import {
   Direction,
 } from "$lib/api";
@@ -98,12 +99,15 @@ export function getDirectionInfo(direction?: Direction | string): DirectionInfo 
 /** Enhanced relative time formatting with internationalization support */
 const getRelativeTimeFormatter = (() => {
   let formatter: Intl.RelativeTimeFormat | null = null;
+  let cachedFor: string | null = null;
   return (locale?: string) => {
-    if (
-      !formatter ||
-      (locale && locale !== formatter.resolvedOptions().locale)
-    ) {
-      formatter = new Intl.RelativeTimeFormat(locale || "en", {
+    const wanted = locale || formatLocale();
+    // Keyed on the requested tag, not on `resolvedOptions().locale`: ICU answers
+    // "nb-NO" with "nb", so comparing against the resolved tag never matches and
+    // rebuilds the formatter on every call.
+    if (!formatter || wanted !== cachedFor) {
+      cachedFor = wanted;
+      formatter = new Intl.RelativeTimeFormat(wanted, {
         numeric: "auto",
         style: "long",
       });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -231,12 +232,7 @@
   // Format date
   function formatDate(dateStr: any): string {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDayTime(dateStr);
   }
 
   // Get time remaining for instance

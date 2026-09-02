@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { startOfDay, toDayString } from "$lib/utils/date-range";
+  import { formatLongDate } from "$lib/utils/formatting";
   import { Calendar } from "lucide-svelte";
   import type {
     MealEvent,
@@ -194,8 +196,7 @@
       const mills = meal.carbIntakes?.[0]?.mills;
       if (!mills) continue;
 
-      const date = new Date(mills);
-      const dateKey = date.toLocaleDateString();
+      const dateKey = toDayString(new Date(mills));
 
       if (!grouped.has(dateKey)) {
         grouped.set(dateKey, []);
@@ -207,14 +208,7 @@
     for (const [date, dayMeals] of grouped) {
       result.push({
         date,
-        displayDate: new Date(
-          dayMeals[0].carbIntakes?.[0]?.mills ?? 0
-        ).toLocaleDateString(undefined, {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
+        displayDate: formatLongDate(startOfDay(date)),
         meals: dayMeals,
       });
     }

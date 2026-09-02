@@ -8,12 +8,7 @@
     TableHeader,
     TableRow,
   } from "$lib/components/ui/table";
-  import {
-    formatInsulinDisplay,
-    bg,
-    bgLabel,
-    bgRange,
-  } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
   import type { DayToDayDailyData, Thresholds } from "./types";
   import { getGlucoseColor } from "$lib/utils/glucose-analytics.ts";
 
@@ -47,10 +42,7 @@
       {#each dailyDataPoints as entry (entry.date)}
         <TableRow>
           <TableCell class="font-medium">
-            {new Date(entry.date).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
+            {formatShortDate(entry.date)}
           </TableCell>
           <TableCell
             class={getGlucoseColor(

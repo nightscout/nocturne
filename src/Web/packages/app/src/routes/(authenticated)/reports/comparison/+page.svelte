@@ -8,13 +8,19 @@
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
-  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { parseDate } from "@internationalized/date";
   import { untrack } from "svelte";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
-  import { dayCount, isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
+  import {
+    dayCount,
+    dayPart,
+    isDayString,
+    startOfDay,
+    toDayString,
+  } from "$lib/utils/date-range";
 
   const PRESETS = [
     "last7-prior7",
@@ -56,12 +62,7 @@
   }
 
   function rangeDisplay(from: string, to: string): string {
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${startOfDay(from).toLocaleDateString(undefined, opts)} – ${startOfDay(to).toLocaleDateString(undefined, opts)}`;
+    return `${formatShortDate(startOfDay(from), true)} – ${formatShortDate(startOfDay(to), true)}`;
   }
 
   // Presets are built on the local calendar day. Deriving "today" from
@@ -120,7 +121,7 @@
     const preset = urlParams.preset ?? DEFAULT_PRESET;
     const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
     const day = (value: string | null, fallback: string) =>
-      isDayString(value) ? value : fallback;
+      dayPart(isDayString(value) ? value : fallback);
     return {
       a: {
         label: urlParams.aLabel ?? fromPreset.a.label,

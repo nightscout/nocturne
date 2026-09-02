@@ -35,7 +35,7 @@
   } from "$api-clients";
   import { severityLabel, severityVar } from "./severity";
   import { formatRange } from "./alertTime";
-  import { time } from "$lib/utils/formatting";
+  import { formatMediumDate, time } from "$lib/utils/formatting";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
@@ -189,11 +189,7 @@
 
   function dateLabel(d: DateValue | undefined): string {
     if (!d) return "Last 24 hours";
-    return d.toDate(getLocalTimeZone()).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(d.toDate(getLocalTimeZone()));
   }
 
   // Link to the Day in Review report for the day under replay. Prefers the

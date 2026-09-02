@@ -1,3 +1,31 @@
+/**
+ * The reason a rejected API call carried, read off the thrown value in one order
+ * for every status arm.
+ *
+ * NSwag throws the parsed error body itself (not wrapped in ApiException) for a
+ * response that declares a typed schema, so an RFC-7807 body arrives as the
+ * thrown value: `detail` carries the reason and `title` only the status phrase,
+ * which is why `detail` is read first. Without a typed schema NSwag throws an
+ * ApiException whose `message` is its own boilerplate and whose body is left
+ * unparsed, so that message is the last resort. `body.message` belongs to an
+ * `HttpError` — the only other thing these catches can see, thrown by an
+ * invalidated query's refresh — and is read first because a handler wrote it.
+ *
+ * That refresh runs inside the command's own `try`, so a write that succeeded
+ * and a refresh that was then refused reject the caller with a reason belonging
+ * to the read, not to the write: the arms cannot tell the two apart, and no
+ * ordering here can.
+ *
+ * `body` names a local holding `parseErrorBody(err)` — the RFC-7807 fields
+ * recovered from a body NSwag left unparsed (`$lib/api/error-body`). They sit
+ * ahead of `message` because anything the server wrote beats NSwag's
+ * boilerplate, and behind the parsed fields because those are the same fields
+ * already decoded.
+ */
+const reason = (err: string, body: string) =>
+  `${err}?.body?.message ?? ${err}?.detail ?? ${err}?.title ?? ` +
+  `${body}?.detail ?? ${body}?.title ?? ${body}?.message ?? ${err}?.message`;
+
 export default {
   openApiPath: './packages/app/src/lib/api/generated/openapi.json',
   outputDir: './packages/app/src/lib',
@@ -34,14 +62,13 @@ export default {
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
     //
-    // Read in author order: the server's own sentence, then one recovered from a
-    // body NSwag left unparsed (`$lib/api/error-body`), and only then `message`,
-    // which on an `ApiException` is NSwag's boilerplate rather than anything the
-    // server wrote.
+    // The generator inlines this arm as the single statement of its `if`, so the
+    // locals it needs sit in a block: without the braces the `const` would be a
+    // syntax error and the `throw` would run on every status.
     on403:
-      `const e403 = err as any;\n` +
+      `{ const e403 = err as any;\n` +
       `      const b403 = parseErrorBody(e403);\n` +
-      `      throw error(403, e403?.detail ?? b403?.detail ?? b403?.title ?? b403?.message ?? e403?.message ?? 'Forbidden')`,
+      `      throw error(403, ${reason('e403', 'b403')} ?? 'Forbidden'); }`,
 
     // The default `on500` swallows every non-401/403 status as a 500 with a
     // generic message. Forward 400 (validation, e.g. cyclic alert_state
@@ -50,9 +77,9 @@ export default {
     // message to the user. Falls through to a 500 with the extracted message
     // so the real error is still visible in dev.
     //
-    // The status is read off the thrown value, so an error body that declares no
-    // `status` field of its own — `ReferencingRulesResponse`,
-    // `PredictionErrorResponse` — never reaches those arms.
+    // The status is read off the thrown value, so an error body must declare a
+    // `status` of its own to reach these arms — a plain payload flattens to a
+    // 500 no matter what the response said.
     //
     // 429 and 404 are forwarded too, and with a fixed reason rather than the
     // extracted message: the rate limiter's body declares no typed schema, so
@@ -69,20 +96,12 @@ export default {
     // command or form rejects its caller with an `HttpError(404)` — SvelteKit
     // renders an error page only for a failed load, so a dialog still gets to
     // show its own "already gone" wording.
-    //
-    // NSwag throws the parsed error body itself (not wrapped in ApiException) for
-    // a response that declares a typed schema, so an RFC-7807 body arrives as
-    // `err`: `detail` carries the reason and `title` only the status phrase,
-    // which is why `detail` is read first. A body NSwag left unparsed is read
-    // next (`$lib/api/error-body`), and its boilerplate `message` last.
-    // `err.body.message` belongs to an `HttpError`, which is what a nested remote
-    // call rethrows.
     on500: (functionName: string) =>
       `const e = err as any;\n` +
       `    const b = parseErrorBody(e);\n` +
       `    const errors = e?.errors ?? b?.errors;\n` +
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
-      `    const message = flat ?? e?.body?.message ?? e?.detail ?? e?.title ?? b?.detail ?? b?.title ?? b?.message ?? e?.message;\n` +
+      `    const message = flat ?? ${reason('e', 'b')};\n` +
       `    if (status === 429) throw error(429, 'Too many requests');\n` +
       `    if (status === 404) throw error(404, 'Not found');\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +

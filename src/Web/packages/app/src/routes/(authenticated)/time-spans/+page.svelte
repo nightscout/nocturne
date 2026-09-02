@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { parseDate } from "@internationalized/date";
+  import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
@@ -10,10 +12,10 @@
   import { getTimeSpansData } from "./data.remote";
   import {
     dayCount as countDays,
+    dayPart,
     isDayString,
     resolveDayRange,
     startOfDay,
-    toDayString,
   } from "$lib/utils/date-range";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
@@ -24,11 +26,11 @@
 
   const fromParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("from");
-    return isDayString(fromUrl) ? fromUrl : defaults.from;
+    return dayPart(isDayString(fromUrl) ? fromUrl : defaults.from);
   });
   const toParam = $derived.by(() => {
     const fromUrl = page.url.searchParams.get("to");
-    return isDayString(fromUrl) ? fromUrl : defaults.to;
+    return dayPart(isDayString(fromUrl) ? fromUrl : defaults.to);
   });
 
   // Fetch data using remote function with date range
@@ -86,13 +88,11 @@
 
   /** Shift the window by whole days, keeping its length. */
   function shiftPeriod(direction: -1 | 1) {
-    const anchor = direction === -1 ? fromDate : toDate;
-    const newFirst = new Date(anchor);
-    newFirst.setDate(newFirst.getDate() + direction * (direction === -1 ? dayCount : 1));
-    const newLast = new Date(newFirst);
-    newLast.setDate(newLast.getDate() + dayCount - 1);
+    const anchor = parseDate(direction === -1 ? fromParam : toParam);
+    const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
+    const newLast = newFirst.add({ days: dayCount - 1 });
     goto(
-      `/time-spans?from=${toDayString(newFirst)}&to=${toDayString(newLast)}`,
+      `/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`,
       { invalidateAll: true }
     );
   }
@@ -103,22 +103,8 @@
 
   // Format date range for display
   const dateRangeDisplay = $derived.by(() => {
-    if (dayCount === 1) {
-      return fromDate.toLocaleDateString(undefined, {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    }
-    return `${fromDate.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    })} - ${toDate.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })} (${dayCount} days)`;
+    if (dayCount === 1) return formatLongDate(fromDate);
+    return `${formatShortDate(fromDate)} - ${formatShortDate(toDate, true)} (${dayCount} days)`;
   });
 </script>
 

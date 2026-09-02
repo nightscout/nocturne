@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -138,7 +139,7 @@
         <div class="flex items-center gap-2">
           <Calendar class="h-5 w-5 text-muted-foreground" />
           <span class="text-2xl font-bold tabular-nums">
-            {selectedRates.length.toLocaleString()}
+            {formatNumber(selectedRates.length)}
           </span>
         </div>
       </CardContent>

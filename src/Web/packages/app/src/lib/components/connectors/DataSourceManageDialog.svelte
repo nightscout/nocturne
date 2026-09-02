@@ -16,7 +16,7 @@
   } from "lucide-svelte";
   import { describeSubmitError, errorStatus } from "$lib/forms";
   import { getCategoryIcon } from "$lib/utils/connector-display";
-  import { lastSeen } from "$lib/utils/formatting";
+  import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
   let {
     open = $bindable(false),
@@ -156,13 +156,13 @@
           <div>
             <span class="text-muted-foreground">Records (24h)</span>
             <p class="mt-1 font-medium">
-              {selectedDataSource.entriesLast24h?.toLocaleString() ?? 0}
+              {formatNumber(selectedDataSource.entriesLast24h)}
             </p>
           </div>
           <div>
             <span class="text-muted-foreground">Total Records</span>
             <p class="mt-1 font-medium">
-              {selectedDataSource.totalEntries?.toLocaleString() ?? 0}
+              {formatNumber(selectedDataSource.totalEntries)}
             </p>
           </div>
         </div>
@@ -235,8 +235,7 @@
               class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
             >
               <li>
-                All glucose records ({selectedDataSource.totalEntries?.toLocaleString() ??
-                  0} records)
+                All glucose records ({formatNumber(selectedDataSource.totalEntries)} records)
               </li>
               <li>All treatments entered by this device</li>
               <li>All device status records</li>
@@ -255,7 +254,7 @@
                   <span class="font-medium">Data deleted successfully</span>
                 </div>
                 <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-                  Deleted {deleteResult.totalDeleted?.toLocaleString() ?? 0} records
+                  Deleted {formatNumber(deleteResult.totalDeleted)} records
                 </p>
               </div>
             {:else}

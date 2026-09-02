@@ -302,11 +302,7 @@ public class AlertRulesController : ControllerBase
         // backfill. Delete the source config instead.
         if (rule.ManagedBy is not null)
         {
-            return Conflict(new
-            {
-                message = $"This rule is managed by '{rule.ManagedBy}' — delete the tracker notification threshold instead.",
-                managedBy = rule.ManagedBy,
-            });
+            return Conflict(new ReferencingRulesResponse([], rule.ManagedBy));
         }
 
         // Refuse to break the alert_state graph: if any other rule references this one, the
@@ -890,11 +886,29 @@ public class AlertRulesController : ControllerBase
 }
 
 /// <summary>
-/// 409 response body returned by <c>DELETE /api/v4/alert-rules/{id}</c> when other rules
-/// reference the target via <c>alert_state</c>. The FE uses this to either link to those
-/// rules or offer a cascade-delete confirmation.
+/// 409 response body returned by <c>DELETE /api/v4/alert-rules/{id}</c>. Either other rules
+/// reference the target via <c>alert_state</c> (<see cref="ReferencingRuleIds"/> is non-empty,
+/// and the FE can link to them or offer a cascade-delete confirmation), or the rule is owned
+/// by a source feature (<see cref="ManagedBy"/> is non-null) and must be deleted there.
 /// </summary>
-public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds);
+/// <remarks>
+/// <see cref="Status"/> and <see cref="Message"/> are carried in the body because the generated
+/// client reads both off the thrown value; a body declaring neither is flattened to a 500.
+/// One record covers both branches because an operation declares a single schema per status.
+/// </remarks>
+public record ReferencingRulesResponse(IReadOnlyList<Guid> ReferencingRuleIds, string? ManagedBy = null)
+{
+    /// <summary>The status this body is returned with.</summary>
+    public int Status => StatusCodes.Status409Conflict;
+
+    /// <summary>The reason, worded for the person who asked for the deletion.</summary>
+    public string Message =>
+        ManagedBy is not null
+            ? $"This rule is managed by '{ManagedBy}' — delete the tracker notification threshold instead."
+            : ReferencingRuleIds.Count <= 1
+                ? "Another alert rule's condition refers to this one. Update that rule first."
+                : $"{ReferencingRuleIds.Count} other alert rules' conditions refer to this one. Update those rules first.";
+}
 
 #region DTOs
 
