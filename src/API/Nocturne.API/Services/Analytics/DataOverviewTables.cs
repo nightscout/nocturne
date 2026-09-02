@@ -8,18 +8,14 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 namespace Nocturne.API.Services.Analytics;
 
 /// <summary>
-/// One table behind the data overview, described in the terms its surfaces need: the
-/// <see cref="SyncDataType"/> name per-day counts are keyed by, the domain timestamp, the source
-/// handle, and the <see cref="RecordType"/> whose non-primary <see cref="LinkedRecord"/>s stand for
-/// cross-connector duplicates.
+/// One table behind the data overview, in the terms its year-range, data-source and
+/// per-day-count surfaces need.
 /// </summary>
 /// <seealso cref="DataOverviewTables"/>
 internal interface IDataOverviewTable
 {
-    /// <summary>Key this table's rows are counted under in <see cref="Core.Models.Services.DailySummaryDay.Counts"/>.</summary>
     string CountsKey { get; }
 
-    /// <summary>Null when the table takes no part in deduplication.</summary>
     RecordType? DedupRecordType { get; }
 
     /// <summary>
@@ -46,13 +42,6 @@ internal interface IDataOverviewTable
 }
 
 /// <inheritdoc cref="IDataOverviewTable"/>
-/// <typeparam name="TEntity">The mapped entity behind the table.</typeparam>
-/// <param name="countsKey">Names the key <see cref="CountsKey"/> reports.</param>
-/// <param name="table">Leases the table's <see cref="Microsoft.EntityFrameworkCore.DbSet{TEntity}"/> from a context.</param>
-/// <param name="timestamp">The column the overview treats as the row's moment in time.</param>
-/// <param name="id">The column <see cref="LinkedRecord.RecordId"/> refers to.</param>
-/// <param name="source">The column holding the data-source handle, or null when the table has none.</param>
-/// <param name="dedupRecordType">Names the record type as deduplication knows it, or null.</param>
 internal sealed class DataOverviewTable<TEntity>(
     SyncDataType countsKey,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
@@ -107,9 +96,8 @@ internal sealed class DataOverviewTable<TEntity>(
     }
 
     /// <summary>
-    /// Reads <paramref name="predicate"/> against the column <paramref name="selector"/> picks, so
-    /// the resulting tree is the one a hand-written lambda over that column would have produced and
-    /// its captured values still reach the provider as query parameters.
+    /// Substituting into a written lambda, rather than assembling the tree node by node, keeps the
+    /// values that lambda captures reaching the provider as query parameters.
     /// </summary>
     private static Expression<Func<TEntity, bool>> Compose<TValue>(
         Expression<Func<TEntity, TValue>> selector,
@@ -120,10 +108,6 @@ internal sealed class DataOverviewTable<TEntity>(
             selector.Parameters
         );
 
-    /// <summary>
-    /// Applies <paramref name="projection"/> to the column <paramref name="selector"/> picks, on the
-    /// same terms as <see cref="Compose{TValue}"/>.
-    /// </summary>
     private static Expression<Func<TEntity, TResult>> Project<TValue, TResult>(
         Expression<Func<TEntity, TValue>> selector,
         Expression<Func<TValue, TResult>> projection

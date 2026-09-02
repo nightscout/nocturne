@@ -250,18 +250,10 @@ public class DataOverviewService : IDataOverviewService
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         // Hoist LinkedRecord subqueries — IQueryable construction is free
-        var npSensorGlucoseIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryBolusIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryTempBasalIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryCarbIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
+        var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
+        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
+        var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
+        var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
 
         // --- Collect glucose readings by month (CGM + meter) ---
         // Each source is queried independently so one failure doesn't prevent the others.
@@ -548,8 +540,7 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// The ids of records deduplication resolved to a non-primary member of a canonical group, so
-    /// one real-world event contributes once however many connectors reported it.
+    /// The ids of records deduplication resolved to a non-primary member of a canonical group.
     /// </summary>
     private static IQueryable<Guid> NonPrimaryRecordIds(
         NocturneDbContext context,
@@ -614,43 +605,6 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Materializes mills values from a table, groups by date in-memory, and merges counts into the dayMap.
-    /// </summary>
-    private async Task CollectCountsFromMillsTable(
-        string dataType,
-        IQueryable<long> millsQuery,
-        Dictionary<string, DailySummaryDay> dayMap,
-        TimeZoneInfo tz,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            var millsList = await millsQuery.ToListAsync(cancellationToken);
-
-            var grouped = millsList
-                .GroupBy(m => MillsToDateString(m, tz))
-                .Select(g => new { Date = g.Key, Count = g.Count() });
-
-            foreach (var group in grouped)
-            {
-                if (!dayMap.TryGetValue(group.Date, out var day))
-                {
-                    day = new DailySummaryDay { Date = group.Date };
-                    dayMap[group.Date] = day;
-                }
-
-                day.Counts.TryGetValue(dataType, out var existing);
-                day.Counts[dataType] = existing + group.Count;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect counts for {DataType}", dataType);
-        }
-    }
-
-    /// <summary>
     /// Collects glucose averages from SensorGlucose and MeterGlucose.
     /// Each source is queried independently so one failure doesn't prevent the others.
     /// </summary>
@@ -671,9 +625,7 @@ public class DataOverviewService : IDataOverviewService
         // SensorGlucose (CGM) - V4 entity uses Timestamp
         try
         {
-            var npSensorGlucoseIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
 
             var sensorReadings = await context
                 .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
@@ -763,10 +715,7 @@ public class DataOverviewService : IDataOverviewService
         CancellationToken cancellationToken
     )
     {
-        // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryBolusIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
+        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
 
         // Manual bolus records — only user-initiated boluses count as bolus insulin
         try
@@ -847,9 +796,7 @@ public class DataOverviewService : IDataOverviewService
         // TempBasal records (pump basal delivery with rate x duration)
         try
         {
-            var nonPrimaryTempBasalIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
 
             var tempBasalRecords = await context
                 .TempBasals.Where(e =>
@@ -925,9 +872,7 @@ public class DataOverviewService : IDataOverviewService
     {
         try
         {
-            var nonPrimaryCarbIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
 
             var carbRecords = await context
                 .CarbIntakes.Where(e =>
@@ -960,16 +905,6 @@ public class DataOverviewService : IDataOverviewService
         {
             _logger.LogWarning(ex, "Failed to collect carb totals");
         }
-    }
-
-    /// <summary>
-    /// Converts Unix milliseconds to a local date string in "yyyy-MM-dd" format using the given timezone.
-    /// </summary>
-    private static string MillsToDateString(long mills, TimeZoneInfo tz)
-    {
-        var utc = DateTimeOffset.FromUnixTimeMilliseconds(mills);
-        var local = TimeZoneInfo.ConvertTime(utc, tz);
-        return local.ToString("yyyy-MM-dd");
     }
 
     /// <summary>
