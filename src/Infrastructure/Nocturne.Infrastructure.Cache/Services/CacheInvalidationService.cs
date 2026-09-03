@@ -6,14 +6,13 @@ using Nocturne.Infrastructure.Cache.Services;
 namespace Nocturne.Infrastructure.Cache.Services;
 
 /// <summary>
-/// Service for managing complex cache invalidation chains for Phase 3 calculations
-/// Implements the invalidation patterns specified in the issue requirements
+/// Removes the cache entries invalidated by a new treatment, entry, or profile change.
 /// </summary>
 public interface ICacheInvalidationService
 {
     /// <summary>
     /// Invalidate cache when new insulin treatment is added
-    /// Invalidates: treatments:recent:*, calculations:iob:*, stats:*
+    /// Invalidates: treatments:recent:*, calculations:iob:*
     /// </summary>
     Task InvalidateForNewInsulinTreatmentAsync(
         string userId,
@@ -22,7 +21,7 @@ public interface ICacheInvalidationService
 
     /// <summary>
     /// Invalidate cache when new carb treatment is added
-    /// Invalidates: treatments:recent:*, calculations:cob:*, stats:*
+    /// Invalidates: treatments:recent:*
     /// </summary>
     Task InvalidateForNewCarbTreatmentAsync(
         string userId,
@@ -31,7 +30,7 @@ public interface ICacheInvalidationService
 
     /// <summary>
     /// Invalidate cache when new glucose entry is added
-    /// Invalidates: entries:current, entries:recent:*, stats:glucose:*, stats:tir:*, stats:hba1c:*
+    /// Invalidates: entries:current, entries:recent:*
     /// </summary>
     Task InvalidateForNewGlucoseEntryAsync(
         string userId,
@@ -40,7 +39,7 @@ public interface ICacheInvalidationService
 
     /// <summary>
     /// Invalidate cache when profile changes
-    /// Invalidates: profiles:*, calculations:iob:*, calculations:cob:*
+    /// Invalidates: profiles:*, calculations:iob:*
     /// </summary>
     Task InvalidateForProfileChangeAsync(
         string userId,
@@ -57,9 +56,6 @@ public interface ICacheInvalidationService
     );
 }
 
-/// <summary>
-/// Implementation of cache invalidation service for Phase 3 calculation chains
-/// </summary>
 public class CacheInvalidationService : ICacheInvalidationService
 {
     private readonly ICacheService _cacheService;
@@ -90,7 +86,6 @@ public class CacheInvalidationService : ICacheInvalidationService
             // Invalidation chain for new insulin treatment:
             // - treatments:recent:* (recent treatments cache)
             // - calculations:iob:* (all IOB calculations)
-            // - stats:* (potentially affected statistics)
 
             var invalidationTasks = new List<Task>
             {
@@ -100,10 +95,6 @@ public class CacheInvalidationService : ICacheInvalidationService
                 ),
                 _cacheService.RemoveByPatternAsync(
                     CacheKeyBuilder.BuildIobCalculationPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildStatsPattern(userId),
                     cancellationToken
                 ),
             };
@@ -141,21 +132,11 @@ public class CacheInvalidationService : ICacheInvalidationService
 
             // Invalidation chain for new carb treatment:
             // - treatments:recent:* (recent treatments cache)
-            // - calculations:cob:* (all COB calculations)
-            // - stats:* (potentially affected statistics)
 
             var invalidationTasks = new List<Task>
             {
                 _cacheService.RemoveByPatternAsync(
                     CacheKeyBuilder.BuildRecentTreatmentsPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildCobCalculationPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildStatsPattern(userId),
                     cancellationToken
                 ),
             };
@@ -194,9 +175,6 @@ public class CacheInvalidationService : ICacheInvalidationService
             // Invalidation chain for new glucose entry:
             // - entries:current (current entries cache)
             // - entries:recent:* (recent entries cache)
-            // - stats:glucose:* (glucose statistics)
-            // - stats:tir:* (time in range statistics)
-            // - stats:hba1c:* (HbA1c estimates)
 
             var invalidationTasks = new List<Task>
             {
@@ -206,18 +184,6 @@ public class CacheInvalidationService : ICacheInvalidationService
                 ),
                 _cacheService.RemoveByPatternAsync(
                     CacheKeyBuilder.BuildRecentEntriesPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "glucose:*"),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "tir:*"),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "hba1c:*"),
                     cancellationToken
                 ),
             };
@@ -258,7 +224,6 @@ public class CacheInvalidationService : ICacheInvalidationService
             // Invalidation chain for profile change:
             // - profiles:* (all profile caches)
             // - calculations:iob:* (basal rates affect IOB)
-            // - calculations:cob:* (carb ratios affect COB)
 
             var invalidationTasks = new List<Task>
             {
@@ -268,10 +233,6 @@ public class CacheInvalidationService : ICacheInvalidationService
                 ),
                 _cacheService.RemoveByPatternAsync(
                     CacheKeyBuilder.BuildIobCalculationPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildCobCalculationPattern(userId),
                     cancellationToken
                 ),
             };
@@ -344,15 +305,6 @@ public class CacheInvalidationService : ICacheInvalidationService
                 // Calculations
                 _cacheService.RemoveByPatternAsync(
                     CacheKeyBuilder.BuildIobCalculationPattern(userId),
-                    cancellationToken
-                ),
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildCobCalculationPattern(userId),
-                    cancellationToken
-                ),
-                // Statistics
-                _cacheService.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildStatsPattern(userId),
                     cancellationToken
                 ),
             };

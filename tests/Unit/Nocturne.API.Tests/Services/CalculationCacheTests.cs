@@ -52,9 +52,7 @@ public class Phase3CalculationCacheTests
             new CalculationCacheConfiguration
             {
                 IobCalculationExpirationSeconds = 900,
-                CobCalculationExpirationSeconds = 900,
                 ProfileCalculationExpirationSeconds = 3600,
-                StatisticsExpirationSeconds = 1800,
             }
         );
     }
@@ -278,14 +276,35 @@ public class Phase3CalculationCacheTests
                 ),
             Times.Once
         );
+        _mockCacheService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Cache")]
+    [Trait("Category", "Invalidation")]
+    public async Task CacheInvalidationService_InvalidateForNewCarbTreatment_InvalidatesCorrectPatterns()
+    {
+        // Arrange
+        var userId = "test-user";
+        var invalidationService = new CacheInvalidationService(
+            _mockCacheService.Object,
+            _mockInvalidationLogger.Object
+        );
+
+        // Act
+        await invalidationService.InvalidateForNewCarbTreatmentAsync(userId, CancellationToken.None);
+
+        // Assert
         _mockCacheService.Verify(
             x =>
                 x.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildStatsPattern(userId),
+                    CacheKeyBuilder.BuildRecentTreatmentsPattern(userId),
                     It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );
+        _mockCacheService.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -321,30 +340,7 @@ public class Phase3CalculationCacheTests
                 ),
             Times.Once
         );
-        _mockCacheService.Verify(
-            x =>
-                x.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "glucose:*"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-        _mockCacheService.Verify(
-            x =>
-                x.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "tir:*"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-        _mockCacheService.Verify(
-            x =>
-                x.RemoveByPatternAsync(
-                    CacheKeyBuilder.BuildPattern("stats", userId, "hba1c:*"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _mockCacheService.VerifyNoOtherCalls();
     }
 
     #endregion
@@ -366,24 +362,6 @@ public class Phase3CalculationCacheTests
 
         // Assert
         var expected = $"calculations:iob:{userId}:{timestamp}";
-        Assert.Equal(expected, key);
-    }
-
-    [Theory]
-    [InlineData("user123", 1640995200000L)] // 2022-01-01 00:00:00 UTC
-    [InlineData("user456", 1641081600000L)] // 2022-01-02 00:00:00 UTC
-    [Trait("Category", "Unit")]
-    [Trait("Category", "CacheKeys")]
-    public void CacheKeyBuilder_BuildCobCalculationKey_GeneratesCorrectKey(
-        string userId,
-        long timestamp
-    )
-    {
-        // Act
-        var key = CacheKeyBuilder.BuildCobCalculationKey(userId, timestamp);
-
-        // Assert
-        var expected = $"calculations:cob:{userId}:{timestamp}";
         Assert.Equal(expected, key);
     }
 

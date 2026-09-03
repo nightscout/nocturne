@@ -140,7 +140,6 @@ public class TreatmentService
         // Automatically invalidates:
         // - treatments:recent:*
         // - calculations:iob:*
-        // - stats:*
         await _invalidation.InvalidateForNewInsulinTreatmentAsync(treatment.UserId);
     }
 }
@@ -151,18 +150,14 @@ public class TreatmentService
 The system uses consistent, hierarchical cache keys for diabetes data:
 
 ```
-glucose:{userId}:recent           # Last 24 hours glucose readings
-glucose:{userId}:trends          # Calculated trends and statistics
-user:{userId}:profile            # User profile information
-user:{userId}:settings           # User preferences and settings
-system:lookups                   # System-wide lookup data
-entries:current                  # Current entry cache
-entries:recent:{userId}:{count}  # Recent entries with filters
-treatments:recent:{userId}:{hours} # Recent treatments by time
-calculations:iob:{userId}:{timestamp} # IOB calculation results
-calculations:cob:{userId}:{timestamp} # COB calculation results
-stats:glucose:{userId}:{period}  # Glucose statistics
-profiles:at:{userId}:{timestamp} # Profile at specific time
+entries:current:{tenantId}                  # Current entry cache
+entries:recent:{tenantId}:{count}           # Recent entries with filters
+treatments:recent:{tenantId}:{hours}h       # Recent treatments by time
+calculations:iob:{tenantId}:{timestamp}     # IOB calculation results
+profiles:current:{tenantId}                 # Active profile
+profiles:calculated:{profileId}:{timestamp} # Profile calculated at a timestamp
+system:lookups                              # System-wide lookup data
+system:status                               # System status
 ```
 
 ## Cache Policies & TTL
@@ -261,7 +256,7 @@ The memory cache now supports advanced features:
 ```csharp
 // Pattern-based cache invalidation now works in memory cache
 await cacheService.RemoveByPatternAsync("entries:recent:*");
-await cacheService.RemoveByPatternAsync("user:123:*");
+await cacheService.RemoveByPatternAsync("calculations:iob:*");
 
 // Get enhanced statistics
 var stats = await cacheService.GetStatisticsAsync();
@@ -290,7 +285,7 @@ Enhanced health check system with better diagnostics:
 
 ### 🔧 Constants and Maintainability
 
-- **Centralized Constants**: All magic strings moved to `CacheConstants` class
+- **Shared Constants**: Processing statuses, default TTLs, and cleanup intervals live in `CacheConstants`; most keys come from `CacheKeyBuilder`, though some callers still assemble their own
 - **Consistent Naming**: Standardized health check names and tags
 - **Better Service Lifetimes**: Optimized singleton/scoped registrations
 

@@ -234,44 +234,4 @@ public static class DataSources
         LibreConnector or MyLifeConnector => 1,
         _ => 5,
     };
-
-    /// <summary>
-    /// Gets all known data source identifier values.
-    /// </summary>
-    /// <value>A read-only list of every data source constant defined in this class.</value>
-    public static IReadOnlyList<string> All { get; } =
-        new[]
-        {
-            DemoService,
-            Testing,
-            DexcomConnector,
-            LibreConnector,
-            MiniMedConnector,
-            CareLinkConnector,
-            GlookoConnector,
-            NightscoutConnector,
-            GlurooConnector,
-            TidepoolConnector,
-            TConnectSyncConnector,
-            HomeAssistantConnector,
-            EversenseConnector,
-            NocturneRemoteConnector,
-            TwiistConnector,
-            XDrip,
-            Spike,
-            ManualEntry,
-            Careportal,
-            ApiClient,
-            MongoDbImport,
-            CsvImport,
-            TidepoolImport,
-            Unknown,
-            System,
-            WebSocket,
-            Loop,
-            OpenAps,
-            AndroidAps,
-            IAps,
-            Trio,
-        };
 }
