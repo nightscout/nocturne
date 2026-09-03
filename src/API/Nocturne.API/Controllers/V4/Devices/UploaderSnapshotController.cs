@@ -55,7 +55,7 @@ public class UploaderSnapshotController(IUploaderSnapshotRepository repo)
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
-        var persisted = await Repository.BulkUpsertAsync(models, WriteOrigin.Live, ct);
+        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         return StatusCode(201, persisted.ToArray());
     }
 
