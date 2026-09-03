@@ -145,14 +145,6 @@ public static class CacheKeyBuilder
         BuildKey("calculations", "iob", userId, timestamp.ToString());
 
     /// <summary>
-    /// Builds a cache key for COB calculation results
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="timestamp">Timestamp for calculation</param>
-    public static string BuildCobCalculationKey(string userId, long timestamp) =>
-        BuildKey("calculations", "cob", userId, timestamp.ToString());
-
-    /// <summary>
     /// Builds a cache key for profile calculations at timestamp
     /// </summary>
     /// <param name="profileId">Profile ID</param>
@@ -166,20 +158,6 @@ public static class CacheKeyBuilder
     /// <param name="userId">User ID</param>
     public static string BuildIobCalculationPattern(string userId) =>
         $"calculations{KeySeparator}iob{KeySeparator}{userId}{KeySeparator}*";
-
-    /// <summary>
-    /// Creates a pattern for invalidating all COB calculation cache for a user
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    public static string BuildCobCalculationPattern(string userId) =>
-        $"calculations{KeySeparator}cob{KeySeparator}{userId}{KeySeparator}*";
-
-    /// <summary>
-    /// Creates a pattern for invalidating all statistics cache for a user
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    public static string BuildStatsPattern(string userId) =>
-        $"stats{KeySeparator}*{KeySeparator}{userId}{KeySeparator}*";
 
     /// <summary>
     /// Creates a pattern for invalidating all profile calculated cache for a profile

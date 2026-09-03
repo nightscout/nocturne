@@ -22,19 +22,9 @@ public class CalculationCacheConfiguration
     public int IobCalculationExpirationSeconds { get; set; } = 900; // 15 minutes
 
     /// <summary>
-    /// COB calculation cache expiration in seconds (default: 15 minutes)
-    /// </summary>
-    public int CobCalculationExpirationSeconds { get; set; } = 900; // 15 minutes
-
-    /// <summary>
     /// Profile calculation cache expiration in seconds (default: 1 hour)
     /// </summary>
     public int ProfileCalculationExpirationSeconds { get; set; } = 3600; // 1 hour
-
-    /// <summary>
-    /// Statistics cache expiration in seconds (default: 30 minutes)
-    /// </summary>
-    public int StatisticsExpirationSeconds { get; set; } = 1800; // 30 minutes
 }
 
 /// <summary>
