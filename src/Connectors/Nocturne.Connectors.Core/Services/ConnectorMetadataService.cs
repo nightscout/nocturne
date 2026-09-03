@@ -109,34 +109,27 @@ public static class ConnectorMetadataService
                 .ToList();
 
             foreach (var assembly in assemblies)
-                try
+                foreach (var type in assembly.LoadableTypes())
                 {
-                    foreach (var type in assembly.GetTypes())
+                    var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
+                    if (attr == null || string.IsNullOrEmpty(attr.DataSourceId)) continue;
+                    var info = new ConnectorDisplayInfo
                     {
-                        var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                        if (attr == null || string.IsNullOrEmpty(attr.DataSourceId)) continue;
-                        var info = new ConnectorDisplayInfo
-                        {
-                            ConnectorName = attr.ConnectorName,
-                            ConnectorId = attr.ConnectorId,
-                            DisplayName = attr.DisplayName,
-                            DataSourceId = attr.DataSourceId,
-                            Icon = attr.Icon,
-                            Category = attr.Category,
-                            Description = attr.Description,
-                            ServiceName = attr.ServiceName,
-                            DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
-                            DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes
-                        };
+                        ConnectorName = attr.ConnectorName,
+                        ConnectorId = attr.ConnectorId,
+                        DisplayName = attr.DisplayName,
+                        DataSourceId = attr.DataSourceId,
+                        Icon = attr.Icon,
+                        Category = attr.Category,
+                        Description = attr.Description,
+                        ServiceName = attr.ServiceName,
+                        DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
+                        DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes
+                    };
 
-                        ConnectorsByDataSourceId[attr.DataSourceId] = info;
+                    ConnectorsByDataSourceId[attr.DataSourceId] = info;
 
-                        RegistrationsByConnectorId[attr.ConnectorId] = attr;
-                    }
-                }
-                catch (ReflectionTypeLoadException)
-                {
-                    // Some types may not be loadable, skip them
+                    RegistrationsByConnectorId[attr.ConnectorId] = attr;
                 }
 
             _initialized = true;

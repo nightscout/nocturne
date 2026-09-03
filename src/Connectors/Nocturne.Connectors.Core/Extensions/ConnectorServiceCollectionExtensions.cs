@@ -243,44 +243,26 @@ public static class ConnectorServiceCollectionExtensions
 
             // Discover and invoke all IConnectorInstaller implementations
             foreach (var assembly in connectorAssemblies)
-            {
-                try
+                foreach (var type in assembly.LoadableTypes())
                 {
-                    foreach (var type in assembly.GetTypes())
-                    {
-                        if (type.IsAbstract || type.IsInterface)
-                            continue;
+                    if (type.IsAbstract || type.IsInterface)
+                        continue;
 
-                        if (!typeof(IConnectorInstaller).IsAssignableFrom(type))
-                            continue;
+                    if (!typeof(IConnectorInstaller).IsAssignableFrom(type))
+                        continue;
 
-                        var installer = (IConnectorInstaller)Activator.CreateInstance(type)!;
-                        installer.Install(services, configuration);
-                    }
+                    var installer = (IConnectorInstaller)Activator.CreateInstance(type)!;
+                    installer.Install(services, configuration);
                 }
-                catch (ReflectionTypeLoadException)
-                {
-                    // Some types may not be loadable, skip them
-                }
-            }
 
             if (pollingService is null)
                 return services;
 
             void AddPollerIfEnabled(Type hostedService, Type configType)
             {
-                // Per-connector section, then the global Settings section, then on by default.
                 var connectorName = ConnectorRegistrationAttribute.DeclaredOn(configType).ConnectorName;
-                var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
-                if (!section.Exists())
-                    section = configuration.GetSection($"Connectors:{connectorName}");
 
-                var isEnabled = section.GetValue<bool?>("Enabled")
-                    ?? configuration.GetValue<bool?>("Parameters:Connectors:Settings:Enabled")
-                    ?? configuration.GetValue<bool?>("Connectors:Settings:Enabled")
-                    ?? true;
-
-                if (isEnabled)
+                if (configuration.ConnectorEnabled(connectorName) ?? true)
                     services.TryAddEnumerable(
                         ServiceDescriptor.Singleton(typeof(IHostedService), hostedService));
             }
