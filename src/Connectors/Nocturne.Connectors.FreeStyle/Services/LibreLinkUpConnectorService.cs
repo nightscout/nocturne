@@ -72,8 +72,6 @@ public class LibreConnectorService(
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
 
-    public override bool IsHealthy => base.IsHealthy && !_tokenProvider.IsTokenExpired;
-
     private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
     {
         var token = await _tokenProvider.GetValidTokenAsync(config);

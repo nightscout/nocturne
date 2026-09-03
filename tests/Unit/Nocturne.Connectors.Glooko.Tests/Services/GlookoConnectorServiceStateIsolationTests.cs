@@ -101,10 +101,10 @@ public class GlookoConnectorServiceStateIsolationTests
     /// <see cref="GlookoConnectorService"/> declares no mutable field of its own, instance or static.
     /// It does not (and cannot cheaply) prove a readonly field holds nothing mutable, and
     /// <c>DeclaredOnly</c> excludes <c>BaseConnectorService</c>, which does declare mutable per-run
-    /// fields (<c>_glucosePublishOrigin</c>, <c>_treatmentPublishOrigin</c>, <c>_devicePublishOrigin</c>,
-    /// <c>_failedRequestCount</c>) whose own comment says they are safe *because* the connector is
-    /// resolved fresh per run. That base-class reliance on the registration lifetime is out of this
-    /// issue's scope and is not covered here.
+    /// fields (<c>_glucosePublishOrigin</c>, <c>_treatmentPublishOrigin</c>, <c>_devicePublishOrigin</c>)
+    /// whose own comment says they are safe *because* the connector is resolved fresh per run. That
+    /// base-class reliance on the registration lifetime is out of this issue's scope and is not
+    /// covered here.
     /// </summary>
     [Fact]
     public void GlookoConnectorService_DeclaresNoMutableFields()
