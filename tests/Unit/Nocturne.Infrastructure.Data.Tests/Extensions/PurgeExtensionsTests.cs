@@ -1,7 +1,6 @@
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Extensions;
 
@@ -15,26 +14,13 @@ public class PurgeExtensionsTests : IDisposable
 {
     private const string Source = "demo-service";
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
     private readonly Guid _tenantA = Guid.CreateVersion7();
     private readonly Guid _tenantB = Guid.CreateVersion7();
+    private readonly SqliteTestDatabase _db;
 
     public PurgeExtensionsTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var db = new NocturneDbContext(_options);
-        db.Database.EnsureCreated();
-        db.Tenants.Add(new TenantEntity { Id = _tenantA, Slug = "a" });
-        db.Tenants.Add(new TenantEntity { Id = _tenantB, Slug = "b" });
-        db.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_tenantA, "a").SeedTenant(_tenantB, "b");
 
         SeedBoluses(_tenantA);
         SeedBoluses(_tenantB);
@@ -42,11 +28,11 @@ public class PurgeExtensionsTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    private NocturneDbContext NewContext(Guid tenantId) => new(_options) { TenantId = tenantId };
+    private NocturneDbContext NewContext(Guid tenantId) => _db.CreateContext(tenantId);
 
     /// <summary>One live and one already-soft-deleted bolus, both carrying <see cref="Source"/>.</summary>
     private void SeedBoluses(Guid tenantId)

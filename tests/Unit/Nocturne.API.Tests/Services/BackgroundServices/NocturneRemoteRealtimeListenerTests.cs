@@ -9,6 +9,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.BackgroundServices;
@@ -277,9 +278,7 @@ public class NocturneRemoteRealtimeListenerTests
 
         services.AddScoped<ITenantAccessor>(_ =>
         {
-            var mock = new Mock<ITenantAccessor>();
-            mock.Setup(t => t.IsResolved).Returns(true);
-            mock.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var mock = MockTenantAccessor.Create(Guid.NewGuid());
             mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
             return mock.Object;
         });

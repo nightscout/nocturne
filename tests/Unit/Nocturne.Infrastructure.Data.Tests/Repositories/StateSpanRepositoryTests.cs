@@ -17,6 +17,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 [Trait("Category", "Repository")]
 public class StateSpanRepositoryTests : IDisposable
 {
+    private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000099");
+
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
@@ -38,9 +42,11 @@ public class StateSpanRepositoryTests : IDisposable
         var httpContextAccessor = new Mock<IHttpContextAccessor>();
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
 
-        _context = TestDbContextFactory.CreateInMemoryContext(
-            interceptors: new MutationAuditInterceptor(httpContextAccessor.Object));
-        _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        _db = TestDbContextFactory.CreateSqliteWithTenant(
+                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object))
+            .SeedTenant(OtherTenantId, "other");
+
+        _context = _db.CreateContext();
         _context.AuditContext = _auditContext;
         _mockDedup = new Mock<IDeduplicationService>();
         _repository = new StateSpanRepository(
@@ -62,6 +68,7 @@ public class StateSpanRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -656,9 +663,8 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task GetActiveAtAsync_respects_tenant_isolation()
     {
-        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000099");
         _context.StateSpans.Add(SpanEntity(
-            otherTenant, StateSpanCategory.Override, "Custom",
+            OtherTenantId, StateSpanCategory.Override, "Custom",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             end: null));
         await _context.SaveChangesAsync();

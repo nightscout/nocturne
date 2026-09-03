@@ -14,6 +14,7 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Mocks;
 using SocketIOClient;
 using Xunit;
 
@@ -378,9 +379,7 @@ public class NightscoutRealtimeListenerTests
 
         services.AddScoped<ITenantAccessor>(_ =>
         {
-            var mock = new Mock<ITenantAccessor>();
-            mock.Setup(t => t.IsResolved).Returns(true);
-            mock.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var mock = MockTenantAccessor.Create(Guid.NewGuid());
             mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
             return mock.Object;
         });

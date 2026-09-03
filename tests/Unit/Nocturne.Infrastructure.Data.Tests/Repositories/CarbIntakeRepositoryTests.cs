@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -21,8 +19,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 public class CarbIntakeRepositoryTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDeduplicationService;
     private readonly CarbIntakeRepository _repo;
@@ -32,24 +29,9 @@ public class CarbIntakeRepositoryTests : IDisposable
         // Create in-memory SQLite database for testing — mirrors the pattern in
         // TreatmentRepositoryTests so partial unique indexes (e.g. on
         // (tenant_id, data_source, sync_identifier)) are enforced end-to-end.
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        // Create the database schema and seed the tenant.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _mockDeduplicationService = new Mock<IDeduplicationService>();
@@ -64,7 +46,7 @@ public class CarbIntakeRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

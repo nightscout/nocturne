@@ -3,7 +3,6 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -20,6 +19,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -34,8 +34,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// </remarks>
 public class SetupControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<IPasskeyService> _passkeyService;
@@ -51,16 +50,9 @@ public class SetupControllerTests : IDisposable
 
     public SetupControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
 
         _tenantService = new Mock<ITenantService>();
         _passkeyService = new Mock<IPasskeyService>();
@@ -83,7 +75,7 @@ public class SetupControllerTests : IDisposable
         _dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
-                var ctx = new NocturneDbContext(_dbOptions);
+                var ctx = _db.CreateContext();
                 return ctx;
             });
 
@@ -126,7 +118,7 @@ public class SetupControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     // ── CreateTenant ──────────────────────────────────────────────────────
@@ -884,7 +876,7 @@ public class SetupControllerTests : IDisposable
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private NocturneDbContext FreshContext() => new(_dbOptions);
+    private NocturneDbContext FreshContext() => _db.CreateContext();
 
     /// <summary>
     /// Drives the passkey completion step with the mocks it needs to reach the grant.

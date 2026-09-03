@@ -1,7 +1,5 @@
 using Nocturne.Connectors.Core.Utilities;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -12,6 +10,7 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
 
@@ -26,7 +25,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
 {
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IJwtService> _mockJwtService;
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly AuthorizationService _authorizationService;
 
@@ -38,15 +37,9 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         _mockSubjectService = new Mock<ISubjectService>();
         _mockJwtService = new Mock<IJwtService>();
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbContext = new NocturneDbContext(dbOptions) { TenantId = _testTenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(_testTenantId);
         _dbContext.Tenants.Add(new TenantEntity
         {
             Id = _testTenantId,
@@ -75,7 +68,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private void SeedGrant(

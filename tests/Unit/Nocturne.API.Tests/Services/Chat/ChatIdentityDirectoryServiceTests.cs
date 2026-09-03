@@ -1,4 +1,3 @@
-using System.Data.Common;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +6,7 @@ using Moq;
 using Nocturne.API.Services.Chat;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
 
@@ -19,32 +19,21 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     private const string UserA = "discord-user-a";
     private const string UserB = "discord-user-b";
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
-    private readonly TestDbContextFactory _factory;
+    private readonly SqliteTestDatabase _db;
+    private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly ChatIdentityDirectoryService _service;
 
     public ChatIdentityDirectoryServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        using (var db = new NocturneDbContext(_options))
-        {
-            db.Database.EnsureCreated();
-        }
-
-        _factory = new TestDbContextFactory(_options);
+        _factory = _db.ContextFactory;
         _service = new ChatIdentityDirectoryService(
             _factory,
             Mock.Of<ILogger<ChatIdentityDirectoryService>>());
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 
     /// <summary>
     /// Inserts a tenant and returns its id. chat_identity_directory.tenant_id is a real FK with
@@ -53,7 +42,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     private Guid NewTenant()
     {
         var id = Guid.CreateVersion7();
-        using var db = new NocturneDbContext(_options);
+        using var db = _db.CreateContext();
         db.Tenants.Add(new TenantEntity
         {
             Id = id,
@@ -71,18 +60,10 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     private Guid NewSubject()
     {
         var id = Guid.CreateVersion7();
-        using var db = new NocturneDbContext(_options);
+        using var db = _db.CreateContext();
         db.Subjects.Add(new SubjectEntity { Id = id, Name = $"s-{id:n}"[..20] });
         db.SaveChanges();
         return id;
-    }
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-        public Task<NocturneDbContext> CreateDbContextAsync(CancellationToken ct = default)
-            => Task.FromResult(CreateDbContext());
     }
 
     /// <summary>
@@ -194,7 +175,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     /// <summary>Hard-deletes a directory row by label, bypassing the service.</summary>
     private void DeleteLink(string platformUserId, string label)
     {
-        using var db = new NocturneDbContext(_options);
+        using var db = _db.CreateContext();
         db.ChatIdentityDirectory
             .Where(d => d.Platform == Platform && d.PlatformUserId == platformUserId && d.Label == label)
             .ExecuteDelete();
@@ -203,7 +184,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     /// <summary>Writes a directory row directly, bypassing the service.</summary>
     private void InsertLink(string platformUserId, Guid tenantId, string label, bool isDefault)
     {
-        using var db = new NocturneDbContext(_options);
+        using var db = _db.CreateContext();
         db.ChatIdentityDirectory.Add(new ChatIdentityDirectoryEntry
         {
             Id = Guid.CreateVersion7(),
@@ -259,7 +240,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         await _service.CreateLinkAsync(Platform, UserA, NewTenant(), NewSubject(), "oliver", "Oliver", default);
         await _service.CreateLinkAsync(Platform, UserB, NewTenant(), subjectId, "lily-b", "Lily", default);
 
-        await using (var db = new NocturneDbContext(_options))
+        await using (var db = _db.CreateContext())
         {
             await db.Subjects.Where(s => s.Id == subjectId).ExecuteDeleteAsync();
         }
@@ -325,7 +306,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         await _service.CreateLinkAsync(Platform, UserA, owned, NewSubject(), "other", "Other", default);
 
         var factory = new InterloperDbContextFactory(
-            _options,
+            _db.Options,
             pending => InsertLink(UserA, stolen, pending.Label, isDefault: false),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
@@ -348,7 +329,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         var tenantId = NewTenant();
 
         var factory = new InterloperDbContextFactory(
-            _options,
+            _db.Options,
             _ => InsertLink(UserA, tenantId, "winner", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
@@ -372,7 +353,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         // Two chat users linking their very first tenant at once: both compute IsDefault = true and
         // collide on ux_directory_user_one_default alone — different tenants, different labels.
         var factory = new InterloperDbContextFactory(
-            _options,
+            _db.Options,
             _ => InsertLink(UserA, theirs, "theirs", isDefault: true),
             interlopeCount: 1);
         var service = new ChatIdentityDirectoryService(
@@ -404,7 +385,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         await _service.CreateLinkAsync(Platform, UserA, owned, NewSubject(), "other", "Other", default);
 
         var factory = new InterloperDbContextFactory(
-            _options,
+            _db.Options,
             pending => InsertLink(UserA, stolen, pending.Label, isDefault: false),
             interlopeCount: 1,
             beforeRetry: () => DeleteLink(UserA, "lily"));
@@ -424,7 +405,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     [Fact]
     public async Task CreateLinkAsync_surfaces_a_rejection_a_re_read_cannot_fix()
     {
-        var factory = new BarrenFailureDbContextFactory(_options);
+        var factory = new BarrenFailureDbContextFactory(_db.Options);
         var service = new ChatIdentityDirectoryService(
             factory, Mock.Of<ILogger<ChatIdentityDirectoryService>>());
 
@@ -442,7 +423,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task CreateLinkAsync_surfaces_the_rejection_when_every_attempt_loses()
     {
         var factory = new InterloperDbContextFactory(
-            _options,
+            _db.Options,
             pending => InsertLink(UserA, NewTenant(), pending.Label, isDefault: false),
             interlopeCount: int.MaxValue);
         var service = new ChatIdentityDirectoryService(

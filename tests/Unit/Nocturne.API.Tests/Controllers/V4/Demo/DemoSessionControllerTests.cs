@@ -1,9 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -19,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 using Nocturne.API.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4.Demo;
 
@@ -29,22 +28,12 @@ namespace Nocturne.API.Tests.Controllers.V4.Demo;
 /// </summary>
 public class DemoSessionControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<ISessionService> _sessionService = new();
 
     public DemoSessionControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var seed = new NocturneDbContext(_dbOptions);
-        seed.Database.EnsureCreated();
+        _db = TestDbContextFactory.CreateSqlite();
 
         _sessionService
             .Setup(s => s.IssueSessionAsync(
@@ -149,7 +138,7 @@ public class DemoSessionControllerTests : IDisposable
 
         // Mutate only the flag: the membership still matches on username and is still unrevoked,
         // so nothing but the flag can account for the 404.
-        await using (var db = new NocturneDbContext(_dbOptions))
+        await using (var db = _db.CreateContext())
         {
             var subject = await db.Subjects.SingleAsync(s => s.IsDemoSubject);
             subject.IsDemoSubject = false;
@@ -179,7 +168,7 @@ public class DemoSessionControllerTests : IDisposable
 
     private Guid SeedTenant(bool isDemo, bool withDemoMember)
     {
-        using var db = new NocturneDbContext(_dbOptions);
+        using var db = _db.CreateContext();
 
         var tenant = new TenantEntity
         {
@@ -220,7 +209,7 @@ public class DemoSessionControllerTests : IDisposable
     {
         var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
+            .ReturnsAsync(() => _db.CreateContext());
         return dbFactory.Object;
     }
 
@@ -270,7 +259,7 @@ public class DemoSessionControllerTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 }

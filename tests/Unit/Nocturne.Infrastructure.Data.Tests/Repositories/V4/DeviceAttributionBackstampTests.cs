@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -28,7 +26,7 @@ public class DeviceAttributionBackstampTests : IDisposable
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly DateTime Base = new(2026, 6, 10, 8, 0, 0, DateTimeKind.Utc);
 
-    private readonly DbConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly BolusRepository _boluses;
     private readonly TempBasalRepository _tempBasals;
@@ -38,23 +36,9 @@ public class DeviceAttributionBackstampTests : IDisposable
 
     public DeviceAttributionBackstampTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(options))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(options) { TenantId = TestTenantId };
+        _context = _db.CreateContext();
         var factory = new TestTenantDbContextFactory(_context);
         var dedup = new Mock<IDeduplicationService>().Object;
         var audit = new Mock<IAuditContext>().Object;
@@ -69,7 +53,7 @@ public class DeviceAttributionBackstampTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

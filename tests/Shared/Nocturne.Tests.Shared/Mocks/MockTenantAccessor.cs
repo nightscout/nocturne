@@ -5,8 +5,7 @@ namespace Nocturne.Tests.Shared.Mocks;
 
 /// <summary>
 /// Shared factory for creating a pre-configured ITenantAccessor mock
-/// with a standard test tenant. Eliminates the 5-line mock setup block
-/// that was duplicated across 10+ test files.
+/// with a standard test tenant.
 /// </summary>
 public static class MockTenantAccessor
 {

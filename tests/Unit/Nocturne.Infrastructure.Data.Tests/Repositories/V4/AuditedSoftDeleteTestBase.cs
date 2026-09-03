@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
@@ -20,35 +18,21 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
 {
     protected static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
 
     protected AuditedSoftDeleteTestBase()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(_options) { TenantId = TestTenantId })
-        {
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        _context = _db.CreateContext();
         UseAuditContext(new UserAuditContext());
     }
 
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -71,7 +55,7 @@ public abstract class AuditedSoftDeleteTestBase<TEntity> : IDisposable
         return (Guid)_context.Entry(row).Property("Id").CurrentValue!;
     }
 
-    private NocturneDbContext Verify() => new(_options) { TenantId = TestTenantId };
+    private NocturneDbContext Verify() => _db.CreateContext();
 
     protected async Task<(DateTime? DeletedAt, bool DeletedByUser)> ReadDeleteStateAsync(Guid id)
     {

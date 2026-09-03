@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
@@ -31,7 +31,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private readonly Guid _revokedSubjectId = Guid.CreateVersion7();
 
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly IJwtService _jwt;
     private readonly PlatformAccessCookieHandler _handler;
     private readonly OidcOptions _oidc = new();
@@ -47,15 +47,9 @@ public class PlatformAccessCookieHandlerTests : IDisposable
         });
         _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance);
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        using (var ctx = new NocturneDbContext(dbOptions))
+        _db = TestDbContextFactory.CreateSqlite();
+        using (var ctx = _db.CreateContext())
         {
-            ctx.Database.EnsureCreated();
             ctx.Subjects.Add(new SubjectEntity { Id = _subjectId, Name = "Operator", IsActive = true, IsPlatformAdmin = true });
             ctx.Subjects.Add(new SubjectEntity { Id = _revokedSubjectId, Name = "Ex-Operator", IsActive = true, IsPlatformAdmin = false });
             ctx.SaveChanges();
@@ -64,7 +58,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
         services.AddDbContext<NocturneDbContext>(o => o
-            .UseSqlite(_connection)
+            .UseSqlite(_db.Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
@@ -75,7 +69,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             Options.Create(_oidc));
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 
     [Fact]
     public async Task ValidGrant_MatchingTenant_PlatformAdmin_AuthenticatesAsPlatformAccess()

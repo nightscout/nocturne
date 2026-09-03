@@ -1,9 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -32,7 +30,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class NutritionControllerMealsTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly BolusRepository _bolusRepo;
     private readonly CarbIntakeRepository _carbIntakeRepo;
@@ -41,16 +39,9 @@ public class NutritionControllerMealsTests : IDisposable
 
     public NutritionControllerMealsTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(options) { TenantId = TestTenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(TestTenantId);
         _dbContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
         _dbContext.SaveChanges();
 
@@ -72,7 +63,7 @@ public class NutritionControllerMealsTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private NutritionController CreateController()

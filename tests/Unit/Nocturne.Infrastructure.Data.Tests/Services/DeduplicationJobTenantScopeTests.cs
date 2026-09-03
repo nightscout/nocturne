@@ -1,11 +1,10 @@
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
@@ -32,28 +31,16 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     private static readonly TenantContext OtherTenant =
         new(OtherTenantId, "other", "Other", true, false);
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
 
     public DeduplicationJobTenantScopeTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
-
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using var seedContext = new NocturneDbContext(_contextOptions) { TenantId = TestTenantId };
-        seedContext.Database.EnsureCreated();
-        seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-        seedContext.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
     }
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -181,7 +168,7 @@ public class DeduplicationJobTenantScopeTests : IDisposable
 
     private DeduplicationService CreateService(IServiceScopeFactory scopeFactory, ITenantAccessor? tenantAccessor)
     {
-        var context = new NocturneDbContext(_contextOptions) { TenantId = TestTenantId };
+        var context = _db.CreateContext();
         return new DeduplicationService(
             context, scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
     }
