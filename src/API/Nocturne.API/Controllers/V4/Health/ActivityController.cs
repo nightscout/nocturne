@@ -127,8 +127,8 @@ public class ActivityController : ControllerBase
         [FromBody] UpsertActivityRequest[] requests,
         CancellationToken cancellationToken = default)
     {
-        if (requests.Length == 0)
-            return BadRequest("At least one activity record is required");
+        if (this.ValidateBulkSize(requests, "Activity", "activity records") is { } invalid)
+            return invalid;
 
         var activityList = requests.Select(MapToActivity).ToList();
 

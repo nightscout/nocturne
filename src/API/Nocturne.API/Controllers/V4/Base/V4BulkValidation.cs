@@ -14,10 +14,32 @@ public static class V4BulkValidation
     /// Maximum records one bulk create-or-update request may carry.
     /// </summary>
     /// <remarks>
-    /// Flat-record bulks share this ceiling; a shape whose items nest collections carries its own
-    /// lower one (<c>SleepController.CreateSessionsBulk</c>).
+    /// Flat-record bulks share this ceiling; a shape whose items nest collections passes its own
+    /// lower one to <see cref="ValidateBulkSize{TRequest}"/>.
     /// </remarks>
     public const int MaxItems = 1000;
+
+    /// <summary>
+    /// Rejects a payload that is absent, empty, or longer than <paramref name="maxItems"/>.
+    /// </summary>
+    /// <param name="subject">The payload's name, as it opens the empty-payload message ("Bolus").</param>
+    /// <param name="plural">Many items ("boluses").</param>
+    /// <returns>The error response to return, or <c>null</c> when the payload is usable.</returns>
+    public static ObjectResult? ValidateBulkSize<TRequest>(
+        this ControllerBase controller,
+        IReadOnlyList<TRequest>? requests,
+        string subject,
+        string plural,
+        int maxItems = MaxItems)
+    {
+        if (requests is not { Count: > 0 })
+            return controller.Problem(detail: $"{subject} data is required", statusCode: 400, title: "Bad Request");
+
+        if (requests.Count > maxItems)
+            return controller.Problem(detail: $"Bulk operations are limited to {maxItems} {plural} per request", statusCode: 400, title: "Bad Request");
+
+        return null;
+    }
 
     /// <summary>
     /// Rejects a payload that is empty, longer than <see cref="MaxItems"/>, carries an unset
@@ -47,24 +69,23 @@ public static class V4BulkValidation
         CancellationToken ct = default)
         where TRequest : IBulkUpsertRequest
     {
-        if (requests is not { Length: > 0 })
-            return controller.Problem(detail: $"{subject} data is required", statusCode: 400, title: "Bad Request");
+        if (controller.ValidateBulkSize(requests, subject, plural) is { } invalid)
+            return invalid;
 
-        if (requests.Length > MaxItems)
-            return controller.Problem(detail: $"Bulk operations are limited to {MaxItems} {plural} per request", statusCode: 400, title: "Bad Request");
+        var items = requests!;
 
-        if (requests.Any(r => r.Timestamp == default))
+        if (items.Any(r => r.Timestamp == default))
             return controller.Problem(detail: $"Timestamp must be set on every {singular}", statusCode: 400, title: "Bad Request");
 
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
+        if (items.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
             return controller.Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
 
         if (controller.HttpContext?.RequestServices?.GetService(typeof(IValidator<TRequest>)) is not IValidator<TRequest> validator)
             return null;
 
-        for (var index = 0; index < requests.Length; index++)
+        for (var index = 0; index < items.Length; index++)
         {
-            var result = await validator.ValidateAsync(requests[index], ct);
+            var result = await validator.ValidateAsync(items[index], ct);
             if (result.IsValid)
                 continue;
 
