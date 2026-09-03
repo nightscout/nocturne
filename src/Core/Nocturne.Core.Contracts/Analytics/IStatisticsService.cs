@@ -105,9 +105,11 @@ public interface IStatisticsService
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps for time-dependent metrics.</param>
-    /// <returns>A <see cref="GlycemicVariability"/> containing all variability metrics.</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 data points.</exception>
-    GlycemicVariability CalculateGlycemicVariability(
+    /// <returns>
+    /// A <see cref="GlycemicVariability"/> containing all variability metrics, or null for fewer
+    /// than two values.
+    /// </returns>
+    GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
         IEnumerable<SensorGlucose> entries
     );

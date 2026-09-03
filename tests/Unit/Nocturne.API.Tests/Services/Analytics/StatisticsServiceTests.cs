@@ -146,34 +146,13 @@ public class StatisticsServiceTests
         );
 
         // Act
-        var result = _statisticsService.CalculateGlycemicVariability(values, entries);
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
 
         // Assert
         result.Should().NotBeNull();
         result.CoefficientOfVariation.Should().BeGreaterThan(0);
         result.StandardDeviation.Should().BeGreaterThan(0);
         result.EstimatedA1c.Should().BeGreaterThan(0);
-    }
-
-    [Fact]
-    public void CalculateGlycemicVariability_WithInsufficientData_ShouldThrowException()
-    {
-        // Arrange
-        var values = new double[] { 100 };
-        var entries = new[]
-        {
-            new SensorGlucose
-            {
-                Mgdl = 100,
-                Timestamp = DateTimeOffset.UtcNow.UtcDateTime,
-            },
-        };
-
-        // Act & Assert
-        Action act = () => _statisticsService.CalculateGlycemicVariability(values, entries);
-        act.Should()
-            .Throw<ArgumentException>()
-            .WithMessage("Not enough data points to calculate glycemic variability metrics");
     }
 
     [Fact]
@@ -714,7 +693,7 @@ public class StatisticsServiceTests
         );
 
         // Act
-        var result = _statisticsService.CalculateGlycemicVariability(values, entries);
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
 
         // Assert
         result.Should().NotBeNull();
