@@ -1477,6 +1477,40 @@ public class DeduplicationServiceTests : IDisposable
 
     #endregion
 
+    #region Linked Record Reads
+
+    [Fact]
+    public async Task GetLinkedRecordsAsync_SkipsARowWhoseRecordTypeIsOutsideTheEnum()
+    {
+        await using var context = NewContext();
+        var service = CreateService(context);
+
+        // A database upgraded from before the legacy tables were dropped still holds rows whose
+        // record_type names a type the enum no longer has.
+        var canonicalId = Guid.CreateVersion7();
+        var liveId = Guid.CreateVersion7();
+        AddLink(context, RecordType.Bolus, liveId, WideBase, "mylife-connector", canonicalId, isPrimary: true);
+        context.LinkedRecords.Add(new LinkedRecordEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            CanonicalId = canonicalId,
+            RecordType = "entry",
+            RecordId = Guid.CreateVersion7(),
+            SourceTimestamp = WideBase + 1_000,
+            DataSource = "glooko-connector",
+            IsPrimary = false,
+            SysCreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var linked = await service.GetLinkedRecordsAsync(canonicalId);
+
+        linked.Should().ContainSingle().Which.RecordId.Should().Be(liveId);
+    }
+
+    #endregion
+
     #region Test Helper Methods
 
     /// <summary>

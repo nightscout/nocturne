@@ -1118,13 +1118,8 @@ public class DeduplicationService : IDeduplicationService
             // and merge each type's candidate canonical groups.
             foreach (var group in batch.GroupBy(l => l.RecordType))
             {
-                // RecordType is a free-form string column whose surface is broader than the enum.
-                // A legacy/typo'd value must not throw and block all further batches for this tenant.
-                if (!Enum.TryParse<RecordType>(group.Key, ignoreCase: true, out var type))
+                if (ParseRecordType(group.Key) is not { } type)
                 {
-                    _logger.LogWarning(
-                        "Skipping linked_records group with unknown RecordType '{RecordType}' during reconcile",
-                        group.Key);
                     continue;
                 }
 
@@ -1314,17 +1309,37 @@ public class DeduplicationService : IDeduplicationService
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => new LinkedRecord
+        return entities
+            .Select(e => (Entity: e, Type: ParseRecordType(e.RecordType)))
+            .Where(static x => x.Type.HasValue)
+            .Select(x => new LinkedRecord
+            {
+                Id = x.Entity.Id.ToString(),
+                CanonicalId = x.Entity.CanonicalId,
+                RecordType = x.Type!.Value,
+                RecordId = x.Entity.RecordId,
+                SourceTimestamp = x.Entity.SourceTimestamp,
+                DataSource = x.Entity.DataSource,
+                IsPrimary = x.Entity.IsPrimary,
+                CreatedAt = x.Entity.SysCreatedAt
+            });
+    }
+
+    /// <summary>
+    /// The <see cref="RecordType"/> a <c>linked_records.record_type</c> string names, or null when
+    /// the column holds a value outside the enum. The column's surface is broader than the enum —
+    /// it carries whatever earlier versions wrote — and one such row must neither fail a read nor
+    /// block a tenant's remaining reconcile batches, so every caller skips a null.
+    /// </summary>
+    private RecordType? ParseRecordType(string recordType)
+    {
+        if (Enum.TryParse<RecordType>(recordType, ignoreCase: true, out var type))
         {
-            Id = e.Id.ToString(),
-            CanonicalId = e.CanonicalId,
-            RecordType = Enum.Parse<RecordType>(e.RecordType, ignoreCase: true),
-            RecordId = e.RecordId,
-            SourceTimestamp = e.SourceTimestamp,
-            DataSource = e.DataSource,
-            IsPrimary = e.IsPrimary,
-            CreatedAt = e.SysCreatedAt
-        });
+            return type;
+        }
+
+        _logger.LogWarning("Skipping linked_records row with unknown RecordType '{RecordType}'", recordType);
+        return null;
     }
 
     /// <inheritdoc />
