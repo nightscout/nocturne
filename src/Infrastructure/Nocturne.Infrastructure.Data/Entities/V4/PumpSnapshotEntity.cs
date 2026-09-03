@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PumpSnapshot
 /// </summary>
 [Table("pump_snapshots")]
-public class PumpSnapshotEntity : V4TimeSeriesEntityBase
+public class PumpSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
 {
     /// <summary>
     /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),

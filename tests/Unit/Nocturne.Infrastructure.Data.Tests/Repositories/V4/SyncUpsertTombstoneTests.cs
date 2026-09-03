@@ -23,6 +23,7 @@ public class SyncUpsertTombstoneTests : IDisposable
 {
     private const string DataSource = "aaps";
     private const string SyncIdentifier = "sync-1";
+    private const string LiveSyncIdentifier = "sync-2";
 
     private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-00000000000a");
     private static readonly DateTime T0 = new(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc);
@@ -83,6 +84,13 @@ public class SyncUpsertTombstoneTests : IDisposable
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<BolusRepository>.Instance,
+            broadcaster);
+
+    private ApsSnapshotRepository NewApsSnapshotRepository(
+        RecordingV4RecordBroadcaster<ApsSnapshot> broadcaster) =>
+        new(new TestTenantDbContextFactory(_context),
+            new Mock<IAuditContext>().Object,
+            NullLogger<ApsSnapshotRepository>.Instance,
             broadcaster);
 
     private async Task AssertInsertedPastTombstoneAsync<TEntity>(
@@ -224,5 +232,139 @@ public class SyncUpsertTombstoneTests : IDisposable
         var rows = await verify.Boluses.IgnoreQueryFilters().AsNoTracking().ToListAsync();
         rows.Single(b => b.Id == live.Id).Insulin.Should().Be(9.0);
         rows.Single(b => b.Id == tombstoneId).Insulin.Should().Be(5.0, "the tombstone row is left untouched");
+    }
+
+    /// <remarks>
+    /// One batch spanning both halves of the rule for the device snapshots, whose bulk upsert is the
+    /// wire path an uploader retries on: <see cref="SyncIdentifier"/> is held by a user tombstone and
+    /// <see cref="LiveSyncIdentifier"/> by a live row.
+    /// </remarks>
+    private async Task AssertSnapshotUpsertFollowsTombstonePolicyAsync<TModel, TEntity>(
+        TEntity deleted,
+        Func<string, double, TModel> build,
+        Func<TModel, Task<TModel>> createAsync,
+        Func<TModel[], Task<IEnumerable<TModel>>> bulkCreateAsync,
+        RecordingV4RecordBroadcaster<TModel> broadcaster,
+        Func<TEntity, double?> value)
+        where TModel : V4RecordBase
+        where TEntity : class, IV4TimeSeriesEntity, ISyncDedupable
+    {
+        var tombstoneId = SeedTombstone(deleted, deletedByUser: true);
+        var live = await createAsync(build(LiveSyncIdentifier, 7.0));
+
+        var result = await bulkCreateAsync([build(SyncIdentifier, 9.0), build(LiveSyncIdentifier, 8.0)]);
+
+        result.Should().ContainSingle().Which.Id.Should().Be(live.Id);
+        broadcaster.Created.Should().ContainSingle("the batch inserted nothing").Which.Id.Should().Be(live.Id);
+        broadcaster.Updated.Should().ContainSingle().Which.Id.Should().Be(live.Id);
+
+        await using var verify = NewContext();
+        var rows = await verify.Set<TEntity>().IgnoreQueryFilters().AsNoTracking().ToListAsync();
+        rows.Should().HaveCount(2, "the re-upload neither lands past the tombstone nor duplicates the live row");
+        value(rows.Single(e => e.Id == tombstoneId)).Should().Be(5.0, "the tombstone row is left untouched");
+        value(rows.Single(e => e.Id == live.Id)).Should().Be(8.0);
+    }
+
+    [Fact]
+    public async Task BulkCreate_WhenAUserDeletedApsTombstoneHoldsTheKey_DropsItAndUpdatesTheLiveRow()
+    {
+        var broadcaster = new RecordingV4RecordBroadcaster<ApsSnapshot>();
+        var repository = NewApsSnapshotRepository(broadcaster);
+
+        await AssertSnapshotUpsertFollowsTombstonePolicyAsync(
+            new ApsSnapshotEntity { AidAlgorithm = nameof(AidAlgorithm.Trio), Iob = 5.0 },
+            (sync, iob) => new ApsSnapshot
+            {
+                Timestamp = T0,
+                DataSource = DataSource,
+                SyncIdentifier = sync,
+                AidAlgorithm = AidAlgorithm.Trio,
+                Iob = iob,
+            },
+            model => repository.CreateAsync(model, WriteOrigin.Live),
+            models => repository.BulkCreateAsync(models, WriteOrigin.Live),
+            broadcaster,
+            e => e.Iob);
+    }
+
+    [Fact]
+    public async Task BulkCreate_WhenAUserDeletedPumpTombstoneHoldsTheKey_DropsItAndUpdatesTheLiveRow()
+    {
+        var broadcaster = new RecordingV4RecordBroadcaster<PumpSnapshot>();
+        var repository = new PumpSnapshotRepository(
+            new TestTenantDbContextFactory(_context),
+            new Mock<IAuditContext>().Object,
+            NullLogger<PumpSnapshotRepository>.Instance,
+            broadcaster);
+
+        await AssertSnapshotUpsertFollowsTombstonePolicyAsync(
+            new PumpSnapshotEntity { Reservoir = 5.0 },
+            (sync, reservoir) => new PumpSnapshot
+            {
+                Timestamp = T0,
+                DataSource = DataSource,
+                SyncIdentifier = sync,
+                Reservoir = reservoir,
+            },
+            model => repository.CreateAsync(model, WriteOrigin.Live),
+            models => repository.BulkCreateAsync(models, WriteOrigin.Live),
+            broadcaster,
+            e => e.Reservoir);
+    }
+
+    [Fact]
+    public async Task BulkCreate_WhenAUserDeletedUploaderTombstoneHoldsTheKey_DropsItAndUpdatesTheLiveRow()
+    {
+        var broadcaster = new RecordingV4RecordBroadcaster<UploaderSnapshot>();
+        var repository = new UploaderSnapshotRepository(
+            new TestTenantDbContextFactory(_context),
+            new Mock<IAuditContext>().Object,
+            NullLogger<UploaderSnapshotRepository>.Instance,
+            broadcaster);
+
+        await AssertSnapshotUpsertFollowsTombstonePolicyAsync(
+            new UploaderSnapshotEntity { BatteryVoltage = 5.0 },
+            (sync, voltage) => new UploaderSnapshot
+            {
+                Timestamp = T0,
+                DataSource = DataSource,
+                SyncIdentifier = sync,
+                BatteryVoltage = voltage,
+            },
+            model => repository.CreateAsync(model, WriteOrigin.Live),
+            models => repository.BulkCreateAsync(models, WriteOrigin.Live),
+            broadcaster,
+            e => e.BatteryVoltage);
+    }
+
+    /// <remarks>
+    /// One snapshot type pins the system-swept half: the branch is the base's and carries no per-type
+    /// code, and the mapper each type contributes is exercised by the user-tombstone tests above. APS
+    /// snapshots are the highest-volume of the three — one per loop cycle from every AID uploader.
+    /// </remarks>
+    [Fact]
+    public async Task BulkCreate_WhenASystemSweptApsTombstoneHoldsTheKey_InsertsPastIt()
+    {
+        var tombstoneId = SeedTombstone(
+            new ApsSnapshotEntity { AidAlgorithm = nameof(AidAlgorithm.Trio), Iob = 5.0 },
+            deletedByUser: false);
+        var broadcaster = new RecordingV4RecordBroadcaster<ApsSnapshot>();
+
+        var result = await NewApsSnapshotRepository(broadcaster).BulkCreateAsync(
+            [new ApsSnapshot
+            {
+                Timestamp = T0,
+                DataSource = DataSource,
+                SyncIdentifier = SyncIdentifier,
+                AidAlgorithm = AidAlgorithm.Trio,
+                Iob = 9.0,
+            }],
+            WriteOrigin.Live);
+
+        result.Should().HaveCount(1);
+        broadcaster.Created.Should().HaveCount(1);
+        broadcaster.Updated.Should().BeEmpty("nothing was upserted in place");
+        await AssertInsertedPastTombstoneAsync<ApsSnapshotEntity>(
+            tombstoneId, e => e.Iob!.Value, deletedValue: 5.0, reuploaded: 9.0);
     }
 }

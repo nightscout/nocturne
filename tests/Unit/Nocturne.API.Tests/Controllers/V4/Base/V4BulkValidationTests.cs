@@ -55,7 +55,7 @@ public class V4BulkValidationTests
     }
 
     private void NothingPersisted() => _aps.Verify(
-        r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+        r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
         Times.Never);
 
     private static UpsertApsSnapshotRequest[] Snapshots(int count) =>
@@ -80,7 +80,7 @@ public class V4BulkValidationTests
     [Fact]
     public async Task PayloadAtTheCap_IsAccepted()
     {
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var result = await ApsController().CreateApsSnapshots(Snapshots(1000));
@@ -120,7 +120,7 @@ public class V4BulkValidationTests
     [Fact]
     public async Task SyncIdentifierWithDataSource_IsAccepted()
     {
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var requests = Snapshots(1);
@@ -261,7 +261,7 @@ public class V4BulkValidationTests
     public async Task ApsSnapshotBulk_HasNoValidator_SoNothingNewRejectsIt()
     {
         Validators.GetService<IValidator<UpsertApsSnapshotRequest>>().Should().BeNull();
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var result = await WithValidators(ApsController()).CreateApsSnapshots(Snapshots(3));
