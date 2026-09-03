@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StateSpan
 /// </summary>
 [Table("state_spans")]
-public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, ISoftDeletable
+public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, ISoftDeletable, IIdentified
 {
     /// <summary>
     /// Identifier of the tenant this state span belongs to

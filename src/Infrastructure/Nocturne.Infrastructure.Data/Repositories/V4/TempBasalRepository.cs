@@ -96,9 +96,7 @@ public class TempBasalRepository : ITempBasalRepository
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == RecordTypeKeys.TempBasal && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = query.ExcludeNonPrimary(ctx, RecordType.TempBasal);
 
         query = descending
             ? query.OrderByDescending(e => e.StartTimestamp)
@@ -443,8 +441,7 @@ public class TempBasalRepository : ITempBasalRepository
         var entity = await ctx.TempBasals
             .AsNoTracking()
             .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
-            .Where(t => !ctx.LinkedRecords
-                .Any(lr => lr.RecordType == RecordTypeKeys.TempBasal && !lr.IsPrimary && lr.RecordId == t.Id))
+            .ExcludeNonPrimary(ctx, RecordType.TempBasal)
             .OrderByDescending(t => t.StartTimestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

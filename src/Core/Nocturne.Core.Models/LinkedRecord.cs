@@ -115,39 +115,10 @@ public enum RecordType
 }
 
 /// <summary>
-/// The <c>linked_records.record_type</c> key of every <see cref="RecordType"/>. The per-type
-/// constants exist alongside <see cref="Key"/> because EF Core cannot translate a method call
-/// inside an expression tree; <c>RecordTypeKeysTests</c> holds the two forms equal.
+/// Owns the <c>linked_records.record_type</c> key of every <see cref="RecordType"/>.
 /// </summary>
 public static class RecordTypeKeys
 {
-    /// <summary><see cref="RecordType.StateSpan"/></summary>
-    public const string StateSpan = "statespan";
-
-    /// <summary><see cref="RecordType.SensorGlucose"/></summary>
-    public const string SensorGlucose = "sensorglucose";
-
-    /// <summary><see cref="RecordType.Bolus"/></summary>
-    public const string Bolus = "bolus";
-
-    /// <summary><see cref="RecordType.CarbIntake"/></summary>
-    public const string CarbIntake = "carbintake";
-
-    /// <summary><see cref="RecordType.BGCheck"/></summary>
-    public const string BGCheck = "bgcheck";
-
-    /// <summary><see cref="RecordType.DeviceEvent"/></summary>
-    public const string DeviceEvent = "deviceevent";
-
-    /// <summary><see cref="RecordType.Note"/></summary>
-    public const string Note = "note";
-
-    /// <summary><see cref="RecordType.BolusCalculation"/></summary>
-    public const string BolusCalculation = "boluscalculation";
-
-    /// <summary><see cref="RecordType.TempBasal"/></summary>
-    public const string TempBasal = "tempbasal";
-
     /// <summary>
     /// The stored key for <paramref name="recordType"/>.
     /// </summary>

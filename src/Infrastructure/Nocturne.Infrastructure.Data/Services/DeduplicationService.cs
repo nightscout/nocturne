@@ -1376,8 +1376,9 @@ public class DeduplicationService : IDeduplicationService
         Guid canonicalId,
         CancellationToken cancellationToken = default)
     {
+        var key = RecordTypeKeys.Key(RecordType.StateSpan);
         var linkedRecords = await _context.LinkedRecords
-            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == RecordTypeKeys.StateSpan)
+            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == key)
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
