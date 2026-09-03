@@ -328,3 +328,13 @@ export const getSiteChangeImpact = query(
     };
   }
 );
+
+/** Per-weekday time-of-day glucose means for the week-to-week report. */
+export const getWeekdayAverages = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { startDate, endDate } = await resolveReportRange(input);
+    return locals.apiClient.statistics.getWeekdayAverages(startDate, endDate);
+  }
+);

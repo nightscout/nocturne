@@ -1279,6 +1279,7 @@ public class StatisticsService : IStatisticsService
             TightTarget = (long)tightTargetCount * intervalMinutes,
             High = (long)highCount * intervalMinutes,
             VeryHigh = (long)veryHighCount * intervalMinutes,
+            AboveRange = (long)(highCount + veryHighCount) * intervalMinutes,
         };
 
         // Calculate episodes (simplified - consecutive readings in same range)
@@ -1409,6 +1410,7 @@ public class StatisticsService : IStatisticsService
         var zones = ExcludingZones(thresholds);
         var episodeCounts = new int[zones.ZoneCount];
         var lastZone = -1;
+        var aboveRange = 0;
 
         foreach (var value in glucoseValues)
         {
@@ -1417,6 +1419,11 @@ public class StatisticsService : IStatisticsService
             if (zone != lastZone && zone != (int)ExcludingZone.Target)
                 episodeCounts[zone]++;
 
+            // One excursion above range may cross between High and VeryHigh any number of
+            // times; it is one excursion, so it is counted on entry only.
+            if (IsAboveRange(zone) && !IsAboveRange(lastZone))
+                aboveRange++;
+
             lastZone = zone;
         }
 
@@ -1424,8 +1431,12 @@ public class StatisticsService : IStatisticsService
         episodes.Low = episodeCounts[(int)ExcludingZone.Low];
         episodes.High = episodeCounts[(int)ExcludingZone.High];
         episodes.VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh];
+        episodes.AboveRange = aboveRange;
 
         return episodes;
+
+        static bool IsAboveRange(int zone) =>
+            zone is (int)ExcludingZone.High or (int)ExcludingZone.VeryHigh;
     }
 
     #endregion
@@ -1575,6 +1586,44 @@ public class StatisticsService : IStatisticsService
         }
 
         return averagedStats;
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    )
+    {
+        const int slotMinutes = 5;
+
+        // slot start -> weekday -> running sum and count, summed once and divided once so every
+        // reading in a cell carries the same weight.
+        var slots = new SortedDictionary<int, Dictionary<DayOfWeek, (double Sum, int Count)>>();
+        foreach (var entry in entries)
+        {
+            if (entry.Mills <= 0 || entry.Mgdl <= 0)
+                continue;
+
+            var local = TimeZoneInfo.ConvertTime(
+                DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills),
+                tenantTimeZone
+            );
+            var slot = (local.Hour * 60 + local.Minute) / slotMinutes * slotMinutes;
+
+            if (!slots.TryGetValue(slot, out var byWeekday))
+                slots[slot] = byWeekday = new Dictionary<DayOfWeek, (double, int)>();
+
+            var running = byWeekday.GetValueOrDefault(local.DayOfWeek);
+            byWeekday[local.DayOfWeek] = (running.Sum + entry.Mgdl, running.Count + 1);
+        }
+
+        return slots
+            .Select(slot => new WeekdayGlucoseSlot
+            {
+                MinuteOfDay = slot.Key,
+                Mean = slot.Value.ToDictionary(w => w.Key, w => w.Value.Sum / w.Value.Count),
+            })
+            .ToList();
     }
 
     /// <summary>
