@@ -60,10 +60,19 @@ public class GlookoClockEgv
     [JsonPropertyName("softDeleted")] public bool SoftDeleted { get; set; }
 }
 
-/// <summary>A page of <c>/api/v2/pumps/normal_boluses</c> restricted to the clock-bearing fields.</summary>
+/// <summary>
+///     A page of <c>/api/v2/pumps/normal_boluses</c> restricted to the clock-bearing fields, plus the
+///     SSV2 cursor envelope so the one-time historical evidence scan can paginate.
+/// </summary>
 public class GlookoClockBolusPage
 {
     [JsonPropertyName("normalBoluses")] public GlookoClockBolus[]? NormalBoluses { get; set; }
+
+    [JsonPropertyName("lastPage")] public bool LastPage { get; set; }
+
+    [JsonPropertyName("lastUpdatedAt")] public string? LastUpdatedAt { get; set; }
+
+    [JsonPropertyName("lastGuid")] public string? LastGuid { get; set; }
 }
 
 public class GlookoClockBolus

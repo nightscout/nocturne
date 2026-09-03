@@ -26,7 +26,7 @@ namespace Nocturne.API.Services.Timezones;
 public class DeviceClockService : IDeviceClockService
 {
     /// <summary>Evidence older than this no longer influences segmentation and is pruned.</summary>
-    public const int RetentionDays = 456;
+    public const int RetentionDays = IDeviceClockService.RetentionDays;
 
     private const string SegmentNotificationType = "connector.deviceClockDeviation";
     private const string ZoneChangeNotificationType = "connector.declaredZoneChanged";

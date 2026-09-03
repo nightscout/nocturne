@@ -16,6 +16,12 @@ namespace Nocturne.Core.Contracts.Timezones;
 public interface IDeviceClockService
 {
     /// <summary>
+    /// Evidence older than this no longer influences segmentation and is pruned; connectors gathering
+    /// historical evidence need not look further back.
+    /// </summary>
+    const int RetentionDays = 456;
+
+    /// <summary>
     /// Stores new observations (idempotently — re-observed evidence is not duplicated), re-derives
     /// the connector's deviation segments from all stored evidence, and returns them.
     /// </summary>

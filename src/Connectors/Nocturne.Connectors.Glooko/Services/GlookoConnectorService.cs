@@ -967,6 +967,13 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             observations.AddRange(
                 GlookoDeviceClockMapper.MapUploadBatches(ClockConnectorId, egvs?.Egvs, boluses?.NormalBoluses));
 
+            // A tenant with no stored evidence gets a one-time historical scan, so deviations that
+            // predate this feature (the whole point of re-correction) are discoverable at all. Bolus
+            // records are sparse enough to page through the full retention window; CGM history is not,
+            // so old windows carry bound-only evidence.
+            if ((await _deviceClockService.GetObservationsAsync(ClockConnectorId, cancellationToken)).Count == 0)
+                observations.AddRange(await ScanHistoricalBolusClocksAsync(context, cancellationToken));
+
             var segments = await _deviceClockService.RecordObservationsAsync(
                 ClockConnectorId,
                 observations,
@@ -988,16 +995,58 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ///     Fetches a single SSV2 cursor page for the clock probe. The cursor's <c>lastUpdatedAt</c> is
     ///     real UTC (server-side), so a wall-clock offset can never clip the window.
     /// </summary>
-    private async Task<T?> FetchClockPageAsync<T>(GlookoSyncContext context, string path, DateTime sinceUtc)
+    private Task<T?> FetchClockPageAsync<T>(GlookoSyncContext context, string path, DateTime sinceUtc)
+        where T : class =>
+        FetchClockPageAsync<T>(context, path, sinceUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"), InitialGuid);
+
+    private async Task<T?> FetchClockPageAsync<T>(
+        GlookoSyncContext context, string path, string cursor, string guid)
         where T : class
     {
-        var url = $"{path}?lastUpdatedAt={sinceUtc:yyyy-MM-dd'T'HH:mm:ss.fff'Z'}&lastGuid={InitialGuid}"
+        var url = $"{path}?lastUpdatedAt={cursor}&lastGuid={guid}"
                   + "&limit=500&sendSoftDeleted=false&allDevicesFlag=true";
         var result = await FetchFromGlookoEndpoint(context, url);
         if (!result.HasValue)
             return null;
 
         return JsonSerializer.Deserialize<T>(result.Value.GetRawText());
+    }
+
+    /// <summary>Page budget for the one-time historical scan: 12 × 500 boluses ≈ years of pump use.</summary>
+    private const int HistoricalScanMaxPages = 12;
+
+    private async Task<IReadOnlyList<DeviceClockObservation>> ScanHistoricalBolusClocksAsync(
+        GlookoSyncContext context, CancellationToken cancellationToken)
+    {
+        var records = new List<GlookoClockBolus>();
+        var cursor = (DateTime.UtcNow - TimeSpan.FromDays(IDeviceClockService.RetentionDays))
+            .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+        var guid = InitialGuid;
+
+        for (var page = 0; page < HistoricalScanMaxPages; page++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = await FetchClockPageAsync<GlookoClockBolusPage>(
+                context, GlookoConstants.NormalBolusesPath, cursor, guid);
+            if (result?.NormalBoluses is not { Length: > 0 } boluses)
+                break;
+
+            records.AddRange(boluses);
+
+            var stalled = result.LastUpdatedAt == cursor && result.LastGuid == guid;
+            if (result.LastPage || string.IsNullOrEmpty(result.LastUpdatedAt) || stalled)
+                break;
+
+            cursor = result.LastUpdatedAt;
+            guid = result.LastGuid ?? InitialGuid;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Historical clock scan read {Count} bolus records", ConnectorSource, records.Count);
+
+        // Mapping once over the full set keeps upload batches whole across page boundaries.
+        return GlookoDeviceClockMapper.MapUploadBatches(ClockConnectorId, null, records.ToArray());
     }
 
     /// <summary>
