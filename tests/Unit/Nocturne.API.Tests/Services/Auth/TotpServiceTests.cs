@@ -1,13 +1,12 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -21,7 +20,7 @@ namespace Nocturne.API.Tests.Services.Auth;
 /// </remarks>
 public class TotpServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly Guid _subjectId = Guid.CreateVersion7();
@@ -29,23 +28,16 @@ public class TotpServiceTests : IDisposable
 
     public TotpServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(options);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
         _dataProtectionProvider = new EphemeralDataProtectionProvider();
     }
 
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     #region GenerateSetupAsync

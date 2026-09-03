@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -30,7 +28,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
     private static readonly Guid TenantB = Guid.Parse("00000000-0000-0000-0000-0000000000bb");
     private static readonly DateTime Base = new(2026, 6, 10, 8, 0, 0, DateTimeKind.Utc);
 
-    private readonly DbConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _contextA;
     private readonly NocturneDbContext _contextB;
     private readonly TempBasalRepository _tempBasalsA;
@@ -42,24 +40,11 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
 
     public SoftDeleteRestoreQuadrantTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantA, "tenant-a")
+            .SeedTenant(TenantB, "tenant-b");
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seed = new NocturneDbContext(options) { TenantId = TenantA })
-        {
-            seed.Database.EnsureCreated();
-            seed.Tenants.Add(new TenantEntity { Id = TenantA, Slug = "tenant-a" });
-            seed.Tenants.Add(new TenantEntity { Id = TenantB, Slug = "tenant-b" });
-            seed.SaveChanges();
-        }
-
-        _contextA = new NocturneDbContext(options) { TenantId = TenantA };
-        _contextB = new NocturneDbContext(options) { TenantId = TenantB };
+        _contextA = _db.CreateContext(TenantA);
+        _contextB = _db.CreateContext(TenantB);
 
         var dedup = new Mock<IDeduplicationService>().Object;
         var audit = new Mock<IAuditContext>().Object;
@@ -80,7 +65,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
     {
         _contextA.Dispose();
         _contextB.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

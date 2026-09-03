@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -28,38 +26,23 @@ public class SyncUpsertTombstoneTests : IDisposable
     private static readonly DateTime T0 = new(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime DeletedOn = new(2026, 6, 1, 9, 0, 0, DateTimeKind.Utc);
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
 
     public SyncUpsertTombstoneTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
-
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seed = new NocturneDbContext(_options) { TenantId = Tenant })
-        {
-            seed.Database.EnsureCreated();
-            seed.Tenants.Add(new TenantEntity { Id = Tenant, Slug = "tenant-a" });
-            seed.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_options) { TenantId = Tenant };
+        _db = TestDbContextFactory.CreateSqliteWithTenant(Tenant, "tenant-a");
+        _context = _db.CreateContext();
     }
 
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    private NocturneDbContext NewContext() => new(_options) { TenantId = Tenant };
+    private NocturneDbContext NewContext() => _db.CreateContext();
 
     private Guid SeedTombstone<TEntity>(TEntity entity, bool deletedByUser)
         where TEntity : class, IV4TimeSeriesEntity, ISyncDedupable

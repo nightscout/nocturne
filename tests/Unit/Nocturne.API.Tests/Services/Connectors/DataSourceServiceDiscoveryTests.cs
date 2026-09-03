@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
@@ -13,6 +11,7 @@ using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -32,8 +31,7 @@ public class DataSourceServiceDiscoveryTests : IDisposable
     private const string RigA = "openaps://rig-a";
     private const string RigB = "openaps://rig-b";
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
 
     private readonly Mock<ISensorGlucoseRepository> _sensorGlucose = new();
     private readonly Mock<IMeterGlucoseRepository> _meterGlucose = new();
@@ -42,27 +40,20 @@ public class DataSourceServiceDiscoveryTests : IDisposable
 
     public DataSourceServiceDiscoveryTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
+        _db = TestDbContextFactory.CreateSqlite();
 
         using var db = NewContext();
-        db.Database.EnsureCreated();
         db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
         db.SaveChanges();
     }
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    private NocturneDbContext NewContext() => new(_dbOptions) { TenantId = TenantId };
+    private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
         context,

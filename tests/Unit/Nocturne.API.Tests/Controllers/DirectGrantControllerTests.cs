@@ -2,8 +2,6 @@ using Nocturne.Connectors.Core.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
@@ -15,14 +13,14 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
 
 public class DirectGrantControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly DirectGrantController _controller;
     private readonly Guid _testTenantId = Guid.CreateVersion7();
@@ -30,16 +28,9 @@ public class DirectGrantControllerTests : IDisposable
 
     public DirectGrantControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(_testTenantId);
 
         // Seed required entities for FK constraints
         _dbContext.Tenants.Add(new TenantEntity
@@ -86,7 +77,7 @@ public class DirectGrantControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     /// <summary>

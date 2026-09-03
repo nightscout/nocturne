@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -34,9 +35,7 @@ public class AlertAcknowledgementServiceTests
         }
         _factory = new TestDbContextFactory(_options) { TenantOverride = _tenantId };
 
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        var tenantAccessor = MockTenantAccessor.Create(_tenantId);
 
         _tenantAccessor = tenantAccessor.Object;
 

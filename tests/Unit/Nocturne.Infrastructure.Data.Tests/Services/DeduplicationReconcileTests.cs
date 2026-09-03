@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +5,7 @@ using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
@@ -22,32 +21,16 @@ namespace Nocturne.Infrastructure.Data.Tests.Services;
 public class DeduplicationReconcileTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly DeduplicationService _service;
 
     public DeduplicationReconcileTests()
     {
         // In-memory SQLite database for testing — mirrors CarbIntakeRepositoryTests.
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        // Create the database schema and seed the tenant.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _service = new DeduplicationService(
@@ -59,7 +42,7 @@ public class DeduplicationReconcileTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -131,7 +114,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         // The cross-tenant row references a real tenant, so seed it (bypassing the
         // query filter) to satisfy the FK constraint without it leaking into _context.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
+        using (var seedContext = _db.CreateContext())
         {
             seedContext.TenantId = otherTenant;
             seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });

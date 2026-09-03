@@ -1,12 +1,11 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
@@ -19,8 +18,7 @@ namespace Nocturne.API.Tests.Middleware.Handlers;
 [Trait("Category", "Unit")]
 public class DirectGrantLastUsedTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<IDbContextFactory<NocturneDbContext>> _dbContextFactory;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -29,17 +27,10 @@ public class DirectGrantLastUsedTests : IDisposable
 
     public DirectGrantLastUsedTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId })
+        using (var ctx = _db.CreateContext(_tenantId))
         {
-            ctx.Database.EnsureCreated();
             ctx.Tenants.Add(new TenantEntity
             {
                 Id = _tenantId,
@@ -69,10 +60,10 @@ public class DirectGrantLastUsedTests : IDisposable
         _dbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         _dbContextFactory
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = _tenantId });
+            .ReturnsAsync(() => _db.CreateContext(_tenantId));
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 
     [Fact]
     public async Task Records_when_where_and_by_what_the_grant_was_presented()
@@ -80,7 +71,7 @@ public class DirectGrantLastUsedTests : IDisposable
         await DirectGrantTokenHandler.RecordLastUsedAsync(
             _dbContextFactory.Object, Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
 
-        await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
+        await using var ctx = _db.CreateContext(_tenantId);
         var grant = await ctx.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == _grantId);
 
         grant.LastUsedAt.Should().NotBeNull();

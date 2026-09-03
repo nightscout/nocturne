@@ -2,8 +2,6 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -17,6 +15,8 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -33,8 +33,7 @@ public class PasskeyControllerTests : IDisposable
         public NocturneDbContext CreateDbContext() => new(options);
     }
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IPasskeyService> _passkeyService;
     private readonly Mock<ITotpService> _totpService;
@@ -51,16 +50,9 @@ public class PasskeyControllerTests : IDisposable
 
     public PasskeyControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
 
         _passkeyService = new Mock<IPasskeyService>();
         _totpService = new Mock<ITotpService>();
@@ -68,9 +60,7 @@ public class PasskeyControllerTests : IDisposable
         _jwtService = new Mock<IJwtService>();
         _sessionService = new Mock<ISessionService>();
         _subjectService = new Mock<ISubjectService>();
-        _tenantAccessor = new Mock<ITenantAccessor>();
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
-        _tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        _tenantAccessor = MockTenantAccessor.Create(_tenantId);
 
         var oidcOptions = Options.Create(new OidcOptions
         {
@@ -101,9 +91,9 @@ public class PasskeyControllerTests : IDisposable
             // The real service, not a mock: the enrolment probe's cross-tenant reach and its
             // revoked-membership filtering are the properties under test, and a mock would
             // assert the mock.
-            new TenantMemberService(new SharedSqliteFactory(_dbOptions)),
+            new TenantMemberService(new SharedSqliteFactory(_db.Options)),
             _dbContext,
-            new SharedSqliteFactory(_dbOptions),
+            new SharedSqliteFactory(_db.Options),
             oidcOptions,
             logger.Object);
 
@@ -118,7 +108,7 @@ public class PasskeyControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
