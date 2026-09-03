@@ -182,6 +182,48 @@ public class DeviceClockServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task EnablingCorrectionsAfterEvidenceAccumulated_StillAnnouncesTheSegment()
+    {
+        // The designed rollout: phase 1 gathers evidence with the flag off; enabling the flag is the
+        // moment data starts to shift, and the owner must hear about it exactly then.
+        await SeedHomeZoneAsync();
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: false);
+
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+
+        _notifications.Verify(
+            n => n.CreateNotificationAsync(
+                OwnerId, "connector.deviceClockDeviation", It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task FailedAnnouncement_IsRetried_ThenSettles()
+    {
+        await SeedHomeZoneAsync();
+        _notifications.SetupSequence(n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broadcast down"))
+            .ReturnsAsync((InAppNotificationDto)null!);
+
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+        await _service.RecordObservationsAsync(Connector, DeviantRun(), null, correctionsEnabled: true);
+
+        // First attempt failed (anchor left unstamped), second succeeded, third stayed silent.
+        _notifications.Invocations.Count.Should().Be(2);
+    }
+
+    [Fact]
     public async Task RefiningAnExistingSegment_StaysSilent()
     {
         await SeedHomeZoneAsync();
@@ -254,6 +296,80 @@ public class DeviceClockServiceTests : IDisposable
             correctionsEnabled: true);
 
         (await _timeline.GetTimelineAsync()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task DeletedMachineEntry_IsNotReAppended_WhileTheAssertionIsUnchanged()
+    {
+        // The user deleting the machine-appended entry is a user assertion; the same (stamped)
+        // profile evidence must never fight it. Only a fresh profile write may re-open the question.
+        await SeedHomeZoneAsync();
+        var run = new List<DeviceClockObservation>
+        {
+            Profile(Utc(10, 2), 600, "Australia/Sydney"),
+            Profile(Utc(11, 2), 600, "Australia/Sydney"),
+            Profile(Utc(12, 2), 600, "Australia/Sydney"),
+        };
+        await _service.RecordObservationsAsync(Connector, run, null, correctionsEnabled: true);
+        var appended = (await _timeline.GetTimelineAsync()).Single(e => e.Timezone == "Australia/Sydney");
+
+        (await _timeline.DeleteAsync(appended.Id)).Should().BeTrue();
+        await _service.RecordObservationsAsync(Connector, run, null, correctionsEnabled: true);
+
+        (await _timeline.GetTimelineAsync()).Should().ContainSingle()
+            .Which.Timezone.Should().Be("America/New_York");
+    }
+
+    [Fact]
+    public async Task AnOccupiedEffectiveFromSlot_IsSkippedInsteadOfViolatingTheUniqueIndex()
+    {
+        // A user entry already sits at the exact instant the append would use; inserting would
+        // violate ix_timezone_timeline_tenant_effective_from and poison the change tracker.
+        await SeedHomeZoneAsync();
+        await _timeline.UpsertAsync(new TimezoneTimelineEntry
+        {
+            Timezone = "Europe/Madrid",
+            EffectiveFrom = new DateTime(2026, 4, 10, 12, 0, 0), // = Utc(10, 2) in Sydney wall clock
+        });
+
+        var run = new List<DeviceClockObservation>
+        {
+            Profile(Utc(10, 2), 600, "Australia/Sydney"),
+            Profile(Utc(11, 2), 600, "Australia/Sydney"),
+            Profile(Utc(12, 2), 600, "Australia/Sydney"),
+        };
+        await _service.RecordObservationsAsync(Connector, run, null, correctionsEnabled: true);
+        await _service.RecordObservationsAsync(Connector, run, null, correctionsEnabled: true);
+
+        (await _timeline.GetTimelineAsync()).Should().HaveCount(2); // origin + the user's Madrid entry
+    }
+
+    [Fact]
+    public async Task ABoundNeverReplacesAnEstimate_HoweverManyRecordsItCarries()
+    {
+        await SeedHomeZoneAsync();
+        var estimate = Batch(Utc(10, 12), 120, samples: 8);
+        await _service.RecordObservationsAsync(Connector, [estimate], null, correctionsEnabled: false);
+
+        var bolusBound = Batch(Utc(10, 12), -200, samples: 20);
+        bolusBound.IsEstimate = false;
+        await _service.RecordObservationsAsync(Connector, [bolusBound], null, correctionsEnabled: false);
+
+        var row = await _db.DeviceClockObservations.SingleAsync();
+        row.IsEstimate.Should().BeTrue();
+        row.OffsetMinutes.Should().Be(120);
+    }
+
+    [Fact]
+    public async Task GetSegments_WithoutATimelineOrFallback_JudgesNothing()
+    {
+        // No expected clock exists; measuring against zero would show deviations the connector
+        // (which always passes its configured offset) never derives.
+        await _service.RecordObservationsAsync(
+            Connector, DeviantRun(), expectedFallbackOffsetHours: -4, correctionsEnabled: false);
+
+        (await _service.GetSegmentsAsync(Connector)).Should().BeEmpty();
+        (await _service.GetSegmentsAsync(Connector, expectedFallbackOffsetHours: -4)).Should().NotBeEmpty();
     }
 
     [Fact]

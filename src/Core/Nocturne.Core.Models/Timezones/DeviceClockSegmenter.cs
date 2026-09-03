@@ -39,6 +39,15 @@ public static class DeviceClockSegmenter
     public const int OffsetGranularityMinutes = 15;
 
     /// <summary>
+    /// How far a segment may reach back before its first supporting observation. A backlog flush
+    /// after days offline can mix pre-deviation records (written at the old offset) into the first
+    /// deviant batch; its <see cref="DeviceClockObservation.CoversFromUtc"/> would then backdate the
+    /// segment over records the derived offset does not describe. When the preceding-evidence floor
+    /// is stale (device offline), this cap bounds that contamination instead.
+    /// </summary>
+    public const int MaxCoversLookbackHours = 72;
+
+    /// <summary>
     /// Derives segments from observations of a single connector.
     /// </summary>
     /// <param name="observationsAscending">The connector's observations ordered by <see cref="DeviceClockObservation.ObservedAtUtc"/>.</param>
@@ -116,6 +125,10 @@ public static class DeviceClockSegmenter
         if (preRunFloor is { } floor && from < floor)
             from = floor;
 
+        var lookbackCap = run[0].ObservedAtUtc.AddHours(-MaxCoversLookbackHours);
+        if (from < lookbackCap)
+            from = lookbackCap;
+
         var estimates = run.Where(o => o.IsEstimate).Select(o => o.OffsetMinutes).OrderBy(v => v).ToList();
         // Estimates carry the true value, so their median wins; a bound-only run corrects with its
         // tightest (largest) bound — still conservative, since every bound is a floor on the offset.
@@ -133,6 +146,7 @@ public static class DeviceClockSegmenter
             ToUtc = to is { } t ? DateTime.SpecifyKind(t, DateTimeKind.Utc) : null,
             OffsetMinutes = offset,
             ObservationCount = run.Count,
+            FirstObservedAtUtc = DateTime.SpecifyKind(run[0].ObservedAtUtc, DateTimeKind.Utc),
         });
     }
 

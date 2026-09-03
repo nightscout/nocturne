@@ -22,6 +22,14 @@ public class GlookoSsv2User
 {
     [JsonPropertyName("guid")] public string? Guid { get; set; }
 
+    /// <summary>
+    ///     The session account's own patient code. SSV2 endpoints take no <c>patient=</c> parameter —
+    ///     they answer for the session user — so on a linked account (caregiver session, re-linked
+    ///     data source) this may differ from the code the windowed fetches query, and clock evidence
+    ///     must not be gathered from the wrong person.
+    /// </summary>
+    [JsonPropertyName("glookoCode")] public string? GlookoCode { get; set; }
+
     /// <summary>Declared IANA zone; null when the account has never set one.</summary>
     [JsonPropertyName("timezone")] public string? Timezone { get; set; }
 

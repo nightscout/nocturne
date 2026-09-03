@@ -43,6 +43,30 @@ public class DeviceClockSegmenterTests
     }
 
     [Fact]
+    public void DeviationOfExactlyThirtyMinutes_IsATimezone()
+    {
+        // Half-hour zones are the smallest real step the gate exists to catch; the boundary is
+        // inclusive for estimates and bounds alike.
+        DeviceClockSegmenter.Derive(
+            [
+                Obs(Utc(10, 12), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes),
+                Obs(Utc(10, 18), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes),
+                Obs(Utc(11, 6), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes),
+            ],
+            Expected)
+            .Should().ContainSingle().Which.OffsetMinutes.Should().Be(HomeOffset + 30);
+
+        DeviceClockSegmenter.Derive(
+            [
+                Obs(Utc(10, 12), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes, estimate: false),
+                Obs(Utc(10, 18), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes, estimate: false),
+                Obs(Utc(11, 6), HomeOffset + DeviceClockSegmenter.MinDeviationMinutes, estimate: false),
+            ],
+            Expected)
+            .Should().ContainSingle();
+    }
+
+    [Fact]
     public void DeviationUnderThirtyMinutes_IsDriftNotATimezone()
     {
         // 25 minutes fast, persistently: still no segment.
@@ -208,6 +232,48 @@ public class DeviceClockSegmenterTests
             Expected);
 
         segments.Should().ContainSingle().Which.FromUtc.Should().Be(floor);
+    }
+
+    [Fact]
+    public void SegmentStart_CannotReachFurtherBack_ThanTheLookbackCapAllows()
+    {
+        // The floor is a week stale (device offline); the first deviant batch is a backlog flush
+        // whose CoversFrom reaches deep into the offline window. The cap bounds the contamination.
+        var segments = DeviceClockSegmenter.Derive(
+            [
+                Obs(Utc(1, 0), HomeOffset), // stale floor, 9+ days before the run
+                Obs(Utc(10, 12), 120, coversFrom: Utc(3, 0)),
+                Obs(Utc(10, 18), 120),
+                Obs(Utc(11, 6), 120),
+            ],
+            Expected);
+
+        segments.Should().ContainSingle().Which.FromUtc
+            .Should().Be(Utc(10, 12).AddHours(-DeviceClockSegmenter.MaxCoversLookbackHours));
+    }
+
+    [Fact]
+    public void SegmentIdentity_IsItsFirstSupportingObservation()
+    {
+        var first = Utc(10, 12);
+        var segments = DeviceClockSegmenter.Derive(
+            [Obs(first, 120), Obs(Utc(10, 18), 120), Obs(Utc(11, 6), 120)], Expected);
+
+        segments.Should().ContainSingle().Which.FirstObservedAtUtc.Should().Be(first);
+    }
+
+    [Fact]
+    public void SegmentContains_IncludesItsStart_AndExcludesItsEnd()
+    {
+        var segment = new DeviceClockSegment { FromUtc = Utc(10, 0), ToUtc = Utc(13, 0), OffsetMinutes = 120 };
+
+        segment.Contains(Utc(10, 0)).Should().BeTrue("the start boundary is part of the deviation");
+        segment.Contains(Utc(10, 0).AddTicks(-1)).Should().BeFalse();
+        segment.Contains(Utc(13, 0)).Should().BeFalse("the end boundary belongs to the next regime");
+        segment.Contains(Utc(13, 0).AddTicks(-1)).Should().BeTrue();
+
+        var open = new DeviceClockSegment { FromUtc = Utc(10, 0), ToUtc = null, OffsetMinutes = 120 };
+        open.Contains(Utc(30, 0)).Should().BeTrue();
     }
 
     [Fact]

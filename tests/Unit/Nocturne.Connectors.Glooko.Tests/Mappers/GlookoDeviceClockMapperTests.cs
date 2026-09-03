@@ -83,10 +83,21 @@ public class GlookoDeviceClockMapperTests
     [Fact]
     public void ZeroOffsetWithADeclaredZone_IsARealClaim()
     {
-        // Iceland runs on UTC year-round; a declared zone makes the zero offset meaningful.
+        // Iceland runs on UTC year-round; a client-written record with a declared zone makes the
+        // zero offset meaningful.
         GlookoDeviceClockMapper.MapProfileObservation(
             [User(timezone: "Atlantic/Reykjavik", utcOffset: "+00:00")], Connector)
             .Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ServerWrittenZeroOffset_IsNeverSet_EvenWithADefaultedZone()
+    {
+        // Only a client ever writes a real offset; a server-authored record's +00:00 is the
+        // placeholder even when a timezone happens to be filled in.
+        GlookoDeviceClockMapper.MapProfileObservation(
+            [User(timezone: "Atlantic/Reykjavik", utcOffset: "+00:00", updatedBy: "server")], Connector)
+            .Should().BeNull();
     }
 
     [Fact]

@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260903002350_AddDeviceClockObservations")]
+    [Migration("20260903012227_AddDeviceClockObservations")]
     partial class AddDeviceClockObservations
     {
         /// <inheritdoc />
@@ -1531,6 +1531,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("applied_at");
 
                     b.Property<string>("Connector")
                         .IsRequired()

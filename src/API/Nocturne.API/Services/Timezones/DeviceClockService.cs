@@ -19,8 +19,11 @@ namespace Nocturne.API.Services.Timezones;
 /// When corrections are enabled for the connector, two things become user-visible:
 /// a newly confirmed deviation segment notifies the tenant owner (an audit trail plus a
 /// notification, never a prompt), and a sustained change of the account's declared zone appends a
-/// timezone timeline entry. With corrections disabled the service only gathers and derives, so the
-/// estimator can be validated against real fleet data without being able to move anything.
+/// timezone timeline entry. Each user-visible action is stamped on the observation that anchors it
+/// (<see cref="DeviceClockObservationEntity.AppliedAt"/>), so the same assertion acts exactly once —
+/// deleting the timeline entry or archiving the notification does not make it come back; only fresh
+/// evidence can trigger again. With corrections disabled the service only gathers and derives, so
+/// the estimator can be validated against real fleet data without being able to move anything.
 /// </summary>
 /// <seealso cref="IDeviceClockService"/>
 public class DeviceClockService : IDeviceClockService
@@ -83,10 +86,6 @@ public class DeviceClockService : IDeviceClockService
             .OrderBy(e => e.ObservedAt)
             .ToListAsync(cancellationToken);
 
-        var expected = await BuildExpectedOffsetAsync(expectedFallbackOffsetHours, cancellationToken);
-        var segmentsBefore = DeviceClockSegmenter.Derive(
-            existing.Select(DeviceClockObservationMapper.ToDomainModel).ToList(), expected);
-
         var byKey = existing.ToDictionary(e => (e.Source, e.ObservedAt));
         var changed = false;
         foreach (var observation in observations)
@@ -95,8 +94,9 @@ public class DeviceClockService : IDeviceClockService
             if (byKey.TryGetValue(key, out var row))
             {
                 // The same batch re-observed later can carry more records (it was caught mid-upload
-                // the first time); richer evidence replaces the row, identical evidence is a no-op.
-                if (observation.SampleCount > row.SampleCount)
+                // the first time); richer evidence replaces the row — but a bound never replaces a
+                // two-sided estimate, however many records it carries.
+                if (observation.SampleCount > row.SampleCount && (observation.IsEstimate || !row.IsEstimate))
                 {
                     row.OffsetMinutes = observation.OffsetMinutes;
                     row.IsEstimate = observation.IsEstimate;
@@ -129,18 +129,21 @@ public class DeviceClockService : IDeviceClockService
         if (changed)
             await _db.SaveChangesAsync(cancellationToken);
 
-        var all = byKey.Values
+        var live = byKey.Values
             .Where(e => e.ObservedAt >= cutoff)
             .OrderBy(e => e.ObservedAt)
-            .Select(DeviceClockObservationMapper.ToDomainModel)
             .ToList();
+        var all = live.Select(DeviceClockObservationMapper.ToDomainModel).ToList();
 
+        var expected = await BuildExpectedOffsetAsync(expectedFallbackOffsetHours, cancellationToken);
         var segments = DeviceClockSegmenter.Derive(all, expected);
 
         if (correctionsEnabled)
         {
-            await MaintainDeclaredZoneAsync(connector, all, tenantId, cancellationToken);
-            await NotifyNewSegmentsAsync(connector, segmentsBefore, segments, tenantId, cancellationToken);
+            var stampedZone = await MaintainDeclaredZoneAsync(connector, all, live, tenantId, cancellationToken);
+            var stampedSegments = await AnnounceSegmentsAsync(connector, segments, live, tenantId, cancellationToken);
+            if (stampedZone || stampedSegments)
+                await _db.SaveChangesAsync(cancellationToken);
         }
         else if (segments.Count > 0)
         {
@@ -174,6 +177,13 @@ public class DeviceClockService : IDeviceClockService
         double? expectedFallbackOffsetHours = null,
         CancellationToken cancellationToken = default)
     {
+        // Without a timeline or a caller-supplied static offset there is no expected clock to
+        // deviate from — measuring against zero would show segments the connector (which always
+        // passes its configured offset) never derives.
+        if (expectedFallbackOffsetHours is null
+            && (await _timeline.GetTimelineAsync(cancellationToken)).Count == 0)
+            return [];
+
         var observations = await GetObservationsAsync(connector, cancellationToken);
         var expected = await BuildExpectedOffsetAsync(expectedFallbackOffsetHours, cancellationToken);
         return DeviceClockSegmenter.Derive(observations, expected);
@@ -190,11 +200,16 @@ public class DeviceClockService : IDeviceClockService
     /// Appends a timeline entry when the account's declared zone has sustainably changed — the
     /// trailing profile observations all report the same valid zone and it differs from the
     /// timeline's latest entry. The account holder asserted the zone themselves (their app wrote it
-    /// to their vendor profile), so unlike derived offsets it belongs in the timeline proper.
+    /// to their vendor profile), so unlike derived offsets it belongs in the timeline proper. The
+    /// newest assertion is stamped applied whatever the outcome, so an unchanged profile can never
+    /// re-append (or re-fight a user who deleted the entry): only a fresh profile write re-opens the
+    /// question.
     /// </summary>
-    private async Task MaintainDeclaredZoneAsync(
+    /// <returns>Whether an observation was stamped (caller saves).</returns>
+    private async Task<bool> MaintainDeclaredZoneAsync(
         string connector,
         IReadOnlyList<DeviceClockObservation> observations,
+        IReadOnlyList<DeviceClockObservationEntity> entities,
         Guid tenantId,
         CancellationToken cancellationToken)
     {
@@ -204,58 +219,81 @@ public class DeviceClockService : IDeviceClockService
             .ToList();
 
         if (trailing.Count < DeviceClockSegmenter.MinConsecutiveObservations)
-            return;
+            return false;
 
         var zone = trailing[^1].DeclaredTimezone!;
         if (trailing.Any(o => !string.Equals(o.DeclaredTimezone, zone, StringComparison.Ordinal)))
-            return;
+            return false;
 
         if (!TimeZoneHelper.TryGetTimeZoneInfoFromId(zone, out var tz))
-            return;
+            return false;
+
+        var anchor = entities.FirstOrDefault(e =>
+            e.Source == (int)DeviceClockObservationSource.Profile
+            && e.ObservedAt == trailing[^1].ObservedAtUtc);
+        if (anchor is null || anchor.AppliedAt is not null)
+            return false;
 
         var entries = await _timeline.GetTimelineAsync(cancellationToken);
         var current = entries.Count > 0 ? entries[^1].Timezone : null;
-        if (string.Equals(current, zone, StringComparison.Ordinal))
-            return;
 
         // The change was first asserted at the earliest observation of the sustained run; enter the
         // zone at that moment's wall clock there.
-        var effectiveFrom = TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(trailing[0].ObservedAtUtc, DateTimeKind.Utc), tz);
+        var effectiveFrom = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(trailing[0].ObservedAtUtc, DateTimeKind.Utc), tz),
+            DateTimeKind.Unspecified);
 
-        await _timeline.UpsertAsync(
-            new TimezoneTimelineEntry
-            {
-                Id = Guid.Empty,
-                EffectiveFrom = DateTime.SpecifyKind(effectiveFrom, DateTimeKind.Unspecified),
-                Timezone = zone,
-            },
-            cancellationToken);
+        // Skip (but still stamp) when there is nothing to do or the slot is taken: the zone is
+        // already current, an identical entry exists (e.g. this service added it before the marker
+        // existed), or any entry occupies the same instant — inserting there would violate the
+        // timeline's unique effective_from and a failed insert would poison the change tracker.
+        var occupied = entries.Any(e => e.EffectiveFrom == effectiveFrom);
+        if (!string.Equals(current, zone, StringComparison.Ordinal) && !occupied)
+        {
+            await _timeline.UpsertAsync(
+                new TimezoneTimelineEntry
+                {
+                    Id = Guid.Empty,
+                    EffectiveFrom = effectiveFrom,
+                    Timezone = zone,
+                },
+                cancellationToken);
 
-        _logger.LogInformation(
-            "Appended timezone timeline entry {Zone} effective {EffectiveFrom:o} for tenant {TenantId} "
-            + "from {Connector}'s sustained declared-zone change (was {Previous})",
-            zone, effectiveFrom, tenantId, connector, current ?? "(none)");
+            _logger.LogInformation(
+                "Appended timezone timeline entry {Zone} effective {EffectiveFrom:o} for tenant {TenantId} "
+                + "from {Connector}'s sustained declared-zone change (was {Previous})",
+                zone, effectiveFrom, tenantId, connector, current ?? "(none)");
 
-        await TryNotifyOwnerAsync(
-            tenantId,
-            ZoneChangeNotificationType,
-            sourceId: $"{connector}:{zone}:{effectiveFrom:yyyyMMddHHmm}",
-            cancellationToken);
+            await TryNotifyOwnerAsync(
+                tenantId,
+                ZoneChangeNotificationType,
+                sourceId: $"{connector}:{zone}:{effectiveFrom:yyyyMMddHHmm}",
+                cancellationToken);
+        }
+
+        anchor.AppliedAt = DateTime.UtcNow;
+        return true;
     }
 
-    private async Task NotifyNewSegmentsAsync(
+    /// <summary>
+    /// Announces deviation segments the owner has never been told about. A segment's identity is the
+    /// observation that opened it; once that anchor is stamped, extensions, re-derivations, enabling
+    /// the flag later, archiving the notification, or notification cleanup can never re-announce it.
+    /// </summary>
+    /// <returns>Whether any observation was stamped (caller saves).</returns>
+    private async Task<bool> AnnounceSegmentsAsync(
         string connector,
-        IReadOnlyList<DeviceClockSegment> before,
-        IReadOnlyList<DeviceClockSegment> after,
+        IReadOnlyList<DeviceClockSegment> segments,
+        IReadOnlyList<DeviceClockObservationEntity> entities,
         Guid tenantId,
         CancellationToken cancellationToken)
     {
-        foreach (var segment in after)
+        var stamped = false;
+        foreach (var segment in segments)
         {
-            // A segment is "new" when no prior segment covered its start; refinements of an already
-            // known deviation (bounds tightening, the open end closing) stay silent.
-            if (before.Any(b => b.Contains(segment.FromUtc) || b.FromUtc == segment.FromUtc))
+            var anchors = entities.Where(e => e.ObservedAt == segment.FirstObservedAtUtc).ToList();
+            if (anchors.Count == 0 || anchors.Any(a => a.AppliedAt is not null))
                 continue;
 
             _logger.LogInformation(
@@ -264,15 +302,28 @@ public class DeviceClockService : IDeviceClockService
                 tenantId, connector, segment.FromUtc,
                 segment.ToUtc?.ToString("o") ?? "open", segment.OffsetMinutes, segment.ObservationCount);
 
-            await TryNotifyOwnerAsync(
+            var announced = await TryNotifyOwnerAsync(
                 tenantId,
                 SegmentNotificationType,
-                sourceId: $"{connector}:{segment.FromUtc:yyyyMMddHHmm}:{segment.OffsetMinutes}",
+                sourceId: $"{connector}:{segment.FirstObservedAtUtc:yyyyMMddHHmm}:{segment.OffsetMinutes}",
                 cancellationToken);
+
+            if (!announced)
+                continue; // transient failure: leave the anchor unstamped so the next sync retries
+
+            foreach (var anchor in anchors)
+                anchor.AppliedAt = DateTime.UtcNow;
+            stamped = true;
         }
+
+        return stamped;
     }
 
-    private async Task TryNotifyOwnerAsync(
+    /// <summary>
+    /// Creates an owner notification. Returns true when the announcement is settled (created, or the
+    /// tenant has no owner to tell); false only on a transient failure worth retrying.
+    /// </summary>
+    private async Task<bool> TryNotifyOwnerAsync(
         Guid tenantId, string type, string sourceId, CancellationToken cancellationToken)
     {
         try
@@ -282,7 +333,7 @@ public class DeviceClockService : IDeviceClockService
             {
                 _logger.LogWarning(
                     "No owner found for tenant {TenantId}; skipping {Type} notification", tenantId, type);
-                return;
+                return true;
             }
 
             // Title and subtitle are i18n keys resolved by the frontend copy layer
@@ -297,11 +348,13 @@ public class DeviceClockService : IDeviceClockService
                 subtitle: titleKey + "_subtitle",
                 sourceId: sourceId,
                 cancellationToken: cancellationToken);
+            return true;
         }
         catch (Exception ex)
         {
             // The correction must not fail over its announcement.
             _logger.LogError(ex, "Failed to create {Type} notification for tenant {TenantId}", type, tenantId);
+            return false;
         }
     }
 }

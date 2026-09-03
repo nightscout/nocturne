@@ -62,4 +62,13 @@ public sealed class DeviceClockObservation
 
     /// <summary>The IANA zone the account declared at observation time. Profile source only.</summary>
     public string? DeclaredTimezone { get; set; }
+
+    /// <summary>
+    /// When the assertion this observation anchors was acted on user-visibly — a timeline entry
+    /// appended from its declared zone, or the deviation segment it opens announced to the owner.
+    /// The marker lives on the evidence (not on the timeline entry or the notification, both of
+    /// which the user can delete or the system can clean up), so the same assertion is never acted
+    /// on twice: only fresh evidence can trigger again.
+    /// </summary>
+    public DateTime? AppliedAtUtc { get; set; }
 }

@@ -56,6 +56,13 @@ public class DeviceClockObservationEntity : ITenantScoped
     [MaxLength(64)]
     public string? DeclaredTimezone { get; set; }
 
+    /// <summary>
+    /// When the assertion this observation anchors was acted on user-visibly (timeline entry
+    /// appended, or its deviation segment announced). Durable act-once marker — see the domain model.
+    /// </summary>
+    [Column("applied_at")]
+    public DateTime? AppliedAt { get; set; }
+
     /// <summary>When this row was created (UTC).</summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

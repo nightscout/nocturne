@@ -20,6 +20,13 @@ public sealed class DeviceClockSegment
     /// <summary>How many observations support this segment.</summary>
     public int ObservationCount { get; set; }
 
+    /// <summary>
+    /// The first supporting observation's time — the segment's stable identity across re-derivation.
+    /// A run extends at its end and its start floor can shift, but the observation that opened it
+    /// does not, so "was this deviation already announced" anchors here.
+    /// </summary>
+    public DateTime FirstObservedAtUtc { get; set; }
+
     /// <summary>Whether a real-UTC instant falls inside this segment.</summary>
     public bool Contains(DateTime utc) => utc >= FromUtc && (ToUtc is null || utc < ToUtc);
 }

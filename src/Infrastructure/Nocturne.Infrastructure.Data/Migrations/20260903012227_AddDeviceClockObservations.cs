@@ -25,6 +25,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     sample_count = table.Column<int>(type: "integer", nullable: false),
                     covers_from = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     declared_timezone = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    applied_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

@@ -35,7 +35,11 @@ public static class GlookoDeviceClockMapper
         if (Math.Abs(offsetMinutes.Value) > DeviceClockEstimator.MaxPlausibleOffsetMinutes)
             return null;
 
-        if (offsetMinutes == 0 && string.IsNullOrWhiteSpace(user.Timezone))
+        // A zero offset is only a real claim when a client actually wrote it: no declared zone, or a
+        // record only the server has ever touched, is the never-set placeholder either way.
+        if (offsetMinutes == 0
+            && (string.IsNullOrWhiteSpace(user.Timezone)
+                || string.Equals(user.UpdatedBy, "server", StringComparison.OrdinalIgnoreCase)))
             return null;
 
         return new DeviceClockObservation

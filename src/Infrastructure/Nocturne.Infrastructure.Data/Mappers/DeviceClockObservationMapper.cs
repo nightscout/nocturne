@@ -19,6 +19,7 @@ public static class DeviceClockObservationMapper
         SampleCount = entity.SampleCount,
         CoversFromUtc = entity.CoversFrom is { } covers ? DateTime.SpecifyKind(covers, DateTimeKind.Utc) : null,
         DeclaredTimezone = entity.DeclaredTimezone,
+        AppliedAtUtc = entity.AppliedAt is { } applied ? DateTime.SpecifyKind(applied, DateTimeKind.Utc) : null,
     };
 
     public static DeviceClockObservationEntity ToEntity(DeviceClockObservation model, Guid tenantId) => new()

@@ -956,6 +956,21 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             // The user record itself rarely changes, so read it from the epoch rather than a window.
             var users = await FetchClockPageAsync<GlookoSsv2UsersPage>(
                 context, GlookoConstants.V2UsersPath, DateTime.UnixEpoch);
+
+            // SSV2 answers for the session account, not for a ?patient= code. On a linked account
+            // (caregiver session, re-linked source) that is a different person, and their phone's
+            // clock must never become evidence about the patient's data.
+            var sessionUser = users?.Users?.FirstOrDefault(u => !u.SoftDeleted);
+            if (sessionUser?.GlookoCode is { Length: > 0 } sessionCode
+                && context.PatientCode is { Length: > 0 } patientCode
+                && !string.Equals(sessionCode, patientCode, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Session account is not the patient; skipping device clock evidence",
+                    ConnectorSource);
+                return [];
+            }
+
             if (GlookoDeviceClockMapper.MapProfileObservation(users?.Users, ClockConnectorId) is { } profile)
                 observations.Add(profile);
 
