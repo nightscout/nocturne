@@ -149,10 +149,36 @@ public static class ConfigurationExtensions
     extension(IConfiguration configuration)
     {
         /// <summary>
-        ///     Binds connector configuration from multiple sources in order of precedence:
-        ///     1. Environment variables (highest priority)
-        ///     2. Parameters:Connectors:{ConnectorName} section
-        ///     3. Connectors:{ConnectorName} section (fallback)
+        ///     The <c>Connectors:{<paramref name="name"/>}</c> section, preferring the
+        ///     <c>Parameters:</c>-prefixed copy Aspire writes.
+        /// </summary>
+        /// <param name="name">A connector name, or <c>Settings</c> for the shared defaults</param>
+        public IConfigurationSection ConnectorSection(string name)
+        {
+            var parameterised = configuration.GetSection($"Parameters:Connectors:{name}");
+            return parameterised.Exists()
+                ? parameterised
+                : configuration.GetSection($"Connectors:{name}");
+        }
+
+        /// <summary>
+        ///     The defaults every connector inherits before its own section is applied.
+        /// </summary>
+        public IConfigurationSection GlobalConnectorSettings => configuration.ConnectorSection("Settings");
+
+        /// <summary>
+        ///     Whether configuration enables the named connector, or <c>null</c> when neither its own
+        ///     section nor the shared defaults say. Callers own the default: installation and polling
+        ///     treat silence as enabled, the health surface reports it as unconfigured.
+        /// </summary>
+        public bool? ConnectorEnabled(string name) =>
+            configuration.ConnectorSection(name).GetValue<bool?>("Enabled")
+            ?? configuration.GlobalConnectorSettings.GetValue<bool?>("Enabled");
+
+        /// <summary>
+        ///     Binds connector configuration in increasing order of precedence: the defaults every
+        ///     connector shares (<c>Connectors:Settings</c>), the connector's own section, then
+        ///     environment variables.
         /// </summary>
         /// <typeparam name="T">The configuration type</typeparam>
         /// <param name="config">The configuration object to bind to</param>
@@ -160,33 +186,17 @@ public static class ConfigurationExtensions
         public void BindConnectorConfiguration<T>(T config, string connectorName)
             where T : BaseConnectorConfiguration
         {
-            // 1. Bind Global Settings (Parameters:Connectors:Settings)
-            var globalSection = configuration.GetSection("Parameters:Connectors:Settings");
+            var globalSection = configuration.GlobalConnectorSettings;
             if (globalSection.Exists()) globalSection.Bind(config);
 
-            // 2. Bind Specific Connector Settings
-            // Try primary configuration path
-            var section = configuration.GetSection($"Parameters:Connectors:{connectorName}");
+            var section = configuration.ConnectorSection(connectorName);
 
-            // Fallback to alternate path if not found
-            if (!section.Exists()) section = configuration.GetSection($"Connectors:{connectorName}");
-
-            // Bind the section if it exists
             // First use standard Bind for properties with matching names
             if (section.Exists()) section.Bind(config);
 
             // Then use [ConnectorProperty] or [AspireParameter] attributes for properties
             // with different names (e.g., JSON "Username" → C# property "LibreUsername")
             BindFromAttributes(section, config);
-
-            // Override with environment variables (these take precedence)
-            // Common base configuration properties
-            if (bool.TryParse(configuration["Enabled"], out var enabled)) config.Enabled = enabled;
-
-            if (int.TryParse(configuration["BatchSize"], out var batchSize)) config.BatchSize = batchSize;
-
-            if (int.TryParse(configuration["SyncIntervalMinutes"], out var syncIntervalMinutes))
-                config.SyncIntervalMinutes = syncIntervalMinutes;
 
             // Bind TimezoneOffset from environment variable (set by Aspire)
             if (double.TryParse(configuration["TimezoneOffset"], out var timezoneOffset))
