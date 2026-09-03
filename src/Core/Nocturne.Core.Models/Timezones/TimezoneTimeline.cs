@@ -23,6 +23,7 @@ public sealed class TimezoneTimeline
     // queried wall-clock is the one in effect.
     private readonly IReadOnlyList<TimezoneTimelineEntry> _entriesDesc;
     private readonly double? _fallbackOffsetHours;
+    private readonly IReadOnlyList<DeviceClockSegment> _deviceClockSegments;
 
     /// <summary>
     /// Creates a timeline resolver.
@@ -32,7 +33,16 @@ public sealed class TimezoneTimeline
     /// Legacy fixed offset (hours east of UTC) applied when no entry covers a timestamp. When null and
     /// no entry applies, the timestamp is treated as already-UTC.
     /// </param>
-    public TimezoneTimeline(IEnumerable<TimezoneTimelineEntry> entries, double? fallbackOffsetHours = null)
+    /// <param name="deviceClockSegments">
+    /// Derived device-clock deviations for the connector this resolver serves. A segment overrides the
+    /// zone conversion only where the entry in effect is the machine-seeded origin (or there is none):
+    /// an explicit user entry — a trip or move with a real <see cref="TimezoneTimelineEntry.EffectiveFrom"/>
+    /// — always wins over derived evidence.
+    /// </param>
+    public TimezoneTimeline(
+        IEnumerable<TimezoneTimelineEntry> entries,
+        double? fallbackOffsetHours = null,
+        IEnumerable<DeviceClockSegment>? deviceClockSegments = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
 
@@ -41,6 +51,7 @@ public sealed class TimezoneTimeline
             .OrderByDescending(e => e.EffectiveFrom)
             .ToList();
         _fallbackOffsetHours = fallbackOffsetHours;
+        _deviceClockSegments = deviceClockSegments?.OrderBy(s => s.FromUtc).ToList() ?? [];
     }
 
     /// <summary>Whether the timeline has at least one usable entry.</summary>
@@ -59,6 +70,9 @@ public sealed class TimezoneTimeline
         var wall = DateTime.SpecifyKind(fakeUtc, DateTimeKind.Unspecified);
 
         var entry = ResolveEntry(wall);
+        if (DerivedSegmentForWall(wall, entry) is { } segment)
+            return DateTime.SpecifyKind(wall.AddMinutes(-segment.OffsetMinutes), DateTimeKind.Utc);
+
         if (entry is null)
         {
             if (_fallbackOffsetHours is { } offset)
@@ -91,11 +105,67 @@ public sealed class TimezoneTimeline
     public DateTime ToLocal(DateTime utc)
     {
         var entry = ResolveEntry(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified));
+        if (DerivedMayOverride(entry))
+        {
+            foreach (var segment in _deviceClockSegments)
+            {
+                if (segment.Contains(utc))
+                    return utc.AddMinutes(segment.OffsetMinutes);
+            }
+        }
+
         if (entry is null)
             return _fallbackOffsetHours is { } offset ? utc.AddHours(offset) : utc;
 
         var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
         return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz);
+    }
+
+    /// <summary>
+    /// The offset (minutes east of UTC) the user-asserted timeline — entries plus legacy fallback,
+    /// never derived segments — predicts at a real-UTC instant. This is the "expected" clock the
+    /// device-clock detector measures deviations against, so it deliberately excludes the detector's
+    /// own output.
+    /// </summary>
+    /// <remarks>
+    /// Entry lookup happens in wall-clock space (same approximation as <see cref="ToLocal"/>): the
+    /// result can be off within hours of a relocation entry's boundary, which is acceptable for
+    /// deviation gating at half-hour granularity.
+    /// </remarks>
+    public int OffsetMinutesAtUtc(DateTime utc)
+    {
+        var entry = ResolveEntry(DateTime.SpecifyKind(utc, DateTimeKind.Unspecified));
+        if (entry is null)
+            return _fallbackOffsetHours is { } fallback ? (int)Math.Round(fallback * 60) : 0;
+
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
+        return (int)tz.GetUtcOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).TotalMinutes;
+    }
+
+    /// <summary>
+    /// Derived evidence may only override where the user has asserted nothing specific: no entry at
+    /// all, or the machine-seeded origin entry (which covers all history from the minimum instant).
+    /// </summary>
+    private static bool DerivedMayOverride(TimezoneTimelineEntry? entry) =>
+        entry is null || entry.EffectiveFrom == DateTime.MinValue;
+
+    /// <summary>
+    /// Finds the derived segment covering a fake-UTC wall clock, if any is allowed to apply. The
+    /// segment spans real UTC, so the wall clock is tested via the segment's own offset: the
+    /// conversion it implies must land inside the segment for the match to be self-consistent.
+    /// </summary>
+    private DeviceClockSegment? DerivedSegmentForWall(DateTime wall, TimezoneTimelineEntry? entry)
+    {
+        if (!DerivedMayOverride(entry))
+            return null;
+
+        foreach (var segment in _deviceClockSegments)
+        {
+            if (segment.Contains(wall.AddMinutes(-segment.OffsetMinutes)))
+                return segment;
+        }
+
+        return null;
     }
 
     private TimezoneTimelineEntry? ResolveEntry(DateTime wallUnspecified)

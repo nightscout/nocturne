@@ -259,17 +259,19 @@ public class GlookoConnectorServiceStateIsolationTests
     {
         public Task<TimezoneTimeline> GetResolverAsync(
             double? fallbackOffsetHours, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new TimezoneTimeline(
-            [
-                new TimezoneTimelineEntry
-                {
-                    Timezone = AmbientTenant.Id == TenantA ? "Australia/Sydney" : "America/Toronto",
-                    EffectiveFrom = DateTime.MinValue,
-                },
-            ], fallbackOffsetHours));
+            Task.FromResult(new TimezoneTimeline(AmbientEntries(), fallbackOffsetHours));
 
         public Task<IReadOnlyList<TimezoneTimelineEntry>> GetTimelineAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<TimezoneTimelineEntry>>([]);
+            Task.FromResult<IReadOnlyList<TimezoneTimelineEntry>>(AmbientEntries());
+
+        private static TimezoneTimelineEntry[] AmbientEntries() =>
+        [
+            new TimezoneTimelineEntry
+            {
+                Timezone = AmbientTenant.Id == TenantA ? "Australia/Sydney" : "America/Toronto",
+                EffectiveFrom = DateTime.MinValue,
+            },
+        ];
 
         public Task<bool> EnsureOriginAsync(string ianaTimezone, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);

@@ -119,7 +119,30 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
         var result = await _syncService.TriggerSyncAsync(GlookoConnectorId, syncRequest, cancellationToken);
         return Ok(new RecorrectResult(result.Success, result.Message));
     }
+
+    /// <summary>
+    /// Diagnostic view of the device-clock evidence behind automatic corrections: the stored
+    /// observations and the deviation segments they currently derive. Read-only; segments are a pure
+    /// function of the observations, so this never changes anything.
+    /// </summary>
+    [HttpGet("device-clock")]
+    [RemoteQuery]
+    public async Task<ActionResult<DeviceClockDiagnostics>> GetDeviceClock(
+        [FromServices] IDeviceClockService deviceClock,
+        CancellationToken cancellationToken)
+    {
+        var observations = await deviceClock.GetObservationsAsync(connector: null, cancellationToken);
+        var segments = await deviceClock.GetSegmentsAsync(GlookoConnectorId, cancellationToken: cancellationToken);
+        return Ok(new DeviceClockDiagnostics(observations, segments));
+    }
 }
+
+/// <summary>Device-clock evidence and what it currently derives.</summary>
+/// <param name="Observations">Stored offset evidence, oldest first.</param>
+/// <param name="Segments">Deviation segments the evidence confirms right now.</param>
+public record DeviceClockDiagnostics(
+    IReadOnlyList<DeviceClockObservation> Observations,
+    IReadOnlyList<DeviceClockSegment> Segments);
 
 /// <summary>Request to create or update a timezone timeline entry.</summary>
 /// <param name="Id">Existing entry id to update, or null to create.</param>
