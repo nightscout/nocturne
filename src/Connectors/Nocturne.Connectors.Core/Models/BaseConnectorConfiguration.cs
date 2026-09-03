@@ -19,9 +19,7 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     ///     Gets the connector name from the ConnectorRegistration attribute.
     ///     Used for error messages and logging.
     /// </summary>
-    private string ConnectorName =>
-        GetType().GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName
-        ?? GetType().Name.Replace("Configuration", "");
+    protected string ConnectorName => ConnectorRegistrationAttribute.NameFor(GetType());
 
     /// <summary>
     ///     Gets the environment variable prefix from the ConnectorRegistration attribute.

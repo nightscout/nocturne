@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Net;
 using Polly;
 
@@ -46,12 +47,7 @@ public static class HttpClientExtensions
                 .ConfigureHttpClient(client =>
                 {
                     if (baseUrl != null)
-                    {
-                        var url = baseUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                            ? baseUrl
-                            : $"https://{baseUrl}";
-                        client.BaseAddress = new Uri(url);
-                    }
+                        client.BaseAddress = BaseAddressFor(baseUrl, builder.Name);
 
                     client.DefaultRequestHeaders.Accept.Clear();
                     client.DefaultRequestHeaders.Accept.Add(
@@ -179,5 +175,19 @@ public static class HttpClientExtensions
 
             return builder;
         }
+    }
+
+    /// <summary>
+    ///     A base address whose path ends in a slash. Without one, resolving a relative request
+    ///     against it drops the last path segment, so an instance hosted under a subpath would
+    ///     lose that subpath.
+    /// </summary>
+    private static Uri BaseAddressFor(string baseUrl, string connectorName)
+    {
+        var resolved = new Uri(ConnectorUrl.ResolveBase(baseUrl, connectorName));
+
+        return resolved.AbsolutePath.EndsWith('/')
+            ? resolved
+            : new UriBuilder(resolved) { Path = $"{resolved.AbsolutePath}/" }.Uri;
     }
 }

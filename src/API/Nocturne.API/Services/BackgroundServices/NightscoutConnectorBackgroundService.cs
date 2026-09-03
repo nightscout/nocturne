@@ -123,17 +123,10 @@ public class NightscoutConnectorBackgroundService
 
         // Tenants may store a bare host with no scheme. Normalise through the same helper the sync
         // path uses so a URL that polls fine does not fail here on Uri parsing.
-        var socketUrl = NightscoutConnectorService.ResolveBaseUrl(config.Url);
-
-        if (!Uri.TryCreate(socketUrl, UriKind.Absolute, out var socketUri))
-        {
-            Logger.LogWarning(
-                "Nightscout URL {Url} for tenant {TenantSlug} is not a valid absolute URI, will rely on polling",
-                socketUrl, tenantSlug);
+        if (ResolveListenerBaseUrl(config.Url, tenantSlug) is not { } socketUrl)
             return;
-        }
 
-        var client = new SocketIO(socketUri, new SocketIOOptions
+        var client = new SocketIO(new Uri(socketUrl), new SocketIOOptions
         {
             Reconnection = true,
             ReconnectionAttempts = ReconnectionAttempts,
