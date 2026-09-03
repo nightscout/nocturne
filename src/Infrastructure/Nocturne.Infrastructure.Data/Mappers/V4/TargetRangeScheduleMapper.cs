@@ -33,7 +33,7 @@ public static class TargetRangeScheduleMapper
         return new TargetRangeSchedule
         {
             ProfileName = entity.ProfileName,
-            Entries = JsonSerializer.Deserialize<List<TargetRangeEntry>>(entity.EntriesJson) ?? [],
+            Entries = MapperHelpers.DeserializeJson<List<TargetRangeEntry>>(entity.EntriesJson) ?? [],
         }.WithHeaderFrom(entity);
     }
 

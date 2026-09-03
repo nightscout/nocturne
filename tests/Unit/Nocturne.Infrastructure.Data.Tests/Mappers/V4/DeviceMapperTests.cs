@@ -200,4 +200,25 @@ public class DeviceMapperTests
         roundTripped.FirstSeenMills.Should().Be(original.FirstSeenMills);
         roundTripped.LastSeenMills.Should().Be(original.LastSeenMills);
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedAdditionalPropertiesJson_YieldsNoAdditionalProperties()
+    {
+        var entity = new DeviceEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Category = "InsulinPump",
+            Type = "Omnipod DASH",
+            Serial = "SN-12345",
+            FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            AdditionalPropertiesJson = """{"unterminated":""",
+        };
+
+        var model = DeviceMapper.ToDomainModel(entity);
+
+        model.AdditionalProperties.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
+    }
 }

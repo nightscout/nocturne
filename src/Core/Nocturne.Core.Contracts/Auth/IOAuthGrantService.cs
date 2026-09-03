@@ -46,6 +46,20 @@ public interface IOAuthGrantService
     );
 
     /// <summary>
+    /// Get the active (non-revoked) grant with this id that this subject owns. A grant that is
+    /// revoked, absent, or owned by another subject all come back <c>null</c>, so a caller
+    /// authorizing against one cannot tell the three apart.
+    /// </summary>
+    /// <param name="grantId">The grant ID to look up</param>
+    /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
     /// Revoke a grant (soft delete). Invalidates all associated refresh tokens, and — because
     /// access tokens carry their grant id — every outstanding access token minted from the grant.
     /// </summary>

@@ -430,4 +430,42 @@ public class TempBasalMapperTests
                 because: $"TempBasalOrigin.{origin} should survive a round trip");
         }
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedAdditionalPropertiesJson_YieldsNoAdditionalProperties()
+    {
+        var entity = new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Algorithm",
+            AdditionalPropertiesJson = """{"unterminated":""",
+        };
+
+        var model = TempBasalMapper.ToDomainModel(entity);
+
+        model.AdditionalProperties.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedInsulinContextJson_YieldsNoInsulinContext()
+    {
+        var entity = new TempBasalEntity
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 1.0,
+            Origin = "Algorithm",
+            InsulinContextJson = """{"insulinName":""",
+        };
+
+        var model = TempBasalMapper.ToDomainModel(entity);
+
+        model.InsulinContext.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
+    }
 }
