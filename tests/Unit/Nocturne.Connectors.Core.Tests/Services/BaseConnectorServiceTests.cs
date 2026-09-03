@@ -178,7 +178,6 @@ public class BaseConnectorServiceTests
         reAuthentications.Should().Be(3);
         delays.DelayedAttempts.Should().BeEmpty(
             "fresh credentials replace the backoff rather than waiting one out");
-        service.FailedRequestCount.Should().Be(1, "the exhausted run tracks exactly one failure");
     }
 
     [Fact]
@@ -203,7 +202,6 @@ public class BaseConnectorServiceTests
         result.Should().BeNull();
         attempts.Should().Be(1, "there is nothing to retry with once re-authentication fails");
         delays.DelayedAttempts.Should().BeEmpty();
-        service.FailedRequestCount.Should().Be(1);
     }
 
     private static (TestConnectorService service, Mock<IConnectorPublisher> publisher,

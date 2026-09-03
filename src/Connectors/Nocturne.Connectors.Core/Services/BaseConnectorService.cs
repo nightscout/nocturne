@@ -1357,59 +1357,21 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         // HttpClient is managed by IHttpClientFactory - do not dispose
     }
 
-    #region Health Tracking
+    #region Failure Tracking
 
-    /// <summary>
-    ///     Tracks consecutive failed requests for health monitoring.
-    ///     Automatically incremented on failures and reset on success.
-    /// </summary>
     private int _failedRequestCount;
 
-    /// <summary>
-    ///     Maximum failed requests before connector is considered unhealthy.
-    ///     Override in derived classes to customize threshold.
-    /// </summary>
-    protected virtual int MaxFailedRequestsBeforeUnhealthy => 5;
-
-    /// <summary>
-    ///     Gets whether the connector is in a healthy state based on recent request failures.
-    ///     Returns false if consecutive failures exceed MaxFailedRequestsBeforeUnhealthy.
-    /// </summary>
-    public virtual bool IsHealthy =>
-        Volatile.Read(ref _failedRequestCount) < MaxFailedRequestsBeforeUnhealthy;
-
-    /// <summary>
-    ///     Gets the number of consecutive failed requests.
-    /// </summary>
-    public int FailedRequestCount => Volatile.Read(ref _failedRequestCount);
-
-    /// <summary>
-    ///     Resets the failed request counter. Call this after successful recovery.
-    /// </summary>
-    public virtual void ResetFailedRequestCount()
-    {
-        Interlocked.Exchange(ref _failedRequestCount, 0);
-        _logger.LogInformation("[{ConnectorSource}] Failed request count reset", ConnectorSource);
-    }
-
-    /// <summary>
-    ///     Increments the failed request count and logs the failure.
-    /// </summary>
     protected void TrackFailedRequest(string? reason = null)
     {
         var newCount = Interlocked.Increment(ref _failedRequestCount);
         _logger.LogWarning(
-            "[{ConnectorSource}] Request failed (count: {FailedCount}/{MaxAllowed}){Reason}",
+            "[{ConnectorSource}] Request failed (consecutive: {FailedCount}){Reason}",
             ConnectorSource,
             newCount,
-            MaxFailedRequestsBeforeUnhealthy,
             reason != null ? $": {reason}" : ""
         );
     }
 
-    /// <summary>
-    ///     Resets the failed request count on success.
-    /// </summary>
     protected void TrackSuccessfulRequest()
     {
         var previousCount = Volatile.Read(ref _failedRequestCount);
@@ -1430,8 +1392,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <summary>
     ///     Executes an async operation under the shared connector retry loop, tracking success and
-    ///     failure for health monitoring. See <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the
-    ///     attempt-budget and delay contract.
+    ///     failure. See <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and
+    ///     delay contract.
     /// </summary>
     /// <typeparam name="T">The return type of the operation</typeparam>
     /// <param name="operation">The async operation to execute</param>
