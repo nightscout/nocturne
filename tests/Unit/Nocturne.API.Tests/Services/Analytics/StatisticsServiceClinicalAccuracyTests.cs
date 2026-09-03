@@ -1023,7 +1023,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries);
+        var result = _sut.CalculateGlycemicVariability(values, entries)!;
 
         // CV < 36% is the clinical target
         result.CoefficientOfVariation.Should().BeLessThan(36);
@@ -1041,7 +1041,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries);
+        var result = _sut.CalculateGlycemicVariability(values, entries)!;
 
         result.CoefficientOfVariation.Should().BeGreaterThan(50);
     }
@@ -1169,7 +1169,7 @@ public class StatisticsServiceClinicalAccuracyTests
         }).ToArray();
 
         var basicStats = _sut.CalculateBasicStats(values);
-        var gv = _sut.CalculateGlycemicVariability(values, entries);
+        var gv = _sut.CalculateGlycemicVariability(values, entries)!;
 
         // Both use sample SD (N-1): sqrt(Σ(x-mean)²/4) = sqrt(4000/4) = sqrt(1000) ≈ 31.6
         basicStats.StandardDeviation.Should().Be(

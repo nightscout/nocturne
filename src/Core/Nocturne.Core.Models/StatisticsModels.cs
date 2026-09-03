@@ -733,9 +733,11 @@ public class GlucoseAnalytics
     public TimeInRangeMetrics TimeInRange { get; set; } = new();
 
     /// <summary>
-    /// Glycemic variability metrics
+    /// Glycemic variability metrics, or null when the window held fewer than two readings. Every
+    /// metric has a clinical band whose best end is at or near zero, so a defaulted instance reads
+    /// as excellent control rather than as absent data.
     /// </summary>
-    public GlycemicVariability GlycemicVariability { get; set; } = new();
+    public GlycemicVariability? GlycemicVariability { get; set; }
 
     /// <summary>
     /// Data quality assessment
