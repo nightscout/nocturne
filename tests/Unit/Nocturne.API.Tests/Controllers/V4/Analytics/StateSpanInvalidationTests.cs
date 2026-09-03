@@ -32,11 +32,22 @@ public class StateSpanInvalidationTests
     [InlineData(nameof(StateSpansController.DeleteStateSpan))]
     public void EveryWrite_RefreshesTheGenericListAndEveryCategoryRead(string write)
     {
-        var invalidates = typeof(StateSpansController).GetMethod(write)!
-            .GetCustomAttribute<RemoteCommandAttribute>()!.Invalidates;
+        var invalidates = Command(write).Invalidates;
 
         invalidates.Should().Contain(nameof(StateSpansController.GetStateSpans));
         invalidates.Should().Contain(CategoryReads);
+    }
+
+    /// <summary>
+    /// A write to a span that already exists can stale the by-id read the detail view holds; a
+    /// create cannot, because nothing is holding the minted id yet.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(StateSpansController.UpdateStateSpan))]
+    [InlineData(nameof(StateSpansController.DeleteStateSpan))]
+    public void AWriteToAnExistingSpan_RefreshesTheByIdRead(string write)
+    {
+        Command(write).Invalidates.Should().Contain(nameof(StateSpansController.GetStateSpan));
     }
 
     [Theory]
@@ -53,4 +64,8 @@ public class StateSpanInvalidationTests
         typeof(StateSpansController).GetMethod(read)!
             .GetCustomAttribute<RemoteQueryAttribute>().Should().NotBeNull();
     }
+
+    private static RemoteCommandAttribute Command(string write) =>
+        typeof(StateSpansController).GetMethod(write)!
+            .GetCustomAttribute<RemoteCommandAttribute>()!;
 }

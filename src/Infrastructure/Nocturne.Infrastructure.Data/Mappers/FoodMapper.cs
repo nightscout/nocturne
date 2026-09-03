@@ -58,9 +58,7 @@ public static class FoodMapper
             Energy = entity.Energy,
             Gi = (int)entity.Gi,
             Unit = entity.Unit,
-            Foods = !string.IsNullOrEmpty(entity.Foods)
-                ? JsonSerializer.Deserialize<List<QuickPickFood>>(entity.Foods)
-                : null,
+            Foods = MapperHelpers.DeserializeJson<List<QuickPickFood>>(entity.Foods),
             HideAfterUse = entity.HideAfterUse,
             Hidden = entity.Hidden,
             Position = entity.Position,

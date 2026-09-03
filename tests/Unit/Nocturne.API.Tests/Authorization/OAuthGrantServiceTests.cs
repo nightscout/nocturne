@@ -181,6 +181,54 @@ public class OAuthGrantServiceTests : IDisposable
     }
 
     // ---------------------------------------------------------------
+    // GetGrantForSubjectAsync
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsTheSubjectsActiveGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, subjectId: _ownerSubjectId);
+
+        var service = CreateService(db);
+        var grant = await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId);
+
+        grant.Should().NotBeNull();
+        grant!.Id.Should().Be(grantId);
+        grant.ClientId.Should().Be(TestClientId, "the caller audits the revocation by client id");
+    }
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsNullForAnotherSubjectsGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        var otherSubjectId = Guid.CreateVersion7();
+        await SeedSubjectAsync(db, otherSubjectId, "Other");
+        var grantId = await SeedGrantAsync(db, subjectId: otherSubjectId);
+
+        var service = CreateService(db);
+
+        (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsNullForARevokedGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(
+            db, subjectId: _ownerSubjectId, revokedAt: DateTime.UtcNow);
+
+        var service = CreateService(db);
+
+        (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
+    }
+
+    // ---------------------------------------------------------------
     // RevokeGrantAsync
     // ---------------------------------------------------------------
 

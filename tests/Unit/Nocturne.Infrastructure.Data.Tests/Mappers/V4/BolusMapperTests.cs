@@ -554,4 +554,22 @@ public class BolusMapperTests
         entity.InsulinContextJson.Should().NotBeNullOrEmpty();
         entity.InsulinContextJson.Should().Contain("Lantus");
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_MalformedInsulinContextJson_YieldsNoInsulinContext()
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 2.5,
+            InsulinContextJson = """{"insulinName":""",
+        };
+
+        var model = BolusMapper.ToDomainModel(entity);
+
+        model.InsulinContext.Should().BeNull(
+            "one unparseable jsonb row must not fail the read of every record around it");
+    }
 }

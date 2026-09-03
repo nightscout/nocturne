@@ -117,6 +117,31 @@ public class BasalInjectionControllerTests
         _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>
+    /// The bulk endpoint rejects an unset timestamp through <c>V4BulkValidation</c>; the single
+    /// create carries the same guard, in the same wording, or it persists 0001-01-01 injections
+    /// the bulk path refuses.
+    /// </summary>
+    [Fact]
+    public async Task Create_returns_400_when_timestamp_is_unset()
+    {
+        var controller = CreateController();
+        var request = new CreateBasalInjectionRequest
+        {
+            Timestamp = default,
+            PatientInsulinId = Guid.NewGuid(),
+            Units = 12,
+        };
+
+        var result = await controller.Create(request);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Timestamp must be set");
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task Create_returns_400_when_PatientInsulin_not_found()
     {

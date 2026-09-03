@@ -406,7 +406,7 @@ public class StateSpansController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [RemoteCommand(Invalidates = [
-        nameof(GetStateSpans),
+        nameof(GetStateSpans), nameof(GetStateSpan),
         nameof(GetPumpModes), nameof(GetConnectivity), nameof(GetOverrides), nameof(GetTemporaryTargets),
         nameof(GetProfiles), nameof(GetExercise), nameof(GetIllness), nameof(GetTravel)])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

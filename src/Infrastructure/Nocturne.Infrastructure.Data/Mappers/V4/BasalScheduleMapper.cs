@@ -33,7 +33,7 @@ public static class BasalScheduleMapper
         return new BasalSchedule
         {
             ProfileName = entity.ProfileName,
-            Entries = JsonSerializer.Deserialize<List<ScheduleEntry>>(entity.EntriesJson) ?? [],
+            Entries = MapperHelpers.DeserializeJson<List<ScheduleEntry>>(entity.EntriesJson) ?? [],
         }.WithHeaderFrom(entity);
     }
 

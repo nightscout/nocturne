@@ -64,9 +64,9 @@ public static class TherapySettingsMapper
             DelayHigh = entity.DelayHigh,
             DelayMedium = entity.DelayMedium,
             DelayLow = entity.DelayLow,
-            LoopSettings = !string.IsNullOrEmpty(entity.LoopSettingsJson)
-                ? JsonSerializer.Deserialize<LoopProfileSettings>(entity.LoopSettingsJson)
-                : null,
+            LoopSettings = MapperHelpers.DeserializeJson<LoopProfileSettings>(
+                entity.LoopSettingsJson
+            ),
             IsDefault = entity.IsDefault,
             EnteredBy = entity.EnteredBy,
             IsExternallyManaged = entity.IsExternallyManaged,

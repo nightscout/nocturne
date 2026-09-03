@@ -57,9 +57,9 @@ public static class BolusMapper
             Duration = entity.Duration,
             SyncIdentifier = entity.SyncIdentifier,
             InsulinType = entity.InsulinType,
-            InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
-                ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
-                : null,
+            InsulinContext = MapperHelpers.DeserializeJson<TreatmentInsulinContext>(
+                entity.InsulinContextJson
+            ),
             Unabsorbed = entity.Unabsorbed,
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
