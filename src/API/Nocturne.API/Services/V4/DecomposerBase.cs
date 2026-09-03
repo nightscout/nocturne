@@ -22,8 +22,13 @@ public abstract class DecomposerBase
     /// stored record is known and before the write, so device-attributed types can settle their
     /// attribution against it; see <see cref="StampAttributionAsync"/>.
     /// </summary>
-    /// <returns>The persisted record, and whether it was inserted rather than updated.</returns>
-    protected async Task<(TRecord Record, bool Created)> UpsertByLegacyIdAsync<TRecord>(
+    /// <returns>
+    /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
+    /// when the write was refused because the record's identity is already held
+    /// (<see cref="RecreationBlockedException"/>) — the outcome the batch path reaches by dropping
+    /// the record from its insert set.
+    /// </returns>
+    protected async Task<(TRecord Record, bool Created)?> UpsertByLegacyIdAsync<TRecord>(
         ILegacyKeyedRepository<TRecord> repository,
         string? legacyId,
         TRecord model,
@@ -42,7 +47,19 @@ public abstract class DecomposerBase
 
         if (existing is null)
         {
-            var created = await repository.CreateAsync(model, origin, ct);
+            TRecord created;
+            try
+            {
+                created = await repository.CreateAsync(model, origin, ct);
+            }
+            catch (RecreationBlockedException)
+            {
+                Logger.LogDebug(
+                    "Skipped {RecordType} from legacy record {LegacyId}: its identity is already held",
+                    recordType, legacyId);
+                return null;
+            }
+
             result.CreatedRecords.Add(created);
             Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
             return (created, true);

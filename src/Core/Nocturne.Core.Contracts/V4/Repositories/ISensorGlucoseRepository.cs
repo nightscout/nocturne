@@ -17,7 +17,9 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="IBGCheckRepository"/>
 /// <seealso cref="ICalibrationRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface ISensorGlucoseRepository : ILegacyKeyedRepository<SensorGlucose>, IDeviceAttributedRepository<SensorGlucose>
+public interface ISensorGlucoseRepository
+    : ILegacyKeyedRepository<SensorGlucose>, IDeviceAttributedRepository<SensorGlucose>,
+      ISyncKeyedRepository<SensorGlucose>
 {
     /// <summary>
     /// Retrieve a page of <see cref="SensorGlucose"/> records filtered by time range, device, source, and origin.
