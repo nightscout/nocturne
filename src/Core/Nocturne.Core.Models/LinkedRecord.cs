@@ -7,8 +7,6 @@ namespace Nocturne.Core.Models;
 /// </summary>
 /// <remarks>
 /// The <see cref="RecordType"/> property determines which table the <see cref="RecordId"/> references:
-/// <see cref="RecordType.Entry"/> maps to <see cref="Entry"/>,
-/// <see cref="RecordType.Treatment"/> maps to <see cref="Treatment"/>,
 /// <see cref="RecordType.StateSpan"/> maps to <see cref="StateSpan"/>,
 /// and other values map to V4 tables.
 /// </remarks>
@@ -34,7 +32,7 @@ public class LinkedRecord
     public RecordType RecordType { get; set; }
 
     /// <summary>
-    /// Gets or sets the ID of the linked record (entry, treatment, or state span)
+    /// Gets or sets the ID of the linked record
     /// </summary>
     [JsonPropertyName("recordId")]
     public Guid RecordId { get; set; }
@@ -70,16 +68,6 @@ public class LinkedRecord
 [JsonConverter(typeof(JsonStringEnumConverter<RecordType>))]
 public enum RecordType
 {
-    /// <summary>
-    /// Glucose entry (SGV, MBG, calibration)
-    /// </summary>
-    Entry,
-
-    /// <summary>
-    /// Treatment (bolus, carbs, temp basal, etc.)
-    /// </summary>
-    Treatment,
-
     /// <summary>
     /// State span (pump mode, connectivity, override, profile)
     /// </summary>
@@ -133,12 +121,6 @@ public enum RecordType
 /// </summary>
 public static class RecordTypeKeys
 {
-    /// <summary><see cref="RecordType.Entry"/></summary>
-    public const string Entry = "entry";
-
-    /// <summary><see cref="RecordType.Treatment"/></summary>
-    public const string Treatment = "treatment";
-
     /// <summary><see cref="RecordType.StateSpan"/></summary>
     public const string StateSpan = "statespan";
 
