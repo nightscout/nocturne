@@ -592,14 +592,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     private void ResolveConfiguration(NocturneRemoteConnectorConfiguration config)
     {
-        if (string.IsNullOrEmpty(config.Url))
-            throw new InvalidOperationException("Remote Nocturne URL is not configured");
-
-        var url = config.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? config.Url
-            : $"https://{config.Url}";
-
-        _resolvedBaseUrl = url.TrimEnd('/');
+        _resolvedBaseUrl = config.ResolveBaseUrl();
 
         _authHeaders = !string.IsNullOrEmpty(config.Token)
             ? new Dictionary<string, string> { ["Authorization"] = $"Bearer {config.Token}" }

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Contracts.Events;
 
@@ -113,12 +114,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     }
 
     private static string ResolveAbsoluteUrl(string configUrl, string endpoint)
-    {
-        var baseUrl = configUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? configUrl
-            : $"https://{configUrl}";
-        return $"{baseUrl.TrimEnd('/')}{endpoint}";
-    }
+        => $"{ConnectorUrl.ResolveBase(configUrl, "Nightscout")}{endpoint}";
 
     private List<T> FilterItems(IReadOnlyList<T> items)
     {

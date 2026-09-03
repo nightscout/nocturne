@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -60,7 +61,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<bool> AuthenticateWithConfigAsync(TConfig config)
     {
         _currentConfig = config;
-        _resolvedBaseUrl = ResolveBaseUrl(config.Url);
+        _resolvedBaseUrl = ConnectorUrl.ResolveBase(config.Url, "Nightscout");
 
         if (string.IsNullOrEmpty(config.ApiSecret))
         {
@@ -722,24 +723,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             url += $"&find[created_at][$lte]={to.Value.ToUniversalTime():o}";
 
         return url;
-    }
-
-    /// <summary>
-    /// Normalises a tenant-configured Nightscout URL: supplies <c>https://</c> when the tenant
-    /// stored a bare host, and trims any trailing slash so callers can append paths directly.
-    /// </summary>
-    /// <param name="configUrl">The URL as stored in the tenant's connector configuration.</param>
-    /// <exception cref="InvalidOperationException">The configured URL is null or empty.</exception>
-    public static string ResolveBaseUrl(string configUrl)
-    {
-        if (string.IsNullOrEmpty(configUrl))
-            throw new InvalidOperationException("Nightscout URL is not configured");
-
-        var url = configUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? configUrl
-            : $"https://{configUrl}";
-
-        return url.TrimEnd('/');
     }
 
     private Dictionary<string, string> GetAuthHeaders()

@@ -69,6 +69,30 @@ public class NightscoutWriteBackSinkEndpointTests
     private NightscoutActivityWriteBackSink ActivitySink(RecordingHttpMessageHandler h)
         => new(Client(h), LoaderFor(_config), _breaker, NullLogger<NightscoutActivityWriteBackSink>.Instance);
 
+    /// <summary>
+    /// A tenant may store a bare host, and one whose name opens with the scheme's letters must
+    /// still be read as a host: taken for an absolute URL it becomes a relative request and the
+    /// write-back lands somewhere other than the tenant's instance.
+    /// </summary>
+    [Fact]
+    public async Task EntrySink_SchemelessHostNamedLikeAScheme_PostsToThatHost()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "httpbin.example.com",
+            ApiSecret = "test-secret-12345",
+            WriteBackEnabled = true,
+            WriteBackBatchSize = 50
+        };
+
+        await EntrySink(handler, config).OnCreatedAsync(
+            new Entry { Id = "1", Sgv = 120, DataSource = "nocturne" });
+
+        handler.Uris.Should().ContainSingle()
+            .Which.Should().Be(new Uri("https://httpbin.example.com/api/v1/entries"));
+    }
+
     [Fact]
     public async Task EntrySink_PostsToV1Entries()
     {

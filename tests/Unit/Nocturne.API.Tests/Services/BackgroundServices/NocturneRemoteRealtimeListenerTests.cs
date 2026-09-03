@@ -1,8 +1,10 @@
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -125,6 +127,66 @@ public class NocturneRemoteRealtimeListenerTests
 
         // Act & Assert — should skip the tenant without throwing
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Pins the listener's own call site: a tenant storing a bare host must reach the connect
+    /// step against the resolved absolute hub URI, rather than being turned away by the
+    /// absolute-URI guard in front of it.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_SchemelessUrl_ConnectsToResolvedHubUri()
+    {
+        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NocturneRemoteConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "127.0.0.1:9",
+            Token = "test-token",
+        };
+
+        var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
+        var sut = new NocturneRemoteConnectorBackgroundService(
+            BuildServiceProvider(connectionString, config), logger);
+
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        logger.Entries.Should().Contain(e =>
+            e.Message.Contains("Failed to connect SignalR")
+            && e.Message.Contains("https://127.0.0.1:9/hubs/data"));
+    }
+
+    /// <summary>
+    /// A stored URL the resolver refuses is the listener's to report: it cannot connect, and
+    /// letting the rejection reach the per-tenant catch would file it as an unexpected error.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UnresolvableUrl_ReportsItAndSkipsTenant()
+    {
+        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NocturneRemoteConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "ftp://x",
+            Token = "test-token",
+        };
+
+        var logger = new ListLogger<NocturneRemoteConnectorBackgroundService>();
+        var sut = new NocturneRemoteConnectorBackgroundService(
+            BuildServiceProvider(connectionString, config), logger);
+
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        logger.Entries.Should().Contain(e =>
+            e.Message.Contains("cannot be resolved to an absolute http(s) URL")
+            && e.Message.Contains("test-tenant"));
+        logger.Entries.Should().NotContain(e =>
+            e.Message.Contains("Unexpected error starting real-time listener"));
+        logger.Entries.Should().NotContain(e => e.Message.Contains("Failed to connect SignalR"));
     }
 
     #region Helpers
