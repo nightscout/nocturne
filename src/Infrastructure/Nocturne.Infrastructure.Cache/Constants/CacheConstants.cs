@@ -27,22 +27,6 @@ public static class CacheConstants
     }
 
     /// <summary>
-    /// Cache key prefixes
-    /// </summary>
-    public static class KeyPrefixes
-    {
-        public const string System = "system";
-    }
-
-    /// <summary>
-    /// Common entry types
-    /// </summary>
-    public static class EntryTypes
-    {
-        public const string Sgv = "sgv";
-    }
-
-    /// <summary>
     /// Cleanup intervals
     /// </summary>
     public static class CleanupIntervals
@@ -56,7 +40,5 @@ public static class CacheConstants
     public static class DefaultTtl
     {
         public static readonly TimeSpan ProcessingStatus = TimeSpan.FromHours(1);
-        public static readonly TimeSpan SystemLookups = TimeSpan.FromHours(4);
-        public static readonly TimeSpan SystemStatus = TimeSpan.FromMinutes(5);
     }
 }

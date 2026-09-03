@@ -16,13 +16,6 @@ public static class CacheKeyBuilder
         BuildKey("entries", "current", tenantId, suffix);
 
     /// <summary>
-    /// Builds a cache key for current profile
-    /// </summary>
-    /// <param name="tenantId">Tenant ID</param>
-    public static string BuildCurrentProfileKey(string tenantId) =>
-        BuildKey("profiles", "current", tenantId);
-
-    /// <summary>
     /// Builds a cache key for recent entries with count and type filters
     /// </summary>
     /// <param name="tenantId">Tenant ID</param>
@@ -102,18 +95,6 @@ public static class CacheKeyBuilder
     }
 
     /// <summary>
-    /// Creates a pattern for cache key matching
-    /// </summary>
-    /// <param name="category">Cache category</param>
-    /// <param name="tenantId">Tenant ID (or * for all tenants)</param>
-    /// <param name="pattern">Pattern suffix</param>
-    public static string BuildPattern(
-        string category,
-        string tenantId = "*",
-        string pattern = "*"
-    ) => $"{category}{KeySeparator}{tenantId}{KeySeparator}{pattern}";
-
-    /// <summary>
     /// Creates a pattern for invalidating all recent entries cache
     /// </summary>
     /// <param name="tenantId">Tenant ID</param>
@@ -126,45 +107,4 @@ public static class CacheKeyBuilder
     /// <param name="tenantId">Tenant ID</param>
     public static string BuildRecentTreatmentsPattern(string tenantId) =>
         $"treatments{KeySeparator}recent{KeySeparator}{tenantId}{KeySeparator}*";
-
-    /// <summary>
-    /// Creates a pattern for invalidating all profile timestamp cache
-    /// </summary>
-    /// <param name="tenantId">Tenant ID</param>
-    public static string BuildProfileTimestampPattern(string tenantId) =>
-        $"profiles{KeySeparator}at{KeySeparator}{tenantId}{KeySeparator}*";
-
-    #region Expensive Calculation Cache Keys
-
-    /// <summary>
-    /// Builds a cache key for IOB calculation results
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <param name="timestamp">Timestamp for calculation</param>
-    public static string BuildIobCalculationKey(string userId, long timestamp) =>
-        BuildKey("calculations", "iob", userId, timestamp.ToString());
-
-    /// <summary>
-    /// Builds a cache key for profile calculations at timestamp
-    /// </summary>
-    /// <param name="profileId">Profile ID</param>
-    /// <param name="timestamp">Timestamp for calculation</param>
-    public static string BuildProfileCalculatedKey(string profileId, long timestamp) =>
-        BuildKey("profiles", "calculated", profileId, timestamp.ToString());
-
-    /// <summary>
-    /// Creates a pattern for invalidating all IOB calculation cache for a user
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    public static string BuildIobCalculationPattern(string userId) =>
-        $"calculations{KeySeparator}iob{KeySeparator}{userId}{KeySeparator}*";
-
-    /// <summary>
-    /// Creates a pattern for invalidating all profile calculated cache for a profile
-    /// </summary>
-    /// <param name="profileId">Profile ID</param>
-    public static string BuildProfileCalculatedPattern(string profileId) =>
-        $"profiles{KeySeparator}calculated{KeySeparator}{profileId}{KeySeparator}*";
-
-    #endregion
 }

@@ -34,12 +34,6 @@ public static class ServiceCollectionExtensions
         // Register in-memory cache service
         services.AddSingleton<ICacheService, MemoryCacheService>();
 
-        // Register cache invalidation service
-        services.AddScoped<ICacheInvalidationService, CacheInvalidationService>();
-
-        // Register cache warming service
-        services.AddScoped<ICacheWarmingService, CacheWarmingService>();
-
         // Register processing status service (in-memory)
         services.AddSingleton<IProcessingStatusService, MemoryProcessingStatusService>();
 
