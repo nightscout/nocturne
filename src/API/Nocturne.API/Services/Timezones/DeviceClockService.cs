@@ -277,9 +277,11 @@ public class DeviceClockService : IDeviceClockService
     }
 
     /// <summary>
-    /// Announces deviation segments the owner has never been told about. A segment's identity is the
-    /// observation that opened it; once that anchor is stamped, extensions, re-derivations, enabling
-    /// the flag later, archiving the notification, or notification cleanup can never re-announce it.
+    /// Announces deviation segments the owner has never been told about. Every observation inside
+    /// the segment's window is stamped, and one stamped member marks the whole segment as announced
+    /// — so extensions, re-derivations, enabling the flag later, archiving the notification,
+    /// notification cleanup, and retention pruning the earliest members (which shifts the segment's
+    /// opening observation) can never re-announce it.
     /// </summary>
     /// <returns>Whether any observation was stamped (caller saves).</returns>
     private async Task<bool> AnnounceSegmentsAsync(
@@ -292,7 +294,12 @@ public class DeviceClockService : IDeviceClockService
         var stamped = false;
         foreach (var segment in segments)
         {
-            var anchors = entities.Where(e => e.ObservedAt == segment.FirstObservedAtUtc).ToList();
+            // The window is [first supporting observation, last supporting observation]: a closed
+            // segment's ToUtc is its last supporting observation, an open one runs to the end.
+            var anchors = entities
+                .Where(e => e.ObservedAt >= segment.FirstObservedAtUtc
+                            && (segment.ToUtc is not { } end || e.ObservedAt <= end))
+                .ToList();
             if (anchors.Count == 0 || anchors.Any(a => a.AppliedAt is not null))
                 continue;
 

@@ -224,6 +224,29 @@ public class DeviceClockServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task PruningTheEarliestAnchor_DoesNotReAnnounceTheSegment()
+    {
+        // Retention rotating the segment's opening observation out shifts its identity to the next
+        // member — which is stamped too, so a 15-month deviation cannot become a notification
+        // fountain as its members age out one by one.
+        await SeedHomeZoneAsync();
+        await _service.RecordObservationsAsync(
+            Connector,
+            [Batch(Utc(10, 12), 120), Batch(Utc(10, 18), 120), Batch(Utc(11, 6), 120), Batch(Utc(11, 12), 120)],
+            null,
+            correctionsEnabled: true);
+        _notifications.Invocations.Clear();
+
+        var earliest = await _db.DeviceClockObservations.OrderBy(e => e.ObservedAt).FirstAsync();
+        _db.DeviceClockObservations.Remove(earliest);
+        await _db.SaveChangesAsync();
+
+        await _service.RecordObservationsAsync(Connector, [], null, correctionsEnabled: true);
+
+        _notifications.Invocations.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task RefiningAnExistingSegment_StaysSilent()
     {
         await SeedHomeZoneAsync();
