@@ -170,7 +170,7 @@ public class HealthRecordResponseContractTests
     {
         var result = await StepCount().CreateStepCounts([]);
 
-        Problem(result.Result, 400).Detail.Should().Be("At least one step count record is required");
+        Problem(result.Result, 400).Detail.Should().Be("Step count data is required");
         _stepCounts.Verify(
             s => s.CreateStepCountsAsync(It.IsAny<IEnumerable<StepCount>>(), It.IsAny<CancellationToken>()),
             Times.Never);

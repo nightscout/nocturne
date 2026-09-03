@@ -31,7 +31,12 @@ public abstract class HealthSeriesControllerBase<TModel, TUpsertRequest> : Healt
             : await ReadPageAsync(V4ReadLimits.ClampLimit(count ?? DefaultCount), skip, ct));
     }
 
-    protected Task<ActionResult<IEnumerable<TModel>>> CreateResponseAsync(
+    /// <remarks>
+    /// The payload is sized before it is mapped, so an oversized one is not projected first.
+    /// </remarks>
+    protected async Task<ActionResult<IEnumerable<TModel>>> CreateResponseAsync(
         TUpsertRequest[] requests, CancellationToken ct) =>
-        CreateResponseAsync([.. requests.Select(ToModel)], ct);
+        this.ValidateBulkSize(requests, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid
+            ? invalid
+            : await CreateResponseAsync([.. requests.Select(ToModel)], ct);
 }
