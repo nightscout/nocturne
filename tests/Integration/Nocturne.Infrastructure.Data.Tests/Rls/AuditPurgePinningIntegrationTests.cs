@@ -17,6 +17,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 ///
 /// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> sets the carrier the
 /// interceptor writes when the connection opens, so the GUC is present for the DELETE itself.
+///
+/// Each case seeds its own tenant, as <see cref="RlsCarrierResetIntegrationTests"/> does:
+/// <see cref="RlsCompletenessFixture"/> is seedless in the sense that it stands up no rows of
+/// its own, not that its collection forbids them.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -69,13 +73,19 @@ public class AuditPurgePinningIntegrationTests
         (await CountAsync(tenant)).Should().Be(0, "the expired rows must be gone");
     }
 
+    /// <summary>
+    /// Deliberately seeds more expired rows than <c>batchSize</c>, so the batching loop must
+    /// iterate. With a batch large enough to swallow the fixture in one statement the loop body
+    /// runs once and its exit condition is never exercised — the sweep that clears a backlog of
+    /// hundreds of thousands of rows would then be uncovered.
+    /// </summary>
     [Fact]
-    public async Task PurgeOlderThanAsync_SparesRowsInsideTheWindow_AndOtherTenants()
+    public async Task PurgeOlderThanAsync_IteratesBatches_SparingRecentRowsAndOtherTenants()
     {
         var tenant = Guid.NewGuid();
         var neighbour = Guid.NewGuid();
-        await SeedAsync(tenant, rows: 2);
-        await SeedAsync(neighbour, rows: 2);
+        await SeedAsync(tenant, rows: 9);
+        await SeedAsync(neighbour, rows: 3);
         await SeedRecentRowAsync(tenant);
 
         var services = new ServiceCollection();
@@ -86,11 +96,45 @@ public class AuditPurgePinningIntegrationTests
         var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
         var purged = await factory.PurgeOlderThanAsync(
-            tenant, AuditTable, "created_at", DateTime.UtcNow.AddDays(-90));
+            tenant, AuditTable, "created_at", DateTime.UtcNow.AddDays(-90), batchSize: 4);
 
-        purged.Should().Be(2);
+        purged.Should().Be(9, "every expired row must be removed across three batches");
         (await CountAsync(tenant)).Should().Be(1, "the row inside the retention window survives");
-        (await CountAsync(neighbour)).Should().Be(2, "the purge must not reach another tenant");
+        (await CountAsync(neighbour)).Should().Be(3, "the purge must not reach another tenant");
+    }
+
+    [Fact]
+    public async Task PurgeOlderThanAsync_RejectsACutoffThatIsNotInThePast()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpContextAccessor();
+        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+
+        // A retention window of zero or fewer days resolves to a cutoff at or after now, which
+        // would delete rows written moments earlier.
+        var act = () => factory.PurgeOlderThanAsync(
+            Guid.NewGuid(), AuditTable, "created_at", DateTime.UtcNow.AddDays(1));
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public async Task PurgeOlderThanAsync_RejectsABatchSizeThatCannotMakeProgress()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpContextAccessor();
+        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+        await using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+
+        var act = () => factory.PurgeOlderThanAsync(
+            Guid.NewGuid(), AuditTable, "created_at", DateTime.UtcNow.AddDays(-1), batchSize: 0);
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
 
     [Theory]

@@ -18,8 +18,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// NULL, matches nothing, and reports success having deleted no rows.
 /// </para>
 /// <para>
-/// Pinning happens here rather than at each call site so a sweep cannot acquire its context
-/// any other way.
+/// Pinning happens here rather than at each call site so no sweep can get it wrong. The
+/// identifier validation proves only that the interpolated strings are safe to embed, not that
+/// the target is tenant-scoped — the delete's tenant bound comes from RLS, with an explicit
+/// <c>tenant_id</c> predicate as the backstop.
 /// </para>
 /// </remarks>
 public static partial class RetentionPurgeExtensions
@@ -27,7 +29,9 @@ public static partial class RetentionPurgeExtensions
     /// <summary>Rows deleted per statement, bounding WAL growth and transaction duration.</summary>
     public const int DefaultBatchSize = 10_000;
 
-    [GeneratedRegex("^[a-z_][a-z0-9_]*$")]
+    // \z rather than $: $ also matches before a trailing newline, which a validator guarding a
+    // DELETE must not accept.
+    [GeneratedRegex(@"\A[a-z_][a-z0-9_]*\z")]
     private static partial Regex SafeIdentifier { get; }
 
     /// <summary>
@@ -39,10 +43,13 @@ public static partial class RetentionPurgeExtensions
     /// <param name="table">Table to purge. Must be a bare lowercase SQL identifier.</param>
     /// <param name="timestampColumn">Age column. Must be a bare lowercase SQL identifier.</param>
     /// <param name="cutoff">Rows strictly older than this are deleted.</param>
-    /// <param name="batchSize">Rows per statement.</param>
+    /// <param name="batchSize">Rows per statement. Must be at least 1.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of rows deleted.</returns>
     /// <exception cref="ArgumentException">An identifier is not a bare lowercase identifier.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="batchSize"/> is below 1, or <paramref name="cutoff"/> is not in the past.
+    /// </exception>
     public static async Task<int> PurgeOlderThanAsync(
         this IDbContextFactory<NocturneDbContext> factory,
         Guid tenantId,
@@ -57,6 +64,14 @@ public static partial class RetentionPurgeExtensions
         RequireIdentifier(table, nameof(table));
         RequireIdentifier(timestampColumn, nameof(timestampColumn));
 
+        // A LIMIT 0 would delete nothing and never satisfy the loop's exit condition.
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+
+        // A cutoff at or after now deletes rows written moments ago, up to the entire table. A
+        // retention window is always historical, so a non-past cutoff is a caller bug, and
+        // refusing it keeps a bad retention setting from erasing the record it is meant to age.
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(cutoff, DateTime.UtcNow, nameof(cutoff));
+
         var totalDeleted = 0;
         int batchDeleted;
 
@@ -64,17 +79,23 @@ public static partial class RetentionPurgeExtensions
         {
             await using var db = await factory.CreateTenantPinnedContextAsync(tenantId, ct);
 
+            // tenant_id is constrained in SQL as well as by RLS. RLS is the guarantee; this is the
+            // backstop for a table that is not tenant-scoped, or is ENABLE without FORCE, where
+            // the policy would not bound the delete. The plan enters on (tenant_id, <column>)
+            // either way, so it costs nothing.
+            //
             // ctid sub-select keeps each statement to a bounded slice of the table.
 #pragma warning disable EF1002
             batchDeleted = await db.Database.ExecuteSqlRawAsync(
-                $"DELETE FROM {table} WHERE ctid IN "
-                + $"(SELECT ctid FROM {table} WHERE {timestampColumn} < {{0}} LIMIT {batchSize})",
-                [cutoff], ct);
+                $"DELETE FROM {table} WHERE tenant_id = {{1}} AND ctid IN "
+                + $"(SELECT ctid FROM {table} WHERE tenant_id = {{1}} AND {timestampColumn} < {{0}} "
+                + $"LIMIT {batchSize})",
+                [cutoff, tenantId], ct);
 #pragma warning restore EF1002
 
             totalDeleted += batchDeleted;
         }
-        while (batchDeleted >= batchSize);
+        while (batchDeleted > 0);
 
         return totalDeleted;
     }

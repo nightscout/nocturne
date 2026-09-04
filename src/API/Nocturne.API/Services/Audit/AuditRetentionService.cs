@@ -21,27 +21,11 @@ public class AuditRetentionService(
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private const int BatchSize = 10_000;
 
-    /// <summary>
-    /// Platform retention applied to tenants that have not set their own. Audit rows are an
-    /// operational trail, not clinical data, and unbounded retention grew mutation_audit_log to
-    /// 24GB in production while almost no tenant had opted into a retention window.
-    /// </summary>
-    private const int FallbackRetentionDays = 90;
+    private int? DefaultReadRetentionDays =>
+        AuditRetentionPolicy.ResolveDefault(AuditRetentionPolicy.ReadConfigKey, configuration);
 
-    private int? DefaultReadRetentionDays => ResolveDefault("Audit:DefaultReadAuditRetentionDays");
-
-    private int? DefaultMutationRetentionDays => ResolveDefault("Audit:DefaultMutationRetentionDays");
-
-    /// <summary>
-    /// Reads a platform retention default. An unset key falls back to
-    /// <see cref="FallbackRetentionDays"/>; a configured value of zero or less disables the
-    /// default, leaving only explicitly configured tenants purged.
-    /// </summary>
-    private int? ResolveDefault(string key)
-    {
-        var days = configuration.GetValue<int?>(key) ?? FallbackRetentionDays;
-        return days > 0 ? days : null;
-    }
+    private int? DefaultMutationRetentionDays =>
+        AuditRetentionPolicy.ResolveDefault(AuditRetentionPolicy.MutationConfigKey, configuration);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
