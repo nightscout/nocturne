@@ -297,12 +297,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// Read-visibility hook applied by <see cref="CountAsync"/> (and reusable by future read paths) so
-    /// counts match the rows reads return. The base is identity; dedup participants override it to
-    /// exclude non-primary LinkedRecords for their RecordType — replacing the per-type CountAsync
-    /// overrides that each carried the same exclusion.
+    /// The <see cref="RecordType"/> this repository's rows are linked under, or null for a type that
+    /// does not participate in deduplication.
     /// </summary>
-    protected virtual IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) => query;
+    protected internal virtual RecordType? DedupRecordType => null;
+
+    /// <summary>
+    /// Applies <see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/> for
+    /// <see cref="DedupRecordType"/>. Every read path of a dedup participant routes through this so
+    /// its counts and its rows agree.
+    /// </summary>
+    protected IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) =>
+        DedupRecordType is { } recordType ? query.ExcludeNonPrimary(ctx, recordType) : query;
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)

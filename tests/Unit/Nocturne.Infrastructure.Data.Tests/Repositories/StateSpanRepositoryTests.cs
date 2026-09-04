@@ -384,23 +384,48 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "statespan",
-            RecordId = duplicateEntity.Id,
-            SourceTimestamp = 0,
-            DataSource = "duplicate",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
+        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
         await _context.SaveChangesAsync();
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
         current.Should().Be(PumpModeState.Automatic);
     }
+
+    [Fact]
+    public async Task GetStateSpansAsync_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var start = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        var state = PumpModeState.Automatic.ToString();
+
+        var primaryEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        primaryEntity.Source = "primary";
+        var duplicateEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
+        var canonicalId = Guid.NewGuid();
+        _context.LinkedRecords.AddRange(
+            Link(canonicalId, primaryEntity.Id, isPrimary: true),
+            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var spans = (await _repository.GetStateSpansAsync()).ToList();
+
+        spans.Should().ContainSingle().Which.Source.Should().Be("primary");
+    }
+
+    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
+    {
+        Id = Guid.NewGuid(),
+        CanonicalId = canonicalId,
+        RecordType = "statespan",
+        RecordId = recordId,
+        SourceTimestamp = 0,
+        DataSource = isPrimary ? "primary" : "duplicate",
+        IsPrimary = isPrimary,
+        SysCreatedAt = DateTime.UtcNow,
+    };
 
     // --- GetActiveAtAsync ---
 

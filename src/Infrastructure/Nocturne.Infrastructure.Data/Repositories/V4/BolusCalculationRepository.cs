@@ -56,12 +56,8 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// <inheritdoc />
     protected override void ApplyUpdate(BolusCalculationEntity target, BolusCalculation source) => BolusCalculationMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
-    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<BolusCalculationEntity> ApplyReadVisibility(IQueryable<BolusCalculationEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.BolusCalculation && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.BolusCalculation;
 
     /// <summary>
     /// Gets bolus calculation records based on filter criteria.
@@ -99,9 +95,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == RecordTypeKeys.BolusCalculation && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

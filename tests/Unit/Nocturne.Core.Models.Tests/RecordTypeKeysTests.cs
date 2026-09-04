@@ -1,39 +1,50 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.Core.Models;
 using Xunit;
 
 namespace Nocturne.Core.Models.Tests;
 
+/// <summary>
+/// Pins each <see cref="RecordType"/> to the key already stored in <c>linked_records.record_type</c>,
+/// so renaming a member orphans no rows and adding one cannot skip the pin.
+/// </summary>
 [Trait("Category", "Unit")]
 public class RecordTypeKeysTests
 {
-    private static readonly Dictionary<string, string> Constants = typeof(RecordTypeKeys)
-        .GetFields(BindingFlags.Public | BindingFlags.Static)
-        .Where(f => f is { IsLiteral: true, IsInitOnly: false } && f.FieldType == typeof(string))
-        .ToDictionary(f => f.Name, f => (string)f.GetRawConstantValue()!);
-
-    [Fact]
-    public void Every_record_type_has_a_constant_and_no_constant_is_orphaned()
+    private static readonly Dictionary<RecordType, string> StoredKeys = new()
     {
-        Constants.Keys.Should().BeEquivalentTo(Enum.GetNames<RecordType>());
-    }
+        [RecordType.StateSpan] = "statespan",
+        [RecordType.SensorGlucose] = "sensorglucose",
+        [RecordType.Bolus] = "bolus",
+        [RecordType.CarbIntake] = "carbintake",
+        [RecordType.BGCheck] = "bgcheck",
+        [RecordType.DeviceEvent] = "deviceevent",
+        [RecordType.Note] = "note",
+        [RecordType.BolusCalculation] = "boluscalculation",
+        [RecordType.TempBasal] = "tempbasal",
+    };
 
-    [Theory]
-    [MemberData(nameof(RecordTypes))]
-    public void Constant_equals_the_computed_key(RecordType recordType)
+    public static TheoryData<RecordType, string> Pins()
     {
-        Constants[recordType.ToString()].Should().Be(RecordTypeKeys.Key(recordType));
-    }
-
-    public static TheoryData<RecordType> RecordTypes()
-    {
-        var data = new TheoryData<RecordType>();
-        foreach (var recordType in Enum.GetValues<RecordType>())
+        var data = new TheoryData<RecordType, string>();
+        foreach (var (recordType, stored) in StoredKeys)
         {
-            data.Add(recordType);
+            data.Add(recordType, stored);
         }
 
         return data;
+    }
+
+    [Fact]
+    public void Every_record_type_is_pinned()
+    {
+        StoredKeys.Keys.Should().BeEquivalentTo(Enum.GetValues<RecordType>());
+    }
+
+    [Theory]
+    [MemberData(nameof(Pins))]
+    public void Key_is_the_stored_key(RecordType recordType, string stored)
+    {
+        RecordTypeKeys.Key(recordType).Should().Be(stored);
     }
 }
