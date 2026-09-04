@@ -22,6 +22,32 @@ public abstract class DecomposerBase
     /// stored record is known and before the write, so device-attributed types can settle their
     /// attribution against it; see <see cref="StampAttributionAsync"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="preserveStoredCorrelationId"/> treats the stored correlation id as belonging to
+    /// the row rather than to the decomposition that last touched it. A decomposer mints a fresh id per
+    /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
+    /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
+    /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
+    /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
+    /// UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
+    /// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is
+    /// why density collapses rather than settling. An empty stored id is ignored, so it still
+    /// self-heals on the next write rather than being frozen and stamped across the group; a non-empty
+    /// one is preserved regardless of origin, since nothing distinguishes a client-supplied id from a
+    /// decomposer-minted one.
+    /// <para>
+    /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
+    /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
+    /// written in separate transactions, so one lost to a cancelled sync is recreated under a fresh id
+    /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
+    /// silently returns nothing. Rewriting the id everywhere on every sync is what currently repairs
+    /// that, so removing the rewrite without converging the group would make the damage permanent.
+    /// A group whose members are not all upserted under a shared legacy id has no anchor to converge
+    /// on and must not set this at all: <see cref="DeviceStatusDecomposer"/> creates its extras row
+    /// keyed by the freshly minted id and carrying no legacy id, so preserving on one of its snapshot
+    /// siblings orphans that row outright.
+    /// </para>
+    /// </remarks>
     /// <returns>The persisted record, and whether it was inserted rather than updated.</returns>
     protected async Task<(TRecord Record, bool Created)> UpsertByLegacyIdAsync<TRecord>(
         ILegacyKeyedRepository<TRecord> repository,
@@ -30,7 +56,8 @@ public abstract class DecomposerBase
         DecompositionResult result,
         WriteOrigin origin,
         CancellationToken ct,
-        Func<TRecord?, Task>? beforeWrite = null)
+        Func<TRecord?, Task>? beforeWrite = null,
+        bool preserveStoredCorrelationId = false)
         where TRecord : class, IV4Record
     {
         var existing = legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
@@ -46,6 +73,13 @@ public abstract class DecomposerBase
             result.CreatedRecords.Add(created);
             Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
             return (created, true);
+        }
+
+        if (preserveStoredCorrelationId
+            && existing.CorrelationId is { } storedCorrelationId
+            && storedCorrelationId != Guid.Empty)
+        {
+            model.CorrelationId = storedCorrelationId;
         }
 
         model.Id = existing.Id;
