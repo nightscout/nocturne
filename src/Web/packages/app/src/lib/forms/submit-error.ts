@@ -36,30 +36,39 @@ export function errorMessage(err: unknown): string | undefined {
 }
 
 /**
- * The 403 bodies the client wrote itself rather than carried from the server.
+ * The bodies the client wrote itself rather than carried from the server.
  *
  * A scope refusal is usually a bare `ForbidResult`, which NSwag reports with one
  * of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
  * `detail` reaches the 403 arm as its `title` — the status phrase. Only a
  * `Problem(detail: …)` refusal — the per-record scope guards — puts a sentence
- * written for a person in the body.
+ * written for a person in the body. NSwag reports an undeclared status the same
+ * way at any status, so a bare `BadRequest()` carries one of those two messages
+ * under a 400 — which is why every arm that forwards a body consults this,
+ * rather than the non-4xx one alone.
+ *
+ * SvelteKit adds the last of these when a *query*'s transport answers non-2xx.
+ * A command or form rejects with a plain `Error` carrying no body, so none of
+ * these checks ever sees one.
  *
  * Recognising the synthesized side is the only check that can be complete: these
- * three strings are constants of a pinned client and of our own codegen, while
- * what a server may write is unbounded and so cannot be matched positively.
+ * strings are constants of a pinned client, of SvelteKit and of our own codegen,
+ * whose 403 arm falls back to the status phrase. What a server may write is
+ * unbounded and so cannot be matched positively.
  */
-const CLIENT_WRITTEN_FORBIDDEN = new Set([
+const CLIENT_WRITTEN_REASONS = new Set([
   "an unexpected server error occurred.",
   "a server side error occurred.",
   "forbidden",
+  "failed to execute remote function",
 ]);
 
-/** The 403 body, when the server rather than the client wrote it. */
-function forbiddenReason(err: unknown): string | undefined {
+/** The body, when the server rather than the client wrote it. */
+function serverWrittenReason(err: unknown): string | undefined {
   const message = errorMessage(err);
   if (message === undefined) return undefined;
 
-  return CLIENT_WRITTEN_FORBIDDEN.has(message.trim().toLowerCase())
+  return CLIENT_WRITTEN_REASONS.has(message.trim().toLowerCase())
     ? undefined
     : message;
 }
@@ -102,7 +111,7 @@ function forbiddenReason(err: unknown): string | undefined {
  * - `forbiddenReason` (403). A writer's fallback ("You don't have permission to
  *   save this") beats the client's own boilerplate but loses to a refusal the
  *   server worded, so the writer takes a server-written body when there is one
- *   — see {@link CLIENT_WRITTEN_FORBIDDEN}. A reader's fallback names the exact
+ *   — see {@link CLIENT_WRITTEN_REASONS}. A reader's fallback names the exact
  *   permission and beats any body the server could send, so the reader always
  *   takes the fallback. A bare `ForbidResult` — what `[RequireScope]` produces,
  *   and so the common refusal — is client-written either way, so both halves
@@ -110,7 +119,9 @@ function forbiddenReason(err: unknown): string | undefined {
  * - `serverError` (5xx, a network failure, a thrown `Error` — anything that is
  *   not a 4xx). A person mid-task must not be shown a server's internal text,
  *   so the writer suppresses it; for a reader the body is the only clue why a
- *   panel is empty, so the reader surfaces it.
+ *   panel is empty, so the reader surfaces it — but only where the server wrote
+ *   it, the one condition both halves share; see
+ *   {@link CLIENT_WRITTEN_REASONS}.
  * - `fault`, the answer once a non-4xx is suppressed. Same reasoning as
  *   `missing`, on the other axis: a writer's fallback names the action, which
  *   is what failed, so it wins; a permission sentence would tell someone who
@@ -131,7 +142,11 @@ export interface RemoteErrorPolicy {
   readonly missing?: string;
   /** Whether a 403 the server worded itself outranks the caller's fallback. */
   readonly forbiddenReason: boolean;
-  /** Whether a body that did not come with a 4xx outranks the caller's fallback. */
+  /**
+   * Whether a server-written body that did not come with a 4xx outranks the
+   * caller's fallback.
+   * @see CLIENT_WRITTEN_REASONS
+   */
   readonly serverError: boolean;
   /**
    * Answer once a body that did not come with a 4xx is suppressed, or the
@@ -188,12 +203,13 @@ export function describeRemoteError(
   if (status === 404) return policy.missing ?? fallback;
   if (status === 403) {
     return (
-      (policy.forbiddenReason ? forbiddenReason(err) : undefined) ?? fallback
+      (policy.forbiddenReason ? serverWrittenReason(err) : undefined) ??
+      fallback
     );
   }
 
   const is4xx = status !== undefined && status >= 400 && status < 500;
-  if (is4xx || policy.serverError) return errorMessage(err) ?? fallback;
+  if (is4xx || policy.serverError) return serverWrittenReason(err) ?? fallback;
 
   return policy.fault ?? fallback;
 }

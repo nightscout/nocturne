@@ -246,6 +246,51 @@ describe("the two halves of RemoteErrorPolicy", () => {
     );
   });
 
+  /**
+   * SvelteKit answers a non-2xx from `/_app/remote/*` with a body of its own,
+   * and the generated client answers an undeclared status with one of two of
+   * its own — at any status, so a bare `BadRequest()` reaches a 4xx arm
+   * carrying one. Neither names a cause, so a reader gains nothing by showing
+   * them and the suppression cannot be scoped to one arm.
+   */
+  it("agrees on a body the client wrote rather than carried, at every status", () => {
+    for (const status of [400, 409, 500, 502]) {
+      for (const message of [
+        "Failed to execute remote function",
+        "An unexpected server error occurred.",
+        "A server side error occurred.",
+      ]) {
+        const synthesized = { status, body: { message } };
+
+        expect(describeSubmitError(synthesized, WRITE_FALLBACK)).toBe(
+          WRITE_FALLBACK
+        );
+        expect(remoteErrorMessage(synthesized, READ_FALLBACK)).toBe(
+          READ_FALLBACK
+        );
+      }
+    }
+  });
+
+  /**
+   * Suppression matches four known strings, so what a server wrote about a
+   * rejected write — the reason retrying unchanged cannot fix — still reaches
+   * the person who has to change it.
+   */
+  it("still carries a 4xx reason the server worded, flattened ModelState included", () => {
+    const validation = {
+      status: 400,
+      body: { message: "units: Insulin units must be greater than zero." },
+    };
+
+    expect(describeSubmitError(validation, WRITE_FALLBACK)).toBe(
+      "units: Insulin units must be greater than zero."
+    );
+    expect(remoteErrorMessage(validation, READ_FALLBACK)).toBe(
+      "units: Insulin units must be greater than zero."
+    );
+  });
+
   it("agrees on a throttled attempt and on a 4xx the server worded", () => {
     expect(describeSubmitError({ status: 429 }, WRITE_FALLBACK)).toBe(
       RATE_LIMITED_ERROR
