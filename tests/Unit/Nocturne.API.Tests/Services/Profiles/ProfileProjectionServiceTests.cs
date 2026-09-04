@@ -371,6 +371,105 @@ public class ProfileProjectionServiceTests
 
     #region Helpers
 
+    /// <summary>
+    /// The five siblings are written in separate transactions, so a group can be mid-convergence when
+    /// a read arrives. The correlation lookup then finds nothing and, without this fallback, an AID
+    /// consumer reading v1/v3 profile is served an empty basal schedule rather than an error.
+    /// </summary>
+    [Fact]
+    public async Task CorrelationLookupMisses_ServesScheduleFromTheSharedLegacyId()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, legacyId: "profile1:Default");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+        SetupLegacyIdLookups("profile1:Default", profileName: "Default");
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        var data = result!.Store["Default"];
+        data.Basal.Should().ContainSingle().Which.Value.Should().Be(1.5);
+        data.CarbRatio.Should().ContainSingle();
+        data.Sens.Should().ContainSingle();
+        data.TargetLow.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task CorrelationLookupMisses_AndNoRowUnderTheLegacyId_StaysEmpty()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, legacyId: "profile1:Default");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+        SetupLegacyIdLookups("profile1:Default", profileName: null);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        var data = result!.Store["Default"];
+        data.Basal.Should().BeEmpty();
+        data.CarbRatio.Should().BeEmpty();
+        data.Sens.Should().BeEmpty();
+        data.TargetLow.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The correlation path guards on <c>ProfileName</c>; the fallback must too. A profile name may
+    /// contain a colon, so the <c>"{profileId}:{storeName}"</c> legacy id cannot be parsed to recover
+    /// the store name, and a renamed row would otherwise serve one store's schedule under another's.
+    /// </summary>
+    [Fact]
+    public async Task CorrelationLookupMisses_AndTheLegacyIdRowIsADifferentStore_StaysEmpty()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, legacyId: "profile1:Default");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+        SetupLegacyIdLookups("profile1:Default", profileName: "Night");
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        var data = result!.Store["Default"];
+        data.Basal.Should().BeEmpty("a schedule belonging to another store must not be served here");
+        data.CarbRatio.Should().BeEmpty();
+        data.Sens.Should().BeEmpty();
+        data.TargetLow.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Schedules stored under <paramref name="legacyId"/> carrying <paramref name="profileName"/>, or
+    /// no row at all when it is null.
+    /// </summary>
+    private void SetupLegacyIdLookups(string legacyId, string? profileName)
+    {
+        _basalRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
+            .ReturnsAsync(profileName is null ? null : new BasalSchedule
+            {
+                ProfileName = profileName,
+                Entries = [new ScheduleEntry { Time = "00:00", Value = 1.5, TimeAsSeconds = 0 }],
+            });
+        _carbRatioRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
+            .ReturnsAsync(profileName is null ? null : new CarbRatioSchedule
+            {
+                ProfileName = profileName,
+                Entries = [new ScheduleEntry { Time = "00:00", Value = 10.0, TimeAsSeconds = 0 }],
+            });
+        _sensitivityRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
+            .ReturnsAsync(profileName is null ? null : new SensitivitySchedule
+            {
+                ProfileName = profileName,
+                Entries = [new ScheduleEntry { Time = "00:00", Value = 50.0, TimeAsSeconds = 0 }],
+            });
+        _targetRangeRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, default))
+            .ReturnsAsync(profileName is null ? null : new TargetRangeSchedule
+            {
+                ProfileName = profileName,
+                Entries = [new TargetRangeEntry { Time = "00:00", Low = 80, High = 120, TimeAsSeconds = 0 }],
+            });
+    }
+
     private static TherapySettings CreateTherapySettings(
         Guid? id = null,
         Guid? correlationId = null,

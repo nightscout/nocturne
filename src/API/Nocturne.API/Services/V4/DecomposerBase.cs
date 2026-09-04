@@ -28,7 +28,9 @@ public abstract class DecomposerBase
     /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
     /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
     /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
-    /// and appends to every index on the table.
+    /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
+    /// UUID v7 id is byte-monotonic in the btree and those appends never refill the pages the dead
+    /// entries freed — which is why density collapses rather than settling.
     /// <para>
     /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
     /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
@@ -36,6 +38,10 @@ public abstract class DecomposerBase
     /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
     /// silently returns nothing. Rewriting the id everywhere on every sync is what currently repairs
     /// that, so removing the rewrite without converging the group would make the damage permanent.
+    /// A group whose members are not all upserted under a shared legacy id has no anchor to converge
+    /// on and must not set this at all: <see cref="DeviceStatusDecomposer"/> creates its extras row
+    /// keyed by the freshly minted id and carrying no legacy id, so preserving on one of its snapshot
+    /// siblings orphans that row outright.
     /// </para>
     /// </remarks>
     /// <returns>The persisted record, and whether it was inserted rather than updated.</returns>

@@ -53,9 +53,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
+        var mintedCorrelationId = Guid.CreateVersion7();
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = mintedCorrelationId
         };
 
         if (profile.Store.Count == 0)
@@ -84,7 +85,7 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
                 MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, result.CorrelationId),
                 result, origin, ct, preserveStoredCorrelationId: true);
 
-            var groupCorrelationId = settings.CorrelationId ?? result.CorrelationId;
+            var groupCorrelationId = settings.CorrelationId ?? mintedCorrelationId;
 
             await UpsertByLegacyIdAsync(
                 _basalScheduleRepo, legacyId,

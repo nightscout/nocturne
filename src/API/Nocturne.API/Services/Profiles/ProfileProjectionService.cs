@@ -136,10 +136,17 @@ public class ProfileProjectionService : IProfileProjectionService
         // A schedule the correlation id does not reach still exists under the legacy id the whole
         // group shares, and that index is unique. Without this an AID consumer reading v1/v3 profile
         // is served an empty basal schedule rather than an error.
-        basal ??= await BySharedLegacyIdAsync(_basalRepo, settings.LegacyId, ct);
-        carbRatio ??= await BySharedLegacyIdAsync(_carbRatioRepo, settings.LegacyId, ct);
-        sensitivity ??= await BySharedLegacyIdAsync(_sensitivityRepo, settings.LegacyId, ct);
-        targetRange ??= await BySharedLegacyIdAsync(_targetRangeRepo, settings.LegacyId, ct);
+        var basalFallback = OrSharedLegacyIdAsync(_basalRepo, basal, s => s.ProfileName, settings, ct);
+        var carbRatioFallback = OrSharedLegacyIdAsync(_carbRatioRepo, carbRatio, s => s.ProfileName, settings, ct);
+        var sensitivityFallback = OrSharedLegacyIdAsync(_sensitivityRepo, sensitivity, s => s.ProfileName, settings, ct);
+        var targetRangeFallback = OrSharedLegacyIdAsync(_targetRangeRepo, targetRange, s => s.ProfileName, settings, ct);
+
+        await Task.WhenAll(basalFallback, carbRatioFallback, sensitivityFallback, targetRangeFallback);
+
+        basal = basalFallback.Result;
+        carbRatio = carbRatioFallback.Result;
+        sensitivity = sensitivityFallback.Result;
+        targetRange = targetRangeFallback.Result;
 
         var profileData = new ProfileData
         {
@@ -185,10 +192,26 @@ public class ProfileProjectionService : IProfileProjectionService
         };
     }
 
-    private static async Task<TRecord?> BySharedLegacyIdAsync<TRecord>(
-        ILegacyKeyedRepository<TRecord> repository, string? legacyId, CancellationToken ct)
+    /// <summary>
+    /// The schedule already found by correlation id, or the one stored under the legacy id every
+    /// sibling in the group shares. The store name is re-checked rather than read off the legacy id:
+    /// a profile name may itself contain a colon, so the <c>"{profileId}:{storeName}"</c> composite
+    /// is not unambiguously parseable, and the correlation path guards on the same field.
+    /// </summary>
+    private static async Task<TRecord?> OrSharedLegacyIdAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository,
+        TRecord? found,
+        Func<TRecord, string> profileName,
+        TherapySettings settings,
+        CancellationToken ct)
         where TRecord : class, IV4Record
-        => string.IsNullOrEmpty(legacyId) ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
+    {
+        if (found is not null || string.IsNullOrEmpty(settings.LegacyId))
+            return found;
+
+        var candidate = await repository.GetByLegacyIdAsync(settings.LegacyId, ct);
+        return candidate is not null && profileName(candidate) == settings.ProfileName ? candidate : null;
+    }
 
     private static List<TimeValue> MapScheduleEntries(List<ScheduleEntry>? entries)
     {
