@@ -98,6 +98,7 @@ if (!isTesting)
 {
     builder.Services.AddPostgreSqlInfrastructure(
         aspirePostgreSqlConnection,
+        builder.Configuration,
         config =>
         {
             config.EnableDetailedErrors = builder.Environment.IsDevelopment();
