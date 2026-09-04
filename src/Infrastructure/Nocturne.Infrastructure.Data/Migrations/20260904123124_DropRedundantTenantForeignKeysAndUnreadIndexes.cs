@@ -18,8 +18,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// That skip is permanent. The migration still completes, so it takes its
     /// <c>__EFMigrationsHistory</c> row and is never run again; a table skipped here keeps its
     /// duplicate until a later migration removes it. The notice naming the table is the only
-    /// record, which is why the migrator data source forwards notices
-    /// (<see cref="Extensions.DatabaseInitializationExtensions.BuildMigratorDataSource"/>).
+    /// record, which is why the migrator context forwards notices
+    /// (<see cref="Extensions.DatabaseInitializationExtensions.CreateMigratorContext"/>).
     /// </para>
     /// </summary>
     public partial class DropRedundantTenantForeignKeysAndUnreadIndexes : Migration
