@@ -374,7 +374,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         // Find the configuration class type
-        var configType = FindConfigurationType(connectorName);
+        var configType = FindConfigurationType(connectorName, _logger);
         if (configType == null)
         {
             _logger.LogWarning("Could not find configuration type for connector {ConnectorName}", connectorName);
@@ -547,7 +547,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
-        var configType = FindConfigurationType(connectorName);
+        var configType = FindConfigurationType(connectorName, _logger);
         if (configType == null)
         {
             _logger.LogWarning("Unknown connector {ConnectorName} for effective config", connectorName);
@@ -574,7 +574,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <summary>
     /// Finds the configuration class Type for a given connector name.
     /// </summary>
-    private static Type? FindConfigurationType(string connectorName)
+    private static Type? FindConfigurationType(string connectorName, ILogger logger)
     {
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => a.FullName?.Contains("Nocturne.Connectors") == true)
@@ -582,21 +582,13 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         foreach (var assembly in assemblies)
         {
-            try
+            foreach (var type in assembly.LoadableTypes(logger))
             {
-                var types = assembly.GetTypes();
-                foreach (var type in types)
+                var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
+                if (attr != null && attr.ConnectorName.Equals(connectorName, StringComparison.OrdinalIgnoreCase))
                 {
-                    var attr = type.GetCustomAttribute<ConnectorRegistrationAttribute>();
-                    if (attr != null && attr.ConnectorName.Equals(connectorName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return type;
-                    }
+                    return type;
                 }
-            }
-            catch (ReflectionTypeLoadException)
-            {
-                // Some types may not be loadable, skip them
             }
         }
 

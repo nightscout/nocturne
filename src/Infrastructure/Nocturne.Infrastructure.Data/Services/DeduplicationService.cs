@@ -595,10 +595,9 @@ public class DeduplicationService : IDeduplicationService
 
         // 7. A wide join reaches up to ten minutes back, so it can land earlier than the group's
         //    primary — and unlike reconcile-merged groups, ingest-formed groups are never revisited
-        //    by MergeDuplicateGroupsAsync. Re-derive the primary here with the same survivor rule
-        //    MergeDuplicateGroupsAsync uses, or the event time the group displays would depend on
-        //    which connector synced first. Scoped to wide joins: the tight path's sticky primary is
-        //    long-standing behaviour.
+        //    by MergeDuplicateGroupsAsync. Re-derive the primary here, or the event time the group
+        //    displays would depend on which connector synced first. Scoped to wide joins: the tight
+        //    path's sticky primary is long-standing behaviour.
         if (wideJoinedCanonicals.Count > 0)
         {
             var joined = wideJoinedCanonicals.ToList();
@@ -608,26 +607,10 @@ public class DeduplicationService : IDeduplicationService
 
             var rowInfo = await LoadRecordInfoAsync(recordType, rows.Select(r => r.RecordId).ToHashSet(), ct);
 
-            // Reads hide soft-deleted records and non-primary links alike, so promoting either a
-            // deleted record or an orphaned link would render the whole group as nothing. A record
-            // id missing from rowInfo is an orphaned link and is treated like a deleted one.
-            bool IsPromotable(LinkedRecordEntity r) =>
-                rowInfo.TryGetValue(r.RecordId, out var ri) && !ri.IsDeleted;
-
             var repointed = false;
             foreach (var group in rows.GroupBy(r => r.CanonicalId))
             {
-                // Earliest promotable record, falling back to earliest overall when the group holds
-                // nothing promotable — the same survivor rule as the reconcile merge.
-                var survivor = group
-                    .Where(IsPromotable)
-                    .OrderBy(r => r.SourceTimestamp)
-                    .ThenBy(r => r.RecordId)
-                    .FirstOrDefault()
-                    ?? group
-                        .OrderBy(r => r.SourceTimestamp)
-                        .ThenBy(r => r.RecordId)
-                        .First();
+                var survivor = PickSurvivor(group, rowInfo);
 
                 // A group with no primary at all renders as nothing, so repair it while the
                 // survivor is already in hand.
@@ -656,16 +639,34 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <summary>
+    /// The link a canonical group's <see cref="LinkedRecordEntity.IsPrimary"/> belongs on: the
+    /// earliest promotable record, falling back to the earliest overall when the group holds
+    /// nothing promotable. Reads hide soft-deleted records and non-primary links alike, so
+    /// promoting either a deleted record or an orphaned link renders the whole group as nothing —
+    /// a record id missing from <paramref name="rowInfo"/> is an orphaned link and is no more
+    /// promotable than a deleted one. <see cref="LinkedRecordEntity.RecordId"/> settles a
+    /// timestamp tie, which a cross-source pair normally has.
+    /// </summary>
+    internal static LinkedRecordEntity PickSurvivor(
+        IEnumerable<LinkedRecordEntity> rows,
+        IReadOnlyDictionary<Guid, RecordInfo> rowInfo)
+    {
+        var ordered = rows.OrderBy(r => r.SourceTimestamp).ThenBy(r => r.RecordId).ToList();
+
+        return ordered.FirstOrDefault(r => rowInfo.TryGetValue(r.RecordId, out var ri) && !ri.IsDeleted)
+               ?? ordered[0];
+    }
+
+    /// <summary>
     /// Collapses duplicate canonical groups for a record type within the current tenant.
     /// Two groups merge when their primary records fall within <see cref="MatchingWindowMillis"/>
     /// of each other and their <see cref="MatchCriteria"/> match; merging is transitive
     /// (union-find) and source-agnostic, mirroring insert-time <see cref="DeduplicateBatchAsync"/>
     /// semantics. A second pass then applies the same wide rules the insert path uses, so a
     /// cross-source pair missed at ingest (out-of-order connector syncs) heals here.
-    /// For each merged super-group the surviving primary is the earliest-timestamp
-    /// non-deleted record (falling back to earliest-overall when every record is soft-deleted);
-    /// all linked rows are re-pointed to the survivor's canonical id and <c>IsPrimary</c> is set
-    /// on exactly the survivor.
+    /// For each merged super-group <see cref="PickSurvivor"/> chooses the surviving primary; all
+    /// linked rows are re-pointed to the survivor's canonical id and <c>IsPrimary</c> is set on
+    /// exactly the survivor.
     /// </summary>
     /// <param name="recordType">The record type whose canonical groups are reconciled.</param>
     /// <param name="candidateCanonicalIds">
@@ -1047,18 +1048,7 @@ public class DeduplicationService : IDeduplicationService
             var rowIds = rows.Select(r => r.RecordId).ToHashSet();
             var rowInfo = await LoadRecordInfoAsync(recordType, rowIds, ct);
 
-            // Survivor = earliest-timestamp non-deleted record; fall back to earliest-overall
-            // only if every record in the group is soft-deleted. A record id missing from rowInfo
-            // is an orphaned link: reads hide it exactly as they hide a deleted record, so it is
-            // never promotable. Same rule as the ingest path's primary re-derivation.
-            bool IsDeleted(LinkedRecordEntity r) =>
-                !rowInfo.TryGetValue(r.RecordId, out var ri) || ri.IsDeleted;
-
-            var survivor = rows
-                .Where(r => !IsDeleted(r))
-                .OrderBy(r => r.SourceTimestamp)
-                .FirstOrDefault()
-                ?? rows.OrderBy(r => r.SourceTimestamp).First();
+            var survivor = PickSurvivor(rows, rowInfo);
 
             // Re-point every row to the survivor's canonical id and fix the IsPrimary invariant.
             foreach (var r in rows)
@@ -1118,13 +1108,8 @@ public class DeduplicationService : IDeduplicationService
             // and merge each type's candidate canonical groups.
             foreach (var group in batch.GroupBy(l => l.RecordType))
             {
-                // RecordType is a free-form string column whose surface is broader than the enum.
-                // A legacy/typo'd value must not throw and block all further batches for this tenant.
-                if (!Enum.TryParse<RecordType>(group.Key, ignoreCase: true, out var type))
+                if (ParseRecordType(group.Key) is not { } type)
                 {
-                    _logger.LogWarning(
-                        "Skipping linked_records group with unknown RecordType '{RecordType}' during reconcile",
-                        group.Key);
                     continue;
                 }
 
@@ -1314,17 +1299,37 @@ public class DeduplicationService : IDeduplicationService
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => new LinkedRecord
+        return entities
+            .Select(e => (Entity: e, Type: ParseRecordType(e.RecordType)))
+            .Where(static x => x.Type.HasValue)
+            .Select(x => new LinkedRecord
+            {
+                Id = x.Entity.Id.ToString(),
+                CanonicalId = x.Entity.CanonicalId,
+                RecordType = x.Type!.Value,
+                RecordId = x.Entity.RecordId,
+                SourceTimestamp = x.Entity.SourceTimestamp,
+                DataSource = x.Entity.DataSource,
+                IsPrimary = x.Entity.IsPrimary,
+                CreatedAt = x.Entity.SysCreatedAt
+            });
+    }
+
+    /// <summary>
+    /// The <see cref="RecordType"/> a <c>linked_records.record_type</c> string names, or null when
+    /// the column holds a value outside the enum. The column's surface is broader than the enum —
+    /// it carries whatever earlier versions wrote — and one such row must neither fail a read nor
+    /// block a tenant's remaining reconcile batches, so every caller skips a null.
+    /// </summary>
+    private RecordType? ParseRecordType(string recordType)
+    {
+        if (Enum.TryParse<RecordType>(recordType, ignoreCase: true, out var type))
         {
-            Id = e.Id.ToString(),
-            CanonicalId = e.CanonicalId,
-            RecordType = Enum.Parse<RecordType>(e.RecordType, ignoreCase: true),
-            RecordId = e.RecordId,
-            SourceTimestamp = e.SourceTimestamp,
-            DataSource = e.DataSource,
-            IsPrimary = e.IsPrimary,
-            CreatedAt = e.SysCreatedAt
-        });
+            return type;
+        }
+
+        _logger.LogWarning("Skipping linked_records row with unknown RecordType '{RecordType}'", recordType);
+        return null;
     }
 
     /// <inheritdoc />
@@ -1361,8 +1366,9 @@ public class DeduplicationService : IDeduplicationService
         Guid canonicalId,
         CancellationToken cancellationToken = default)
     {
+        var key = RecordTypeKeys.Key(RecordType.StateSpan);
         var linkedRecords = await _context.LinkedRecords
-            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == RecordTypeKeys.StateSpan)
+            .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == key)
             .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
@@ -1396,37 +1402,48 @@ public class DeduplicationService : IDeduplicationService
     /// <summary>
     /// One record type's <see cref="DeduplicateAllAsync"/> phase. <see cref="Name"/> is reported as
     /// <see cref="DeduplicationProgress.CurrentPhase"/>, so callers observe it.
+    /// <see cref="RecordIds"/> is every id a link of this type can point at: the type's rows with
+    /// <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record is
+    /// still linked. Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
+    /// <see cref="Phase{TEntity}"/> is what guarantees.
     /// </summary>
     private sealed record TypePhase(
         RecordType RecordType,
         string Name,
         Func<NocturneDbContext, CancellationToken, Task<int>> CountAsync,
+        Func<NocturneDbContext, IQueryable<Guid>> RecordIds,
         PhaseRunner RunAsync);
 
     /// <summary>
     /// Builds one <see cref="TypePhase"/>. <paramref name="timestamp"/> both orders the query and
-    /// supplies the event time, so a type whose event time is not <c>Timestamp</c> states it once.
+    /// supplies the event time, so a type whose event time is not <c>Timestamp</c> states it once;
+    /// <paramref name="id"/> serves the same two purposes.
     /// </summary>
     private static TypePhase Phase<TEntity>(
         RecordType recordType,
         string name,
         Func<NocturneDbContext, IQueryable<TEntity>> set,
         Expression<Func<TEntity, DateTime>> timestamp,
-        Func<TEntity, Guid> id,
+        Expression<Func<TEntity, Guid>> id,
         Func<TEntity, string?> dataSource,
-        Func<TEntity, MatchCriteria> criteria) where TEntity : class
+        Func<TEntity, MatchCriteria> criteria) where TEntity : class, ITenantScoped
     {
         var eventTime = timestamp.Compile();
+        var recordId = id.Compile();
 
         return new TypePhase(
             recordType,
             name,
             (context, ct) => set(context).CountAsync(ct),
+            context => set(context)
+                .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+                .Select(id),
             (service, totalRecords, startOffset, progress, ct) => service.DeduplicateTypeAsync(
                 recordType,
-                set(service._context).OrderBy(timestamp),
+                set(service._context),
+                timestamp,
                 e => new DeduplicationInput(
-                    id(e),
+                    recordId(e),
                     new DateTimeOffset(eventTime(e), TimeSpan.Zero).ToUnixTimeMilliseconds(),
                     dataSource(e) ?? DeduplicationInput.UnknownDataSource,
                     criteria(e)),
@@ -1470,6 +1487,42 @@ public class DeduplicationService : IDeduplicationService
             static c => c.StateSpans, static s => s.StartTimestamp,
             static s => s.Id, static s => s.Source, MatchCriteriaMapper.From)
     ];
+
+    /// <summary>
+    /// The record types <see cref="DeduplicateAllAsync"/> covers, in processing order. Internal so
+    /// a test can drive itself off the registry instead of restating it.
+    /// </summary>
+    internal static IReadOnlyList<RecordType> DeduplicatedRecordTypes { get; } =
+        [.. TypePhases.Select(static p => p.RecordType)];
+
+    /// <summary>
+    /// Deletes the links of <paramref name="context"/>'s tenant that have nothing left to point at:
+    /// a record id no longer in its type's table, and a record type no <see cref="RecordType"/>
+    /// member names, which no caller can read back — <see cref="GetLinkedRecordsAsync"/> drops a row
+    /// whose key does not parse. A soft-deleted record is not an orphan.
+    /// </summary>
+    /// <returns>The number of links deleted.</returns>
+    public static async Task<int> DeleteOrphanedLinksAsync(
+        NocturneDbContext context, CancellationToken ct = default)
+    {
+        var namedTypes = Enum.GetValues<RecordType>().Select(RecordTypeKeys.Key).ToList();
+
+        var deleted = await context.LinkedRecords
+            .Where(lr => !namedTypes.Contains(lr.RecordType))
+            .ExecuteDeleteAsync(ct);
+
+        foreach (var phase in TypePhases)
+        {
+            var recordTypeStr = RecordTypeKeys.Key(phase.RecordType);
+            var recordIds = phase.RecordIds(context);
+
+            deleted += await context.LinkedRecords
+                .Where(lr => lr.RecordType == recordTypeStr && !recordIds.Contains(lr.RecordId))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        return deleted;
+    }
 
     /// <inheritdoc />
     public async Task<DeduplicationResult> DeduplicateAllAsync(
@@ -1677,9 +1730,19 @@ public class DeduplicationService : IDeduplicationService
                && owner == tenantId;
     }
 
+    /// <summary>
+    /// Pages <paramref name="set"/> in <paramref name="timestamp"/> order into
+    /// <see cref="DeduplicateBatchAsync"/>. A page ends on a whole timestamp — the run of rows
+    /// sharing the last one is drained with it — so the cursor can advance strictly past it and no
+    /// row is read twice or skipped, without needing an order over record ids that both the
+    /// database and the CLR agree on. A canonical group split across pages still collapses: each
+    /// page's links are persisted before the next page's matching-window query re-reads them,
+    /// the same seam <see cref="DeduplicateBatchAsync"/> already documents for its own chunking.
+    /// </summary>
     private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateTypeAsync<TEntity>(
         RecordType recordType,
-        IQueryable<TEntity> query,
+        IQueryable<TEntity> set,
+        Expression<Func<TEntity, DateTime>> timestamp,
         Func<TEntity, DeduplicationInput> toInput,
         string phaseName,
         int totalRecords,
@@ -1688,19 +1751,56 @@ public class DeduplicationService : IDeduplicationService
         CancellationToken ct) where TEntity : class
     {
         const int batchSize = 500;
-        var allEntities = await query.ToListAsync(ct);
-        var inputs = allEntities.Select(toInput).ToList();
+
+        // One paging predicate serves every entity type, so the ordering column arrives as a
+        // property name rather than an expression to compose into it.
+        if (timestamp.Body is not MemberExpression timestampMember)
+        {
+            throw new ArgumentException(
+                "The ordering expression must be a simple member access (e => e.Timestamp): the "
+                + "keyset predicate reads that property by name.",
+                nameof(timestamp));
+        }
+
+        var timestampProperty = timestampMember.Member.Name;
+        var eventTime = timestamp.Compile();
+
+        var ordered = set
+            .AsNoTracking()
+            .OrderBy(e => EF.Property<DateTime>(e, timestampProperty));
 
         var totalProcessed = 0;
         var totalGroups = 0;
         var totalLinked = 0;
         var totalDuplicates = 0;
+        DateTime? cursor = null;
 
-        foreach (var chunk in inputs.Chunk(batchSize))
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            var result = await DeduplicateBatchAsync(recordType, chunk, ct);
+            var page = await (cursor is { } after
+                    ? ordered.Where(e => EF.Property<DateTime>(e, timestampProperty) > after)
+                    : ordered)
+                .Take(batchSize)
+                .ToListAsync(ct);
+
+            if (page.Count == 0)
+                break;
+
+            var pageEnd = eventTime(page[^1]);
+            if (page.Count == batchSize)
+            {
+                var tail = await ordered
+                    .Where(e => EF.Property<DateTime>(e, timestampProperty) == pageEnd)
+                    .ToListAsync(ct);
+
+                page = [.. page.Where(e => eventTime(e) < pageEnd), .. tail];
+            }
+
+            cursor = pageEnd;
+
+            var result = await DeduplicateBatchAsync(recordType, page.Select(toInput).ToList(), ct);
             totalProcessed += result.Processed;
             totalGroups += result.GroupsCreated;
             totalLinked += result.RecordsLinked;

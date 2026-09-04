@@ -3,8 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
@@ -18,14 +16,14 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
 
 public class TenantDirectGrantControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly NocturneDbContext _auditDbContext;
     private readonly TenantDirectGrantController _controller;
@@ -36,16 +34,9 @@ public class TenantDirectGrantControllerTests : IDisposable
 
     public TenantDirectGrantControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(_tenantId);
 
         // Seed required entities for FK constraints
         _dbContext.Tenants.Add(new TenantEntity
@@ -84,11 +75,11 @@ public class TenantDirectGrantControllerTests : IDisposable
 
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
+            .ReturnsAsync(() => _db.CreateContext());
 
         // The audit service runs on the request-scoped context, which on this path carries no
         // tenant — so a recorded tenant can only have come from the grant's own pinned context.
-        _auditDbContext = new NocturneDbContext(_dbOptions);
+        _auditDbContext = _db.CreateContext();
         var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
             new AuthAuditService(
@@ -110,7 +101,7 @@ public class TenantDirectGrantControllerTests : IDisposable
     {
         _auditDbContext.Dispose();
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     [Fact]
@@ -269,7 +260,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(404, objectResult.StatusCode);
 
-        await using var otherContext = new NocturneDbContext(_dbOptions) { TenantId = otherTenantId };
+        await using var otherContext = _db.CreateContext(otherTenantId);
         var grant = await otherContext.OAuthGrants.AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == otherGrantId);
         Assert.NotNull(grant);
@@ -285,7 +276,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         var otherTenantId = Guid.CreateVersion7();
         var grantId = Guid.CreateVersion7();
 
-        await using var context = new NocturneDbContext(_dbOptions) { TenantId = otherTenantId };
+        await using var context = _db.CreateContext(otherTenantId);
         context.Tenants.Add(new TenantEntity
         {
             Id = otherTenantId,

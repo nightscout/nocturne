@@ -1,5 +1,4 @@
 using Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -95,16 +94,4 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
-
-    /// <summary>
-    /// Bulk create-or-update by (DataSource, SyncIdentifier): rows matched by that key are updated
-    /// in place, so uploader retries of the same loop cycle stay idempotent. Everything else inserts
-    /// through the LegacyId-dedup path of <see cref="BulkCreateAsync"/>.
-    /// </summary>
-    /// <param name="records">Records to upsert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>All persisted records: updated rows first, then inserted rows.</returns>
-    Task<IEnumerable<ApsSnapshot>> BulkUpsertAsync(
-        IEnumerable<ApsSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default);
 }

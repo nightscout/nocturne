@@ -1,8 +1,6 @@
 using System.Text;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +12,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -27,23 +26,16 @@ public class ConnectorHealthErrorMessageTests : IDisposable
     private const string ConnectorName = "Glooko";
     private const string TruncationMarker = "... (truncated)";
 
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly ConnectorConfigurationService _service;
 
     public ConnectorHealthErrorMessageTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(dbOptions) { TenantId = _tenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(_tenantId);
 
         _dbContext.Tenants.Add(new TenantEntity
         {
@@ -78,7 +70,7 @@ public class ConnectorHealthErrorMessageTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

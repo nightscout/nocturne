@@ -1,4 +1,5 @@
 using Nocturne.API.Models;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
@@ -79,9 +80,7 @@ public class ConnectorHealthService(
         );
 
         // Determine enabled state (check environment config first)
-        var envEnabled = configuration.GetValue<bool?>(
-            $"Parameters:Connectors:{connector.ConfigKey}:Enabled"
-        );
+        var envEnabled = configuration.ConnectorEnabled(connector.ConfigKey);
         var enabledConfig = envEnabled == false ? false : (dbConfig?.IsActive ?? envEnabled);
 
         var hasDatabaseConfig = configStatus?.HasDatabaseConfig ?? dbConfig != null;

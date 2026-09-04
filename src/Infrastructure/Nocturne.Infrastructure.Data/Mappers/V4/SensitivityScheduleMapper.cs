@@ -33,7 +33,7 @@ public static class SensitivityScheduleMapper
         return new SensitivitySchedule
         {
             ProfileName = entity.ProfileName,
-            Entries = JsonSerializer.Deserialize<List<ScheduleEntry>>(entity.EntriesJson) ?? [],
+            Entries = MapperHelpers.DeserializeJson<List<ScheduleEntry>>(entity.EntriesJson) ?? [],
         }.WithHeaderFrom(entity);
     }
 

@@ -1,6 +1,4 @@
 using FluentAssertions;
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -10,6 +8,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -22,8 +21,7 @@ namespace Nocturne.API.Tests.Authorization;
 [Trait("Category", "OAuth")]
 public class OAuthGrantServiceTests : IDisposable
 {
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<IOAuthClientService> _mockClientService;
     private readonly Mock<ILogger<OAuthGrantService>> _mockLogger;
     private readonly GuestSessionCacheService _guestSessionCache =
@@ -37,17 +35,7 @@ public class OAuthGrantServiceTests : IDisposable
 
     public OAuthGrantServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .Options;
-
-        using var dbContext = new NocturneDbContext(_contextOptions);
-        dbContext.Database.EnsureCreated();
-        dbContext.Tenants.Add(new TenantEntity { Id = _testTenantId, Slug = "test" });
-        dbContext.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(_testTenantId);
 
         _mockClientService = new Mock<IOAuthClientService>();
         _mockLogger = new Mock<ILogger<OAuthGrantService>>();
@@ -57,7 +45,7 @@ public class OAuthGrantServiceTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private void SetupDefaultMocks()
@@ -77,7 +65,7 @@ public class OAuthGrantServiceTests : IDisposable
     {
         return new OAuthGrantService(
             dbContext,
-            new TestDbContextFactory(_contextOptions, _testTenantId),
+            _db.ContextFactory,
             _mockClientService.Object,
             _guestSessionCache,
             _mockLogger.Object);
@@ -87,17 +75,9 @@ public class OAuthGrantServiceTests : IDisposable
     /// Hands out tenant-pinned contexts over the shared in-memory connection, standing in for the
     /// registered <see cref="IDbContextFactory{TContext}"/>.
     /// </summary>
-    private sealed class TestDbContextFactory(
-        DbContextOptions<NocturneDbContext> options, Guid tenantId)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() =>
-            new(options) { TenantId = tenantId };
-    }
-
     private NocturneDbContext CreateDbContext()
     {
-        return new NocturneDbContext(_contextOptions) { TenantId = _testTenantId };
+        return _db.CreateContext();
     }
 
     private async Task SeedClientAsync(NocturneDbContext db, Guid? id = null, string? clientId = null)
@@ -178,6 +158,54 @@ public class OAuthGrantServiceTests : IDisposable
         var grants = await service.GetGrantsForSubjectAsync(Guid.CreateVersion7());
 
         Assert.Empty(grants);
+    }
+
+    // ---------------------------------------------------------------
+    // GetGrantForSubjectAsync
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsTheSubjectsActiveGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, subjectId: _ownerSubjectId);
+
+        var service = CreateService(db);
+        var grant = await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId);
+
+        grant.Should().NotBeNull();
+        grant!.Id.Should().Be(grantId);
+        grant.ClientId.Should().Be(TestClientId, "the caller audits the revocation by client id");
+    }
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsNullForAnotherSubjectsGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        var otherSubjectId = Guid.CreateVersion7();
+        await SeedSubjectAsync(db, otherSubjectId, "Other");
+        var grantId = await SeedGrantAsync(db, subjectId: otherSubjectId);
+
+        var service = CreateService(db);
+
+        (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGrantForSubjectAsync_ReturnsNullForARevokedGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(
+            db, subjectId: _ownerSubjectId, revokedAt: DateTime.UtcNow);
+
+        var service = CreateService(db);
+
+        (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
     }
 
     // ---------------------------------------------------------------

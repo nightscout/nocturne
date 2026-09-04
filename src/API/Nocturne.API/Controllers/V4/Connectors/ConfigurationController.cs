@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Connectors.Core.Utilities;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
@@ -315,8 +316,8 @@ public class ConfigurationController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The scheme-less allowance mirrors the connectors' own normalisation
-    /// (<c>NightscoutConnectorService.ResolveBaseUrl</c> and <c>ConfigureConnectorClient</c> prepend
-    /// <c>https://</c> to any stored value that does not already begin with <c>http</c>), so
+    /// (<c>ConnectorUrl.ResolveBase</c> and <c>ConfigureConnectorClient</c> prepend
+    /// <c>https://</c> to any stored value that is not already an absolute http/https URI), so
     /// validating here does not reject a value the connector would have accepted — an existing
     /// tenant re-saving <c>mysite.example</c> or <c>mysite.example:1337</c> must not start failing.
     /// <para>
@@ -324,8 +325,9 @@ public class ConfigurationController : ControllerBase
     /// parse alone: <c>Uri.TryCreate("mysite.example:1337", UriKind.Absolute, …)</c> succeeds with
     /// <c>Scheme == "mysite.example"</c> and an empty host, and <c>"localhost:1337"</c> the same way
     /// — 1337 is Nightscout's default self-hosted port, so that form is common. So once http/https
-    /// has been accepted above, what is left has to look like a host: no leading slash, and no
-    /// colon except the one introducing a port.
+    /// has been accepted, what is left has to look like a host: no leading slash, and no colon
+    /// except the one introducing a port. Both readings are
+    /// <c>ConnectorUrl.TryResolveBase</c>, which the connectors resolve their base URL through.
     /// </para>
     /// <para>
     /// Embedded credentials are refused because this value is stored in the connector's runtime
@@ -337,52 +339,9 @@ public class ConfigurationController : ControllerBase
     /// </remarks>
     private static bool IsAcceptableUri(string? candidate)
     {
-        if (string.IsNullOrWhiteSpace(candidate))
-            return false;
-
-        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute)
-            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
-        {
-            return string.IsNullOrEmpty(absolute.UserInfo);
-        }
-
-        // Any other explicit scheme is out. Tested before the scheme-less fallback, because
-        // prepending https:// to "file:/etc/passwd" produces something that still parses.
-        if (candidate.StartsWith('/') || !ColonIntroducesOnlyAPort(candidate))
-            return false;
-
-        // No scheme of its own: a host, optionally with a port, which the connectors read as https.
-        return Uri.TryCreate($"https://{candidate}", UriKind.Absolute, out var implied)
-            && string.IsNullOrEmpty(implied.UserInfo);
-    }
-
-    /// <summary>
-    /// A scheme and a <c>host:port</c> cannot be told apart by charset — a scheme may contain the
-    /// dots and dashes a hostname does — so what follows the first colon decides: digits to the end
-    /// of the value or to the first path separator, and it is a port.
-    /// </summary>
-    private static bool ColonIntroducesOnlyAPort(string candidate)
-    {
-        var authority = candidate.AsSpan();
-
-        if (authority[0] == '[')
-        {
-            var close = authority.IndexOf(']');
-            if (close < 0)
-                return false;
-
-            authority = authority[(close + 1)..];
-        }
-
-        var colon = authority.IndexOf(':');
-        if (colon < 0)
-            return true;
-
-        var afterColon = authority[(colon + 1)..];
-        var slash = afterColon.IndexOf('/');
-        var port = slash < 0 ? afterColon : afterColon[..slash];
-
-        return port.Length > 0 && !port.ContainsAnyExcept("0123456789");
+        return ConnectorUrl.TryResolveBase(candidate, out var resolved)
+            && Uri.TryCreate(resolved, UriKind.Absolute, out var absolute)
+            && string.IsNullOrEmpty(absolute.UserInfo);
     }
 
     /// <summary>

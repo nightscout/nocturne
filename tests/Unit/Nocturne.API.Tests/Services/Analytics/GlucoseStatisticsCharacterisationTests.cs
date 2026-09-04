@@ -88,7 +88,7 @@ public class GlucoseStatisticsCharacterisationTests
     [Fact]
     public void CalculateGlycemicVariability_PinsSampleStandardDeviationAndDerivedMetrics()
     {
-        var result = _service.CalculateGlycemicVariability(DayCurve, EntriesEveryFiveMinutes(DayCurve));
+        var result = _service.CalculateGlycemicVariability(DayCurve, EntriesEveryFiveMinutes(DayCurve))!;
 
         // Unlike CalculateBasicStats this centres on the unrounded mean 114.375, giving
         // sqrt(sum((v - 114.375)^2) / 23) = 44.19109933990741.
@@ -102,13 +102,54 @@ public class GlucoseStatisticsCharacterisationTests
         result.EstimatedA1c.Should().BeApproximately(5.612369337979094, 1e-12);
     }
 
-    [Fact]
-    public void CalculateGlycemicVariability_ThrowsBelowTwoReadings()
+    /// <summary>
+    /// Every metric's clinical band has its best end at or near zero, so absent data is reported
+    /// as absent rather than as a defaulted instance a consumer would band as excellent control.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void CalculateGlycemicVariability_PinsNullBelowTwoReadings(int readingCount)
     {
-        var act = () => _service.CalculateGlycemicVariability([100d], EntriesEveryFiveMinutes([100d]));
+        var values = DayCurve.Take(readingCount).ToArray();
 
-        act.Should().Throw<ArgumentException>();
+        _service.CalculateGlycemicVariability(values, EntriesEveryFiveMinutes(values))
+            .Should().BeNull();
     }
+
+    /// <summary>
+    /// The timestamped entries are counted separately from the values, so a series that clears the
+    /// aggregate's floor can still leave a timestamp-driven metric under its own.
+    /// </summary>
+    [Fact]
+    public void CalculateGlycemicVariability_PinsTheTimestampedMetricsWithoutEntries()
+    {
+        var result = _service.CalculateGlycemicVariability([100d, 120d], []);
+
+        result.Should().NotBeNull();
+        Metrics(result!).Should().HaveCount(MetricCount)
+            .And.NotContain(metric => double.IsNaN(metric.Value));
+        result!.LabilityIndex.Should().Be(0);
+        result.MeanTotalDailyChange.Should().Be(0);
+        result.TimeInFluctuation.Should().Be(0);
+
+        // No pair of entries survives the 15-minute gap test, so the ideal distance is zero and
+        // GVI reports its floor rather than dividing by it.
+        result.GlycemicVariabilityIndex.Should().Be(1.0);
+    }
+
+    /// <summary>
+    /// Guards <see cref="Metrics"/> against reflecting over nothing, which would make every
+    /// assertion over the set pass vacuously.
+    /// </summary>
+    private const int MetricCount = 14;
+
+    private static IEnumerable<KeyValuePair<string, double>> Metrics(GlycemicVariability variability) =>
+        typeof(GlycemicVariability)
+            .GetProperties()
+            .Where(property => property.PropertyType == typeof(double))
+            .Select(property =>
+                KeyValuePair.Create(property.Name, (double)property.GetValue(variability)!));
 
     #endregion
 
@@ -146,6 +187,16 @@ public class GlucoseStatisticsCharacterisationTests
         _service.CalculateADRR([100d, 100d, 100d]).Should().BeApproximately(0, 1e-12);
     }
 
+    /// <summary>
+    /// An unguarded ADRR reaches <see cref="GlucoseStatistics.StandardDeviation(IReadOnlyCollection{double}, VarianceMode)"/>,
+    /// whose mean of an empty series throws.
+    /// </summary>
+    [Fact]
+    public void CalculateAdrr_PinsZeroForAnEmptySeries()
+    {
+        _service.CalculateADRR([]).Should().Be(0);
+    }
+
     [Fact]
     public void CalculateJIndex_PinsThePopulationVarianceComponent()
     {
@@ -153,6 +204,16 @@ public class GlucoseStatisticsCharacterisationTests
 
         // 0.324 * (114.375 - 112)^2 + 0.0018 * (sum(dev^2) / 24)
         _service.CalculateJIndex(DayCurve, mean).Should().BeApproximately(5.1962343749999995, 1e-12);
+    }
+
+    /// <summary>
+    /// The population variance divides by the reading count, so an unguarded J-Index over an empty
+    /// series would report <see cref="double.NaN"/> from <c>0 / 0</c>.
+    /// </summary>
+    [Fact]
+    public void CalculateJIndex_PinsZeroForAnEmptySeries()
+    {
+        _service.CalculateJIndex([], 0).Should().Be(0);
     }
 
     [Fact]

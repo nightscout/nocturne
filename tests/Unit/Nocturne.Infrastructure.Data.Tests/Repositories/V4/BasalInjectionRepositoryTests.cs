@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -19,30 +17,15 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 public class BasalInjectionRepositoryTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly BasalInjectionRepository _repo;
 
     public BasalInjectionRepositoryTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _repo = new BasalInjectionRepository(
@@ -53,7 +36,7 @@ public class BasalInjectionRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -169,7 +152,7 @@ public class BasalInjectionRepositoryTests : IDisposable
 
         await _repo.DeleteBySyncIdentifierAsync("aaps", "sync-7", WriteOrigin.Live);
 
-        await using var verify = new NocturneDbContext(_contextOptions) { TenantId = TestTenantId };
+        await using var verify = _db.CreateContext();
         var raw = await verify.BasalInjections.IgnoreQueryFilters().SingleAsync(e => e.Id == created.Id);
         verify.Entry(raw).Property("DeletedByUser").CurrentValue.Should().Be(true);
 

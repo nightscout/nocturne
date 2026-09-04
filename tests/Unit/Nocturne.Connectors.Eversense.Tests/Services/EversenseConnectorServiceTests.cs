@@ -117,7 +117,6 @@ public class EversenseConnectorServiceTests
 
         // Assert
         result.Should().BeTrue();
-        fixture.Service.FailedRequestCount.Should().Be(0);
     }
 
     #endregion

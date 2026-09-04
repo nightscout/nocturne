@@ -297,12 +297,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// Read-visibility hook applied by <see cref="CountAsync"/> (and reusable by future read paths) so
-    /// counts match the rows reads return. The base is identity; dedup participants override it to
-    /// exclude non-primary LinkedRecords for their RecordType — replacing the per-type CountAsync
-    /// overrides that each carried the same exclusion.
+    /// The <see cref="RecordType"/> this repository's rows are linked under, or null for a type that
+    /// does not participate in deduplication.
     /// </summary>
-    protected virtual IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) => query;
+    protected internal virtual RecordType? DedupRecordType => null;
+
+    /// <summary>
+    /// Applies <see cref="ReadVisibilityFilter.ExcludeNonPrimary{TEntity}"/> for
+    /// <see cref="DedupRecordType"/>. Every read path of a dedup participant routes through this so
+    /// its counts and its rows agree.
+    /// </summary>
+    protected IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) =>
+        DedupRecordType is { } recordType ? query.ExcludeNonPrimary(ctx, recordType) : query;
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
@@ -387,27 +393,15 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         => Task.CompletedTask;
 
     /// <summary>
-    /// Bulk-inserts records with batch-level and DB-level deduplication by LegacyId. The base
-    /// implements the LegacyId-only path; SyncId-upsert / DeduplicationService participants override
-    /// the <see cref="SplitUpsertsAsync"/> / <see cref="PostCommitDedupAsync"/> hooks rather than the
-    /// whole method.
+    /// Bulk write in one transaction: <see cref="SplitUpsertsAsync"/> separates the rows upserted in
+    /// place from the rows still to insert, the insert set is deduplicated by LegacyId (batch- then
+    /// DB-level) and inserted in chunks, and the commit is followed by dedup linking and the
+    /// broadcast. The base implements the LegacyId-only path; SyncId-upsert / DeduplicationService
+    /// participants override the <see cref="SplitUpsertsAsync"/> / <see cref="PostCommitDedupAsync"/>
+    /// hooks rather than the whole method.
     /// </summary>
-    public virtual Task<IEnumerable<TModel>> BulkCreateAsync(
+    public virtual async Task<IEnumerable<TModel>> BulkCreateAsync(
         IEnumerable<TModel> recordsParam, WriteOrigin origin, CancellationToken ct = default)
-        => BulkWriteAsync(recordsParam, SplitUpsertsAsync, origin, ct);
-
-    /// <summary>
-    /// The transaction every bulk write shares: <paramref name="splitter"/> separates the rows upserted
-    /// in place from the rows still to insert, the insert set is deduplicated by LegacyId (batch- then
-    /// DB-level) and inserted in chunks, and the commit is followed by dedup linking and the broadcast.
-    /// Types that expose a second bulk entry point alongside the insert-only
-    /// <see cref="BulkCreateAsync"/> (an explicit <c>BulkUpsertAsync</c>) pass their own splitter.
-    /// </summary>
-    protected async Task<IEnumerable<TModel>> BulkWriteAsync(
-        IEnumerable<TModel> recordsParam,
-        Func<NocturneDbContext, List<TEntity>, CancellationToken, Task<UpsertSplit>> splitter,
-        WriteOrigin origin,
-        CancellationToken ct)
     {
         var records = recordsParam.ToList();
         if (records.Count == 0) return [];
@@ -418,7 +412,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
             var entities = records.Select(ToEntity).ToList();
 
-            var split = await splitter(ctx, entities, ct);
+            var split = await SplitUpsertsAsync(ctx, entities, ct);
             var toInsert = split.ToInsert;
 
             // Batch-level LegacyId dedup

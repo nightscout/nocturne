@@ -45,11 +45,11 @@ public class PumpSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_UpdatesExistingRecordInPlace()
+    public async Task BulkCreateAsync_UpdatesExistingRecordInPlace()
     {
-        await _repository.BulkUpsertAsync([CreateSnapshot("sync-1", reservoir: 100)], WriteOrigin.Live);
+        await _repository.BulkCreateAsync([CreateSnapshot("sync-1", reservoir: 100)], WriteOrigin.Live);
 
-        var result = (await _repository.BulkUpsertAsync([CreateSnapshot("sync-1", reservoir: 80)], WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateSnapshot("sync-1", reservoir: 80)], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         _context.PumpSnapshots.Count().Should().Be(1);
@@ -57,11 +57,11 @@ public class PumpSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_InsertsWhenNoKeyMatch()
+    public async Task BulkCreateAsync_InsertsWhenNoKeyMatch()
     {
-        await _repository.BulkUpsertAsync([CreateSnapshot("sync-1")], WriteOrigin.Live);
+        await _repository.BulkCreateAsync([CreateSnapshot("sync-1")], WriteOrigin.Live);
 
-        var result = (await _repository.BulkUpsertAsync([CreateSnapshot("sync-2")], WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateSnapshot("sync-2")], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         _context.PumpSnapshots.Count().Should().Be(2);

@@ -35,10 +35,6 @@ public class MyLifeConnectorService(
     public override string ServiceName => "MyLife";
     protected override string ConnectorSource => DataSources.MyLifeConnector;
 
-
-    public override bool IsHealthy =>
-        FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
-
     /// <summary>
     /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
     /// is established.

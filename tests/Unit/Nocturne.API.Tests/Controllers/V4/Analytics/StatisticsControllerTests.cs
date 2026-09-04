@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -28,7 +29,7 @@ public class StatisticsControllerTests
     private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
 
-    private StatisticsController CreateController()
+    private StatisticsController CreateController(ICanonicalGlucoseService? canonicalGlucose = null)
     {
         var controller = new StatisticsController(
             _statsServiceMock.Object,
@@ -49,7 +50,7 @@ public class StatisticsControllerTests
             _targetRangeScheduleRepoMock.Object,
             _basalInjectionRepoMock.Object,
             _activeProfileResolverMock.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create());
+            canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -275,6 +276,66 @@ public class StatisticsControllerTests
         var payload = ok.Value.Should().BeOfType<ReportAnalysisResult>().Subject;
         payload.PersonalRange.Should().BeNull();
         payload.Analysis.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetWeekdayAverages_PassesTheCanonicalReadingsAndTherapyTimezoneToTheService()
+    {
+        var readings = new List<SensorGlucose> { new() { Mgdl = 100 }, new() { Mgdl = 120 } };
+        SetupGlucose(readings);
+        // The canonical stream is what the service must see, not the raw multi-device fetch.
+        var canonical = new List<SensorGlucose> { new() { Mgdl = 110 } };
+        var canonicalGlucose = new Mock<ICanonicalGlucoseService>();
+        canonicalGlucose
+            .Setup(s => s.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(canonical);
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Stockholm");
+
+        var slots = new List<WeekdayGlucoseSlot> { new() { MinuteOfDay = 480 } };
+        List<SensorGlucose>? usedEntries = null;
+        TimeZoneInfo? usedTz = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateWeekdayAverages(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo>((entries, tz) =>
+            {
+                usedEntries = entries.ToList();
+                usedTz = tz;
+            })
+            .Returns(slots);
+
+        var result = await CreateController(canonicalGlucose.Object).GetWeekdayAverages(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeSameAs(slots);
+        usedEntries.Should().BeEquivalentTo(canonical);
+        canonicalGlucose.Verify(
+            s => s.SelectAsync(
+                It.Is<IReadOnlyList<SensorGlucose>>(raw => raw.SequenceEqual(readings)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm"));
+        usedTz!.BaseUtcOffset.Should().Be(TimeSpan.FromHours(1));
+    }
+
+    [Fact]
+    public async Task GetWeekdayAverages_WithoutATherapyTimezone_BucketsOnUtc()
+    {
+        SetupGlucose(Array.Empty<SensorGlucose>());
+        TimeZoneInfo? usedTz = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateWeekdayAverages(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo>((_, tz) => usedTz = tz)
+            .Returns(new List<WeekdayGlucoseSlot>());
+
+        await CreateController().GetWeekdayAverages(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
+
+        usedTz.Should().Be(TimeZoneInfo.Utc);
     }
 
     [Fact]

@@ -55,12 +55,8 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     /// <inheritdoc />
     protected override void ApplyUpdate(BGCheckEntity target, BGCheck source) => BGCheckMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
-    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<BGCheckEntity> ApplyReadVisibility(IQueryable<BGCheckEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.BGCheck && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.BGCheck;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended BG-check query (non-primary LinkedRecords
@@ -111,9 +107,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == RecordTypeKeys.BGCheck && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

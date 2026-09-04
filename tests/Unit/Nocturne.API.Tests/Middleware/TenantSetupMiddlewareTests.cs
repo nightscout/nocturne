@@ -2,9 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -15,13 +13,15 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
 
 public class TenantSetupMiddlewareTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly IDbContextFactory<NocturneDbContext> _dbFactory;
     private readonly Mock<ITenantAccessor> _tenantAccessor;
@@ -45,18 +45,11 @@ public class TenantSetupMiddlewareTests : IDisposable
 
     public TenantSetupMiddlewareTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(options);
+        _dbContext = _db.CreateContext();
         _dbContext.TenantId = _tenantId;
-        _dbContext.Database.EnsureCreated();
-        _dbFactory = new SharedSqliteFactory(options);
+        _dbFactory = new SharedSqliteFactory(_db.Options);
 
         // Seed the tenant entity so FK constraints are satisfied for TenantMembers
         _dbContext.Set<TenantEntity>().Add(new TenantEntity
@@ -67,15 +60,13 @@ public class TenantSetupMiddlewareTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _tenantAccessor = new Mock<ITenantAccessor>();
-        _tenantAccessor.Setup(t => t.IsResolved).Returns(true);
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
+        _tenantAccessor = MockTenantAccessor.Create(_tenantId);
     }
 
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private (TenantSetupMiddleware middleware, DefaultHttpContext context) Build(

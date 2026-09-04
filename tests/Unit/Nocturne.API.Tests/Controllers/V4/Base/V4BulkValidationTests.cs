@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
@@ -6,8 +7,10 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Controllers.V4.Glucose;
+using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
@@ -15,9 +18,12 @@ using Nocturne.API.Services.V4;
 using Nocturne.API.Validators.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -55,7 +61,7 @@ public class V4BulkValidationTests
     }
 
     private void NothingPersisted() => _aps.Verify(
-        r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+        r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
         Times.Never);
 
     private static UpsertApsSnapshotRequest[] Snapshots(int count) =>
@@ -80,7 +86,7 @@ public class V4BulkValidationTests
     [Fact]
     public async Task PayloadAtTheCap_IsAccepted()
     {
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var result = await ApsController().CreateApsSnapshots(Snapshots(1000));
@@ -120,7 +126,7 @@ public class V4BulkValidationTests
     [Fact]
     public async Task SyncIdentifierWithDataSource_IsAccepted()
     {
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var requests = Snapshots(1);
@@ -203,6 +209,125 @@ public class V4BulkValidationTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ActivityBulk_OverTheCap_IsRejected()
+    {
+        var service = new Mock<IActivityService>();
+
+        var result = await Activities(service).CreateActivities(Fill(1001, () => new UpsertActivityRequest()));
+
+        Rejected(result.Result, "Bulk operations are limited to 1000 activity records per request");
+        service.Verify(
+            s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivityBulk_NullPayload_IsRejected()
+    {
+        var service = new Mock<IActivityService>();
+
+        var result = await Activities(service).CreateActivities(null!);
+
+        Rejected(result.Result, "Activity data is required");
+        service.Verify(
+            s => s.CreateActivitiesAsync(It.IsAny<IEnumerable<Activity>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task HeartRateBulk_OverTheCap_IsRejected()
+    {
+        var service = new Mock<IHeartRateService>();
+
+        var result = await HeartRates(service).CreateHeartRates(Fill(1001, () => new UpsertHeartRateRequest()));
+
+        Rejected(result.Result, "Bulk operations are limited to 1000 heart rate records per request");
+        service.Verify(
+            s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task HeartRateBulk_NullPayload_IsRejected()
+    {
+        var service = new Mock<IHeartRateService>();
+
+        var result = await HeartRates(service).CreateHeartRates(null!);
+
+        Rejected(result.Result, "Heart rate data is required");
+        service.Verify(
+            s => s.CreateHeartRatesAsync(It.IsAny<IEnumerable<HeartRate>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task StepCountBulk_OverTheCap_IsRejected()
+    {
+        var service = new Mock<IStepCountService>();
+
+        var result = await StepCounts(service).CreateStepCounts(Fill(1001, () => new UpsertStepCountRequest()));
+
+        Rejected(result.Result, "Bulk operations are limited to 1000 step count records per request");
+        service.Verify(
+            s => s.CreateStepCountsAsync(It.IsAny<IEnumerable<StepCount>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task StepCountBulk_NullPayload_IsRejected()
+    {
+        var service = new Mock<IStepCountService>();
+
+        var result = await StepCounts(service).CreateStepCounts(null!);
+
+        Rejected(result.Result, "Step count data is required");
+        service.Verify(
+            s => s.CreateStepCountsAsync(It.IsAny<IEnumerable<StepCount>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task BodyWeightBatch_OverTheCap_IsRejected()
+    {
+        var service = new Mock<IBodyWeightService>();
+        var body = JsonSerializer.SerializeToElement(Fill(1001, () => new BodyWeight()));
+
+        var result = await BodyWeights(service).CreateBodyWeights(body);
+
+        Rejected(result.Result, "Bulk operations are limited to 1000 body weight records per request");
+        service.Verify(
+            s => s.CreateBodyWeightsAsync(It.IsAny<IEnumerable<BodyWeight>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task BodyWeightBatch_EmptyPayload_IsRejected()
+    {
+        var service = new Mock<IBodyWeightService>();
+        var body = JsonSerializer.SerializeToElement(Array.Empty<BodyWeight>());
+
+        var result = await BodyWeights(service).CreateBodyWeights(body);
+
+        Rejected(result.Result, "Body weight data is required");
+        service.Verify(
+            s => s.CreateBodyWeightsAsync(It.IsAny<IEnumerable<BodyWeight>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SleepBulk_OverItsOwnLowerCap_IsRejected()
+    {
+        var service = new Mock<ISleepService>();
+
+        var result = await Sleep(service).CreateSessionsBulk(Fill(101, () => new SleepSession()));
+
+        Rejected(result.Result, "Bulk operations are limited to 100 sessions per request");
+        service.Verify(
+            s => s.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     // ── The per-item validators auto-validation cannot reach ────────
 
     [Fact]
@@ -261,7 +386,7 @@ public class V4BulkValidationTests
     public async Task ApsSnapshotBulk_HasNoValidator_SoNothingNewRejectsIt()
     {
         Validators.GetService<IValidator<UpsertApsSnapshotRequest>>().Should().BeNull();
-        _aps.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+        _aps.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<ApsSnapshot> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
         var result = await WithValidators(ApsController()).CreateApsSnapshots(Snapshots(3));
@@ -329,6 +454,21 @@ public class V4BulkValidationTests
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));
+
+    private static ActivityController Activities(Mock<IActivityService> service) =>
+        WithContext(new ActivityController(service.Object, Mock.Of<IActivityDecomposer>()));
+
+    private static HeartRateController HeartRates(Mock<IHeartRateService> service) =>
+        WithContext(new HeartRateController(service.Object));
+
+    private static StepCountController StepCounts(Mock<IStepCountService> service) =>
+        WithContext(new StepCountController(service.Object));
+
+    private static BodyWeightController BodyWeights(Mock<IBodyWeightService> service) =>
+        WithContext(new BodyWeightController(service.Object));
+
+    private static SleepController Sleep(Mock<ISleepService> service) =>
+        WithContext(new SleepController(service.Object));
 
     private static SensorGlucoseController SensorGlucose(Mock<ISensorGlucoseRepository>? repo = null) =>
         WithContext(new SensorGlucoseController(

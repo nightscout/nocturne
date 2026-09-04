@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Middleware;
@@ -11,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -22,24 +21,16 @@ namespace Nocturne.API.Tests.Services.Auth;
 /// </summary>
 public class AuthAuditServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private readonly Guid _adminSubjectId = Guid.CreateVersion7();
 
     public AuthAuditServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var seed = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
-        seed.Database.EnsureCreated();
+        using var seed = _db.CreateContext(_tenantId);
         seed.Tenants.Add(new TenantEntity
         {
             Id = _tenantId,
@@ -295,10 +286,7 @@ public class AuthAuditServiceTests : IDisposable
                 .InvokeAsync(httpContext, auditContext);
         }
 
-        await using var dbContext = new NocturneDbContext(_dbOptions)
-        {
-            TenantId = pinnedTenantId ?? Guid.Empty,
-        };
+        await using var dbContext = _db.CreateContext(pinnedTenantId ?? Guid.Empty);
 
         var service = new AuthAuditService(
             dbContext,
@@ -309,13 +297,13 @@ public class AuthAuditServiceTests : IDisposable
         await service.LogAsync(
             eventType, subjectId, success: true, actor: actor, tenantId: tenantId);
 
-        await using var reader = new NocturneDbContext(_dbOptions);
+        await using var reader = _db.CreateContext();
         return await reader.AuthAuditLog.SingleAsync(a => a.EventType == eventType);
     }
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 }

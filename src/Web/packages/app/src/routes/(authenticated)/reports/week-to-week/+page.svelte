@@ -4,18 +4,29 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
-  import { getReportsData } from "$api/reports.remote";
+  import { getWeekdayAverages } from "$api/reports.remote";
+  import type { DayOfWeek } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, formatShortDate } from "$lib/utils/formatting";
-  import { DAY_KEYS, buildWeekdayBuckets } from "./week-to-week.utils";
 
-  const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  type Weekday = keyof typeof DayOfWeek;
 
-  const DAY_SERIES = DAY_KEYS.map((key, i) => ({
+  /** Series keys are the API's weekday names; the theme's colour tokens use the short form. */
+  const WEEKDAYS: Weekday[] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  const DAY_SERIES = WEEKDAYS.map((key) => ({
     key,
-    label: DAY_LABELS[i],
-    color: `var(--weekday-${key})`,
+    label: key.slice(0, 3),
+    color: `var(--weekday-${key.slice(0, 3).toLowerCase()})`,
   }));
 
   // Get shared date params from context (set by reports layout)
@@ -23,8 +34,8 @@
   const reportsParams = requireDateParamsContext(7);
 
   // Create resource with automatic layout registration
-  const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+  const weekdayResource = contextResource(
+    () => getWeekdayAverages(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Week Comparison" }
   );
 
@@ -32,10 +43,27 @@
     return `${formatShortDate(reportsParams.startDate, true)} – ${formatShortDate(reportsParams.endDate, true)}`;
   });
 
-  // Each cell is the mean of every reading in that weekday's 5-minute bucket.
-  const chartData = $derived(
-    buildWeekdayBuckets(reportsResource.current?.entries ?? [], (mgdl) => bg(mgdl))
-  );
+  // One row per populated 5-minute slot, anchored on today's calendar day so the
+  // x-axis reads as a time of day; each weekday's mean is shown in the display unit.
+  const chartData = $derived.by(() => {
+    const today = new Date();
+    return (weekdayResource.current ?? []).map((slot) => {
+      const row: { time: Date } & Partial<Record<Weekday, number>> = {
+        time: new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          today.getDate(),
+          0,
+          slot.minuteOfDay ?? 0
+        ),
+      };
+      for (const weekday of WEEKDAYS) {
+        const mgdl = slot.mean?.[weekday];
+        if (mgdl != null) row[weekday] = bg(mgdl);
+      }
+      return row;
+    });
+  });
 
   function previousWeek() {
     const newEnd = parseDate(reportsParams.fromDay).subtract({ days: 1 });
@@ -54,7 +82,7 @@
   }
 </script>
 
-{#if reportsResource.current}
+{#if weekdayResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
   <!-- Week-stepper controls — navigation chaff; the compared date range stays
        visible in the layout's print header. -->

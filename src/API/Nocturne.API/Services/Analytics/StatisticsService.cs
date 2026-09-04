@@ -236,7 +236,7 @@ public class StatisticsService : IStatisticsService
     {
         var targets = ClinicalTargets.ForPopulation(population);
         var tir = analytics.TimeInRange.Percentages;
-        var cv = analytics.GlycemicVariability.CoefficientOfVariation;
+        var cv = analytics.GlycemicVariability?.CoefficientOfVariation ?? 0;
 
         var assessment = new ClinicalTargetAssessment
         {
@@ -782,8 +782,11 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
-    /// <returns>Comprehensive glycemic variability metrics</returns>
-    public GlycemicVariability CalculateGlycemicVariability(
+    /// <returns>
+    /// Comprehensive glycemic variability metrics, or null for fewer than two readings. The
+    /// individual metrics have differing data floors; this one governs all of them.
+    /// </returns>
+    public GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
         IEnumerable<SensorGlucose> entries
     )
@@ -792,11 +795,7 @@ public class StatisticsService : IStatisticsService
         var entriesList = entries.ToList();
 
         if (valuesList.Count < 2)
-        {
-            throw new ArgumentException(
-                "Not enough data points to calculate glycemic variability metrics"
-            );
-        }
+            return null;
 
         var mean = valuesList.Average();
         var standardDeviation = GlucoseStatistics.StandardDeviation(
@@ -810,7 +809,7 @@ public class StatisticsService : IStatisticsService
         var jIndex = CalculateJIndex(valuesList, mean);
         var hbgi = CalculateHBGI(valuesList);
         var lbgi = CalculateLBGI(valuesList);
-        var gvi = CalculateGVI(valuesList, entriesList);
+        var gvi = CalculateGVI(entriesList);
         var pgs = CalculatePGS(valuesList, gvi, mean);
 
         // Calculate Mean Total Daily Change and Time in Fluctuation
@@ -958,10 +957,7 @@ public class StatisticsService : IStatisticsService
         var windowSize = hours * pointsPerHour;
 
         if (valuesList.Count < windowSize)
-        {
-            // Return 0 instead of throwing exception when insufficient data
             return 0;
-        }
 
         var differences = new List<double>();
         for (int i = 0; i <= valuesList.Count - windowSize; i++)
@@ -978,10 +974,12 @@ public class StatisticsService : IStatisticsService
     /// Calculate ADRR (Average Daily Risk Range)
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
-    /// <returns>ADRR value</returns>
+    /// <returns>ADRR value, or 0 if no data</returns>
     public double CalculateADRR(IEnumerable<double> values)
     {
         var logTransformed = values.Select(val => Math.Log(val)).ToList();
+        if (logTransformed.Count == 0)
+            return 0;
 
         return GlucoseStatistics.StandardDeviation(logTransformed, VarianceMode.Population) * 100;
     }
@@ -990,15 +988,12 @@ public class StatisticsService : IStatisticsService
     /// Calculate Lability Index
     /// </summary>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
-    /// <returns>Lability Index value</returns>
+    /// <returns>Lability Index value, or 0 for fewer than two entries</returns>
     private double CalculateLabilityIndex(IEnumerable<SensorGlucose> entries)
     {
         var entriesList = entries.ToList();
         if (entriesList.Count < 2)
-            throw new ArgumentException(
-                "Not enough data points to calculate Lability Index (requires at least 2).",
-                nameof(entries)
-            );
+            return 0;
 
         double totalChange = 0;
         for (int i = 1; i < entriesList.Count; i++)
@@ -1016,12 +1011,16 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
     /// <param name="mean">Mean glucose value</param>
-    /// <returns>J-Index value</returns>
+    /// <returns>J-Index value, or 0 if no data</returns>
     public double CalculateJIndex(IEnumerable<double> values, double mean)
     {
+        var valuesList = values.ToList();
+        if (valuesList.Count == 0)
+            return 0;
+
         const double targetMean = 112; // Target glucose level in mg/dL
         var meanComponent = 0.324 * Math.Pow(mean - targetMean, 2);
-        var variance = GlucoseStatistics.Variance(values.ToList(), mean, VarianceMode.Population);
+        var variance = GlucoseStatistics.Variance(valuesList, mean, VarianceMode.Population);
         var variabilityComponent = 0.0018 * variance;
 
         return meanComponent + variabilityComponent;
@@ -1035,7 +1034,7 @@ public class StatisticsService : IStatisticsService
     /// <param name="values">Collection of glucose values</param>
     /// <returns>HBGI value</returns>
     public double CalculateHBGI(IEnumerable<double> values) =>
-        KovatchevRisk(values, keepPositive: true, "HBGI");
+        KovatchevRisk(values, keepPositive: true);
 
     /// <summary>
     /// Calculate LBGI (Low Blood Glucose Index)
@@ -1045,27 +1044,20 @@ public class StatisticsService : IStatisticsService
     /// <param name="values">Collection of glucose values</param>
     /// <returns>LBGI value</returns>
     public double CalculateLBGI(IEnumerable<double> values) =>
-        KovatchevRisk(values, keepPositive: false, "LBGI");
+        KovatchevRisk(values, keepPositive: false);
 
     /// <summary>
     /// Mean of the Kovatchev risk transform <c>f(BG) = 1.084 * (ln(BG/18)^1.084 - 1.928)</c> over
     /// <paramref name="values"/>, counting only the readings whose <c>f(BG)</c> falls on one side
     /// of zero: the hyperglycaemic side when <paramref name="keepPositive"/>, the hypoglycaemic
-    /// side otherwise. <paramref name="indexName"/> names the index in the empty-input message.
+    /// side otherwise. Zero for an empty series.
     /// </summary>
     /// <seealso cref="KovatchevMgdlPerMmol"/>
-    private static double KovatchevRisk(
-        IEnumerable<double> values,
-        bool keepPositive,
-        string indexName
-    )
+    private static double KovatchevRisk(IEnumerable<double> values, bool keepPositive)
     {
         var valuesList = values.ToList();
-        if (!valuesList.Any())
-            throw new ArgumentException(
-                $"Not enough data points to calculate {indexName}.",
-                nameof(values)
-            );
+        if (valuesList.Count == 0)
+            return 0;
 
         var riskSum = valuesList.Sum(glucose =>
         {
@@ -1085,19 +1077,11 @@ public class StatisticsService : IStatisticsService
     /// Measures the distance traveled by the glucose line if stretched out
     /// GVI = 1.0-1.2: low variability (non-diabetic), GVI = 1.2-1.5: modest variability, GVI > 1.5: high glycemic variability
     /// </summary>
-    /// <param name="values">Collection of glucose values</param>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
-    /// <returns>GVI value</returns>
-    private double CalculateGVI(IEnumerable<double> values, IEnumerable<SensorGlucose> entries)
+    /// <returns>GVI value, or 1.0 when no pair of entries is close enough together to measure</returns>
+    private double CalculateGVI(IEnumerable<SensorGlucose> entries)
     {
-        var valuesList = values.ToList();
         var entriesList = entries.ToList();
-
-        if (valuesList.Count < 2 || entriesList.Count < 2)
-            throw new ArgumentException(
-                "Not enough data points to calculate GVI (requires at least 2).",
-                nameof(values)
-            );
 
         double actualDistance = 0;
         double idealTime = 0;
@@ -1146,11 +1130,8 @@ public class StatisticsService : IStatisticsService
     public double CalculatePGS(IEnumerable<double> values, double gvi, double meanGlucose)
     {
         var valuesList = values.ToList();
-        if (!valuesList.Any())
-        {
-            // Return 0 instead of throwing exception when no data
+        if (valuesList.Count == 0)
             return 0;
-        }
 
         const double targetLow = GlucoseConstants.TargetBottomMgdl;
         const double targetHigh = GlucoseConstants.TargetTopMgdl;
@@ -1298,6 +1279,7 @@ public class StatisticsService : IStatisticsService
             TightTarget = (long)tightTargetCount * intervalMinutes,
             High = (long)highCount * intervalMinutes,
             VeryHigh = (long)veryHighCount * intervalMinutes,
+            AboveRange = (long)(highCount + veryHighCount) * intervalMinutes,
         };
 
         // Calculate episodes (simplified - consecutive readings in same range)
@@ -1428,6 +1410,7 @@ public class StatisticsService : IStatisticsService
         var zones = ExcludingZones(thresholds);
         var episodeCounts = new int[zones.ZoneCount];
         var lastZone = -1;
+        var aboveRange = 0;
 
         foreach (var value in glucoseValues)
         {
@@ -1436,6 +1419,11 @@ public class StatisticsService : IStatisticsService
             if (zone != lastZone && zone != (int)ExcludingZone.Target)
                 episodeCounts[zone]++;
 
+            // One excursion above range may cross between High and VeryHigh any number of
+            // times; it is one excursion, so it is counted on entry only.
+            if (IsAboveRange(zone) && !IsAboveRange(lastZone))
+                aboveRange++;
+
             lastZone = zone;
         }
 
@@ -1443,8 +1431,12 @@ public class StatisticsService : IStatisticsService
         episodes.Low = episodeCounts[(int)ExcludingZone.Low];
         episodes.High = episodeCounts[(int)ExcludingZone.High];
         episodes.VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh];
+        episodes.AboveRange = aboveRange;
 
         return episodes;
+
+        static bool IsAboveRange(int zone) =>
+            zone is (int)ExcludingZone.High or (int)ExcludingZone.VeryHigh;
     }
 
     #endregion
@@ -1594,6 +1586,44 @@ public class StatisticsService : IStatisticsService
         }
 
         return averagedStats;
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    )
+    {
+        const int slotMinutes = 5;
+
+        // slot start -> weekday -> running sum and count, summed once and divided once so every
+        // reading in a cell carries the same weight.
+        var slots = new SortedDictionary<int, Dictionary<DayOfWeek, (double Sum, int Count)>>();
+        foreach (var entry in entries)
+        {
+            if (entry.Mills <= 0 || entry.Mgdl <= 0)
+                continue;
+
+            var local = TimeZoneInfo.ConvertTime(
+                DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills),
+                tenantTimeZone
+            );
+            var slot = (local.Hour * 60 + local.Minute) / slotMinutes * slotMinutes;
+
+            if (!slots.TryGetValue(slot, out var byWeekday))
+                slots[slot] = byWeekday = new Dictionary<DayOfWeek, (double, int)>();
+
+            var running = byWeekday.GetValueOrDefault(local.DayOfWeek);
+            byWeekday[local.DayOfWeek] = (running.Sum + entry.Mgdl, running.Count + 1);
+        }
+
+        return slots
+            .Select(slot => new WeekdayGlucoseSlot
+            {
+                MinuteOfDay = slot.Key,
+                Mean = slot.Value.ToDictionary(w => w.Key, w => w.Value.Sum / w.Value.Count),
+            })
+            .ToList();
     }
 
     /// <summary>
@@ -2642,7 +2672,6 @@ public class StatisticsService : IStatisticsService
                 },
                 BasicStats = new BasicGlucoseStats(),
                 TimeInRange = new TimeInRangeMetrics(),
-                GlycemicVariability = new GlycemicVariability(),
                 DataQuality = new DataQuality(),
             };
         }

@@ -25,6 +25,9 @@ public abstract class HealthRecordControllerBase<TModel> : ControllerBase
     /// </summary>
     protected abstract string RecordTypeName { get; }
 
+    /// <summary>The record type as it reads mid-sentence — "heart rate".</summary>
+    protected string RecordTypeNoun => char.ToLowerInvariant(RecordTypeName[0]) + RecordTypeName[1..];
+
     protected abstract Task<IEnumerable<TModel>> ReadPageAsync(int count, int skip, CancellationToken ct);
 
     protected abstract Task<TModel?> ReadAsync(string id, CancellationToken ct);
@@ -43,11 +46,8 @@ public abstract class HealthRecordControllerBase<TModel> : ControllerBase
 
     protected async Task<ActionResult<IEnumerable<TModel>>> CreateResponseAsync(
         IReadOnlyList<TModel> models, CancellationToken ct) =>
-        models.Count == 0
-            ? Problem(
-                detail: $"At least one {char.ToLowerInvariant(RecordTypeName[0]) + RecordTypeName[1..]} record is required",
-                statusCode: 400,
-                title: "Bad Request")
+        this.ValidateBulkSize(models, RecordTypeName, $"{RecordTypeNoun} records") is { } invalid
+            ? invalid
             : Ok(await WriteManyAsync(models, ct));
 
     protected async Task<ActionResult<TModel>> UpdateResponseAsync(string id, TModel model, CancellationToken ct) =>

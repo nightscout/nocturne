@@ -348,7 +348,8 @@
           <div>
             <div class="text-muted-foreground">CV</div>
             <div class="font-medium tabular-nums">
-              {(analysis?.glycemicVariability?.coefficientOfVariation ?? 0).toFixed(1)}%
+              {analysis?.glycemicVariability?.coefficientOfVariation?.toFixed(1) ??
+                "–"}%
             </div>
           </div>
           <div>

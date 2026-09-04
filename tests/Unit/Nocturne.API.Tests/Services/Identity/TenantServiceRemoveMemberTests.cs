@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -11,6 +10,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -28,22 +28,15 @@ namespace Nocturne.API.Tests.Services.Identity;
 [Trait("Category", "Unit")]
 public sealed class TenantServiceRemoveMemberTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
+    private readonly SqliteTestDatabase _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _ownerRoleId = Guid.CreateVersion7();
 
     public TenantServiceRemoveMemberTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .Options;
+        _db = TestDbContextFactory.CreateSqlite();
 
         using var db = Context();
-        db.Database.EnsureCreated();
         db.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" });
         db.TenantRoles.Add(new TenantRoleEntity
         {
@@ -57,7 +50,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         db.SaveChanges();
     }
 
-    private NocturneDbContext Context() => new(_options) { TenantId = _tenantId };
+    private NocturneDbContext Context() => _db.CreateContext(_tenantId);
 
     private sealed class Factory(DbContextOptions<NocturneDbContext> options, Guid tenantId)
         : IDbContextFactory<NocturneDbContext>
@@ -66,7 +59,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
     }
 
     private TenantService Service() => new(
-        new Factory(_options, _tenantId),
+        new Factory(_db.Options, _tenantId),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
@@ -227,7 +220,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
 
         result.Ok.Should().BeTrue();
         var directory = new ChatIdentityDirectoryService(
-            new Factory(_options, _tenantId), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
+            new Factory(_db.Options, _tenantId), Mock.Of<ILogger<ChatIdentityDirectoryService>>());
         (await directory.GetCandidatesAsync("discord", "chat-user", default))
             .Select(c => c.Label).Should().BeEquivalentTo(["elsewhere"]);
         (await directory.GetCandidatesAsync("discord", "another-chat-user", default))
@@ -247,5 +240,5 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         IsActive = true,
     };
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 }

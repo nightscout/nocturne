@@ -5,7 +5,6 @@ namespace Nocturne.API.Models.Requests.V4;
 /// <summary>
 /// Request body for creating a new basal insulin injection record via the V4 API.
 /// </summary>
-/// <seealso cref="Validators.V4.CreateBasalInjectionRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BasalInjectionController"/>
 public class CreateBasalInjectionRequest : IBulkUpsertRequest
 {

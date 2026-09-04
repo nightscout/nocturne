@@ -799,9 +799,7 @@ public class OAuthController : ControllerBase
             return subjectError;
         }
 
-        // Verify ownership: load all grants for the subject and check if grantId is among them
-        var grants = await _grantService.GetGrantsForSubjectAsync(subjectId);
-        if (grants.All(g => g.Id != grantId))
+        if (await _grantService.GetGrantForSubjectAsync(grantId, subjectId) is null)
         {
             return NotFound(new OAuthError
             {

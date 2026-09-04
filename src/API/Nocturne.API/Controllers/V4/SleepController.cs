@@ -119,13 +119,10 @@ public class SleepController : ControllerBase
         [FromBody] SleepSession[] sessions,
         CancellationToken cancellationToken = default)
     {
-        if (sessions is not { Length: > 0 })
-            return Problem(detail: "Sleep session data is required", statusCode: 400, title: "Bad Request");
-
         // Sessions embed stage intervals and biometric samples, so the cap is lower than the
-        // 1000-item flat-record bulks.
-        if (sessions.Length > 100)
-            return Problem(detail: "Bulk operations are limited to 100 sessions per request", statusCode: 400, title: "Bad Request");
+        // flat-record bulks' V4BulkValidation.MaxItems.
+        if (this.ValidateBulkSize(sessions, "Sleep session", "sessions", maxItems: 100) is { } invalid)
+            return invalid;
 
         var results = new List<SleepSession>(sessions.Length);
         try

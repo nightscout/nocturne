@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
@@ -9,6 +7,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -23,28 +22,20 @@ namespace Nocturne.API.Tests.Services.Auth;
 /// </remarks>
 public class PlatformAdminBootstrapServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _sqlite;
     private readonly NocturneDbContext _db;
 
     public PlatformAdminBootstrapServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _sqlite = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _db = new NocturneDbContext(_dbOptions);
-        _db.Database.EnsureCreated();
+        _db = _sqlite.CreateContext();
     }
 
     public void Dispose()
     {
         _db.Dispose();
-        _connection.Dispose();
+        _sqlite.Dispose();
     }
 
     [Fact]
@@ -108,16 +99,10 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
-            new TestDbContextFactory(_dbOptions),
+            _sqlite.ContextFactory,
             Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .BootstrapAsync(CancellationToken.None);
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
 
     private async Task<bool> IsPlatformAdminAsync(Guid subjectId) =>
         await _db.Subjects.AsNoTracking()

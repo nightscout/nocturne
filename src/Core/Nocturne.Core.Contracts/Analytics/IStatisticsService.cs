@@ -105,9 +105,11 @@ public interface IStatisticsService
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps for time-dependent metrics.</param>
-    /// <returns>A <see cref="GlycemicVariability"/> containing all variability metrics.</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 data points.</exception>
-    GlycemicVariability CalculateGlycemicVariability(
+    /// <returns>
+    /// A <see cref="GlycemicVariability"/> containing all variability metrics, or null for fewer
+    /// than two values.
+    /// </returns>
+    GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
         IEnumerable<SensorGlucose> entries
     );
@@ -213,6 +215,19 @@ public interface IStatisticsService
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
     /// <returns>Time-of-day averaged statistics for AGP-style charts.</returns>
     IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries);
+
+    /// <summary>
+    /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's
+    /// local clock, for the week-to-week report. Readings without a timestamp or glucose value
+    /// are skipped; slots no reading falls in are absent.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <returns>The populated slots in time-of-day order.</returns>
+    IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    );
 
     // Treatment Statistics
 

@@ -13,11 +13,10 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing uploader snapshot records (point-in-time uploader state) in the database.
-/// Inherits the shared CRUD, soft-delete and LegacyId-deduplicated bulk-insert surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the uploader-specific queries and the
-/// (DataSource, SyncIdentifier) upsert below.
+/// Takes the sync-key upsert and keyed delete of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
+/// so it keeps only the uploader-specific queries.
 /// </summary>
-public class UploaderSnapshotRepository : V4RepositoryBase<UploaderSnapshot, UploaderSnapshotEntity>, IUploaderSnapshotRepository
+public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnapshot, UploaderSnapshotEntity>, IUploaderSnapshotRepository
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="UploaderSnapshotRepository"/> class.
@@ -79,77 +78,5 @@ public class UploaderSnapshotRepository : V4RepositoryBase<UploaderSnapshot, Upl
             .ThenByDescending(e => e.Timestamp)     // tie-break: most recent
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public Task<IEnumerable<UploaderSnapshot>> BulkUpsertAsync(
-        IEnumerable<UploaderSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default)
-        => BulkWriteAsync(records, SplitBySyncKeyAsync, origin, ct);
-
-    /// <summary>
-    /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place. Soft-deleted rows are excluded: the partial
-    /// unique index ignores them, so a re-upload after a delete inserts a fresh row instead of writing
-    /// into the deleted one.
-    /// </summary>
-    private static async Task<UpsertSplit> SplitBySyncKeyAsync(
-        NocturneDbContext ctx, List<UploaderSnapshotEntity> entities, CancellationToken ct)
-    {
-        // Records without both keys keep a unique grouping key so they're not collapsed.
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
-            .Select(g => g.Last())
-            .ToList();
-
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        var updatedEntities = new List<UploaderSnapshotEntity>();
-        var materiallyChanged = new List<UploaderSnapshotEntity>();
-        if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
-
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        var existingRows = await ctx.UploaderSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var toInsert = new List<UploaderSnapshotEntity>();
-        foreach (var entity in entities)
-        {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
-            {
-                UploaderSnapshotMapper.UpdateEntity(existing, UploaderSnapshotMapper.ToDomainModel(entity));
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (V4MaterialChange.HasMaterialChange(ctx.Entry(existing)))
-                    materiallyChanged.Add(existing);
-            }
-            else
-            {
-                toInsert.Add(entity);
-            }
-        }
-
-        if (updatedEntities.Count > 0)
-        {
-            // Persist updates before the insert-chunking loop clears the tracker.
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 }

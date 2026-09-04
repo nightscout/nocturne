@@ -1,8 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -14,6 +12,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
@@ -26,8 +25,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Platform;
 [Trait("Category", "Unit")]
 public class CompatibilityAnalysisDetailTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _otherTenantId = Guid.CreateVersion7();
     private static readonly Guid OlderAnalysisId = new("01900000-0000-7000-8000-000000000001");
@@ -36,16 +34,9 @@ public class CompatibilityAnalysisDetailTests : IDisposable
 
     public CompatibilityAnalysisDetailTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var seed = new NocturneDbContext(_dbOptions) { TenantId = _tenantId };
-        seed.Database.EnsureCreated();
+        using var seed = _db.CreateContext(_tenantId);
         seed.Tenants.Add(Tenant(_tenantId, "default"));
         seed.DiscrepancyAnalyses.Add(
             Analysis(OlderAnalysisId, "trace-older", DateTimeOffset.UnixEpoch));
@@ -55,7 +46,7 @@ public class CompatibilityAnalysisDetailTests : IDisposable
         seed.DiscrepancyDetails.Add(Detail(NewerAnalysisId, "newer-field"));
         seed.SaveChanges();
 
-        using var otherSeed = new NocturneDbContext(_dbOptions) { TenantId = _otherTenantId };
+        using var otherSeed = _db.CreateContext(_otherTenantId);
         otherSeed.Tenants.Add(Tenant(_otherTenantId, "other"));
         otherSeed.DiscrepancyAnalyses.Add(
             Analysis(OtherTenantAnalysisId, "trace-other", DateTimeOffset.UnixEpoch.AddDays(2)));
@@ -155,7 +146,7 @@ public class CompatibilityAnalysisDetailTests : IDisposable
             Mock.Of<ILogger<CompatibilityController>>());
 
     private DiscrepancyAnalysisRepository CreateRepository() =>
-        new(new NocturneDbContext(_dbOptions) { TenantId = _tenantId });
+        new(_db.CreateContext(_tenantId));
 
     private static TenantEntity Tenant(Guid id, string slug) =>
         new()
@@ -199,7 +190,7 @@ public class CompatibilityAnalysisDetailTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 }

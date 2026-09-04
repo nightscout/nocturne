@@ -42,9 +42,9 @@ public static class BasalInjectionMapper
             PatientDeviceId = entity.PatientDeviceId,
             Units = entity.Units,
             Notes = entity.Notes,
-            InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
-                ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
-                : null,
+            InsulinContext = MapperHelpers.DeserializeJson<TreatmentInsulinContext>(
+                entity.InsulinContextJson
+            ),
         }.WithHeaderFrom(entity);
     }
 

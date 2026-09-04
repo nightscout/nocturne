@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.V4;
@@ -24,29 +22,15 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 public class PatientDeviceRepositoryReorderTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly PatientDeviceRepository _repo;
 
     public PatientDeviceRepositoryReorderTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(options))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(options) { TenantId = TestTenantId };
+        _context = _db.CreateContext();
         _repo = new PatientDeviceRepository(
             new TestTenantDbContextFactory(_context),
             NullLogger<PatientDeviceRepository>.Instance);
@@ -55,7 +39,7 @@ public class PatientDeviceRepositoryReorderTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

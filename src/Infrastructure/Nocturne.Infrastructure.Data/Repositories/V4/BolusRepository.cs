@@ -54,12 +54,8 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <inheritdoc />
     protected override void ApplyUpdate(BolusEntity target, Bolus source) => BolusMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="CountAsync"/> matches the rows
-    /// <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<BolusEntity> ApplyReadVisibility(IQueryable<BolusEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.Bolus && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.Bolus;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended bolus query (non-primary LinkedRecords
@@ -119,9 +115,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         if (kind.HasValue)
             query = query.Where(e => e.BolusKind == kind.Value.ToString());
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == RecordTypeKeys.Bolus && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
         // that seeks directly to the cursor position. O(limit) vs O(offset + limit).

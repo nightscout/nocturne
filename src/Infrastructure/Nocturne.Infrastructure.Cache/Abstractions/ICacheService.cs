@@ -83,49 +83,4 @@ public interface ICacheService
         CancellationToken cancellationToken = default
     )
         where T : class;
-
-    /// <summary>
-    /// Invalidates cache entries by tags
-    /// </summary>
-    /// <param name="tags">Tags to invalidate</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task InvalidateTagsAsync(string[] tags, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clears all cache entries for the current tenant
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task ClearAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets cache statistics
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task<CacheStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Cache statistics
-/// </summary>
-public class CacheStatistics
-{
-    /// <summary>
-    /// Total number of keys in cache
-    /// </summary>
-    public long TotalKeys { get; set; }
-
-    /// <summary>
-    /// Cache hit rate (0-1)
-    /// </summary>
-    public double HitRate { get; set; }
-
-    /// <summary>
-    /// Memory usage in bytes
-    /// </summary>
-    public long MemoryUsage { get; set; }
-
-    /// <summary>
-    /// Number of expired keys
-    /// </summary>
-    public long ExpiredKeys { get; set; }
 }

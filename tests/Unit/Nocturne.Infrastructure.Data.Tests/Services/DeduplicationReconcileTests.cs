@@ -1,5 +1,3 @@
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +5,7 @@ using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
@@ -22,32 +21,16 @@ namespace Nocturne.Infrastructure.Data.Tests.Services;
 public class DeduplicationReconcileTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly DeduplicationService _service;
 
     public DeduplicationReconcileTests()
     {
         // In-memory SQLite database for testing — mirrors CarbIntakeRepositoryTests.
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        // Create the database schema and seed the tenant.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_contextOptions);
+        _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
 
         _service = new DeduplicationService(
@@ -59,7 +42,7 @@ public class DeduplicationReconcileTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -131,7 +114,7 @@ public class DeduplicationReconcileTests : IDisposable
 
         // The cross-tenant row references a real tenant, so seed it (bypassing the
         // query filter) to satisfy the FK constraint without it leaking into _context.
-        using (var seedContext = new NocturneDbContext(_contextOptions))
+        using (var seedContext = _db.CreateContext())
         {
             seedContext.TenantId = otherTenant;
             seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
@@ -250,6 +233,64 @@ public class DeduplicationReconcileTests : IDisposable
         links.Count(l => l.IsPrimary).Should().Be(1);
         links.Single(l => l.IsPrimary).RecordId.Should().Be(live); // earliest non-deleted
     }
+
+    /// <summary>
+    /// A pair of record ids whose relative order under <see cref="Comparer{T}.Default"/> is fixed,
+    /// so a tie-break assertion does not depend on generated ids.
+    /// </summary>
+    private static readonly Guid LowerRecordId = Guid.Parse("00000000-0000-0000-0000-00000000000a");
+    private static readonly Guid HigherRecordId = Guid.Parse("00000000-0000-0000-0000-00000000000b");
+
+    [Fact]
+    public void PickSurvivor_BreaksATimestampTieOnRecordId()
+    {
+        // A cross-source pair normally shares the millisecond, so the timestamp decides nothing and
+        // the choice must not fall out of whichever row the database returned first.
+        var info = Promotable(LowerRecordId, HigherRecordId);
+
+        DeduplicationService.PickSurvivor(TiedRows(LowerRecordId, HigherRecordId), info)
+            .RecordId.Should().Be(LowerRecordId);
+        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), info)
+            .RecordId.Should().Be(LowerRecordId);
+    }
+
+    [Fact]
+    public void PickSurvivor_TreatsAMissingRecordAsUnpromotable()
+    {
+        // An orphaned link reads exactly as a deleted record, so promoting it would render the
+        // whole canonical group as nothing.
+        DeduplicationService.PickSurvivor(
+                TiedRows(LowerRecordId, HigherRecordId), Promotable(HigherRecordId))
+            .RecordId.Should().Be(HigherRecordId);
+    }
+
+    [Fact]
+    public void PickSurvivor_FallsBackToTheEarliestWhenNothingIsPromotable()
+    {
+        var deleted = new Dictionary<Guid, DeduplicationService.RecordInfo>
+        {
+            [LowerRecordId] = new(new MatchCriteria(), IsDeleted: true),
+            [HigherRecordId] = new(new MatchCriteria(), IsDeleted: true)
+        };
+
+        DeduplicationService.PickSurvivor(TiedRows(HigherRecordId, LowerRecordId), deleted)
+            .RecordId.Should().Be(LowerRecordId);
+    }
+
+    /// <summary>
+    /// Two links sharing one source timestamp, in the given order.
+    /// </summary>
+    private static LinkedRecordEntity[] TiedRows(Guid first, Guid second) =>
+    [
+        new() { RecordId = first, SourceTimestamp = 1_700_000_000_000, IsPrimary = true },
+        new() { RecordId = second, SourceTimestamp = 1_700_000_000_000 }
+    ];
+
+    /// <summary>
+    /// Record info marking every listed id as present and not deleted.
+    /// </summary>
+    private static Dictionary<Guid, DeduplicationService.RecordInfo> Promotable(params Guid[] ids) =>
+        ids.ToDictionary(id => id, _ => new DeduplicationService.RecordInfo(new MatchCriteria(), IsDeleted: false));
 
     [Fact]
     public async Task MergeDuplicateGroupsAsync_MergesTransitiveThreeGroupChain()
@@ -777,6 +818,242 @@ public class DeduplicationReconcileTests : IDisposable
         var rows = await _context.DedupReconcileState.IgnoreQueryFilters()
             .Where(s => s.TenantId == TestTenantId).CountAsync();
         rows.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeduplicateAllAsync_PagesPastTheBatchSizeWithoutSkippingOrRereadingARow()
+    {
+        // 503 readings in 251 groups, spaced far enough apart that only same-timestamp readings
+        // match. The 250th group holds three, so the 500-row page boundary lands inside it and the
+        // page has to drain the rest of that timestamp before the cursor can move past it.
+        const int groupsBeforeBoundary = 249;
+        var readings = new List<SensorGlucoseEntity>();
+        for (var group = 0; group <= groupsBeforeBoundary + 1; group++)
+        {
+            var atGroup = group == groupsBeforeBoundary ? 3 : 2;
+            for (var i = 0; i < atGroup; i++)
+            {
+                readings.Add(new SensorGlucoseEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = TestTenantId,
+                    Mgdl = 120,
+                    Timestamp = WideBase.AddMinutes(15 * group),
+                    DataSource = $"connector-{i}"
+                });
+            }
+        }
+
+        _context.SensorGlucose.AddRange(readings);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _service.DeduplicateAllAsync();
+
+        result.Success.Should().BeTrue();
+        result.SensorGlucoseProcessed.Should().Be(readings.Count);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().HaveCount(readings.Count);
+        links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(groupsBeforeBoundary + 2);
+        links.Count(l => l.IsPrimary).Should().Be(groupsBeforeBoundary + 2);
+    }
+
+    [Theory]
+    [MemberData(nameof(DeduplicatedRecordTypes))]
+    public async Task DeleteOrphanedLinksAsync_SweepsAnOrphanOfEveryDeduplicatedType(RecordType recordType)
+    {
+        AddLink(recordType, Guid.CreateVersion7(), ToMills(WideBase), "glooko-connector",
+            Guid.CreateVersion7(), isPrimary: true);
+        await _context.SaveChangesAsync();
+
+        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        deleted.Should().Be(1);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Every type the dedup registry covers, so a type added there without a case in
+    /// <see cref="AddRecord"/> fails these theories rather than going untested.
+    /// </summary>
+    public static TheoryData<RecordType> DeduplicatedRecordTypes =>
+        [.. DeduplicationService.DeduplicatedRecordTypes];
+
+    [Theory]
+    [MemberData(nameof(DeduplicatedRecordTypes))]
+    public async Task DeleteOrphanedLinksAsync_KeepsALinkToALiveRecordOfEveryDeduplicatedType(
+        RecordType recordType)
+    {
+        // A type the sweep does not recognise has every one of its links swept, live record or not,
+        // so this is what separates the nine from an unknown key.
+        var recordId = AddRecord(recordType);
+        AddPrimaryLink(recordType, recordId, ToMills(WideBase), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
+    }
+
+    /// <summary>
+    /// Adds one live record of <paramref name="recordType"/> for the test tenant and returns its id.
+    /// </summary>
+    private Guid AddRecord(RecordType recordType)
+    {
+        var id = Guid.CreateVersion7();
+        object entity = recordType switch
+        {
+            RecordType.SensorGlucose => new SensorGlucoseEntity { Id = id, Mgdl = 120, Timestamp = WideBase },
+            RecordType.Bolus => new BolusEntity { Id = id, Insulin = 2, Timestamp = WideBase },
+            RecordType.CarbIntake => new CarbIntakeEntity { Id = id, Carbs = 30, Timestamp = WideBase },
+            RecordType.BGCheck => new BGCheckEntity { Id = id, Glucose = 120, Timestamp = WideBase },
+            RecordType.DeviceEvent => new DeviceEventEntity { Id = id, EventType = "SiteChange", Timestamp = WideBase },
+            RecordType.Note => new NoteEntity { Id = id, Text = "note", Timestamp = WideBase },
+            RecordType.BolusCalculation => new BolusCalculationEntity { Id = id, CarbInput = 30, Timestamp = WideBase },
+            RecordType.TempBasal => new TempBasalEntity
+            {
+                Id = id, Rate = 0.5, StartTimestamp = WideBase, Origin = "Manual"
+            },
+            RecordType.StateSpan => new StateSpanEntity
+            {
+                Id = id, Category = nameof(StateSpanCategory.Exercise), State = "Running", StartTimestamp = WideBase
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, "No table backs this type")
+        };
+
+        ((ITenantScoped)entity).TenantId = TestTenantId;
+        _context.Add(entity);
+        return id;
+    }
+
+    [Theory]
+    [InlineData("entry")]
+    [InlineData("treatment")]
+    [InlineData("meterglucose")]
+    [InlineData("sleepstage")]
+    public async Task DeleteOrphanedLinksAsync_SweepsALinkNoRecordTypeMemberNames(string recordType)
+    {
+        // Keys earlier builds wrote. No RecordType member names any of them, so
+        // GetLinkedRecordsAsync drops the row and nothing can read it back.
+        AddRawLink(recordType, TestTenantId);
+        await _context.SaveChangesAsync();
+
+        var deleted = await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        deleted.Should().Be(1);
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Adds a primary link carrying <paramref name="recordType"/> verbatim, for the keys the
+    /// <see cref="RecordType"/> enum cannot express. Returns the link's id.
+    /// </summary>
+    private Guid AddRawLink(string recordType, Guid tenantId)
+    {
+        var id = Guid.CreateVersion7();
+        _context.LinkedRecords.Add(new LinkedRecordEntity
+        {
+            Id = id,
+            TenantId = tenantId,
+            CanonicalId = Guid.CreateVersion7(),
+            RecordType = recordType,
+            RecordId = Guid.CreateVersion7(),
+            SourceTimestamp = ToMills(WideBase),
+            DataSource = "glooko-connector",
+            IsPrimary = true
+        });
+        return id;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeleteOrphanedLinksAsync_KeepsALinkToAnExistingRecord(bool softDeleted)
+    {
+        // A soft-deleted record is not an orphan: PickSurvivor still reads it, and the group falls
+        // back to it when every member is deleted.
+        var recordId = await AddCarb(WideBase, "glooko-connector", 50,
+            deletedAt: softDeleted ? WideBase.AddHours(1) : null);
+        AddPrimaryLink(RecordType.CarbIntake, recordId, ToMills(WideBase), "glooko-connector");
+        await _context.SaveChangesAsync();
+
+        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().ContainSingle().Which.RecordId.Should().Be(recordId);
+    }
+
+    [Fact]
+    public async Task DeleteOrphanedLinksAsync_LeavesAnotherTenantsOrphanAlone()
+    {
+        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        using (var seedContext = _db.CreateContext())
+        {
+            seedContext.TenantId = otherTenant;
+            seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
+            seedContext.LinkedRecords.Add(new LinkedRecordEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = otherTenant,
+                CanonicalId = Guid.CreateVersion7(),
+                RecordType = "carbintake",
+                RecordId = Guid.CreateVersion7(),
+                SourceTimestamp = ToMills(WideBase),
+                DataSource = "glooko-connector",
+                IsPrimary = true
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().ContainSingle().Which.TenantId.Should().Be(otherTenant);
+    }
+
+    [Fact]
+    public async Task DeleteOrphanedLinksAsync_SweepsALinkWhoseRecordBelongsToAnotherTenant()
+    {
+        // Ignoring the query filters to reach soft-deleted records also drops tenant scoping, so
+        // the record-id set has to re-apply it: another tenant's record must not vouch for a link
+        // in this one, and this one's sweep must not reach that tenant's own link.
+        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var theirRecordId = Guid.CreateVersion7();
+        var theirLinkId = Guid.CreateVersion7();
+
+        using (var seedContext = _db.CreateContext())
+        {
+            seedContext.TenantId = otherTenant;
+            seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
+            seedContext.CarbIntakes.Add(new CarbIntakeEntity
+            {
+                Id = theirRecordId, TenantId = otherTenant, Carbs = 30, Timestamp = WideBase
+            });
+            seedContext.LinkedRecords.Add(new LinkedRecordEntity
+            {
+                Id = theirLinkId,
+                TenantId = otherTenant,
+                CanonicalId = Guid.CreateVersion7(),
+                RecordType = "carbintake",
+                RecordId = theirRecordId,
+                SourceTimestamp = ToMills(WideBase),
+                DataSource = "glooko-connector",
+                IsPrimary = true
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        // The test tenant's link points at the other tenant's record, so it is an orphan here.
+        AddPrimaryLink(RecordType.CarbIntake, theirRecordId, ToMills(WideBase), "mylife-connector");
+        await _context.SaveChangesAsync();
+
+        await DeduplicationService.DeleteOrphanedLinksAsync(_context);
+
+        var links = await _context.LinkedRecords.IgnoreQueryFilters().ToListAsync();
+        links.Should().ContainSingle().Which.Id.Should().Be(theirLinkId);
     }
 
     /// <summary>
