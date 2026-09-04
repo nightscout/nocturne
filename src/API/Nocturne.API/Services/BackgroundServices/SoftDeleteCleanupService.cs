@@ -111,40 +111,12 @@ public class SoftDeleteCleanupService(
     }
 
     /// <summary>
-    /// Deletes records from the specified table with deleted_at before the cutoff, in batches
-    /// of <see cref="BatchSize"/> to avoid WAL bloat and long-running transactions.
-    /// <para>
-    /// The tenant reach the DELETE needs comes from
-    /// <see cref="RlsPinningExtensions.CreateTenantPinnedContextAsync"/> and cannot come from a
-    /// <c>set_config</c> issued as its own command: EF opens and closes the connection around
-    /// each command, and the close discards the session variable.
-    /// </para>
+    /// Deletes records from the specified table with deleted_at before the cutoff.
     /// </summary>
     /// <returns>Total number of records deleted.</returns>
-    private async Task<int> PurgeBatchedAsync(
-        Guid tenantId, string table, DateTime cutoff, CancellationToken ct)
-    {
-        var totalDeleted = 0;
-        int batchDeleted;
-
-        do
-        {
-            await using var db = await contextFactory.CreateTenantPinnedContextAsync(tenantId, ct);
-
-            // Delete a batch using ctid for efficient sub-select.
-            // Table name is from our code (not user input) so interpolation is safe.
-#pragma warning disable EF1002
-            batchDeleted = await db.Database.ExecuteSqlRawAsync(
-                $"DELETE FROM {table} WHERE ctid IN (SELECT ctid FROM {table} WHERE deleted_at < {{0}} LIMIT {BatchSize})",
-                [cutoff], ct);
-#pragma warning restore EF1002
-
-            totalDeleted += batchDeleted;
-        }
-        while (batchDeleted >= BatchSize);
-
-        return totalDeleted;
-    }
+    private Task<int> PurgeBatchedAsync(
+        Guid tenantId, string table, DateTime cutoff, CancellationToken ct) =>
+        contextFactory.PurgeOlderThanAsync(tenantId, table, "deleted_at", cutoff, BatchSize, ct);
 
     /// <summary>
     /// Removes linked_records that reference hard-deleted records, and links of a record type that

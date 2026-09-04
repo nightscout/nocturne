@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Audit;
 
@@ -102,6 +103,9 @@ public class AuditRetentionService(
             return;
         }
 
+        var cycleReadDeleted = 0;
+        var cycleMutationDeleted = 0;
+
         foreach (var tenantId in tenantIds)
         {
             var config = configs.GetValueOrDefault(tenantId);
@@ -127,6 +131,9 @@ public class AuditRetentionService(
                         tenantId, "mutation_audit_log", cutoff, ct);
                 }
 
+                cycleReadDeleted += readDeleted;
+                cycleMutationDeleted += mutationDeleted;
+
                 if (readDeleted > 0 || mutationDeleted > 0)
                 {
                     logger.LogInformation(
@@ -141,40 +148,19 @@ public class AuditRetentionService(
                     tenantId);
             }
         }
+
+        // Unconditional: a zero-deletion cycle is the signature of a purge that cannot see its
+        // rows, which a per-tenant log gated on a non-zero count cannot distinguish from idleness.
+        logger.LogInformation(
+            "Audit retention purge swept {TenantCount} tenants: {ReadDeleted} read, {MutationDeleted} mutation records deleted",
+            tenantIds.Count, cycleReadDeleted, cycleMutationDeleted);
     }
 
     /// <summary>
-    /// Deletes records from the specified table older than the cutoff, in batches of
-    /// <see cref="BatchSize"/> to avoid WAL bloat and long-running transactions.
+    /// Deletes audit records from the specified table older than the cutoff.
     /// </summary>
     /// <returns>Total number of records deleted.</returns>
-    internal virtual async Task<int> PurgeBatchedAsync(
-        Guid tenantId, string table, DateTime cutoff, CancellationToken ct)
-    {
-        var totalDeleted = 0;
-        int batchDeleted;
-
-        do
-        {
-            await using var db = await contextFactory.CreateDbContextAsync(ct);
-
-            // Set RLS context for the tenant-scoped table
-            await db.Database.ExecuteSqlRawAsync(
-                "SELECT set_config('app.current_tenant_id', {0}, false)",
-                [tenantId.ToString()], ct);
-
-            // Delete a batch using ctid for efficient sub-select.
-            // Table name is from our code (not user input) so interpolation is safe.
-#pragma warning disable EF1002
-            batchDeleted = await db.Database.ExecuteSqlRawAsync(
-                $"DELETE FROM {table} WHERE ctid IN (SELECT ctid FROM {table} WHERE created_at < {{0}} LIMIT {BatchSize})",
-                [cutoff], ct);
-#pragma warning restore EF1002
-
-            totalDeleted += batchDeleted;
-        }
-        while (batchDeleted >= BatchSize);
-
-        return totalDeleted;
-    }
+    internal virtual Task<int> PurgeBatchedAsync(
+        Guid tenantId, string table, DateTime cutoff, CancellationToken ct) =>
+        contextFactory.PurgeOlderThanAsync(tenantId, table, "created_at", cutoff, BatchSize, ct);
 }
