@@ -5,7 +5,8 @@
   import { Separator } from "$lib/components/ui/separator";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
-  import { getApiClient } from "$lib/api";
+  import { triggerConnectorSync } from "$api/generated/services.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Cloud,
     Loader2,
@@ -20,9 +21,9 @@
   } from "lucide-svelte";
   import type {
     ConnectorCapabilities,
-    SyncRequest,
     SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
+  import type { SyncRequest } from "$lib/api/generated/schemas";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
 
@@ -61,6 +62,45 @@
 
 
 
+  const selectedRange = () => ({
+    from: new Date(granularSyncFrom).toISOString(),
+    to: new Date(granularSyncTo).toISOString(),
+  });
+
+  /**
+   * The sync's own result stands whatever the callback does, so a refresh the
+   * caller could not complete is left to the caller to report.
+   */
+  async function notifyComplete() {
+    if (!onSyncComplete) return;
+    try {
+      await onSyncComplete();
+    } catch (e) {
+      console.error("Failed to refresh after a connector sync", e);
+    }
+  }
+
+  /**
+   * A refused sync reports itself through the same result panel as a partial
+   * one, so a rejection becomes a result rather than propagating.
+   */
+  async function requestSync(
+    connectorId: string,
+    request: SyncRequest,
+    fallback: string
+  ): Promise<SyncResult> {
+    try {
+      return await triggerConnectorSync({ id: connectorId, request });
+    } catch (e) {
+      return {
+        success: false,
+        message: describeSubmitError(e, fallback),
+        errors: [],
+        itemsSynced: {},
+      };
+    }
+  }
+
   async function triggerGranularSync() {
     const connectorId = selectedConnector?.id;
     if (!connectorId) return;
@@ -68,34 +108,16 @@
     const supportsHistoricalSync =
       selectedConnectorCapabilities?.supportsHistoricalSync ?? true;
 
-    // Fast-feedback UI
     isGranularSyncing = true;
     granularSyncResult = null;
 
     try {
-      const apiClient = getApiClient();
-      const request: SyncRequest = supportsHistoricalSync
-        ? {
-            from: new Date(granularSyncFrom),
-            to: new Date(granularSyncTo),
-          }
-        : {};
-
-      const result = await apiClient.services.triggerConnectorSync(
+      granularSyncResult = await requestSync(
         connectorId,
-        request
+        supportsHistoricalSync ? selectedRange() : {},
+        "We couldn't start the sync. Please try again."
       );
-
-      granularSyncResult = result;
-      if (onSyncComplete) await onSyncComplete();
-    } catch (e) {
-      granularSyncResult = {
-        success: false,
-        message: e instanceof Error ? e.message : "Failed to trigger sync",
-        errors: [],
-        itemsSynced: {},
-      };
-      if (onSyncComplete) await onSyncComplete();
+      await notifyComplete();
     } finally {
       isGranularSyncing = false;
     }
@@ -108,29 +130,12 @@
     foodOnlySyncResult = null;
 
     try {
-      const apiClient = getApiClient();
-      const request: SyncRequest = {
-        from: new Date(granularSyncFrom),
-        to: new Date(granularSyncTo),
-        dataTypes: ["Food" as any],
-      };
-
-      const result = await apiClient.services.triggerConnectorSync(
+      foodOnlySyncResult = await requestSync(
         connectorId,
-        request
+        { ...selectedRange(), dataTypes: ["Food"] },
+        "We couldn't download the food data. Please try again."
       );
-
-      foodOnlySyncResult = result;
-      if (result.success && onSyncComplete) {
-        await onSyncComplete();
-      }
-    } catch (e) {
-      foodOnlySyncResult = {
-        success: false,
-        message: e instanceof Error ? e.message : "Failed to sync food data",
-        errors: [],
-        itemsSynced: {},
-      };
+      if (foodOnlySyncResult.success) await notifyComplete();
     } finally {
       isFoodOnlySyncing = false;
     }

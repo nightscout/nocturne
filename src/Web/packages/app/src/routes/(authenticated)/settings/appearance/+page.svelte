@@ -209,10 +209,7 @@
     <Card class="border-destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <div>
-          <p class="font-medium">Failed to load settings</p>
-          <p class="text-sm text-muted-foreground">{store.error}</p>
-        </div>
+        <p class="font-medium">{store.error}</p>
       </CardContent>
     </Card>
   {:else}
