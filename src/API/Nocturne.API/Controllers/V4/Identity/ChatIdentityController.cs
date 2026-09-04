@@ -19,9 +19,9 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [ApiController]
 [Tags("Identity")]
 [Authorize]
-// Every endpoint here binds or reads a chat identity for a subject. The demo's subject is
-// shared, so one visitor's Discord or Telegram binding would be enumerable and revocable by
-// the next — GetLinks lists by tenant, not by subject.
+// Every endpoint here binds or reads a chat identity for a subject. The demo's subject is shared,
+// so ownership does not separate one visitor from the next: a visitor's Discord or Telegram
+// binding would be the next visitor's to read and revoke.
 [DenyDemoSubject]
 [Route("api/v4/chat-identity")]
 public class ChatIdentityController : ControllerBase
@@ -58,13 +58,25 @@ public class ChatIdentityController : ControllerBase
             ?? throw new InvalidOperationException("Authenticated request has no subject id");
     }
 
+    /// <summary>The rows a by-id request from this caller may reach.</summary>
+    /// <seealso cref="ChatLinkScope"/>
+    private ChatLinkScope OwnedByCaller()
+        => ChatLinkScope.ForOwner(_tenantAccessor.TenantId, GetUserIdOrThrow());
+
     /// <summary>List active chat identity links for the current tenant.</summary>
     /// <remarks>
+    /// <para>
     /// The list stays tenant-scoped, so a chat account linked to several tenants shows a
     /// non-default row here while its default sits on a row this tenant cannot see. Naming that
     /// row's label closes the gap without widening the list, and it is filled in only for the
     /// caller's own links: a co-member's chat account may be linked to tenants the caller has no
     /// part in, and its label is that tenant's slug.
+    /// </para>
+    /// <para>
+    /// A co-member's row is listed so the tenant's bot routing is legible, but the chat account
+    /// behind it is the co-member's and not this tenant's to hand out, so
+    /// <see cref="ChatIdentityLinkResponse.PlatformUserId"/> is withheld on the same terms.
+    /// </para>
     /// </remarks>
     [HttpGet]
     [RemoteQuery]
@@ -78,8 +90,9 @@ public class ChatIdentityController : ControllerBase
         var responses = new List<ChatIdentityLinkResponse>(links.Count);
         foreach (var link in links)
         {
-            var response = MapResponse(link);
-            if (link.NocturneUserId == subjectId)
+            var ownedByCaller = link.NocturneUserId == subjectId;
+            var response = MapResponse(link, ownedByCaller);
+            if (ownedByCaller)
             {
                 var holder = await _service.GetDefaultAsync(link.Platform, link.PlatformUserId, ct);
                 response.DefaultLabel = holder?.Label;
@@ -92,6 +105,10 @@ public class ChatIdentityController : ControllerBase
     }
 
     /// <summary>Claim a pending link token after /connect slash command auth.</summary>
+    /// <remarks>
+    /// A token carries no subject, and a chat account already linked to this tenant keeps the
+    /// link it has, so the row this returns may belong to another subject and predate the claim.
+    /// </remarks>
     [HttpPost("links/claim")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
@@ -101,21 +118,7 @@ public class ChatIdentityController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
         var userId = GetUserIdOrThrow();
         var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
-        return Ok(MapResponse(entry));
-    }
-
-    /// <summary>Directly create a link for the current tenant (used by OAuth2 finalize hop).</summary>
-    [HttpPost("links/direct")]
-    [RemoteCommand(Invalidates = ["GetLinks"])]
-    [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ChatIdentityLinkResponse>> CreateDirectLink(
-        [FromBody] CreateDirectLinkRequest body, CancellationToken ct)
-    {
-        var tenantId = _tenantAccessor.TenantId;
-        var userId = GetUserIdOrThrow();
-        var entry = await _service.CreateDirectLinkAsync(
-            tenantId, userId, body.Platform, body.PlatformUserId, ct);
-        return Ok(MapResponse(entry));
+        return Ok(MapResponse(entry, ownedByCaller: entry.NocturneUserId == userId));
     }
 
     /// <inheritdoc cref="ChatIdentityService.SetDefaultAsync"/>
@@ -125,10 +128,9 @@ public class ChatIdentityController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> SetDefault(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantAccessor.TenantId;
         try
         {
-            await _service.SetDefaultAsync(tenantId, id, ct);
+            await _service.SetDefaultAsync(OwnedByCaller(), id, ct);
         }
         catch (KeyNotFoundException)
         {
@@ -144,13 +146,13 @@ public class ChatIdentityController : ControllerBase
     public async Task<ActionResult> UpdateLink(
         Guid id, [FromBody] UpdateChatIdentityLinkRequest body, CancellationToken ct)
     {
-        var tenantId = _tenantAccessor.TenantId;
+        var scope = OwnedByCaller();
         try
         {
             if (body.Label is not null)
-                await _service.RenameLabelAsync(tenantId, id, body.Label, ct);
+                await _service.RenameLabelAsync(scope, id, body.Label, ct);
             if (body.DisplayName is not null)
-                await _service.UpdateDisplayNameAsync(tenantId, id, body.DisplayName, ct);
+                await _service.UpdateDisplayNameAsync(scope, id, body.DisplayName, ct);
         }
         catch (KeyNotFoundException)
         {
@@ -166,10 +168,9 @@ public class ChatIdentityController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> RevokeLink(Guid id, CancellationToken ct)
     {
-        var tenantId = _tenantAccessor.TenantId;
         try
         {
-            await _service.RevokeAsync(tenantId, id, ct);
+            await _service.RevokeAsync(OwnedByCaller(), id, ct);
         }
         catch (KeyNotFoundException)
         {
@@ -201,14 +202,16 @@ public class ChatIdentityController : ControllerBase
         });
     }
 
-    private static ChatIdentityLinkResponse MapResponse(ChatIdentityDirectoryEntry e)
+    private static ChatIdentityLinkResponse MapResponse(
+        ChatIdentityDirectoryEntry e, bool ownedByCaller)
         => new()
         {
             Id = e.Id,
             TenantId = e.TenantId,
             NocturneUserId = e.NocturneUserId,
             Platform = e.Platform,
-            PlatformUserId = e.PlatformUserId,
+            PlatformUserId = ownedByCaller ? e.PlatformUserId : null,
+            IsOwnedByCaller = ownedByCaller,
             PlatformChannelId = e.PlatformChannelId,
             Label = e.Label,
             DisplayName = e.DisplayName,
@@ -227,7 +230,13 @@ public class ChatIdentityLinkResponse
     public Guid TenantId { get; set; }
     public Guid NocturneUserId { get; set; }
     public string Platform { get; set; } = string.Empty;
-    public string PlatformUserId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The chat account this link routes, or <c>null</c> on a link belonging to another subject.
+    /// </summary>
+    /// <seealso cref="ChatIdentityController.GetLinks"/>
+    public string? PlatformUserId { get; set; }
+
     public string? PlatformChannelId { get; set; }
     public string Label { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
@@ -240,6 +249,12 @@ public class ChatIdentityLinkResponse
     /// </summary>
     public string? DefaultLabel { get; set; }
 
+    /// <summary>
+    /// Whether the caller's own subject owns this link, and so whether the by-id endpoints on
+    /// <see cref="ChatIdentityController"/> will act on it rather than answering 404.
+    /// </summary>
+    public bool IsOwnedByCaller { get; set; }
+
     public string DisplayUnit { get; set; } = "mg/dL";
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -248,12 +263,6 @@ public class ChatIdentityLinkResponse
 public class ClaimChatIdentityLinkRequest
 {
     public string Token { get; set; } = string.Empty;
-}
-
-public class CreateDirectLinkRequest
-{
-    public string Platform { get; set; } = string.Empty;
-    public string PlatformUserId { get; set; } = string.Empty;
 }
 
 public class UpdateChatIdentityLinkRequest

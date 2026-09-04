@@ -5,20 +5,18 @@ using Nocturne.Infrastructure.Data.Entities;
 namespace Nocturne.API.Services.Chat;
 
 /// <summary>
-/// Tenant-scoped facade over <see cref="ChatIdentityDirectoryService"/> and
-/// <see cref="ChatIdentityPendingLinkService"/>. Handles pending-token claim flows,
-/// direct link creation, and read-only pending link lookups.
+/// Facade over <see cref="ChatIdentityDirectoryService"/> and
+/// <see cref="ChatIdentityPendingLinkService"/> for callers authenticated as a tenant subject.
+/// Handles pending-token claim flows and read-only pending link lookups.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ClaimPendingLinkAsync"/> validates that the consumed token belongs to the
-/// requested tenant: if the token's <c>TenantSlug</c> hint is set it must match the tenant's
-/// slug (case-insensitive), otherwise any tenant may claim it. This check prevents a token
-/// issued in a Discord DM targeted at tenant A from being redeemed against tenant B.
-/// </para>
-/// <para>
-/// <see cref="CreateDirectLinkAsync"/> bypasses the pending-token flow entirely and is
-/// intended for administrative link creation (e.g. from the management UI).
+/// Proof that the caller controls the chat account comes from the pending token, which is issued
+/// only after the account authorises the bot, so <see cref="ClaimPendingLinkAsync"/> is the sole
+/// way a link enters the directory from here. It also validates that the consumed token belongs
+/// to the requested tenant: if the token's <c>TenantSlug</c> hint is set it must match the
+/// tenant's slug (case-insensitive), otherwise any tenant may claim it. This check prevents a
+/// token issued in a Discord DM targeted at tenant A from being redeemed against tenant B.
 /// </para>
 /// <para>
 /// <see cref="GetPendingAsync"/> is a read-only lookup safe for the OAuth2 authorise page;
@@ -78,50 +76,26 @@ public sealed class ChatIdentityService(
         return entry;
     }
 
-    /// <summary>Creates a chat identity link directly, bypassing the pending-token flow.</summary>
-    public async Task<ChatIdentityDirectoryEntry> CreateDirectLinkAsync(
-        Guid tenantId, Guid userId, string platform, string platformUserId, CancellationToken ct)
-    {
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var tenant = await db.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => new { t.Slug, t.DisplayName })
-            .FirstAsync(ct);
-
-        return await directory.CreateLinkAsync(
-            platform, platformUserId, tenantId, userId, tenant.Slug, tenant.DisplayName, ct);
-    }
-
     /// <summary>Designates a chat identity link as the default for the platform user.</summary>
-    public Task SetDefaultAsync(Guid tenantId, Guid linkId, CancellationToken ct)
-        => directory.SetDefaultAsync(linkId, RequireTenant(tenantId), ct);
+    public Task SetDefaultAsync(ChatLinkScope scope, Guid linkId, CancellationToken ct)
+        => directory.SetDefaultAsync(linkId, scope, ct);
 
     /// <summary>Renames the label on a chat identity link.</summary>
-    public Task RenameLabelAsync(Guid tenantId, Guid linkId, string newLabel, CancellationToken ct)
-        => directory.RenameLabelAsync(linkId, RequireTenant(tenantId), newLabel, ct);
+    public Task RenameLabelAsync(ChatLinkScope scope, Guid linkId, string newLabel, CancellationToken ct)
+        => directory.RenameLabelAsync(linkId, scope, newLabel, ct);
 
     /// <summary>Updates the display name on a chat identity link.</summary>
-    public Task UpdateDisplayNameAsync(Guid tenantId, Guid linkId, string newDisplayName, CancellationToken ct)
-        => directory.UpdateDisplayNameAsync(linkId, RequireTenant(tenantId), newDisplayName, ct);
+    public Task UpdateDisplayNameAsync(ChatLinkScope scope, Guid linkId, string newDisplayName, CancellationToken ct)
+        => directory.UpdateDisplayNameAsync(linkId, scope, newDisplayName, ct);
 
     /// <summary>Permanently removes a chat identity link.</summary>
-    /// <exception cref="KeyNotFoundException">The link does not belong to <paramref name="tenantId"/>.</exception>
-    public async Task RevokeAsync(Guid tenantId, Guid linkId, CancellationToken ct)
+    /// <exception cref="KeyNotFoundException">The link is not in <paramref name="scope"/>.</exception>
+    public async Task RevokeAsync(ChatLinkScope scope, Guid linkId, CancellationToken ct)
     {
-        var deleted = await directory.RevokeAsync(linkId, RequireTenant(tenantId), ct);
+        var deleted = await directory.RevokeAsync(linkId, scope, ct);
         if (deleted == 0)
             throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
     }
-
-    /// <summary>
-    /// Returns the tenant every mutation on this facade is scoped to. An unresolved tenant is
-    /// rejected rather than passed through as an unscoped (cross-tenant) operation.
-    /// </summary>
-    private static Guid RequireTenant(Guid tenantId)
-        => tenantId != Guid.Empty
-            ? tenantId
-            : throw new InvalidOperationException(
-                "Chat identity link management requires a resolved tenant.");
 
     /// <summary>
     /// Read-only lookup for the authorize page. Does NOT consume the token.
