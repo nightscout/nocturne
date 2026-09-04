@@ -47,7 +47,10 @@ internal static class ActogramReadScopeGuard
             data.HeartRates = [];
 
         if (!Scope.Satisfies(grantedScopes, Scope.StepCountRead))
+        {
             data.StepCounts = [];
+            data.StepDayTotals = new();
+        }
 
         if (!Scope.Satisfies(grantedScopes, Scope.SleepRead))
             data.SleepSpans = [];

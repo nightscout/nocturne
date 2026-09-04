@@ -275,6 +275,49 @@ public class StatisticsServiceTests
     }
 
     [Fact]
+    public void CalculateTimeInRange_AboveRange_SumsTheHighAndVeryHighZones()
+    {
+        // Arrange
+        // High, VeryHigh, Target, Low, High, Target: the Low reading must count in neither field.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 300, 100, 60, 200, 100));
+
+        // Assert
+        result.Durations.High.Should().Be(10);
+        result.Durations.VeryHigh.Should().Be(5);
+        result.Durations.Low.Should().Be(5);
+        result.Durations.AboveRange.Should().Be(15);
+        // The zone counters see 200 then 300 as one High and one VeryHigh episode; above range
+        // it is a single excursion, and the later 200 the second.
+        result.Episodes.High.Should().Be(2);
+        result.Episodes.VeryHigh.Should().Be(1);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_AboveRangeEpisodes_CountAnExcursionOnceHoweverOftenItCrossesVeryHigh()
+    {
+        // High, VeryHigh, High, Target, High: the zone counters report three High episodes.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(190, 260, 190, 100, 190));
+
+        result.Episodes.High.Should().Be(3);
+        result.Episodes.VeryHigh.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(2);
+    }
+
+    private static SensorGlucose[] Sequence(params int[] mgdl)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return mgdl
+            .Select((value, i) => new SensorGlucose
+            {
+                Mgdl = value,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + i).UtcDateTime,
+            })
+            .ToArray();
+    }
+
+    [Fact]
     public void CalculatePersonalRangeTime_WithTimeOfDaySchedule_SplitsReadingsByActiveEntry()
     {
         // Arrange — midnight entry targets 100-180, 06:00 entry targets 80-160.
@@ -342,6 +385,107 @@ public class StatisticsServiceTests
 
         _statisticsService.CalculatePersonalRangeTime(invalidEntries, schedule, TimeZoneInfo.Utc).Should().BeNull();
         _statisticsService.CalculatePersonalRangeTime(validEntries, [], TimeZoneInfo.Utc).Should().BeNull();
+    }
+
+    #endregion
+
+    #region Weekday Averages Tests
+
+    /// <summary>2026-07-20 is a Monday.</summary>
+    private static readonly DateTime WeekdayMonday = new(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc);
+
+    private static SensorGlucose ReadingAt(DateTime utc, int mgdl) =>
+        new() { Mgdl = mgdl, Timestamp = DateTime.SpecifyKind(utc, DateTimeKind.Utc) };
+
+    [Fact]
+    public void CalculateWeekdayAverages_KeysAReadingByWeekdayAndFiveMinuteSlot()
+    {
+        var slots = _statisticsService
+            .CalculateWeekdayAverages([ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(3), 120)], TimeZoneInfo.Utc)
+            .ToList();
+
+        var slot = slots.Should().ContainSingle().Subject;
+        slot.MinuteOfDay.Should().Be(480);
+        slot.Mean.Should().Equal(new Dictionary<DayOfWeek, double> { [DayOfWeek.Monday] = 120 });
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_MeansEveryReadingInACellEqually()
+    {
+        // A running (previous + next) / 2 would give 165 for these three.
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddHours(8), 60),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(1), 120),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(2), 240),
+        };
+
+        var slots = _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).ToList();
+
+        slots.Should().ContainSingle().Which.Mean[DayOfWeek.Monday].Should().Be(140);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_MergesAWeekdayAcrossWeeksAndKeepsWeekdaysApartInACell()
+    {
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddDays(-7).AddHours(8), 100),
+            ReadingAt(WeekdayMonday.AddHours(8), 200),
+            ReadingAt(WeekdayMonday.AddDays(1).AddHours(8), 150),
+        };
+
+        var slot = _statisticsService
+            .CalculateWeekdayAverages(entries, TimeZoneInfo.Utc)
+            .Should().ContainSingle().Subject;
+
+        slot.Mean.Should().Equal(new Dictionary<DayOfWeek, double>
+        {
+            [DayOfWeek.Monday] = 150,
+            [DayOfWeek.Tuesday] = 150,
+        });
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_FloorsToFiveMinutesAndOrdersSlotsByTimeOfDay()
+    {
+        var entries = new[]
+        {
+            ReadingAt(WeekdayMonday.AddHours(20), 100),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(8), 300),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(1), 100),
+            ReadingAt(WeekdayMonday.AddHours(8).AddMinutes(2), 200),
+        };
+
+        var slots = _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).ToList();
+
+        slots.Select(s => s.MinuteOfDay).Should().Equal(480, 485, 1200);
+        slots[0].Mean[DayOfWeek.Monday].Should().Be(150);
+        slots[1].Mean[DayOfWeek.Monday].Should().Be(300);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_BucketsOnTheTenantClock()
+    {
+        // 22:30 UTC on Monday is 08:30 on Tuesday in Sydney (UTC+10 in July).
+        var sydney = TimeZoneHelper.GetTimeZoneInfoFromId("Australia/Sydney");
+        sydney.Should().NotBe(TimeZoneInfo.Utc);
+
+        var slot = _statisticsService
+            .CalculateWeekdayAverages([ReadingAt(WeekdayMonday.AddHours(22).AddMinutes(30), 100)], sydney)
+            .Should().ContainSingle().Subject;
+
+        slot.MinuteOfDay.Should().Be(510);
+        slot.Mean.Keys.Should().Equal(DayOfWeek.Tuesday);
+    }
+
+    [Fact]
+    public void CalculateWeekdayAverages_SkipsReadingsWithoutAValueOrTimestamp()
+    {
+        var entries = new[] { ReadingAt(WeekdayMonday.AddHours(8), 0), new SensorGlucose { Mgdl = 100 } };
+
+        _statisticsService.CalculateWeekdayAverages(entries, TimeZoneInfo.Utc).Should().BeEmpty();
+        _statisticsService.CalculateWeekdayAverages([], TimeZoneInfo.Utc).Should().BeEmpty();
     }
 
     #endregion

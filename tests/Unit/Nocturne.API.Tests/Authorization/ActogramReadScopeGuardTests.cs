@@ -23,6 +23,7 @@ public class ActogramReadScopeGuardTests
         Thresholds = new ChartThresholdsDto { Low = 70, High = 180 },
         HeartRates = [new HeartRatePointDto { Time = 1700000000000, Bpm = 64 }],
         StepCounts = [new StepBubbleDto { Time = 1700000000000, Steps = 900 }],
+        StepDayTotals = new() { ["2023-11-14"] = 900 },
         SleepSpans = [new ActogramSleepSpan { StartMills = 1, EndMills = 2, State = "deep" }],
     };
 
@@ -38,6 +39,7 @@ public class ActogramReadScopeGuardTests
         data.Thresholds.Low.Should().Be(70);
         data.HeartRates.Should().BeEmpty();
         data.StepCounts.Should().BeEmpty();
+        data.StepDayTotals.Should().BeEmpty();
         data.SleepSpans.Should().BeEmpty();
     }
 
@@ -47,6 +49,7 @@ public class ActogramReadScopeGuardTests
         var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.StepCountRead));
 
         data.StepCounts.Should().HaveCount(1);
+        data.StepDayTotals.Should().ContainKey("2023-11-14");
         data.Glucose.Should().BeEmpty();
         data.HeartRates.Should().BeEmpty();
         data.SleepSpans.Should().BeEmpty();

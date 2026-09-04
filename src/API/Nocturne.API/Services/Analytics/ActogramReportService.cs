@@ -105,6 +105,10 @@ public sealed class ActogramReportService : IActogramReportService
 
         var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);
 
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
+            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken)
+        );
+
         var (glucoseData, glucoseYMax) = ChartDataService.BuildGlucoseData(
             glucoseRecords.ToList()
         );
@@ -168,9 +172,41 @@ public sealed class ActogramReportService : IActogramReportService
             Thresholds = thresholds,
             HeartRates = heartRates,
             StepCounts = stepCounts,
+            StepDayTotals = SumStepsByLocalDay(stepRecords, startTime, endTime, tz),
             SleepSpans = sleepSpans,
         };
     }
+
+    /// <summary>
+    /// Total steps per tenant-local calendar day, with every day the half-open window touches
+    /// present so a day without samples reads as 0 rather than as missing.
+    /// </summary>
+    private static Dictionary<string, int> SumStepsByLocalDay(
+        IEnumerable<StepCount> steps,
+        long startTime,
+        long endTime,
+        TimeZoneInfo tz
+    )
+    {
+        var totals = new Dictionary<string, int>(StringComparer.Ordinal);
+        var lastDay = LocalDate(endTime - 1, tz);
+        for (var day = LocalDate(startTime, tz); day <= lastDay; day = day.AddDays(1))
+            totals[day.ToString("O")] = 0;
+
+        foreach (var step in steps)
+        {
+            var key = LocalDate(step.Mills, tz).ToString("O");
+            if (totals.ContainsKey(key))
+                totals[key] += step.Metric;
+        }
+
+        return totals;
+    }
+
+    private static DateOnly LocalDate(long mills, TimeZoneInfo tz) =>
+        DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeMilliseconds(mills), tz).DateTime
+        );
 
     private async Task<ChartThresholdsDto> BuildThresholdsAsync(long atMills, CancellationToken ct)
     {

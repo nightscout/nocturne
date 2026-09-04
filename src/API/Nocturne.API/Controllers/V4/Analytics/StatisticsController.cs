@@ -395,6 +395,37 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Mean glucose per weekday in each five-minute slot of the day for a date range, bucketed on
+    /// the tenant's local clock. Backs the week-to-week report.
+    /// </summary>
+    /// <param name="startDate">Start of the window (inclusive, UTC).</param>
+    /// <param name="endDate">End of the window (exclusive, UTC).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The populated slots in time-of-day order.</returns>
+    [HttpGet("weekday-averages")]
+    [RequireScope(Scope.ReportsRead)]
+    [RemoteQuery]
+    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        // Uncapped and canonicalised for the same reasons as range-analytics above.
+        var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
+        var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+
+        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
+
+        return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
+    }
+
+    /// <summary>
     /// Returns the target range schedule active for the tenant's active profile right now, or null
     /// when none is configured. Shared selection policy for report statistics and AID metrics, kept
     /// in step with the alert engine and <c>TargetRangeResolver</c> (active profile, newest schedule

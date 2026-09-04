@@ -367,6 +367,12 @@ public class TimeInRangeDurations
     /// Duration in very high range (minutes)
     /// </summary>
     public double VeryHigh { get; set; }
+
+    /// <summary>
+    /// Time above range (minutes): <see cref="High"/> and <see cref="VeryHigh"/> together, which
+    /// are mutually excluding zones.
+    /// </summary>
+    public double AboveRange { get; set; }
 }
 
 /// <summary>
@@ -393,6 +399,13 @@ public class TimeInRangeEpisodes
     /// Number of very high episodes
     /// </summary>
     public int VeryHigh { get; set; }
+
+    /// <summary>
+    /// Number of excursions above range. A run of consecutive readings in <see cref="High"/> or
+    /// <see cref="VeryHigh"/> is one excursion however often it crosses between the two, so this
+    /// is at most, and usually less than, the sum of those counts.
+    /// </summary>
+    public int AboveRange { get; set; }
 }
 
 /// <summary>
@@ -895,6 +908,23 @@ public class AveragedStats : BasicGlucoseStats
 }
 
 /// <summary>
+/// Mean glucose per weekday in one five-minute slot of the day, for the week-to-week report.
+/// Slots are keyed on the tenant's local clock, so a reading is bucketed on the weekday and
+/// time of day the patient experienced it.
+/// </summary>
+public class WeekdayGlucoseSlot
+{
+    /// <summary>Minutes after local midnight at which the slot starts (0, 5, ..., 1435).</summary>
+    public int MinuteOfDay { get; set; }
+
+    /// <summary>
+    /// Mean glucose (mg/dL) of the readings in this slot on each weekday. A weekday with no
+    /// readings in the slot is absent.
+    /// </summary>
+    public Dictionary<DayOfWeek, double> Mean { get; set; } = new();
+}
+
+/// <summary>
 /// Diabetes population types for clinical target assessment
 /// </summary>
 public enum DiabetesPopulation
@@ -1107,12 +1137,6 @@ public class PeriodMetrics
     /// <summary>Name of the period (e.g., "Overnight", "Morning")</summary>
     public string PeriodName { get; set; } = string.Empty;
 
-    /// <summary>Start hour of the period (0-23)</summary>
-    public int StartHour { get; set; }
-
-    /// <summary>End hour of the period (0-23)</summary>
-    public int EndHour { get; set; }
-
     /// <summary>Number of readings in this period</summary>
     public int ReadingCount { get; set; }
 
@@ -1125,131 +1149,14 @@ public class PeriodMetrics
     /// <summary>Standard deviation (mg/dL)</summary>
     public double StandardDeviation { get; set; }
 
-    /// <summary>Coefficient of variation (%)</summary>
-    public double CoefficientOfVariation { get; set; }
-
     /// <summary>Time in range percentage (%)</summary>
     public double TimeInRange { get; set; }
-
-    /// <summary>Time below range percentage (%)</summary>
-    public double TimeBelowRange { get; set; }
-
-    /// <summary>Time very low percentage (%)</summary>
-    public double TimeVeryLow { get; set; }
-
-    /// <summary>Time above range percentage (%)</summary>
-    public double TimeAboveRange { get; set; }
-
-    /// <summary>Time very high percentage (%)</summary>
-    public double TimeVeryHigh { get; set; }
-
-    /// <summary>Number of hypoglycemic events in this period</summary>
-    public int HypoglycemiaEvents { get; set; }
-
-    /// <summary>Number of hyperglycemic events in this period</summary>
-    public int HyperglycemiaEvents { get; set; }
 
     /// <summary>Minimum glucose value (mg/dL)</summary>
     public double Min { get; set; }
 
     /// <summary>Maximum glucose value (mg/dL)</summary>
     public double Max { get; set; }
-}
-
-/// <summary>
-/// Individual hyperglycemia episode details
-/// </summary>
-public class HyperglycemiaEpisode
-{
-    /// <summary>Start time of the episode (Unix milliseconds)</summary>
-    public long StartTime { get; set; }
-
-    /// <summary>End time of the episode (Unix milliseconds)</summary>
-    public long EndTime { get; set; }
-
-    /// <summary>Duration of the episode in minutes</summary>
-    public double DurationMinutes { get; set; }
-
-    /// <summary>Peak glucose value during the episode (mg/dL)</summary>
-    public double PeakValue { get; set; }
-
-    /// <summary>Time of peak (Unix milliseconds)</summary>
-    public long PeakTime { get; set; }
-
-    /// <summary>Whether this was a severe episode (&gt;250 mg/dL)</summary>
-    public bool IsSevere { get; set; }
-
-    /// <summary>Whether this was a prolonged episode (&gt;2 hours)</summary>
-    public bool IsProlonged { get; set; }
-
-    /// <summary>Hour of day when episode started (0-23)</summary>
-    public int HourOfDay { get; set; }
-
-    /// <summary>Day of week when episode occurred</summary>
-    public DayOfWeek DayOfWeek { get; set; }
-
-    /// <summary>Time to return to target range in minutes</summary>
-    public double TimeToTargetMinutes { get; set; }
-
-    /// <summary>Average glucose during the episode</summary>
-    public double AverageGlucose { get; set; }
-}
-
-/// <summary>
-/// Comprehensive hyperglycemia analysis
-/// </summary>
-public class HyperglycemiaAnalysis
-{
-    /// <summary>Total number of hyperglycemia episodes (&gt;180 mg/dL)</summary>
-    public int TotalEpisodes { get; set; }
-
-    /// <summary>Number of severe hyperglycemia episodes (&gt;250 mg/dL)</summary>
-    public int SevereEpisodes { get; set; }
-
-    /// <summary>Number of prolonged episodes (&gt;2 hours above 180)</summary>
-    public int ProlongedEpisodes { get; set; }
-
-    /// <summary>Average episodes per day</summary>
-    public double EpisodesPerDay { get; set; }
-
-    /// <summary>Average duration of episodes in minutes</summary>
-    public double AverageDurationMinutes { get; set; }
-
-    /// <summary>Average peak glucose during episodes</summary>
-    public double AveragePeak { get; set; }
-
-    /// <summary>Highest glucose recorded</summary>
-    public double HighestGlucose { get; set; }
-
-    /// <summary>Average time to return to target range</summary>
-    public double AverageTimeToTargetMinutes { get; set; }
-
-    /// <summary>Time of day distribution of episodes (hour -> count)</summary>
-    public Dictionary<int, int> HourlyDistribution { get; set; } = new();
-
-    /// <summary>Day of week distribution of episodes</summary>
-    public Dictionary<DayOfWeek, int> DayOfWeekDistribution { get; set; } = new();
-
-    /// <summary>Most common hour for hyperglycemia</summary>
-    public int? PeakHour { get; set; }
-
-    /// <summary>Most common day for hyperglycemia</summary>
-    public DayOfWeek? PeakDay { get; set; }
-
-    /// <summary>Whether there's a post-meal pattern</summary>
-    public bool HasPostMealPattern { get; set; }
-
-    /// <summary>Description of the pattern if detected</summary>
-    public string PatternDescription { get; set; } = string.Empty;
-
-    /// <summary>List of individual episodes</summary>
-    public List<HyperglycemiaEpisode> Episodes { get; set; } = new();
-
-    /// <summary>Nocturnal hyperglycemia episodes (12 AM - 6 AM)</summary>
-    public int NocturnalEpisodes { get; set; }
-
-    /// <summary>Percentage of total episodes that are nocturnal</summary>
-    public double NocturnalPercentage { get; set; }
 }
 
 /// <summary>
@@ -1427,9 +1334,6 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     /// <summary>Glycemic Risk Index (composite risk score)</summary>
     public GlycemicRiskIndex GRI { get; set; } = new();
 
-    /// <summary>Hyperglycemia event analysis</summary>
-    public HyperglycemiaAnalysis HyperglycemiaAnalysis { get; set; } = new();
-
     /// <summary>Clinical target assessment</summary>
     public new ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
 
@@ -1448,7 +1352,7 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
 /// <seealso cref="AveragedStats"/>
 public class ReportAnalysisResult
 {
-    /// <summary>Extended glucose analytics (TIR, GMI, GRI, variability, hypo/hyper, etc.).</summary>
+    /// <summary>Extended glucose analytics (TIR, GMI, GRI, variability, clinical assessment, etc.).</summary>
     public ExtendedGlucoseAnalytics Analysis { get; set; } = new();
 
     /// <summary>Time-of-day averaged statistics for AGP-style charts.</summary>
