@@ -133,6 +133,14 @@ public class ProfileProjectionService : IProfileProjectionService
             targetRange = targetRangeTask.Result.FirstOrDefault();
         }
 
+        // A schedule the correlation id does not reach still exists under the legacy id the whole
+        // group shares, and that index is unique. Without this an AID consumer reading v1/v3 profile
+        // is served an empty basal schedule rather than an error.
+        basal ??= await BySharedLegacyIdAsync(_basalRepo, settings.LegacyId, ct);
+        carbRatio ??= await BySharedLegacyIdAsync(_carbRatioRepo, settings.LegacyId, ct);
+        sensitivity ??= await BySharedLegacyIdAsync(_sensitivityRepo, settings.LegacyId, ct);
+        targetRange ??= await BySharedLegacyIdAsync(_targetRangeRepo, settings.LegacyId, ct);
+
         var profileData = new ProfileData
         {
             Dia = settings.Dia,
@@ -176,6 +184,11 @@ public class ProfileProjectionService : IProfileProjectionService
             }
         };
     }
+
+    private static async Task<TRecord?> BySharedLegacyIdAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository, string? legacyId, CancellationToken ct)
+        where TRecord : class, IV4Record
+        => string.IsNullOrEmpty(legacyId) ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
 
     private static List<TimeValue> MapScheduleEntries(List<ScheduleEntry>? entries)
     {

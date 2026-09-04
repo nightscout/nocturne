@@ -66,33 +66,42 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
         // No system attribution here — there is no batch path to take it on (see
         // DecomposerBase.SystemAttributedBatchWrites): a profile write is a user's profile edit,
-        // and byte-identical re-upserts diff to empty and are skipped — which holds only because the
-        // siblings keep the correlation id they were created under; see UpsertByLegacyIdAsync.
+        // and byte-identical re-upserts diff to empty and are skipped.
+        //
+        // The therapy settings row anchors the group's correlation id, and the four schedules are
+        // stamped with whatever it resolves to. Reading it back rather than reusing the minted id is
+        // what keeps an unchanged re-upsert free of writes, and stamping the schedules from it is
+        // what keeps the group whole: the five rows are written in five separate transactions, so a
+        // sibling lost to a cancelled sync is recreated on the next one, and it has to rejoin the
+        // group rather than fork it. ProfileProjectionService loads the schedules by this id.
         foreach (var (storeName, profileData) in profile.Store)
         {
             var legacyId = $"{profile.Id}:{storeName}";
             var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-            await UpsertByLegacyIdAsync(
+            var (settings, _) = await UpsertByLegacyIdAsync(
                 _therapySettingsRepo, legacyId,
                 MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, result.CorrelationId),
                 result, origin, ct, preserveStoredCorrelationId: true);
+
+            var groupCorrelationId = settings.CorrelationId ?? result.CorrelationId;
+
             await UpsertByLegacyIdAsync(
                 _basalScheduleRepo, legacyId,
-                MapToBasalSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
-                result, origin, ct, preserveStoredCorrelationId: true);
+                MapToBasalSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
+                result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _carbRatioScheduleRepo, legacyId,
-                MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
-                result, origin, ct, preserveStoredCorrelationId: true);
+                MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
+                result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _sensitivityScheduleRepo, legacyId,
-                MapToSensitivitySchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
-                result, origin, ct, preserveStoredCorrelationId: true);
+                MapToSensitivitySchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
+                result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _targetRangeScheduleRepo, legacyId,
-                MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
-                result, origin, ct, preserveStoredCorrelationId: true);
+                MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
+                result, origin, ct);
         }
 
         return result;

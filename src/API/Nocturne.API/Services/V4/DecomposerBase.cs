@@ -28,11 +28,15 @@ public abstract class DecomposerBase
     /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
     /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
     /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
-    /// and appends to every index on the table; the id being UUID v7 makes those appends monotonic, so
-    /// the freed space is never reused. Callers whose records are upserted in place under a stable
-    /// legacy id set this: the id still groups the same siblings, and an unchanged re-upsert then diffs
-    /// to genuinely nothing. Callers that create a side record under the freshly minted id — as
-    /// <see cref="DeviceStatusDecomposer"/> does for its extras row — must not, or the two diverge.
+    /// and appends to every index on the table.
+    /// <para>
+    /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
+    /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
+    /// written in separate transactions, so one lost to a cancelled sync is recreated under a fresh id
+    /// while the survivors keep the old one, and a reader that loads siblings by correlation id then
+    /// silently returns nothing. Rewriting the id everywhere on every sync is what currently repairs
+    /// that, so removing the rewrite without converging the group would make the damage permanent.
+    /// </para>
     /// </remarks>
     /// <returns>The persisted record, and whether it was inserted rather than updated.</returns>
     protected async Task<(TRecord Record, bool Created)> UpsertByLegacyIdAsync<TRecord>(

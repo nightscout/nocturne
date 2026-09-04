@@ -7,8 +7,8 @@ namespace Nocturne.Core.Models.V4;
 /// </summary>
 /// <remarks>
 /// Each entry in <see cref="Entries"/> specifies how many grams of carbohydrate one unit of insulin
-/// covers at a given time of day. All schedules decomposed from the same legacy <see cref="Profile"/>
-/// share the same <see cref="IV4Record.CorrelationId"/>.
+/// covers at a given time of day. All records decomposed from one named profile store share the same
+/// <see cref="IV4Record.CorrelationId"/>.
 /// </remarks>
 /// <seealso cref="Profile"/>
 /// <seealso cref="IV4Record"/>
