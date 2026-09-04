@@ -26,8 +26,22 @@ export function isClockReadingStale(
   return readingAgeMinutes(lastUpdated, now) >= staleMinutes;
 }
 
+function isJustNow(lastUpdated: number, now: number): boolean {
+  return readingAgeMinutes(lastUpdated, now) < 1;
+}
+
 /** Compact age label for a clock face: "now", "7m". */
 export function readingAgeLabel(lastUpdated: number, now: number): string {
-  const mins = readingAgeMinutes(lastUpdated, now);
-  return mins < 1 ? "now" : `${mins}m`;
+  return isJustNow(lastUpdated, now)
+    ? "now"
+    : `${readingAgeMinutes(lastUpdated, now)}m`;
+}
+
+/**
+ * Reading age for a clock's age element. "now" is a moment rather than an
+ * elapsed count, so it takes no "ago".
+ */
+export function readingAgePhrase(lastUpdated: number, now: number): string {
+  const label = readingAgeLabel(lastUpdated, now);
+  return isJustNow(lastUpdated, now) ? label : `${label} ago`;
 }

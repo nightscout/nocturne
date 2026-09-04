@@ -186,6 +186,15 @@ export const ELEMENT_INFO: Record<ClockElementType, ElementInfo> = {
   },
 };
 
+const ELEMENT_INFO_BY_TYPE: ReadonlyMap<string, ElementInfo> = new Map(
+  Object.entries(ELEMENT_INFO)
+);
+
+/** Palette entry for a stored element type, which the API models as a bare string. */
+export function elementInfo(type: string | undefined): ElementInfo | undefined {
+  return type === undefined ? undefined : ELEMENT_INFO_BY_TYPE.get(type);
+}
+
 export interface ElementGroup {
   name: string;
   types: ClockElementType[];

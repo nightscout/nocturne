@@ -66,8 +66,6 @@
   // Realtime store for live preview
   const realtimeStore = getRealtimeStore();
   const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
-  const direction = $derived(realtimeStore.direction);
 
   // Tracker definitions
   const definitionsQuery = getDefinitions({});
@@ -449,10 +447,8 @@
       {:else}
         <ClockElementPreview
           {element}
-          {currentBG}
-          {bgDelta}
-          {direction}
-          {currentTime}
+          glucose={realtimeStore}
+          now={currentTime}
           {trackerDefinitions}
         />
       {/if}

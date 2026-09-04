@@ -6,10 +6,12 @@
  */
 
 import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
-import { ELEMENT_INFO, type ClockElementType, type InternalElement } from "./types";
+import {
+  TEXT_ELEMENT_TYPES,
+  elementInfo,
+  type InternalElement,
+} from "./types";
 import { browser } from "$app/environment";
-import { formatClockTime } from "$lib/components/clock/clock-time";
-import { bg, bgDelta as formatBgDelta, bgLabel } from "$lib/utils/formatting";
 
 /**
  * Resolve CSS variable to its computed value
@@ -115,10 +117,7 @@ export function buildStyleString(element: ClockElement, currentBG: number): stri
   const parts: string[] = [];
 
   // Font size from element.size
-  const size =
-    element.size ||
-    ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-    20;
+  const size = element.size || elementInfo(element.type)?.defaultSize || 20;
   parts.push(`font-size: ${size * 0.8}px`);
 
   // Color
@@ -140,22 +139,7 @@ export function buildStyleString(element: ClockElement, currentBG: number): stri
  * Check if element is a text-based element (uses unified text rendering)
  */
 export function isTextElement(type: string): boolean {
-  const textTypes = [
-    "sg",
-    "delta",
-    "arrow",
-    "age",
-    "time",
-    "iob",
-    "cob",
-    "basal",
-    "forecast",
-    "summary",
-    "text",
-    "tracker",
-    "trackers",
-  ];
-  return textTypes.includes(type);
+  return TEXT_ELEMENT_TYPES.includes(type);
 }
 
 /**
@@ -195,53 +179,4 @@ export function isCategoryChecked(
 ): boolean {
   if (!categories || categories.length === 0) return true;
   return categories.includes(category);
-}
-
-/**
- * Render element value (for text-based elements, not arrow/tracker)
- *
- * @param currentBG Sample glucose in mg/dL; converted here to the user's units so the
- *   builder preview matches what the saved face will actually show.
- * @param bgDelta Sample delta in mg/dL.
- */
-export function renderElementValue(
-  element: ClockElement,
-  currentBG: number,
-  bgDelta: number,
-  currentTime: Date
-): string {
-  switch (element.type) {
-    case "sg":
-      return String(bg(currentBG));
-    case "delta":
-      return element.showUnits !== false
-        ? `${formatBgDelta(bgDelta)} ${bgLabel()}`
-        : formatBgDelta(bgDelta);
-    case "arrow":
-      return ""; // Handled separately with Lucide icon
-    case "age":
-      return "3m ago";
-    case "time":
-      return formatClockTime(currentTime, element.format);
-    case "iob":
-      return "--U";
-    case "cob":
-      return "--g";
-    case "basal":
-      return "0.8U/h";
-    case "forecast":
-      return String(bg(currentBG + 10));
-    case "summary":
-      return "92% in range";
-    case "tracker":
-      return ""; // Handled separately with icon + time
-    case "trackers":
-      return "[trackers]";
-    case "text":
-      return element.text || "Text";
-    case "chart":
-      return "[chart]";
-    default:
-      return "";
-  }
 }
