@@ -990,7 +990,7 @@ public class DeduplicationReconcileTests : IDisposable
     public async Task DeleteOrphanedLinksAsync_LeavesAnotherTenantsOrphanAlone()
     {
         var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000002");
-        using (var seedContext = new NocturneDbContext(_contextOptions))
+        using (var seedContext = _db.CreateContext())
         {
             seedContext.TenantId = otherTenant;
             seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
@@ -1024,7 +1024,7 @@ public class DeduplicationReconcileTests : IDisposable
         var theirRecordId = Guid.CreateVersion7();
         var theirLinkId = Guid.CreateVersion7();
 
-        using (var seedContext = new NocturneDbContext(_contextOptions))
+        using (var seedContext = _db.CreateContext())
         {
             seedContext.TenantId = otherTenant;
             seedContext.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "other" });
