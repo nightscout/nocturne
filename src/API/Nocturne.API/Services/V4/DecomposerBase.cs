@@ -22,6 +22,18 @@ public abstract class DecomposerBase
     /// stored record is known and before the write, so device-attributed types can settle their
     /// attribution against it; see <see cref="StampAttributionAsync"/>.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="preserveStoredCorrelationId"/> treats the stored correlation id as belonging to
+    /// the row rather than to the decomposition that last touched it. A decomposer mints a fresh id per
+    /// call, so re-upserting an otherwise unchanged row modifies <see cref="IV4Record.CorrelationId"/>
+    /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
+    /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
+    /// and appends to every index on the table; the id being UUID v7 makes those appends monotonic, so
+    /// the freed space is never reused. Callers whose records are upserted in place under a stable
+    /// legacy id set this: the id still groups the same siblings, and an unchanged re-upsert then diffs
+    /// to genuinely nothing. Callers that create a side record under the freshly minted id — as
+    /// <see cref="DeviceStatusDecomposer"/> does for its extras row — must not, or the two diverge.
+    /// </remarks>
     /// <returns>The persisted record, and whether it was inserted rather than updated.</returns>
     protected async Task<(TRecord Record, bool Created)> UpsertByLegacyIdAsync<TRecord>(
         ILegacyKeyedRepository<TRecord> repository,
@@ -30,7 +42,8 @@ public abstract class DecomposerBase
         DecompositionResult result,
         WriteOrigin origin,
         CancellationToken ct,
-        Func<TRecord?, Task>? beforeWrite = null)
+        Func<TRecord?, Task>? beforeWrite = null,
+        bool preserveStoredCorrelationId = false)
         where TRecord : class, IV4Record
     {
         var existing = legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
@@ -47,6 +60,9 @@ public abstract class DecomposerBase
             Logger.LogDebug("Created {RecordType} from legacy record {LegacyId}", recordType, legacyId);
             return (created, true);
         }
+
+        if (preserveStoredCorrelationId && existing.CorrelationId is { } storedCorrelationId)
+            model.CorrelationId = storedCorrelationId;
 
         model.Id = existing.Id;
         var updated = await repository.UpdateAsync(existing.Id, model, origin, ct);
