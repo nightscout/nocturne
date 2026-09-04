@@ -24,6 +24,35 @@ public static class DatabaseInitializationExtensions
     /// The runtime connection interceptor is attached so the role-attribute
     /// guard runs on the migrator connection too.
     /// </summary>
+    /// <summary>
+    /// The migrator data source, with server notices forwarded to <paramref name="logger"/>.
+    /// <para>
+    /// A migration that decides something at runtime — which constraints matched a shape, which
+    /// index it had to rebuild, whether it could take a lock before giving up — can only report it
+    /// with <c>RAISE NOTICE</c>, and a notice reaches no log by default: the server's
+    /// <c>log_min_messages</c> is <c>warning</c>, and Npgsql surfaces it as a connection event with
+    /// no subscriber. Forwarding it is the only record such a migration leaves, because one that
+    /// completes gets its history row and is never run again.
+    /// </para>
+    /// </summary>
+    internal static NpgsqlDataSource BuildMigratorDataSource(string migratorConnectionString, ILogger logger)
+    {
+        var builder = new NpgsqlDataSourceBuilder(migratorConnectionString);
+
+        builder.UsePhysicalConnectionInitializer(
+            connection => connection.Notice += Forward,
+            connection =>
+            {
+                connection.Notice += Forward;
+                return Task.CompletedTask;
+            });
+
+        return builder.Build();
+
+        void Forward(object? _, NpgsqlNoticeEventArgs args) =>
+            logger.LogInformation("Migration notice: {Notice}", args.Notice.MessageText);
+    }
+
     public static async Task RunMigrationsAsync(
         string migratorConnectionString,
         ILogger logger,
@@ -35,7 +64,7 @@ public static class DatabaseInitializationExtensions
         {
             logger.LogInformation("Running PostgreSQL database migrations under migrator role...");
 
-            dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+            dataSource = BuildMigratorDataSource(migratorConnectionString, logger);
 
             // On a cold start (e.g. `docker compose up -d` with a fresh volume) the
             // database container may not be accepting TCP connections yet when the
