@@ -81,13 +81,13 @@ public class SoftDeleteCleanupService(
             {
                 var retentionDays = SoftDeleteRetentionPolicy.ResolveDays(
                     configMap.GetValueOrDefault(tenantId), configuration);
-                var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+                var minAge = TimeSpan.FromDays(retentionDays);
 
                 var totalDeleted = 0;
 
                 foreach (var table in tables)
                 {
-                    var tableDeleted = await PurgeBatchedAsync(tenantId, table, cutoff, ct);
+                    var tableDeleted = await PurgeBatchedAsync(tenantId, table, minAge, ct);
                     totalDeleted += tableDeleted;
                 }
 
@@ -111,12 +111,15 @@ public class SoftDeleteCleanupService(
     }
 
     /// <summary>
-    /// Deletes records from the specified table with deleted_at before the cutoff.
+    /// Deletes records from the specified table whose deleted_at is older than the window.
     /// </summary>
     /// <returns>Total number of records deleted.</returns>
     private Task<int> PurgeBatchedAsync(
-        Guid tenantId, string table, DateTime cutoff, CancellationToken ct) =>
-        contextFactory.PurgeOlderThanAsync(tenantId, table, "deleted_at", cutoff, BatchSize, ct);
+        Guid tenantId, string table, TimeSpan minAge, CancellationToken ct) =>
+        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, BatchSize, ct);
+
+    /// <summary>Age column on every soft-deletable table.</summary>
+    internal const string AgeColumn = "deleted_at";
 
     /// <summary>
     /// Removes linked_records that reference hard-deleted records, and links of a record type that

@@ -16,6 +16,12 @@ public static class AuditRetentionPolicy
     /// <summary>Platform retention applied to tenants that have not set their own.</summary>
     public const int FallbackRetentionDays = 90;
 
+    /// <summary>
+    /// Floor applied to any configured window. A window of zero or less puts the purge cutoff at
+    /// or after now, which would delete records written moments earlier.
+    /// </summary>
+    public const int MinRetentionDays = 1;
+
     /// <summary>Configuration key for the instance-wide read-audit default.</summary>
     public const string ReadConfigKey = "Audit:DefaultReadAuditRetentionDays";
 
@@ -26,22 +32,30 @@ public static class AuditRetentionPolicy
     /// Resolves the effective read-audit window, or null when no purge applies.
     /// </summary>
     public static int? ResolveReadDays(int? tenantConfigured, IConfiguration configuration) =>
-        tenantConfigured ?? ResolveDefault(ReadConfigKey, configuration);
+        Floor(tenantConfigured) ?? ResolveDefault(ReadConfigKey, configuration);
 
     /// <summary>
     /// Resolves the effective mutation-audit window, or null when no purge applies.
     /// </summary>
     public static int? ResolveMutationDays(int? tenantConfigured, IConfiguration configuration) =>
-        tenantConfigured ?? ResolveDefault(MutationConfigKey, configuration);
+        Floor(tenantConfigured) ?? ResolveDefault(MutationConfigKey, configuration);
 
     /// <summary>
     /// Reads a platform retention default. An unset key falls back to
     /// <see cref="FallbackRetentionDays"/>; a configured value of zero or less disables the
-    /// default.
+    /// default, leaving only explicitly configured tenants purged.
     /// </summary>
     public static int? ResolveDefault(string key, IConfiguration configuration)
     {
         var days = configuration.GetValue<int?>(key) ?? FallbackRetentionDays;
         return days > 0 ? days : null;
     }
+
+    /// <summary>
+    /// Applies <see cref="MinRetentionDays"/> to a tenant-supplied window. A stored row predating
+    /// the DTO bound, or written by any path that bypasses it, is clamped here rather than
+    /// trusted.
+    /// </summary>
+    private static int? Floor(int? tenantConfigured) =>
+        tenantConfigured is { } days ? Math.Max(days, MinRetentionDays) : null;
 }

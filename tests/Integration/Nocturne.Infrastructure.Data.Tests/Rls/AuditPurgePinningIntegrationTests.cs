@@ -1,5 +1,8 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
@@ -27,6 +30,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 public class AuditPurgePinningIntegrationTests
 {
     private const string AuditTable = "mutation_audit_log";
+    private static readonly TimeSpan NinetyDays = TimeSpan.FromDays(90);
 
     private readonly RlsCompletenessFixture _fx;
 
@@ -38,24 +42,20 @@ public class AuditPurgePinningIntegrationTests
         var tenant = Guid.NewGuid();
         await SeedAsync(tenant, rows: 3);
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-        await using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-
-        var cutoff = DateTime.UtcNow.AddDays(-90);
+        var factory = BuildFactory();
+        var cutoff = DateTime.UtcNow - NinetyDays;
 
         // The broken form: the pin is issued as its own command, so the connection closes and
-        // resets the GUC before the DELETE runs.
+        // resets the GUC before the DELETE runs. Bounded by tenant_id so that if the pin ever
+        // did carry, this could not reach another test's rows in the shared container.
         await using (var unpinned = await factory.CreateDbContextAsync())
         {
             await unpinned.Database.ExecuteSqlRawAsync(
                 "SELECT set_config('app.current_tenant_id', {0}, false)", [tenant.ToString()]);
 
             var deleted = await unpinned.Database.ExecuteSqlRawAsync(
-                $"DELETE FROM {AuditTable} WHERE created_at < {{0}}", [cutoff]);
+                $"DELETE FROM {AuditTable} WHERE tenant_id = {{1}} AND created_at < {{0}}",
+                [cutoff, tenant]);
 
             deleted.Should().Be(0,
                 "a set_config issued as its own EF command does not survive to the DELETE, so "
@@ -66,8 +66,7 @@ public class AuditPurgePinningIntegrationTests
 
         // The production primitive both retention sweeps call. It pins internally, so the GUC is
         // present when EF opens the connection for the DELETE.
-        var purged = await factory.PurgeOlderThanAsync(
-            tenant, AuditTable, "created_at", cutoff);
+        var purged = await factory.PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays);
 
         purged.Should().Be(3, "the shared purge pins the tenant and so actually deletes");
         (await CountAsync(tenant)).Should().Be(0, "the expired rows must be gone");
@@ -77,7 +76,7 @@ public class AuditPurgePinningIntegrationTests
     /// Deliberately seeds more expired rows than <c>batchSize</c>, so the batching loop must
     /// iterate. With a batch large enough to swallow the fixture in one statement the loop body
     /// runs once and its exit condition is never exercised — the sweep that clears a backlog of
-    /// hundreds of thousands of rows would then be uncovered.
+    /// over a million rows would then be uncovered.
     /// </summary>
     [Fact]
     public async Task PurgeOlderThanAsync_IteratesBatches_SparingRecentRowsAndOtherTenants()
@@ -88,35 +87,46 @@ public class AuditPurgePinningIntegrationTests
         await SeedAsync(neighbour, rows: 3);
         await SeedRecentRowAsync(tenant);
 
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-        await using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-
-        var purged = await factory.PurgeOlderThanAsync(
-            tenant, AuditTable, "created_at", DateTime.UtcNow.AddDays(-90), batchSize: 4);
+        var purged = await BuildFactory().PurgeOlderThanAsync(
+            tenant, AuditTable, "created_at", NinetyDays, batchSize: 4);
 
         purged.Should().Be(9, "every expired row must be removed across three batches");
         (await CountAsync(tenant)).Should().Be(1, "the row inside the retention window survives");
         (await CountAsync(neighbour)).Should().Be(3, "the purge must not reach another tenant");
     }
 
+    /// <summary>
+    /// The <c>tenant_id</c> predicate is a backstop for a target RLS does not bound, so RLS
+    /// cannot witness it — every behavioural assertion here passes with the predicate removed.
+    /// Asserting the emitted SQL is what keeps it from being deleted as dead weight.
+    /// </summary>
     [Fact]
-    public async Task PurgeOlderThanAsync_RejectsACutoffThatIsNotInThePast()
+    public async Task PurgeOlderThanAsync_BoundsBothTheDeleteAndTheSubSelectByTenant()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-        await using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+        var tenant = Guid.NewGuid();
+        await SeedAsync(tenant, rows: 1);
 
-        // A retention window of zero or fewer days resolves to a cutoff at or after now, which
-        // would delete rows written moments earlier.
-        var act = () => factory.PurgeOlderThanAsync(
-            Guid.NewGuid(), AuditTable, "created_at", DateTime.UtcNow.AddDays(1));
+        var capture = new CapturingInterceptor();
+        await BuildFactory(capture).PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays);
+
+        var delete = capture.Commands.Should()
+            .ContainSingle(c => c.StartsWith("DELETE FROM", StringComparison.Ordinal)).Subject;
+
+        delete.Split("tenant_id = ").Length.Should().Be(3,
+            "both the outer DELETE and the ctid sub-select must be bounded by tenant_id, so the "
+            + "purge cannot cross tenants on a table RLS does not force");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task PurgeOlderThanAsync_RejectsANonPositiveWindow(int days)
+    {
+        // A zero-day window is the boundary that matters: the cutoff it produces is a hair
+        // earlier than the moment the purge runs, so an absolute-cutoff guard would admit it and
+        // the sweep would delete the tenant's entire audit table.
+        var act = () => BuildFactory().PurgeOlderThanAsync(
+            Guid.NewGuid(), AuditTable, "created_at", TimeSpan.FromDays(days));
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -124,15 +134,8 @@ public class AuditPurgePinningIntegrationTests
     [Fact]
     public async Task PurgeOlderThanAsync_RejectsABatchSizeThatCannotMakeProgress()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-        await using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-
-        var act = () => factory.PurgeOlderThanAsync(
-            Guid.NewGuid(), AuditTable, "created_at", DateTime.UtcNow.AddDays(-1), batchSize: 0);
+        var act = () => BuildFactory().PurgeOlderThanAsync(
+            Guid.NewGuid(), AuditTable, "created_at", NinetyDays, batchSize: 0);
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -141,31 +144,34 @@ public class AuditPurgePinningIntegrationTests
     [InlineData("mutation_audit_log; DROP TABLE tenants", "created_at")]
     [InlineData("mutation_audit_log", "created_at) --")]
     [InlineData("Mutation_Audit_Log", "created_at")]
+    [InlineData("mutation_audit_log\n", "created_at")]
+    [InlineData("mutation_audit_log", "created_at\n")]
     public async Task PurgeOlderThanAsync_RejectsNonIdentifiers(string table, string column)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-        await using var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-
-        var act = () => factory.PurgeOlderThanAsync(
-            Guid.NewGuid(), table, column, DateTime.UtcNow);
+        var act = () => BuildFactory().PurgeOlderThanAsync(
+            Guid.NewGuid(), table, column, NinetyDays);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
-    private async Task SeedRecentRowAsync(Guid tenant)
+    private IDbContextFactory<NocturneDbContext> BuildFactory(IInterceptor? extra = null)
     {
-        await using var conn = await _fx.OpenMigratorConnectionAsync();
-        await SetTenantAsync(conn, tenant);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText =
-            $"INSERT INTO {AuditTable} (id, tenant_id, entity_type, action, created_at) "
-            + "VALUES (gen_random_uuid(), @tid, 'SensorGlucose', 'update', now())";
-        AddParam(cmd, "@tid", tenant);
-        await cmd.ExecuteNonQueryAsync();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpContextAccessor();
+
+        if (extra is null)
+        {
+            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+            return services.BuildServiceProvider().GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+        }
+
+        var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(dataSource)
+            .AddInterceptors(new TenantConnectionInterceptor(), extra)
+            .Options;
+        return new PlainContextFactory(options);
     }
 
     private async Task<long> CountAsync(Guid tenant)
@@ -207,6 +213,18 @@ public class AuditPurgePinningIntegrationTests
         }
     }
 
+    private async Task SeedRecentRowAsync(Guid tenant)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await SetTenantAsync(conn, tenant);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            $"INSERT INTO {AuditTable} (id, tenant_id, entity_type, action, created_at) "
+            + "VALUES (gen_random_uuid(), @tid, 'SensorGlucose', 'update', now())";
+        AddParam(cmd, "@tid", tenant);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private static async Task SetTenantAsync(NpgsqlConnection conn, Guid tenant)
     {
         await using var cmd = conn.CreateCommand();
@@ -215,11 +233,38 @@ public class AuditPurgePinningIntegrationTests
         await cmd.ExecuteScalarAsync();
     }
 
-    private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
+    private static void AddParam(DbCommand cmd, string name, object value)
     {
         var p = cmd.CreateParameter();
         p.ParameterName = name;
         p.Value = value;
         cmd.Parameters.Add(p);
+    }
+
+    private sealed class PlainContextFactory(DbContextOptions<NocturneDbContext> options)
+        : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() => new(options);
+    }
+
+    private sealed class CapturingInterceptor : DbCommandInterceptor
+    {
+        public List<string> Commands { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken ct = default)
+        {
+            Commands.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, ct);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            Commands.Add(command.CommandText);
+            return base.NonQueryExecutingAsync(command, eventData, result, ct);
+        }
     }
 }

@@ -93,8 +93,10 @@ public class AuditRetentionService(
         foreach (var tenantId in tenantIds)
         {
             var config = configs.GetValueOrDefault(tenantId);
-            var readDays = config?.ReadAuditRetentionDays ?? defaultReadDays;
-            var mutationDays = config?.MutationAuditRetentionDays ?? defaultMutationDays;
+            var readDays = AuditRetentionPolicy.ResolveReadDays(
+                config?.ReadAuditRetentionDays, configuration);
+            var mutationDays = AuditRetentionPolicy.ResolveMutationDays(
+                config?.MutationAuditRetentionDays, configuration);
 
             try
             {
@@ -103,16 +105,14 @@ public class AuditRetentionService(
 
                 if (readDays is { } read)
                 {
-                    var cutoff = DateTime.UtcNow.AddDays(-read);
                     readDeleted = await PurgeBatchedAsync(
-                        tenantId, "read_access_log", cutoff, ct);
+                        tenantId, "read_access_log", TimeSpan.FromDays(read), ct);
                 }
 
                 if (mutationDays is { } mutation)
                 {
-                    var cutoff = DateTime.UtcNow.AddDays(-mutation);
                     mutationDeleted = await PurgeBatchedAsync(
-                        tenantId, "mutation_audit_log", cutoff, ct);
+                        tenantId, "mutation_audit_log", TimeSpan.FromDays(mutation), ct);
                 }
 
                 cycleReadDeleted += readDeleted;
@@ -141,10 +141,13 @@ public class AuditRetentionService(
     }
 
     /// <summary>
-    /// Deletes audit records from the specified table older than the cutoff.
+    /// Deletes audit records from the specified table older than the retention window.
     /// </summary>
     /// <returns>Total number of records deleted.</returns>
     internal virtual Task<int> PurgeBatchedAsync(
-        Guid tenantId, string table, DateTime cutoff, CancellationToken ct) =>
-        contextFactory.PurgeOlderThanAsync(tenantId, table, "created_at", cutoff, BatchSize, ct);
+        Guid tenantId, string table, TimeSpan minAge, CancellationToken ct) =>
+        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, BatchSize, ct);
+
+    /// <summary>Age column on both audit tables.</summary>
+    internal const string AgeColumn = "created_at";
 }

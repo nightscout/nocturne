@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -31,6 +32,18 @@ public class AuditRetentionServiceTests
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        return new NocturneDbContext(options);
+    }
+
+    /// <summary>
+    /// Column names are relational metadata, which the InMemory provider does not build. The
+    /// connection string is never opened; only the model is read.
+    /// </summary>
+    private static NocturneDbContext CreateRelationalModelContext()
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql("Host=localhost;Database=model-only")
             .Options;
         return new NocturneDbContext(options);
     }
@@ -243,12 +256,12 @@ public class AuditRetentionServiceTests
         ILogger<AuditRetentionService> logger)
         : AuditRetentionService(contextFactory, configuration, logger)
     {
-        public List<(Guid TenantId, string Table, DateTime Cutoff)> Purges { get; } = [];
+        public List<(Guid TenantId, string Table, TimeSpan MinAge)> Purges { get; } = [];
 
         internal override Task<int> PurgeBatchedAsync(
-            Guid tenantId, string table, DateTime cutoff, CancellationToken ct)
+            Guid tenantId, string table, TimeSpan minAge, CancellationToken ct)
         {
-            Purges.Add((tenantId, table, cutoff));
+            Purges.Add((tenantId, table, minAge));
             return Task.FromResult(0);
         }
     }
@@ -279,8 +292,7 @@ public class AuditRetentionServiceTests
         service.Purges.Should().OnlyContain(p => p.TenantId == tenantId);
         service.Purges.Select(p => p.Table).Should()
             .BeEquivalentTo(["read_access_log", "mutation_audit_log"]);
-        service.Purges.Should().OnlyContain(
-            p => p.Cutoff < DateTime.UtcNow.AddDays(-89) && p.Cutoff > DateTime.UtcNow.AddDays(-91));
+        service.Purges.Should().OnlyContain(p => p.MinAge == TimeSpan.FromDays(90));
     }
 
     [Fact]
@@ -310,11 +322,11 @@ public class AuditRetentionServiceTests
         await service.PurgeExpiredRecordsAsync(CancellationToken.None);
 
         var mutation = service.Purges.Single(p => p.Table == "mutation_audit_log");
-        mutation.Cutoff.Should().BeBefore(DateTime.UtcNow.AddDays(-364));
+        mutation.MinAge.Should().Be(TimeSpan.FromDays(365));
 
         // The unset read window still falls back to the platform default.
         var read = service.Purges.Single(p => p.Table == "read_access_log");
-        read.Cutoff.Should().BeAfter(DateTime.UtcNow.AddDays(-91));
+        read.MinAge.Should().Be(TimeSpan.FromDays(90));
     }
 
     [Fact]
@@ -348,7 +360,7 @@ public class AuditRetentionServiceTests
         await service.PurgeExpiredRecordsAsync(CancellationToken.None);
 
         service.Purges.Should().ContainSingle()
-            .Which.Should().Match<(Guid TenantId, string Table, DateTime Cutoff)>(
+            .Which.Should().Match<(Guid TenantId, string Table, TimeSpan MinAge)>(
                 p => p.TenantId == configuredTenant && p.Table == "mutation_audit_log");
     }
 
@@ -407,5 +419,48 @@ public class AuditRetentionServiceTests
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Exactly(2));
+    }
+
+    /// <summary>
+    /// The age column is interpolated into raw SQL, so nothing type-checks it. A typo satisfies
+    /// the identifier validation, compiles, passes every behavioural test, and then fails at
+    /// runtime into the per-tenant catch — a warning and a purge that silently deletes nothing,
+    /// which is the exact failure this service already shipped once.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(MutationAuditLogEntity))]
+    [InlineData(typeof(ReadAccessLogEntity))]
+    public void AgeColumn_ExistsOnEveryTableThePurgeTargets(Type entityType)
+    {
+        using var context = CreateRelationalModelContext();
+
+        var columns = context.Model.FindEntityType(entityType)!
+            .GetProperties()
+            .Select(p => p.GetColumnName());
+
+        columns.Should().Contain(AuditRetentionService.AgeColumn);
+    }
+
+    /// <summary>
+    /// Same exposure on the sibling sweep, which shares the purge primitive.
+    /// </summary>
+    [Fact]
+    public void SoftDeleteAgeColumn_ExistsOnEverySoftDeletableTable()
+    {
+        using var context = CreateRelationalModelContext();
+
+        var softDeletable = context.Model.GetEntityTypes()
+            .Where(t => typeof(ISoftDeletable).IsAssignableFrom(t.ClrType)
+                        && typeof(ITenantScoped).IsAssignableFrom(t.ClrType))
+            .ToList();
+
+        softDeletable.Should().NotBeEmpty("the sweep must have tables to purge");
+
+        foreach (var entityType in softDeletable)
+        {
+            entityType.GetProperties().Select(p => p.GetColumnName())
+                .Should().Contain(SoftDeleteCleanupService.AgeColumn,
+                    $"{entityType.ClrType.Name} is purged by deleted_at");
+        }
     }
 }

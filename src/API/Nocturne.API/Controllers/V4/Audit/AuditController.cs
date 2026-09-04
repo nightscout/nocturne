@@ -250,22 +250,27 @@ public class AuditController : ControllerBase
         var effectiveSoftDeleteDays = SoftDeleteRetentionPolicy.ResolveDays(
             softDeleteRow?.SoftDeleteRetentionDays, _configuration);
 
-        var effectiveMutationDays = AuditRetentionPolicy.ResolveMutationDays(
-            request.MutationAuditRetentionDays, _configuration);
-
-        if (effectiveMutationDays is int ma && ma < effectiveSoftDeleteDays)
+        if (request.MutationAuditRetentionDays is int requested && requested < effectiveSoftDeleteDays)
         {
-            var requested = request.MutationAuditRetentionDays is null
-                ? $"the platform default ({ma} days)"
-                : $"{ma} days";
-
             return BadRequest(new
             {
-                error = $"Mutation audit retention ({requested}) must be >= the effective "
+                error = $"Mutation audit retention ({requested} days) must be >= the effective "
                       + $"soft-delete retention ({effectiveSoftDeleteDays} days). Audit rows "
                       + "must outlive the soft-deleted entities they describe, otherwise "
                       + "user-delete attribution is lost while the entity is still recoverable.",
             });
+        }
+
+        // A null defers to the platform default, which an instance may configure below this
+        // tenant's soft-delete window. Store the floor rather than refusing: the tenant did not
+        // choose the failing value, and rejecting would leave them unable to change any other
+        // audit setting, including turning read auditing off.
+        var mutationDays = request.MutationAuditRetentionDays;
+        if (mutationDays is null
+            && AuditRetentionPolicy.ResolveMutationDays(null, _configuration) is int platformDays
+            && platformDays < effectiveSoftDeleteDays)
+        {
+            mutationDays = effectiveSoftDeleteDays;
         }
 
         var entity = await db.TenantAuditConfig
@@ -281,7 +286,7 @@ public class AuditController : ControllerBase
                 TenantId = tenantId,
                 ReadAuditEnabled = request.ReadAuditEnabled,
                 ReadAuditRetentionDays = request.ReadAuditRetentionDays,
-                MutationAuditRetentionDays = request.MutationAuditRetentionDays,
+                MutationAuditRetentionDays = mutationDays,
                 SysCreatedAt = now,
                 SysUpdatedAt = now,
             };
@@ -291,7 +296,7 @@ public class AuditController : ControllerBase
         {
             entity.ReadAuditEnabled = request.ReadAuditEnabled;
             entity.ReadAuditRetentionDays = request.ReadAuditRetentionDays;
-            entity.MutationAuditRetentionDays = request.MutationAuditRetentionDays;
+            entity.MutationAuditRetentionDays = mutationDays;
             entity.SysUpdatedAt = now;
         }
 

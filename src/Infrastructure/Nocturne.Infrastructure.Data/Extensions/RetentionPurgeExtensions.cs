@@ -21,7 +21,18 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// Pinning happens here rather than at each call site so no sweep can get it wrong. The
 /// identifier validation proves only that the interpolated strings are safe to embed, not that
 /// the target is tenant-scoped — the delete's tenant bound comes from RLS, with an explicit
-/// <c>tenant_id</c> predicate as the backstop.
+/// <c>tenant_id</c> predicate as the backstop for a target that is not tenant-scoped, or is
+/// <c>ENABLE</c> without <c>FORCE</c>, where the policy would not bound it. The predicate is
+/// free on the audit tables, which index <c>(tenant_id, created_at)</c>, and free on the
+/// soft-deletable tables too — they have no <c>(tenant_id, deleted_at)</c> index, so it is
+/// evaluated as a filter over rows the partial <c>deleted_at</c> index already selected, which
+/// RLS would have filtered anyway.
+/// </para>
+/// <para>
+/// The window is taken as a minimum age rather than an absolute cutoff so a caller cannot ask
+/// for a cutoff at or after now — a zero or negative retention window would otherwise delete
+/// rows written moments earlier, up to the whole table. The cutoff is derived once, before the
+/// first batch, so it cannot creep forward across a long sweep.
 /// </para>
 /// </remarks>
 public static partial class RetentionPurgeExtensions
@@ -36,26 +47,26 @@ public static partial class RetentionPurgeExtensions
 
     /// <summary>
     /// Hard-deletes rows of <paramref name="table"/> whose <paramref name="timestampColumn"/> is
-    /// before <paramref name="cutoff"/>, within one tenant, in batches.
+    /// older than <paramref name="minAge"/>, within one tenant, in batches.
     /// </summary>
     /// <param name="factory">The context factory.</param>
     /// <param name="tenantId">The tenant whose rows are being aged out.</param>
     /// <param name="table">Table to purge. Must be a bare lowercase SQL identifier.</param>
     /// <param name="timestampColumn">Age column. Must be a bare lowercase SQL identifier.</param>
-    /// <param name="cutoff">Rows strictly older than this are deleted.</param>
+    /// <param name="minAge">Retention window. Rows strictly older than this are deleted.</param>
     /// <param name="batchSize">Rows per statement. Must be at least 1.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of rows deleted.</returns>
     /// <exception cref="ArgumentException">An identifier is not a bare lowercase identifier.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="batchSize"/> is below 1, or <paramref name="cutoff"/> is not in the past.
+    /// <paramref name="minAge"/> is not positive, or <paramref name="batchSize"/> is below 1.
     /// </exception>
     public static async Task<int> PurgeOlderThanAsync(
         this IDbContextFactory<NocturneDbContext> factory,
         Guid tenantId,
         string table,
         string timestampColumn,
-        DateTime cutoff,
+        TimeSpan minAge,
         int batchSize = DefaultBatchSize,
         CancellationToken ct = default)
     {
@@ -64,38 +75,38 @@ public static partial class RetentionPurgeExtensions
         RequireIdentifier(table, nameof(table));
         RequireIdentifier(timestampColumn, nameof(timestampColumn));
 
-        // A LIMIT 0 would delete nothing and never satisfy the loop's exit condition.
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(minAge, TimeSpan.Zero, nameof(minAge));
+
+        // A LIMIT 0 deletes nothing, so the sweep would never make progress.
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
-        // A cutoff at or after now deletes rows written moments ago, up to the entire table. A
-        // retention window is always historical, so a non-past cutoff is a caller bug, and
-        // refusing it keeps a bad retention setting from erasing the record it is meant to age.
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(cutoff, DateTime.UtcNow, nameof(cutoff));
+        var cutoff = DateTime.UtcNow - minAge;
+
+        // Values are bound as parameters; only the validated identifiers and the batch size are
+        // interpolated. The ctid sub-select keeps each statement to a bounded slice of the table.
+        var sql = $$"""
+            DELETE FROM {{table}}
+            WHERE tenant_id = {1}
+              AND ctid IN (
+                SELECT ctid FROM {{table}}
+                WHERE tenant_id = {1} AND {{timestampColumn}} < {0}
+                LIMIT {{batchSize}})
+            """;
 
         var totalDeleted = 0;
         int batchDeleted;
 
         do
         {
+#pragma warning disable EF1002
             await using var db = await factory.CreateTenantPinnedContextAsync(tenantId, ct);
 
-            // tenant_id is constrained in SQL as well as by RLS. RLS is the guarantee; this is the
-            // backstop for a table that is not tenant-scoped, or is ENABLE without FORCE, where
-            // the policy would not bound the delete. The plan enters on (tenant_id, <column>)
-            // either way, so it costs nothing.
-            //
-            // ctid sub-select keeps each statement to a bounded slice of the table.
-#pragma warning disable EF1002
-            batchDeleted = await db.Database.ExecuteSqlRawAsync(
-                $"DELETE FROM {table} WHERE tenant_id = {{1}} AND ctid IN "
-                + $"(SELECT ctid FROM {table} WHERE tenant_id = {{1}} AND {timestampColumn} < {{0}} "
-                + $"LIMIT {batchSize})",
-                [cutoff, tenantId], ct);
+            batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, [cutoff, tenantId], ct);
 #pragma warning restore EF1002
 
             totalDeleted += batchDeleted;
         }
-        while (batchDeleted > 0);
+        while (batchDeleted >= batchSize);
 
         return totalDeleted;
     }

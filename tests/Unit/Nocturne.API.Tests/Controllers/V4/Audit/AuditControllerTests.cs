@@ -209,10 +209,12 @@ public class AuditControllerTests : IDisposable
 
     /// <summary>
     /// A null mutation retention is the platform default (90 days), not infinity, so it does not
-    /// automatically clear a soft-delete window longer than that.
+    /// automatically clear a longer soft-delete window. The tenant did not choose the failing
+    /// value, so the floor is stored rather than the save refused — otherwise they could not
+    /// change any other audit setting.
     /// </summary>
     [Fact]
-    public async Task UpdateConfig_NullMutationRetentionBelowSoftDeleteWindow_Returns400()
+    public async Task UpdateConfig_NullMutationRetentionBelowSoftDeleteWindow_StoresTheFloor()
     {
         var controller = CreateController(
             Scopes(Scope.AuditManage),
@@ -225,6 +227,30 @@ public class AuditControllerTests : IDisposable
         {
             ReadAuditEnabled = true,
             MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AuditConfigDto>()
+            .Which.MutationAuditRetentionDays.Should().Be(180);
+    }
+
+    /// <summary>
+    /// A value the tenant chose explicitly is still refused rather than silently raised.
+    /// </summary>
+    [Fact]
+    public async Task UpdateConfig_ExplicitMutationRetentionBelowSoftDeleteWindow_Returns400()
+    {
+        var controller = CreateController(
+            Scopes(Scope.AuditManage),
+            new Dictionary<string, string?>
+            {
+                ["DataRetention:SoftDeleteRetentionDays"] = "180",
+            });
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 90,
         }, CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
