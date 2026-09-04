@@ -12,8 +12,9 @@ namespace Nocturne.Infrastructure.Data.Tests;
 /// Pins what makes a profile re-upsert free: <c>correlation_id</c> is the only column a decomposer
 /// changes when nothing about the profile has, and it is indexed, so an update to it cannot be HOT
 /// and appends to every index on the table. Npgsql writes a <see cref="System.Guid"/> big-endian, so
-/// a UUID v7 id is byte-monotonic in the btree and those appends never refill the pages the dead
-/// entries freed — which is why production density collapsed to 1.24% rather than settling. The column
+/// a UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
+/// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is why
+/// production density collapsed to 1.24% rather than settling. The column
 /// is also <see cref="Entities.AuditIgnoredAttribute"/>, so such an update neither audits nor
 /// broadcasts, which is why the write stayed invisible while that happened.
 /// The model builds offline against the Npgsql provider (no connection needed for change tracking).

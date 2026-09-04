@@ -135,6 +135,25 @@ public class ProfileDecomposerTests
     }
 
     /// <summary>
+    /// The write API binds a whole <see cref="TherapySettings"/> from the request body and validates
+    /// only the timestamp, so a caller can store an empty correlation id. Freezing that would stamp it
+    /// across all four schedules and merge the group with every other group carrying it, leaving
+    /// same-named stores to resolve against each other. It has to keep self-healing.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_DoesNotPreserveAnEmptyStoredCorrelationId()
+    {
+        var written = SetUp(Guid.Empty, Guid.CreateVersion7(), out var decomposer);
+
+        await decomposer.DecomposeAsync(BuildProfile(), WriteOrigin.Live);
+
+        var ids = written().Select(r => r.CorrelationId).ToList();
+        ids.Should().HaveCount(5);
+        ids.Should().AllSatisfy(id => id.Should().NotBe(Guid.Empty).And.NotBeNull());
+        ids.Distinct().Should().ContainSingle("the group must converge on the freshly minted id");
+    }
+
+    /// <summary>
     /// Five repositories each already holding a record — the therapy settings anchor under
     /// <paramref name="anchorCorrelationId"/> and the four schedules under
     /// <paramref name="scheduleCorrelationId"/> — returning the models handed to <c>UpdateAsync</c>.

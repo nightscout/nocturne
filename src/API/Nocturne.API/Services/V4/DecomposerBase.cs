@@ -29,8 +29,11 @@ public abstract class DecomposerBase
     /// and makes EF emit an UPDATE — one carrying no material change, so it neither audits nor
     /// broadcasts, but still writes a row version. The column is indexed, so that update cannot be HOT
     /// and appends to every index on the table; Npgsql writes a <see cref="Guid"/> big-endian, so a
-    /// UUID v7 id is byte-monotonic in the btree and those appends never refill the pages the dead
-    /// entries freed — which is why density collapses rather than settling.
+    /// UUID v7 id is byte-monotonic in the btree and those appends rarely refill the pages the dead
+    /// entries freed — only vacuum returns an entirely empty one, and not before two cycles — which is
+    /// why density collapses rather than settling. A stored id that is not a real correlation id is
+    /// ignored, so a bad one still self-heals on the next write rather than being frozen and stamped
+    /// across the group.
     /// <para>
     /// Only an anchor record may set this, and only where the caller then stamps the rest of the group
     /// from what it reads back. Preserving per row instead lets a group fork permanently: siblings are
@@ -71,8 +74,12 @@ public abstract class DecomposerBase
             return (created, true);
         }
 
-        if (preserveStoredCorrelationId && existing.CorrelationId is { } storedCorrelationId)
+        if (preserveStoredCorrelationId
+            && existing.CorrelationId is { } storedCorrelationId
+            && storedCorrelationId != Guid.Empty)
+        {
             model.CorrelationId = storedCorrelationId;
+        }
 
         model.Id = existing.Id;
         var updated = await repository.UpdateAsync(existing.Id, model, origin, ct);
