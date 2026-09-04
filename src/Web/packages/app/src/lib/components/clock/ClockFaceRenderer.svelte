@@ -1,15 +1,8 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { getClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import {
-    formatGlucoseValue,
-    formatGlucoseDelta,
-    bgLabel,
-  } from "$lib/utils/formatting";
   import { isUnwiredElementType } from "$lib/clock-builder/types";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
-  import { formatClockTime } from "$lib/components/clock/clock-time";
   import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -37,10 +30,7 @@
     type Vec2,
   } from "$lib/components/clock/screensaver-math";
   import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
-  import {
-    isClockReadingStale,
-    readingAgeLabel,
-  } from "$lib/components/clock/staleness";
+  import { isClockReadingStale } from "$lib/components/clock/staleness";
 
   interface Props {
     config: ClockFaceConfig;
@@ -74,14 +64,8 @@
   const glucose = getClockGlucoseSource();
 
   const currentBG = $derived(glucose.currentBG);
-  const bgDelta = $derived(glucose.bgDelta);
   const direction = $derived(glucose.direction);
   const lastUpdated = $derived(glucose.lastUpdated);
-
-  // Format for display based on user's unit preference
-  const units = $derived(glucoseUnits.current);
-  const displayBG = $derived(formatGlucoseValue(currentBG, units));
-  const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
 
   // Current time state
   let currentTime = $state(new Date());
@@ -93,16 +77,12 @@
     return () => clearInterval(interval);
   });
 
-  // Reading age, driven by the ticker above so it advances while the CGM is silent.
   const isStale = $derived(
     isClockReadingStale(
       config?.settings?.staleMinutes,
       lastUpdated,
       currentTime.getTime()
     )
-  );
-  const timeSince = $derived(
-    readingAgeLabel(lastUpdated, currentTime.getTime())
   );
 
   // Resolve CSS variable to its computed value
@@ -190,17 +170,6 @@
       parts.push(customCss);
     }
     return parts.join("; ");
-  }
-
-  // Render element value (for text-based elements, not arrow/tracker)
-  function renderElementValue(element: ClockElement): string {
-    return renderClockElementValue(element, {
-      displayBG: String(displayBG),
-      displayDelta,
-      unitLabel: bgLabel(),
-      age: timeSince,
-      time: formatClockTime(currentTime, element.format),
-    });
   }
 
   // Background chart element
@@ -538,7 +507,7 @@
                 class="leading-none tabular-nums {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)} {isStale && element.type === 'sg' ? 'line-through opacity-60' : ''}"
                 style={buildStyleString(element)}
               >
-                {renderElementValue(element)}
+                {renderClockElementValue(element, glucose, currentTime)}
               </span>
             {/if}
           {/if}
