@@ -34,7 +34,7 @@ public class RlsCarrierResetIntegrationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
         await using var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 

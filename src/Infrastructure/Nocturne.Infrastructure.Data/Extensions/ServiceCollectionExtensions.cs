@@ -58,14 +58,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
         // Register NpgsqlDataSource as a singleton - this manages the connection pool
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(
-            postgreSqlConfig.ConnectionString
-        );
-        dataSourceBuilder.ConnectionStringBuilder.MaxPoolSize = postgreSqlConfig.MaxPoolSize;
-        PostgresRuntimeOptions.ApplyStatementTimeout(
-            dataSourceBuilder.ConnectionStringBuilder,
-            postgreSqlConfig.StatementTimeoutSeconds);
-        var dataSource = dataSourceBuilder.Build();
+        var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(postgreSqlConfig);
         services.AddSingleton(dataSource);
 
         // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
@@ -183,11 +176,21 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">Service collection</param>
     /// <param name="connectionString">PostgreSQL connection string</param>
-    /// <param name="configure">Optional configuration action</param>
+    /// <param name="configuration">
+    /// Application configuration whose <see cref="PostgreSqlConfiguration.SectionName"/> section is
+    /// bound over the defaults, so every setting on <see cref="PostgreSqlConfiguration"/> is
+    /// reachable from appsettings or the environment. Deliberately has no default: passing
+    /// <see langword="null"/> is a decision to run on compiled-in defaults, and omitting it by
+    /// accident should not compile.
+    /// </param>
+    /// <param name="configure">
+    /// Optional overrides applied after the section, for values the host derives at startup.
+    /// </param>
     /// <returns>Service collection for chaining</returns>
     public static IServiceCollection AddPostgreSqlInfrastructure(
         this IServiceCollection services,
         string connectionString,
+        IConfiguration? configuration,
         Action<PostgreSqlConfiguration>? configure = null
     )
     {
@@ -199,8 +202,16 @@ public static class ServiceCollectionExtensions
             );
         }
 
-        // Create and configure options
+        // Create and configure options. The section is bound first so an explicit configure
+        // action — which carries values the host derives at startup — still wins over it.
         var config = new PostgreSqlConfiguration { ConnectionString = connectionString };
+        configuration?.GetSection(PostgreSqlConfiguration.SectionName).Bind(config);
+
+        // Restored after the bind, not before it. PostgreSql:ConnectionString is a documented key
+        // that the design-time factory reads, so a self-hoster may well have it set; letting it
+        // survive here would repoint the runtime pool at whatever role that key names.
+        config.ConnectionString = connectionString;
+
         configure?.Invoke(config);
 
         // Validate connection string is still set after configure action
@@ -232,12 +243,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
         // Register NpgsqlDataSource as a singleton - this manages the connection pool
-        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(config.ConnectionString);
-        dataSourceBuilder.ConnectionStringBuilder.MaxPoolSize = config.MaxPoolSize;
-        PostgresRuntimeOptions.ApplyStatementTimeout(
-            dataSourceBuilder.ConnectionStringBuilder,
-            config.StatementTimeoutSeconds);
-        var dataSource = dataSourceBuilder.Build();
+        var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(config);
         services.AddSingleton(dataSource);
 
         // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
