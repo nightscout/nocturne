@@ -1638,11 +1638,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TempBasalEntity>()
-            .HasIndex(e => e.EndTimestamp)
-            .HasDatabaseName("ix_temp_basals_end_timestamp");
-
-        modelBuilder
-            .Entity<TempBasalEntity>()
             .HasIndex(e => e.StartTimestamp)
             .HasDatabaseName("ix_temp_basals_start_timestamp")
             .IsDescending();
@@ -2089,10 +2084,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_subject");
 
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_mutation_audit_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
-
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_created");
         });
@@ -2107,10 +2098,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_created");
-
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_read_access_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
         });
 
         modelBuilder.Entity<TenantAuditConfigEntity>(entity =>
