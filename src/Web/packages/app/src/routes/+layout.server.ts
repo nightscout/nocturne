@@ -81,8 +81,12 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   );
 
   // Display preferences for SSR, in the same precedence the browser applies them
-  // (backend blob over the mirrored cookie) so the markup matches hydration.
-  const serverPrefs = await resolveServerPreferences(locals);
+  // (backend blob over the mirrored cookie) so the markup matches hydration. Together with the
+  // scopes because on a share host both are API round-trips and neither reads the other.
+  const [serverPrefs, effectivePermissions] = await Promise.all([
+    resolveServerPreferences(locals),
+    resolveEffectivePermissions(locals),
+  ]);
   const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const displayPreferences = [
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
@@ -100,7 +104,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
     isShareHost: locals.isShareHost,
-    effectivePermissions: await resolveEffectivePermissions(locals),
+    effectivePermissions,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     tenantSlug,

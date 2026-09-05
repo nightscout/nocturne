@@ -18,11 +18,9 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// this answers — a request that did not arrive over a share token gets the 404 an unrouted path
 /// gets, so no member or bearer token can read another member's settings through it.
 /// <para>
-/// What a viewer can read is presentation only, and is nobody's identity: glucose units, time
-/// format, region format, colour theme, prediction display and chart style. The projection is an
-/// allow-list (<see cref="UserDisplayPreferences.ToPresentationOnly"/>), so a preference added
-/// later stays private until someone decides otherwise, and the response carries no subject id,
-/// name, username, email or display language.
+/// The response carries glucose units, time format, region format, colour theme, prediction
+/// display and chart style, and no subject id, name, username, email or display language. See
+/// <see cref="UserDisplayPreferences.ToPresentationOnly"/> for what is withheld and why.
 /// </para>
 /// </remarks>
 [ApiController]

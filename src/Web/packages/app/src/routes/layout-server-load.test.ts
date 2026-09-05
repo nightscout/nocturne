@@ -180,4 +180,14 @@ describe("root layout load", () => {
     });
     expect(getShareAppearance).not.toHaveBeenCalled();
   });
+
+  it("asks for no owner's appearance on behalf of an anonymous tenant-host visitor", async () => {
+    const { data, getShareAppearance } = runLoad({
+      host: TENANT_HOST,
+      ownerAppearance: { glucoseUnits: "mmol" },
+    });
+
+    await expect(data).resolves.toMatchObject({ serverPreferences: null });
+    expect(getShareAppearance).not.toHaveBeenCalled();
+  });
 });

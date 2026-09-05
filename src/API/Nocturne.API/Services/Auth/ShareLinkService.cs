@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
@@ -201,18 +202,8 @@ public sealed class ShareLinkService : IShareLinkService
     /// <inheritdoc />
     public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
     {
-        // The longest-standing owner, so a tenant with several owners renders one settled way
-        // instead of changing appearance as the membership list shifts. System subjects are
-        // excluded: the Public subject the share itself runs as never carries an owner role, and
-        // a service account's blank preferences would silently win over a person's.
         var ownerPreferences = await _dbContext.TenantMembers.AsNoTracking()
-            .Where(m => m.TenantId == tenantId
-                && m.RevokedAt == null
-                && !m.Subject!.IsSystemSubject
-                && m.Subject.IsActive
-                && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
-            .OrderBy(m => m.SysCreatedAt)
-            .ThenBy(m => m.Id)
+            .OwnersOf(tenantId)
             .Select(m => m.Subject!.Preferences)
             .FirstOrDefaultAsync(ct);
 

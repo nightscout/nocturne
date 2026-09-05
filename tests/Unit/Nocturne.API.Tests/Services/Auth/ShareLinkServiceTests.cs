@@ -272,6 +272,59 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Adds a second owner of the tenant, joining <paramref name="joinedAfter"/> the seeded one.
+    /// </summary>
+    private async Task AddOwnerAsync(
+        UserDisplayPreferences preferences,
+        DateTime joinedAfter,
+        bool isSystemSubject = false,
+        bool isActiveSubject = true)
+    {
+        var subjectId = Guid.NewGuid();
+        _db.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = $"Owner {subjectId:N}",
+            IsActive = isActiveSubject,
+            IsSystemSubject = isSystemSubject,
+            Preferences = preferences.Serialize(),
+        });
+
+        var member = new TenantMemberEntity
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            SubjectId = subjectId,
+        };
+        _db.TenantMembers.Add(member);
+        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+        {
+            Id = Guid.NewGuid(),
+            TenantMemberId = member.Id,
+            TenantRoleId = await _db.TenantRoles
+                .Where(r => r.TenantId == TenantId && r.Slug == RoleSeeds.Owner)
+                .Select(r => r.Id)
+                .FirstAsync(),
+        });
+        await _db.SaveChangesAsync();
+
+        // The context stamps SysCreatedAt on insert, so the join time can only be set afterwards.
+        member.SysCreatedAt = joinedAfter;
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Backdates the seeded owner's membership so later arrivals sort after it.</summary>
+    private async Task<DateTime> BackdateTheSeededOwnerAsync()
+    {
+        var joined = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var member = await _db.TenantMembers
+            .FirstAsync(m => m.SubjectId == TestDatabaseSeeder.TestSubjectId);
+        member.SysCreatedAt = joined;
+        await _db.SaveChangesAsync();
+        return joined;
+    }
+
     [Fact]
     public async Task SharedAppearance_is_the_owners_presentation_settings()
     {
@@ -338,4 +391,48 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         appearance.GlucoseUnits.Should().BeNull();
     }
+
+    [Fact]
+    public async Task SharedAppearance_settles_on_the_longest_standing_of_several_owners()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" }, seededJoined.AddYears(1));
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "a later co-owner does not restyle the link");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_a_system_subject_holding_the_owner_role()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" },
+            seededJoined.AddYears(-1),
+            isSystemSubject: true);
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "no person is behind a system subject");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_an_owner_whose_subject_is_deactivated()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" },
+            seededJoined.AddYears(-1),
+            isActiveSubject: false);
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "a deactivated subject cannot sign in either");
+    }
+
 }

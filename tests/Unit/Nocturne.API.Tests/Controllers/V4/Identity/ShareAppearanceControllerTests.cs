@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -84,15 +85,32 @@ public sealed class ShareAppearanceControllerTests
             DashboardTopWidgets = [WidgetId.Tdd],
         };
 
-        var disclosed = PropertyNames(typeof(UserDisplayPreferences))
-            .Where(name => typeof(UserDisplayPreferences).GetProperty(name)!
-                .GetValue(everythingSet.ToPresentationOnly()) is not null);
+        var disclosed = everythingSet.ToPresentationOnly();
 
-        disclosed.Should().BeEquivalentTo(
+        SetPropertyNames(disclosed).Should().BeEquivalentTo(
             "GlucoseUnits", "TimeFormat", "RegionFormat", "ColorTheme", "Prediction", "Chart");
+
+        // Both are carried whole rather than field by field, so the projection cannot withhold a
+        // field added inside them: everything these two types declare is disclosed. Pinning the
+        // declarations is what makes adding one a decision rather than a default.
+        PropertyNames(typeof(PredictionPreferences)).Should().BeEquivalentTo(
+            "Enabled", "Minutes", "DisplayMode");
+        PropertyNames(typeof(ChartPreferences)).Should().BeEquivalentTo(
+            "LineColorMode", "LineColor", "PointColorMode", "PointColor", "ShowPoints",
+            "AreaMode", "AreaOpacity", "AlwaysShowPatterns", "Lookback");
     }
 
     private static IEnumerable<string> PropertyNames(Type type) =>
-        type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(p => p.Name);
+
+    /// <summary>
+    /// The names of the properties carrying a value. Every display preference is nullable, so
+    /// applied to a projection of an all-set instance this is exactly what the projection let
+    /// through.
+    /// </summary>
+    private static IEnumerable<string> SetPropertyNames(UserDisplayPreferences preferences) =>
+        typeof(UserDisplayPreferences)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.GetValue(preferences) is not null)
             .Select(p => p.Name);
 }
