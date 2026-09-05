@@ -22,7 +22,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="ProfileSummary"/>
 /// <seealso cref="TempBasal"/>
 [JsonSchemaFlatten]
-public class BasalSchedule : V4RecordBase
+public class BasalSchedule : V4RecordBase, IProfileScoped
 {
     /// <summary>
     /// Named profile this schedule belongs to

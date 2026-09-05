@@ -349,6 +349,71 @@ public class ProfileProjectionServiceTests
         _basalRepo.Verify(r => r.GetByProfileNameAsync("Default", default), Times.Once);
     }
 
+    /// <summary>
+    /// One correlation id spans every store in a profile upload, so the correlated rows carry the
+    /// other stores' schedules too. Serving one of those would hand an AID consumer another store's
+    /// basal rates, carb ratios and targets.
+    /// </summary>
+    [Fact]
+    public async Task CorrelationLookupReturnsAnotherStore_IsNotServed()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, profileName: "Default");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(
+            correlationId,
+            basals: [CreateBasalSchedule(correlationId, "Night")],
+            carbRatios: [CreateCarbRatioSchedule(correlationId, "Night")],
+            sensitivities: [CreateSensitivitySchedule(correlationId, "Night")],
+            targetRanges: [CreateTargetRangeSchedule(correlationId, "Night")]);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        var data = result!.Store["Default"];
+        data.Basal.Should().BeEmpty("a schedule belonging to another store must not be served here");
+        data.CarbRatio.Should().BeEmpty();
+        data.Sens.Should().BeEmpty();
+        data.TargetLow.Should().BeEmpty();
+        data.TargetHigh.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The decoy here is what splitting the <c>"{profileId}:{storeName}"</c> legacy id on its first
+    /// colon would yield for this store, so a name-derived match would serve the wrong schedule.
+    /// </summary>
+    [Fact]
+    public async Task CorrelationLookup_MatchesTheStoreNameVerbatimWhenItContainsAColon()
+    {
+        var correlationId = Guid.NewGuid();
+        const string storeName = "u200 sedentary (120%) 4/16/24 08:09";
+        var settings = CreateTherapySettings(
+            correlationId: correlationId,
+            profileName: storeName,
+            legacyId: $"profile1:{storeName}");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(correlationId);
+        _basalRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, default))
+            .ReturnsAsync(
+            [
+                new BasalSchedule
+                {
+                    ProfileName = "u200 sedentary (120%) 4/16/24 08",
+                    Entries = [new ScheduleEntry { Time = "00:00", Value = 0.4, TimeAsSeconds = 0 }],
+                },
+                new BasalSchedule
+                {
+                    ProfileName = storeName,
+                    Entries = [new ScheduleEntry { Time = "00:00", Value = 1.5, TimeAsSeconds = 0 }],
+                },
+            ]);
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.Store[storeName].Basal.Should().ContainSingle().Which.Value.Should().Be(1.5);
+    }
+
     [Fact]
     public async Task LegacyId_ExtractsProfileIdPrefix()
     {
@@ -436,6 +501,30 @@ public class ProfileProjectionServiceTests
         data.CarbRatio.Should().BeEmpty();
         data.Sens.Should().BeEmpty();
         data.TargetLow.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CorrelationHit_IsServedWithoutConsultingTheLegacyIdRow()
+    {
+        var correlationId = Guid.NewGuid();
+        var settings = CreateTherapySettings(correlationId: correlationId, legacyId: "profile1:Default");
+
+        SetupGetLatest(settings);
+        SetupCorrelationLookups(
+            correlationId,
+            basals: [CreateBasalSchedule(correlationId)],
+            carbRatios: [CreateCarbRatioSchedule(correlationId)],
+            sensitivities: [CreateSensitivitySchedule(correlationId)],
+            targetRanges: [CreateTargetRangeSchedule(correlationId)]);
+        SetupLegacyIdLookups("profile1:Default", "Default");
+
+        var result = await _sut.GetCurrentProfileAsync();
+
+        result!.Store["Default"].Basal.Should().ContainSingle().Which.Value.Should().Be(1.0);
+        _basalRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
+        _carbRatioRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
+        _sensitivityRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
+        _targetRangeRepo.Verify(r => r.GetByLegacyIdAsync(It.IsAny<string>(), default), Times.Never);
     }
 
     /// <summary>
