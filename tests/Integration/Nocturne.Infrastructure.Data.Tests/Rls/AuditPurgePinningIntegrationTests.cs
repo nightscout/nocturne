@@ -221,7 +221,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddHttpContextAccessor();
-            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+            services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
 
             var provider = services.BuildServiceProvider();
             _owned.Add(provider);
