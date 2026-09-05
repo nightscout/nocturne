@@ -15,14 +15,15 @@ export function readingAgeMinutes(lastUpdated: number, now: number): number {
 
 /**
  * Whether the reading is older than the clock face's configured stale window.
- * A `staleMinutes` of 0 or undefined disables the check.
+ * A `staleMinutes` of 0 or undefined disables the check; a null `lastUpdated`
+ * is the absence of a reading, which has no age to have outlived the window.
  */
 export function isClockReadingStale(
   staleMinutes: number | undefined,
-  lastUpdated: number,
+  lastUpdated: number | null,
   now: number
 ): boolean {
-  if (!staleMinutes) return false;
+  if (!staleMinutes || lastUpdated === null) return false;
   return readingAgeMinutes(lastUpdated, now) >= staleMinutes;
 }
 

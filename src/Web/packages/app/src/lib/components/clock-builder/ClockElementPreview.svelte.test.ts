@@ -21,10 +21,18 @@ const glucose = {
   demoMode: false,
 };
 
-function preview(type: ClockElementType) {
+const noReading = {
+  currentBG: null,
+  bgDelta: 0,
+  direction: "",
+  lastUpdated: null,
+  demoMode: false,
+};
+
+function preview(type: ClockElementType, source: ClockGlucoseSource = glucose) {
   const { container } = render(ClockElementPreview, {
     element: { _id: type, type, format: "24h" },
-    glucose,
+    glucose: source,
     now,
     trackerDefinitions: [],
   });
@@ -68,6 +76,13 @@ describe("ClockElementPreview", () => {
   it("names the elements the runtime renderer has no value for", () => {
     expect(preview("summary")).toBe("Summary");
     expect(preview("trackers")).toBe("Trackers");
+  });
+
+  it("shows the no-reading face, not a fabricated one, with no reading", () => {
+    expect(preview("sg", noReading)).toBe("--");
+    // No value to show, so the builder names the element instead.
+    expect(preview("delta", noReading)).toBe(elementInfo("delta")?.name);
+    expect(preview("age", noReading)).toBe(elementInfo("age")?.name);
   });
 
   it("follows the glucose source after mount", async () => {

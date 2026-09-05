@@ -36,7 +36,7 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
   if (info.hasFormatOption) element.format = DEFAULT_CLOCK_TIME_FORMAT;
   if (info.hasMinutesAheadOption) element.minutesAhead = 30;
   if (type === "tracker") {
-    element.show = ["name", "remaining"];
+    element.show = ["name"];
     element.visibilityThreshold = "always";
   }
   if (type === "trackers") {

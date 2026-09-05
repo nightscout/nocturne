@@ -1,7 +1,15 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { getClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-  import { isUnwiredElementType } from "$lib/clock-builder/types";
+  import {
+    buildCustomCssString,
+    clockBackgroundStyle,
+    getElementColor,
+    getFontClass,
+    getFontWeightClass,
+    getTrackerDefinition,
+    isUnwiredElementType,
+  } from "$lib/clock-builder";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
   import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
@@ -18,7 +26,6 @@
   import type {
     ClockFaceConfig,
     ClockElement,
-    ClockElementStyle,
     TrackerDefinitionDto,
   } from "$lib/api";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
@@ -85,85 +92,19 @@
     )
   );
 
-  // Resolve CSS variable to its computed value
-  function resolveCssVar(name: string): string {
-    if (!browser) return "#000000"; // fallback for SSR
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
-  // Get BG color based on value
-  function getBgColor(bg: number): string {
-    if (bg < 70) return resolveCssVar("--glucose-very-low");
-    if (bg < 80) return resolveCssVar("--glucose-low");
-    if (bg > 250) return resolveCssVar("--glucose-very-high");
-    if (bg > 180) return resolveCssVar("--glucose-high");
-    return resolveCssVar("--glucose-in-range");
-  }
-
   // Tracker definitions (skipped on the anonymous public clock — see loadTrackerDefinitions)
   const definitionsQuery = loadTrackerDefinitions ? getDefinitions({}) : null;
   const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
     definitionsQuery?.current ?? [],
   );
 
-  // Get tracker definition by ID
-  function getTrackerDefinition(definitionId: string | undefined) {
-    if (!definitionId) return null;
-    return trackerDefinitions.find((d) => d.id === definitionId) ?? null;
-  }
-
-  // Font class helpers
-  function getFontClass(font: string | undefined): string {
-    switch (font) {
-      case "mono":
-        return "font-mono";
-      case "serif":
-        return "font-serif";
-      case "sans":
-        return "font-sans";
-      default:
-        return "";
-    }
-  }
-
-  function getFontWeightClass(weight: string | undefined): string {
-    switch (weight) {
-      case "normal":
-        return "font-normal";
-      case "medium":
-        return "font-medium";
-      case "semibold":
-        return "font-semibold";
-      case "bold":
-        return "font-bold";
-      default:
-        return "font-medium";
-    }
-  }
-
-  // Get element color
-  function getElementColor(style: ClockElementStyle | undefined): string {
-    const color = style?.color;
-    if (color === "dynamic") return getBgColor(currentBG);
-    return color || "#ffffff";
-  }
-
-  // Build custom CSS properties string from element.style.custom
-  function buildCustomCssString(element: ClockElement): string {
-    const custom = element.style?.custom;
-    if (!custom) return "";
-    return Object.entries(custom)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join("; ");
-  }
-
-  // Build inline style string
+  // Sized off `scale`, so it cannot share the builder's own style builder.
   function buildStyleString(element: ClockElement): string {
     const style = element.style;
     const parts: string[] = [];
     const size = (element.size || 20) * scale;
     parts.push(`font-size: ${size}px`);
-    parts.push(`color: ${getElementColor(style)}`);
+    parts.push(`color: ${getElementColor(element, currentBG)}`);
     parts.push(`opacity: ${style?.opacity ?? 1.0}`);
     const customCss = buildCustomCssString(element);
     if (customCss) {
@@ -185,17 +126,9 @@
     return null;
   });
 
-  // Preview background style
-  const bgStyle = $derived.by(() => {
-    if (!config?.settings) return "background-color: var(--background);";
-    if (config.settings.backgroundImage) {
-      return `background-image: url(${config.settings.backgroundImage}); background-size: cover; background-position: center;`;
-    }
-    if (config.settings.bgColor) {
-      return `background-color: ${getBgColor(currentBG)};`;
-    }
-    return "background-color: var(--background);";
-  });
+  const bgStyle = $derived(
+    clockBackgroundStyle(config?.settings, currentBG, "var(--background)")
+  );
 
   const overlayOpacity = $derived(
     config?.settings?.backgroundImage
@@ -474,19 +407,18 @@
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center"
-                style="color: {getElementColor(element.style)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
+                style="color: {getElementColor(element, currentBG)}; opacity: {element.style?.opacity ?? 1.0};{customCss ? ` ${customCss}` : ''}"
               >
                 <TrendArrow {direction} {size} />
               </div>
             {:else if element.type === "tracker"}
-              <!-- Tracker element with icon and time remaining -->
-              {@const def = getTrackerDefinition(element.definitionId)}
+              {@const def = getTrackerDefinition(element.definitionId, trackerDefinitions)}
               {@const size = (element.size || 14) * scale}
-              {@const showOptions = element.show ?? ["name", "remaining"]}
+              {@const showOptions = element.show ?? ["name"]}
               {@const customCss = buildCustomCssString(element)}
               <div
                 class="flex items-center gap-1 {getFontClass(element.style?.font)} {getFontWeightClass(element.style?.fontWeight)}"
-                style="color: {getElementColor(element.style)}; opacity: {element.style?.opacity ?? 1.0}; font-size: {size}px;{customCss ? ` ${customCss}` : ''}"
+                style="color: {getElementColor(element, currentBG)}; opacity: {element.style?.opacity ?? 1.0}; font-size: {size}px;{customCss ? ` ${customCss}` : ''}"
               >
                 {#if showOptions.includes("icon") && def?.category}
                   <TrackerCategoryIcon
@@ -497,9 +429,6 @@
                 {/if}
                 {#if showOptions.includes("name")}
                   <span class="leading-none">{def?.name ?? "Tracker"}</span>
-                {/if}
-                {#if showOptions.includes("remaining")}
-                  <span class="leading-none tabular-nums opacity-70">2d 4h</span>
                 {/if}
               </div>
             {:else if element.type !== "chart"}

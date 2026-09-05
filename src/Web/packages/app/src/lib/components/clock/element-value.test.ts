@@ -35,6 +35,18 @@ const glucose = {
   demoMode: false,
 };
 
+/**
+ * A tenant with no readings at all: a new tenant, or a connector not yet
+ * syncing.
+ */
+const noReading = {
+  currentBG: null,
+  bgDelta: null,
+  direction: "",
+  lastUpdated: null,
+  demoMode: false,
+};
+
 const el = (element: ClockElement): ClockElement => element;
 
 function withUnits(units: GlucoseUnits, run: () => void) {
@@ -114,6 +126,48 @@ describe("renderClockElementValue", () => {
         now
       )
     ).toBe("now");
+  });
+
+  it("renders a placeholder, not a number, when there is no reading", () => {
+    withUnits("mg/dl", () => {
+      expect(renderClockElementValue(el({ type: "sg" }), noReading, now)).toBe(
+        "--"
+      );
+    });
+    withUnits("mmol", () => {
+      expect(renderClockElementValue(el({ type: "sg" }), noReading, now)).toBe(
+        "--"
+      );
+    });
+  });
+
+  it("renders no delta and no age when there is no reading", () => {
+    expect(renderClockElementValue(el({ type: "delta" }), noReading, now)).toBe(
+      ""
+    );
+    expect(renderClockElementValue(el({ type: "age" }), noReading, now)).toBe(
+      ""
+    );
+  });
+
+  it("renders no delta from a lone reading", () => {
+    expect(
+      renderClockElementValue(
+        el({ type: "delta" }),
+        { ...glucose, bgDelta: null },
+        now
+      )
+    ).toBe("");
+  });
+
+  it("still renders the wall clock when there is no reading", () => {
+    expect(
+      renderClockElementValue(
+        el({ type: "time", format: "24h" }),
+        noReading,
+        now
+      )
+    ).toBe("14:05");
   });
 
   it("renders time in the element's pinned format", () => {

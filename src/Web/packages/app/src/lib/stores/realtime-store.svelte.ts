@@ -1181,18 +1181,72 @@ export function tryGetRealtimeStore(): RealtimeStore | null {
 }
 
 /**
- * The minimal live-glucose surface a clock face renders. Satisfied by the full
- * {@link RealtimeStore} (authenticated views) and by the lightweight polling
- * `PublicClockStore` (anonymous public clock links), so `ClockFaceRenderer`
- * works with either without knowing which one it has.
+ * The minimal live-glucose surface a clock face renders. Satisfied by the
+ * lightweight polling `PublicClockStore` (anonymous public clock links) and by
+ * {@link clockGlucoseSourceOf} over the full {@link RealtimeStore}
+ * (authenticated views), so `ClockFaceRenderer` works with either without
+ * knowing which one it has.
  */
 export interface ClockGlucoseSource {
-  readonly currentBG: number;
-  readonly bgDelta: number;
+  /** Null when there is no reading; a face must not present a stand-in as one. */
+  readonly currentBG: number | null;
+  /** Null when nothing measures a change, so no rise or fall can be claimed. */
+  readonly bgDelta: number | null;
   /** Empty when the reading carried no direction. */
   readonly direction: string;
-  readonly lastUpdated: number;
+  /** Null when there is no reading, so age and staleness have nothing to measure. */
+  readonly lastUpdated: number | null;
   readonly demoMode: boolean;
+}
+
+/**
+ * The change a face may show: the reading's own delta, else the gap to the
+ * previous reading. Null when there is neither — a lone reading is not a rise
+ * from zero.
+ */
+export function clockGlucoseDelta(
+  carried: number | null | undefined,
+  currentBG: number | null | undefined,
+  previousBG: number | null | undefined
+): number | null {
+  if (carried != null) return carried;
+  if (currentBG == null || previousBG == null) return null;
+  return currentBG - previousBG;
+}
+
+/**
+ * The store's own `currentBG`/`lastUpdated`/`bgDelta` fall back to 0 and the
+ * current time for the dashboard tiles, which cannot tell an absent reading
+ * from a real one.
+ */
+export function clockGlucoseSourceOf(
+  store: Pick<
+    RealtimeStore,
+    "currentEntry" | "previousEntry" | "direction" | "demoMode"
+  >
+): ClockGlucoseSource {
+  const mgdlOf = (entry: Entry | null) => entry?.sgv ?? entry?.mgdl ?? null;
+  return {
+    get currentBG() {
+      return mgdlOf(store.currentEntry);
+    },
+    get bgDelta() {
+      return clockGlucoseDelta(
+        store.currentEntry?.delta,
+        mgdlOf(store.currentEntry),
+        mgdlOf(store.previousEntry)
+      );
+    },
+    get direction() {
+      return store.direction;
+    },
+    get lastUpdated() {
+      return store.currentEntry?.mills ?? null;
+    },
+    get demoMode() {
+      return store.demoMode;
+    },
+  };
 }
 
 const CLOCK_GLUCOSE_SOURCE_KEY = Symbol("clock-glucose-source");
@@ -1208,5 +1262,8 @@ export function setClockGlucoseSource(source: ClockGlucoseSource): void {
  * so authenticated clock previews keep working unchanged.
  */
 export function getClockGlucoseSource(): ClockGlucoseSource {
-  return getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ?? getRealtimeStore();
+  return (
+    getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ??
+    clockGlucoseSourceOf(getRealtimeStore())
+  );
 }

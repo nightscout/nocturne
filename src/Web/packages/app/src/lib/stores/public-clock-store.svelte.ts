@@ -7,7 +7,10 @@
 
 import { getApiClient } from "$lib/api/client";
 import type { ClockGlucoseDto } from "$lib/api";
-import type { ClockGlucoseSource } from "./realtime-store.svelte";
+import {
+  clockGlucoseDelta,
+  type ClockGlucoseSource,
+} from "./realtime-store.svelte";
 
 /** Glucose only changes every ~5 min, so a 30s poll keeps a public clock current cheaply. */
 const POLL_INTERVAL_MS = 30_000;
@@ -26,20 +29,18 @@ export class PublicClockStore implements ClockGlucoseSource {
     this.clockId = clockId;
   }
 
-  currentBG = $derived(this.readings[0]?.mgdl ?? 0);
+  currentBG = $derived(this.readings[0]?.mgdl ?? null);
   direction = $derived(this.readings[0]?.direction ?? "");
-  lastUpdated = $derived(this.readings[0]?.mills ?? Date.now());
+  lastUpdated = $derived(this.readings[0]?.mills ?? null);
   demoMode = $derived(this.readings.some((r) => r.dataSource === "demo-service"));
 
-  bgDelta = $derived.by(() => {
-    const latest = this.readings[0];
-    if (latest?.delta != null) return latest.delta;
-    const previous = this.readings[1];
-    if (latest?.mgdl != null && previous?.mgdl != null) {
-      return latest.mgdl - previous.mgdl;
-    }
-    return 0;
-  });
+  bgDelta = $derived(
+    clockGlucoseDelta(
+      this.readings[0]?.delta,
+      this.readings[0]?.mgdl,
+      this.readings[1]?.mgdl
+    )
+  );
 
   /** Begin polling. No-op during SSR. */
   async start(): Promise<void> {
