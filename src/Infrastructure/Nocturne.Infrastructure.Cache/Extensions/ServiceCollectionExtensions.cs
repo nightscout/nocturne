@@ -36,8 +36,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICacheService, MemoryCacheService>();
 
         // MemoryProcessingStatusService takes TimeProvider, so a caller adding this to a bare
-        // collection would otherwise fail to resolve it. TryAdd, so a host that supplies its own
-        // clock (the API composition root registers one explicitly) still wins.
+        // collection would otherwise fail to resolve it. TryAdd is first-wins: a host that wants a
+        // different clock must register it before calling this.
         services.TryAddSingleton(TimeProvider.System);
 
         // Register processing status service (in-memory)
