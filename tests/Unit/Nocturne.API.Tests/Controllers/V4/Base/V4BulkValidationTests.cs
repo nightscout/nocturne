@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
@@ -291,9 +290,8 @@ public class V4BulkValidationTests
     public async Task BodyWeightBatch_OverTheCap_IsRejected()
     {
         var service = new Mock<IBodyWeightService>();
-        var body = JsonSerializer.SerializeToElement(Fill(1001, () => new BodyWeight()));
 
-        var result = await BodyWeights(service).CreateBodyWeights(body);
+        var result = await BodyWeights(service).CreateBodyWeights(Fill(1001, () => new BodyWeight()));
 
         Rejected(result.Result, "Bulk operations are limited to 1000 body weight records per request");
         service.Verify(
@@ -305,9 +303,8 @@ public class V4BulkValidationTests
     public async Task BodyWeightBatch_EmptyPayload_IsRejected()
     {
         var service = new Mock<IBodyWeightService>();
-        var body = JsonSerializer.SerializeToElement(Array.Empty<BodyWeight>());
 
-        var result = await BodyWeights(service).CreateBodyWeights(body);
+        var result = await BodyWeights(service).CreateBodyWeights([]);
 
         Rejected(result.Result, "Body weight data is required");
         service.Verify(

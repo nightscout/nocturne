@@ -1,9 +1,12 @@
-using System.Text.Json;
+using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
 using Nocturne.API.Models.Requests.V4;
@@ -176,39 +179,22 @@ public class HealthRecordResponseContractTests
             Times.Never);
     }
 
-    // ── The batch route takes one record or many ────────────────────
+    // ── The batch route takes an array of records ───────────────────
 
     [Fact]
-    public async Task Batch_create_with_an_array_body_reaches_the_service_with_every_record()
+    public async Task Batch_create_reaches_the_service_with_every_record()
     {
         var written = CaptureBodyWeights();
-        var body = JsonSerializer.SerializeToElement(new[]
-        {
+
+        var result = await BodyWeight().CreateBodyWeights([
             new BodyWeight { Mills = 1_781_000_000_000, WeightKg = 80.5m },
             new BodyWeight { Mills = 1_781_000_060_000, WeightKg = 81.0m },
-        });
-
-        var result = await BodyWeight().CreateBodyWeights(body);
+        ]);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeAssignableTo<IEnumerable<BodyWeight>>()
             .Which.Should().HaveCount(2);
         written().Select(w => w.WeightKg).Should().Equal([80.5m, 81.0m]);
-    }
-
-    [Fact]
-    public async Task Batch_create_with_a_bare_object_body_reaches_the_service_with_one_record()
-    {
-        var written = CaptureBodyWeights();
-        var body = JsonSerializer.SerializeToElement(
-            new BodyWeight { Mills = 1_781_000_000_000, WeightKg = 80.5m });
-
-        var result = await BodyWeight().CreateBodyWeights(body);
-
-        result.Result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeAssignableTo<IEnumerable<BodyWeight>>()
-            .Which.Should().ContainSingle("a single object is accepted as a batch of one");
-        written().Single().WeightKg.Should().Be(80.5m);
     }
 
     [Fact]
@@ -219,12 +205,38 @@ public class HealthRecordResponseContractTests
         Problem(result.Result, 400).Detail.Should().Be("Body weight data is required");
     }
 
+    /// <summary>
+    /// The batch route's declared body type is what every published SDK's method signature is
+    /// generated from, so the shape the wire accepts is pinned through MVC's own binding rather
+    /// than left to the signature.
+    /// </summary>
     [Fact]
-    public async Task Batch_create_with_a_body_that_is_not_json_answers_400()
+    public async Task Batch_create_binds_an_array_body_and_refuses_a_bare_record()
     {
-        var result = await BodyWeight().CreateBodyWeights("not a json element");
+        var bodyType = typeof(BodyWeightController)
+            .GetMethod(nameof(BodyWeightController.CreateBodyWeights))!
+            .GetParameters()[0]
+            .ParameterType;
+        const string record = """{"weightKg":80.5,"mills":1781000000000}""";
 
-        Problem(result.Result, 400).Detail.Should().Be("Invalid data format");
+        (await BindBodyAsync(bodyType, $"[{record}]")).HasError.Should().BeFalse();
+        (await BindBodyAsync(bodyType, record)).HasError.Should().BeTrue();
+    }
+
+    /// <summary>Runs MVC's JSON body binding, which is what answers 400 before an action runs.</summary>
+    private static Task<InputFormatterResult> BindBodyAsync(Type bodyType, string json)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.ContentType = "application/json";
+        httpContext.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        return new SystemTextJsonInputFormatter(new JsonOptions(), NullLogger<SystemTextJsonInputFormatter>.Instance)
+            .ReadAsync(new InputFormatterContext(
+                httpContext,
+                modelName: string.Empty,
+                modelState: new ModelStateDictionary(),
+                metadata: new EmptyModelMetadataProvider().GetMetadataForType(bodyType),
+                readerFactory: (stream, encoding) => new StreamReader(stream, encoding)));
     }
 
     // ── Update ──────────────────────────────────────────────────────
