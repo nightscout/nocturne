@@ -47,9 +47,6 @@ public class UpsertCalibrationRequest : IBulkUpsertRequest
     /// </summary>
     public double? Scale { get; set; }
 
-    /// <summary>
-    /// Always <c>null</c>: <see cref="Nocturne.Core.Models.V4.Calibration"/> carries no sync key, so a bulk
-    /// payload of these has nothing for the upsert to match on.
-    /// </summary>
+    // Calibrations carry no sync key.
     string? IBulkUpsertRequest.SyncIdentifier => null;
 }

@@ -99,9 +99,11 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="requests">The records to write, at most <see cref="V4BulkValidation.MaxItems"/> of them.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// Array semantics are per-item, not all-or-nothing: on the record types whose repository upserts
-    /// on the sync key, an item carrying both `dataSource` and `syncIdentifier` updates the row already
-    /// matched by that pair; every other item inserts.
+    /// Array semantics are per-item, not all-or-nothing. A record type whose repository derives from
+    /// <c>SyncUpsertRepositoryBase</c> — sensor glucose, meter readings, boluses, carb intakes, basal
+    /// injections and the device-status snapshots — updates in place the row already matched by an
+    /// item's (`dataSource`, `syncIdentifier`) pair; every other type, and every item not carrying both
+    /// halves of that pair, inserts.
     ///
     /// The payload is validated as a whole — an empty body, more than the cap, an item with an unset
     /// `timestamp`, an item supplying `syncIdentifier` without `dataSource`, or an item any registered
@@ -115,13 +117,13 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public virtual async Task<ActionResult<TModel[]>> CreateBulk(
-        [FromBody] TCreateRequest[] requests, CancellationToken ct = default)
+        [FromBody] IReadOnlyList<TCreateRequest> requests, CancellationToken ct = default)
     {
         var naming = BulkNaming;
         if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
             return invalid;
 
-        var models = new List<TModel>(requests.Length);
+        var models = new List<TModel>(requests.Count);
         foreach (var request in requests)
             models.Add(MapCreateToModel(request));
 
@@ -299,6 +301,12 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// Hook called once a bulk payload has mapped and before it persists. Override to enrich or
     /// attribute the batch in one pass, mutating <paramref name="models"/> in place.
     /// </summary>
+    /// <remarks>
+    /// An override that needs the same work <see cref="OnBeforeCreateAsync"/> does per item should
+    /// call it in a loop rather than keep a second copy — unless the work has a batch form, as device
+    /// attribution does in <see cref="Services.Devices.PatientDeviceAttribution.ApplyManyAsync"/>,
+    /// where one pass for the payload is the point of the endpoint.
+    /// </remarks>
     /// <param name="models">The mapped records, positionally aligned with <paramref name="requests"/>.</param>
     /// <param name="requests">The inbound requests, for the fields the domain model does not carry.</param>
     /// <param name="ct">Cancellation token.</param>

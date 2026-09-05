@@ -100,9 +100,6 @@ public class UpsertBolusCalculationRequest : IBulkUpsertRequest
     /// </summary>
     public double? PreBolus { get; set; }
 
-    /// <summary>
-    /// Always <c>null</c>: <see cref="Nocturne.Core.Models.V4.BolusCalculation"/> carries no sync key, so a bulk
-    /// payload of these has nothing for the upsert to match on.
-    /// </summary>
+    // Bolus calculations carry no sync key.
     string? IBulkUpsertRequest.SyncIdentifier => null;
 }

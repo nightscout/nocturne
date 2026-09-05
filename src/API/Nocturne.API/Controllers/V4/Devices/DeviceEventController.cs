@@ -133,16 +133,29 @@ public class DeviceEventController(
 
     /// <inheritdoc/>
     /// <remarks>
-    /// One item at a time rather than a single stamper pass: the device categories a device event can
-    /// be attributed to are derived from its own event type, so a batch has no one category list to
-    /// share.
+    /// One stamper pass per distinct category list rather than one for the payload: the categories a
+    /// device event can be attributed to are derived from its own event type. There is no batch-level
+    /// source for the same reason as the other bulk writers — per-record DataSource drives matching.
     /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<DeviceEvent> models, IReadOnlyList<UpsertDeviceEventRequest> requests, CancellationToken ct)
     {
-        for (var i = 0; i < models.Count; i++)
-            if (await OnBeforeCreateAsync(models[i], requests[i], ct) is { } error)
-                return error;
+        // DeviceAttributionCategories.DeviceEvent hands back one of two cached lists, so this is two
+        // passes however long the payload is; were it ever to allocate per call, the grouping would
+        // degrade to one pass per item rather than becoming wrong.
+        var byCategories = models
+            .Select((model, i) => (Model: model, requests[i].PatientDeviceId))
+            .GroupBy(item => DeviceAttributionCategories.DeviceEvent(item.Model.EventType));
+
+        foreach (var group in byCategories)
+        {
+            var error = await PatientDeviceAttribution.ApplyManyAsync(
+                [.. group.Select(item => ((IDeviceAttributed)item.Model, item.PatientDeviceId))],
+                patientDevices, deviceStamper, group.Key, batchSource: null, ct);
+
+            if (error is not null)
+                return Problem(detail: error, statusCode: 400, title: "Bad Request");
+        }
 
         return null;
     }

@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
@@ -7,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Controllers.V4.Health;
@@ -139,17 +142,103 @@ public class V4BulkValidationTests
 
     // ── The wording each endpoint gives them ────────────────────────
 
+    /// <summary>
+    /// Every controller reached through <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
+    /// driven through its own <c>bulk</c> action, so a new one cannot ship with wording nobody read.
+    /// The controllers below this are the bulk endpoints that do NOT come off that base and so are
+    /// still named one at a time.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CrudControllers))]
+    public async Task EveryCrudBulkEndpoint_NamesTheDataItTakes(Type controllerType)
+    {
+        var naming = BulkNamingOf(controllerType);
+
+        naming.Subject.Should().MatchRegex("^[A-Z]", "the subject opens a sentence");
+        naming.Singular.Should().Be(naming.Singular.ToLowerInvariant(), "the singular sits mid-sentence");
+        naming.Plural.Should().Be(naming.Plural.ToLowerInvariant(), "the plural sits mid-sentence");
+        naming.Plural.Should().NotBe(naming.Singular, "one item and many read differently");
+
+        Rejected(await DriveBulkAsync(controllerType, 0), $"{naming.Subject} data is required");
+        Rejected(
+            await DriveBulkAsync(controllerType, V4BulkValidation.MaxItems + 1),
+            $"Bulk operations are limited to {V4BulkValidation.MaxItems} {naming.Plural} per request");
+        Rejected(await DriveBulkAsync(controllerType, 1), $"Timestamp must be set on every {naming.Singular}");
+    }
+
+    public static TheoryData<Type> CrudControllers()
+    {
+        var controllers = typeof(V4BulkValidation).Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsGenericTypeDefinition: false } && DerivesFromCrudBase(t))
+            .OrderBy(t => t.FullName, StringComparer.Ordinal)
+            .ToList();
+
+        controllers.Should().NotBeEmpty("the sweep proves nothing if it discovers no controllers");
+
+        var data = new TheoryData<Type>();
+        foreach (var type in controllers)
+            data.Add(type);
+
+        return data;
+    }
+
+    private static bool DerivesFromCrudBase(Type type)
+    {
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(V4CrudControllerBase<,,,>))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reads <c>BulkNaming</c> off an unconstructed controller and posts <paramref name="count"/>
+    /// freshly-constructed requests to its <c>CreateBulk</c>. The getter returns a constant and the
+    /// payload never clears validation, so no dependency is reached — several of these controllers
+    /// take a <c>NocturneDbContext</c>, which has no mockable constructor.
+    /// </summary>
+    private static ControllerBase UnconstructedController(Type controllerType)
+    {
+        var controller = (ControllerBase)RuntimeHelpers.GetUninitializedObject(controllerType);
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        return controller;
+    }
+
+    private static V4BulkNaming BulkNamingOf(Type controllerType)
+    {
+        var property = controllerType.GetProperty("BulkNaming", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"{controllerType.Name} declares no BulkNaming");
+
+        return (V4BulkNaming)property.GetValue(UnconstructedController(controllerType))!;
+    }
+
+    private static async Task<ActionResult?> DriveBulkAsync(Type controllerType, int count)
+    {
+        var action = controllerType.GetMethod("CreateBulk")
+            ?? throw new InvalidOperationException($"{controllerType.Name} exposes no CreateBulk");
+
+        var requestType = action.GetParameters()[0].ParameterType.GetGenericArguments()[0];
+        var payload = Array.CreateInstance(requestType, count);
+        for (var i = 0; i < count; i++)
+            payload.SetValue(Activator.CreateInstance(requestType), i);
+
+        var task = (Task)action.Invoke(UnconstructedController(controllerType), [payload, CancellationToken.None])!;
+        await task;
+
+        var actionResultOfT = task.GetType().GetProperty("Result")!.GetValue(task)!;
+        return (ActionResult?)actionResultOfT.GetType().GetProperty("Result")!.GetValue(actionResultOfT);
+    }
+
     [Fact]
     public async Task EmptyPayload_NamesTheDataTheEndpointTakes()
     {
         Rejected((await ApsController().CreateApsSnapshots([])).Result, "APS snapshot data is required");
         Rejected((await PumpController().CreatePumpSnapshots([])).Result, "Pump snapshot data is required");
         Rejected((await UploaderController().CreateUploaderSnapshots([])).Result, "Uploader snapshot data is required");
-        Rejected((await BasalInjections().CreateBulk([])).Result, "Basal injection data is required");
-        Rejected((await Boluses().CreateBulk([])).Result, "Bolus data is required");
         Rejected((await CarbIntakes().CreateCarbIntakesBulk([])).Result, "Carb intake data is required");
         Rejected((await TempBasals().CreateTempBasals([])).Result, "Temp basal data is required");
-        Rejected((await SensorGlucose().CreateBulk([])).Result, "Sensor glucose data is required");
     }
 
     [Fact]
@@ -162,50 +251,11 @@ public class V4BulkValidationTests
             (await UploaderController().CreateUploaderSnapshots(Fill(1001, () => new UpsertUploaderSnapshotRequest()))).Result,
             "Bulk operations are limited to 1000 snapshots per request");
         Rejected(
-            (await BasalInjections().CreateBulk(Fill(1001, () => new CreateBasalInjectionRequest { Timestamp = T0, Units = 1 }))).Result,
-            "Bulk operations are limited to 1000 injections per request");
-        Rejected(
-            (await Boluses().CreateBulk(Fill(1001, () => new CreateBolusRequest()))).Result,
-            "Bulk operations are limited to 1000 boluses per request");
-        Rejected(
             (await CarbIntakes().CreateCarbIntakesBulk(Fill(1001, () => new CreateCarbIntakeRequest()))).Result,
             "Bulk operations are limited to 1000 intakes per request");
         Rejected(
             (await TempBasals().CreateTempBasals(Fill(1001, () => new CreateTempBasalRequest()))).Result,
             "Bulk operations are limited to 1000 temp basals per request");
-        Rejected(
-            (await SensorGlucose().CreateBulk(Fill(1001, () => new UpsertSensorGlucoseRequest()))).Result,
-            "Bulk operations are limited to 1000 readings per request");
-    }
-
-    // ── Endpoints that did not run the full preamble before ─────────
-
-    [Fact]
-    public async Task SensorGlucoseBulk_RejectsAnUnsetTimestamp()
-    {
-        var repo = new Mock<ISensorGlucoseRepository>();
-
-        var result = await SensorGlucose(repo).CreateBulk(
-            [new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = 120 }, new UpsertSensorGlucoseRequest { Mgdl = 115 }]);
-
-        Rejected(result.Result, "Timestamp must be set on every reading");
-        repo.Verify(
-            r => r.BulkCreateAsync(It.IsAny<IEnumerable<Core.Models.V4.SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task BasalInjectionBulk_RejectsAnUnsetTimestamp()
-    {
-        var repo = new Mock<IBasalInjectionRepository>();
-
-        var result = await BasalInjections(repo).CreateBulk(
-            [new CreateBasalInjectionRequest { Timestamp = T0, Units = 12 }, new CreateBasalInjectionRequest { Timestamp = default, Units = 12 }]);
-
-        Rejected(result.Result, "Timestamp must be set on every injection");
-        repo.Verify(
-            r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]
@@ -428,17 +478,6 @@ public class V4BulkValidationTests
 
     private static UploaderSnapshotController UploaderController() =>
         WithContext(new UploaderSnapshotController(Mock.Of<IUploaderSnapshotRepository>()));
-
-    private static BasalInjectionController BasalInjections(Mock<IBasalInjectionRepository>? repo = null) =>
-        WithContext(new BasalInjectionController(
-            (repo ?? new Mock<IBasalInjectionRepository>()).Object, Mock.Of<IPatientInsulinRepository>()));
-
-    private static BolusController Boluses() =>
-        WithContext(new BolusController(
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<IPatientInsulinRepository>(),
-            Mock.Of<IPatientDeviceRepository>(),
-            Mock.Of<IPatientDeviceStamper>()));
 
     // The database context is only reached past the preamble, which is all these tests exercise.
     private static NutritionController CarbIntakes() =>

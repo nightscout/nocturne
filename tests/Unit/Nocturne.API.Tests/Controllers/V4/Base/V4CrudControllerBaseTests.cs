@@ -73,6 +73,38 @@ public class TestCrudController(ITestRecordRepository repository)
     };
 }
 
+/// <summary>
+/// A controller whose before-write hooks always reject, with a detail no guard produces. A response
+/// carrying that detail proves the hook ran; a response carrying a guard's detail proves it did not.
+/// </summary>
+public class RejectingCrudController(ITestRecordRepository repository) : TestCrudController(repository)
+{
+    public const string HookDetail = "hook ran";
+
+    public int BeforeCreateCalls { get; private set; }
+
+    public int BeforeUpdateCalls { get; private set; }
+
+    protected override Task<ObjectResult?> OnBeforeCreateAsync(TestRecord model, TestCreateRequest request, CancellationToken ct)
+    {
+        BeforeCreateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+
+    protected override Task<ObjectResult?> OnBeforeUpdateAsync(TestRecord model, TestUpdateRequest request, TestRecord existing, CancellationToken ct)
+    {
+        BeforeUpdateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+
+    protected override Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<TestRecord> models, IReadOnlyList<TestCreateRequest> requests, CancellationToken ct)
+    {
+        BeforeCreateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+}
+
 /// <summary>A controller that records how often the base ran the per-record after-create hook.</summary>
 public class CountingCrudController(ITestRecordRepository repository) : TestCrudController(repository)
 {
@@ -265,6 +297,103 @@ public class V4CrudControllerBaseTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task Create_DefaultTimestamp_IsRejectedBeforeTheBeforeCreateHookRuns()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.Create(new TestCreateRequest { Timestamp = default });
+
+        Detail(result.Result).Should().Be("Timestamp must be set");
+        controller.BeforeCreateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Update_DefaultTimestamp_IsRejectedBeforeTheBeforeUpdateHookRuns()
+    {
+        var id = Guid.NewGuid();
+        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TestRecord { Id = id, Timestamp = DateTime.UtcNow });
+        var controller = Rejecting();
+
+        var result = await controller.Update(id, new TestUpdateRequest { Timestamp = default });
+
+        Detail(result.Result).Should().Be("Timestamp must be set");
+        controller.BeforeUpdateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CreateBulk_FailedValidation_IsRejectedBeforeTheBeforeBulkHookRuns()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.CreateBulk(
+        [
+            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow },
+            new TestCreateRequest { Timestamp = default },
+        ]);
+
+        Detail(result.Result).Should().Be("Timestamp must be set on every record");
+        controller.BeforeCreateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Create_TimestampSet_ReachesTheBeforeCreateHook()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.Create(new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow });
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeCreateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.CreateAsync(It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_TimestampSet_ReachesTheBeforeUpdateHook()
+    {
+        var id = Guid.NewGuid();
+        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TestRecord { Id = id, Timestamp = DateTime.UtcNow });
+        var controller = Rejecting();
+
+        var result = await controller.Update(id, new TestUpdateRequest { Timestamp = DateTime.UtcNow });
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeUpdateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.UpdateAsync(id, It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateBulk_ValidPayload_ReachesTheBeforeBulkHook()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.CreateBulk([new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow }]);
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeCreateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private RejectingCrudController Rejecting() => new(_repo.Object)
+    {
+        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+    };
+
+    private static string? Detail(ActionResult? result)
+    {
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        return objectResult.Value.Should().BeOfType<ProblemDetails>().Subject.Detail;
     }
 
     [Fact]

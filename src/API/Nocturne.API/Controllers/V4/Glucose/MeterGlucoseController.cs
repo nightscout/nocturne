@@ -111,11 +111,6 @@ public class MeterGlucoseController(
     };
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// The batch form rather than a loop over <see cref="OnBeforeCreateAsync"/>: one stamper pass
-    /// resolves the whole payload, and per-record DataSource drives matching, so no batch-level
-    /// source is needed for a mixed-source upload.
-    /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<MeterGlucose> models, IReadOnlyList<UpsertMeterGlucoseRequest> requests, CancellationToken ct)
     {

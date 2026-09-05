@@ -20,6 +20,12 @@ namespace Nocturne.API.Tests.Controllers.V4.Base;
 /// gives every derived controller, exercised at two of them: what reaches the repository, what comes
 /// back, and what the cap and the timestamp guard reject.
 /// </summary>
+/// <remarks>
+/// Whether a re-sent sync key updates a row or inserts one is the repository's to decide, and only
+/// the types deriving from <c>SyncUpsertRepositoryBase</c> upsert on it (notes do not). What the
+/// controller owes either way is to hand the request's own (DataSource, SyncIdentifier) to the
+/// repository unaltered on every send, which is what these assert.
+/// </remarks>
 [Trait("Category", "Unit")]
 public class V4CrudBulkCreateTests
 {
@@ -85,7 +91,7 @@ public class V4CrudBulkCreateTests
     }
 
     [Fact]
-    public async Task Boluses_ResentBatch_CarriesTheSameSyncKeys_SoTheUpsertStillMatches()
+    public async Task Boluses_HandTheRequestsSyncKeysToTheRepository_OnEverySend()
     {
         var repo = EchoingBolusRepository();
         var written = new List<List<Bolus>>();
@@ -175,7 +181,7 @@ public class V4CrudBulkCreateTests
     }
 
     [Fact]
-    public async Task Notes_ResentBatch_CarriesTheSameSyncKeys_SoTheUpsertStillMatches()
+    public async Task Notes_HandTheRequestsSyncKeysToTheRepository_OnEverySend()
     {
         var repo = new Mock<INoteRepository>();
         var written = new List<List<Note>>();

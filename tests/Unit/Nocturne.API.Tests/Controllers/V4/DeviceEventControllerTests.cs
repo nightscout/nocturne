@@ -54,6 +54,42 @@ public class DeviceEventControllerTests
             .ReturnsAsync(new PatientDevice { Id = patientDeviceId, DeviceCategory = DeviceCategory.InsulinPump });
 
     [Fact]
+    public async Task CreateBulk_StampsEveryEventThatDidNotClearAttribution()
+    {
+        var stamped = Guid.NewGuid();
+        _deviceStamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
+                (records, _, _, _) =>
+                {
+                    foreach (var record in records)
+                        record.PatientDeviceId = stamped;
+                })
+            .Returns(Task.CompletedTask);
+
+        IEnumerable<DeviceEvent>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<DeviceEvent>, WriteOrigin, CancellationToken>((e, _, _) => persisted = e.ToList())
+            .ReturnsAsync((IEnumerable<DeviceEvent> e, WriteOrigin _, CancellationToken _) => e);
+
+        await CreateController().CreateBulk(
+        [
+            ValidRequest(patientDeviceId: Guid.Empty),
+            ValidRequest(eventType: DeviceEventType.SensorChange),
+        ]);
+
+        persisted.Should().NotBeNull();
+        persisted!.Should().SatisfyRespectively(
+            cleared => cleared.PatientDeviceId.Should().BeNull(),
+            attributed => attributed.PatientDeviceId.Should().Be(stamped));
+    }
+
+    [Fact]
     public async Task Create_PersistsExplicitPatientDeviceId()
     {
         var patientDeviceId = Guid.NewGuid();
