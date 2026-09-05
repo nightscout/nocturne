@@ -12,23 +12,30 @@ namespace Nocturne.Infrastructure.Cache.Services;
 public class MemoryProcessingStatusService : IProcessingStatusService
 {
     private readonly ILogger<MemoryProcessingStatusService> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, ProcessingStatus> _statusCache;
-    private readonly Timer _cleanupTimer;
+    private readonly ITimer _cleanupTimer;
     private readonly TimeSpan _defaultTtl = CacheConstants.DefaultTtl.ProcessingStatus;
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
-    public MemoryProcessingStatusService(ILogger<MemoryProcessingStatusService> logger)
+    public MemoryProcessingStatusService(
+        ILogger<MemoryProcessingStatusService> logger,
+        TimeProvider timeProvider
+    )
     {
         _logger = logger;
+        _timeProvider = timeProvider;
         _statusCache = new ConcurrentDictionary<string, ProcessingStatus>();
 
-        // Setup cleanup timer to remove expired entries every 5 minutes
-        _cleanupTimer = new Timer(
+        _cleanupTimer = _timeProvider.CreateTimer(
             CleanupExpiredEntries,
             null,
             CacheConstants.CleanupIntervals.StatusCleanup,
             CacheConstants.CleanupIntervals.StatusCleanup
         );
     }
+
+    private DateTime UtcNow => _timeProvider.GetUtcNow().UtcDateTime;
 
     /// <inheritdoc />
     public Task<ProcessingStatus?> GetStatusAsync(
@@ -41,7 +48,7 @@ public class MemoryProcessingStatusService : IProcessingStatusService
             if (_statusCache.TryGetValue(correlationId, out var status))
             {
                 // Check if expired
-                if (status.StartedAt.Add(_defaultTtl) < DateTime.UtcNow)
+                if (status.StartedAt.Add(_defaultTtl) < UtcNow)
                 {
                     _statusCache.TryRemove(correlationId, out _);
                     return Task.FromResult<ProcessingStatus?>(null);
@@ -112,7 +119,7 @@ public class MemoryProcessingStatusService : IProcessingStatusService
             }
 
             status.Status = CacheConstants.ProcessingStatus.Completed;
-            status.CompletedAt = DateTime.UtcNow;
+            status.CompletedAt = UtcNow;
             status.Progress = 100;
             if (results != null)
             {
@@ -156,7 +163,7 @@ public class MemoryProcessingStatusService : IProcessingStatusService
             }
 
             status.Status = CacheConstants.ProcessingStatus.Failed;
-            status.CompletedAt = DateTime.UtcNow;
+            status.CompletedAt = UtcNow;
             status.Errors = errors.ToList();
 
             await UpdateStatusAsync(correlationId, status, cancellationToken);
@@ -193,7 +200,7 @@ public class MemoryProcessingStatusService : IProcessingStatusService
                 Progress = 0,
                 ProcessedCount = 0,
                 TotalCount = totalCount,
-                StartedAt = DateTime.UtcNow,
+                StartedAt = UtcNow,
             };
 
             _statusCache.AddOrUpdate(correlationId, status, (key, existing) => status);
@@ -273,10 +280,13 @@ public class MemoryProcessingStatusService : IProcessingStatusService
     {
         try
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(timeout);
+            using var timeoutCts = new CancellationTokenSource(timeout, _timeProvider);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCts.Token
+            );
 
-            var startTime = DateTime.UtcNow;
+            var startTimestamp = _timeProvider.GetTimestamp();
             while (!cts.Token.IsCancellationRequested)
             {
                 var status = await GetStatusAsync(correlationId, cts.Token);
@@ -289,15 +299,14 @@ public class MemoryProcessingStatusService : IProcessingStatusService
                     _logger.LogDebug(
                         "Processing completed for correlation ID: {CorrelationId} after {ElapsedTime}ms",
                         correlationId,
-                        (DateTime.UtcNow - startTime).TotalMilliseconds
+                        _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds
                     );
                     return status;
                 }
 
-                // Wait 1 second before checking again
                 try
                 {
-                    await Task.Delay(1000, cts.Token);
+                    await Task.Delay(PollInterval, _timeProvider, cts.Token);
                 }
                 catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
                 {
@@ -330,7 +339,7 @@ public class MemoryProcessingStatusService : IProcessingStatusService
     {
         try
         {
-            var cutoffTime = DateTime.UtcNow.Subtract(_defaultTtl);
+            var cutoffTime = UtcNow.Subtract(_defaultTtl);
             var expiredKeys = _statusCache
                 .Where(kvp => kvp.Value.StartedAt < cutoffTime)
                 .Select(kvp => kvp.Key)

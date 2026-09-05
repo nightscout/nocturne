@@ -1,0 +1,4 @@
+P:System.DateTime.UtcNow;Inject TimeProvider and read GetUtcNow().UtcDateTime.
+P:System.DateTime.Now;Inject TimeProvider; GetLocalNow().LocalDateTime only where local time is genuinely intended.
+P:System.DateTimeOffset.UtcNow;Inject TimeProvider and read GetUtcNow().
+P:System.DateTimeOffset.Now;Inject TimeProvider; GetLocalNow() only where local time is genuinely intended.
