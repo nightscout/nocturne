@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   Building2,
   Wrench,
+  HeartPulse,
   ListChecks,
   Users,
   KeyRound,
