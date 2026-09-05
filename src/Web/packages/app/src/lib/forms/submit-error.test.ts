@@ -6,6 +6,7 @@ import { parseErrorBody } from "$lib/api/error-body";
 import {
   describeRemoteError,
   describeSubmitError,
+  errorMessage,
   GENERIC_SUBMIT_ERROR,
   MISSING_ITEM_ERROR,
   PERMISSION_GATED_MUTATION,
@@ -82,6 +83,16 @@ function problemDetails(status: number, detail: string) {
 }
 
 const NEEDS_SCOPE = "This operation requires the 'activity.write' scope.";
+
+describe("a thrown HttpError", () => {
+  it("carries its reason on body.message and nowhere else", () => {
+    const thrown = httpError(500, "We couldn't load your settings.");
+
+    expect(thrown).not.toBeInstanceOf(Error);
+    expect(thrown).not.toHaveProperty("message");
+    expect(errorMessage(thrown)).toBe("We couldn't load your settings.");
+  });
+});
 
 describe("describeSubmitError", () => {
   it("uses the handler's message for a 4xx", () => {
