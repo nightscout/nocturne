@@ -80,7 +80,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
             MigratorConnectionString,
             NullLogger.Instance);
 
-        // Pin the tenant-table storage parameters, exactly as the API does at startup.
+        // Apply the tenant-table storage parameters, exactly as the API does at startup.
         await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(
             MigratorConnectionString,
             NullLogger.Instance);

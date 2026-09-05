@@ -1,4 +1,3 @@
-using System.Globalization;
 using Nocturne.Infrastructure.Data.Configuration;
 
 namespace Nocturne.Infrastructure.Data.Tests.Configuration;
@@ -13,16 +12,6 @@ public class TenantTableStorageParametersTests
 
         sql.Should().Contain("SET LOCAL lock_timeout = '3s';");
         sql.Should().Contain("ALTER TABLE linked_records SET (autovacuum_analyze_scale_factor = 0.01);");
-    }
-
-    [Fact]
-    public void AnalyzeScaleFactor_IsCanonicalText()
-    {
-        // The drift query compares the stored option text verbatim; a non-canonical constant
-        // (trailing zero, leading plus) would make every startup re-apply it.
-        decimal.Parse(TenantTableStorageParameters.AnalyzeScaleFactor, CultureInfo.InvariantCulture)
-            .ToString(CultureInfo.InvariantCulture)
-            .Should().Be(TenantTableStorageParameters.AnalyzeScaleFactor);
     }
 
     [Theory]

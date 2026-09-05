@@ -8,8 +8,9 @@ namespace Nocturne.Infrastructure.Data.Tests.StorageParameters;
 
 /// <summary>
 /// Asserts, against a real PostgreSQL, what the startup reconciler leaves in <c>pg_class.reloptions</c>:
-/// every tenant-scoped table carries the pinned <c>autovacuum_analyze_scale_factor</c>, a run over an
-/// already-pinned database alters nothing, and a value changed or reset by hand is put back. The
+/// every tenant-scoped table carries the <c>autovacuum_analyze_scale_factor</c> ceiling, a run over an
+/// already-reconciled database alters nothing, a value raised or reset by hand is put back, a value
+/// lowered by hand is kept, and a table whose lock is held is skipped rather than stalling. The
 /// expected table set comes from the fixture, which walks <see cref="ITenantScoped"/> CLR types
 /// rather than asking the reconciler what it was told to do.
 /// </summary>
@@ -26,7 +27,7 @@ public class TenantTableStorageParameterTests
     public TenantTableStorageParameterTests(RlsCompletenessFixture fx) => _fx = fx;
 
     [Fact]
-    public async Task EveryTenantScopedTable_CarriesThePinnedAnalyzeScaleFactor()
+    public async Task EveryTenantScopedTable_CarriesTheAnalyzeScaleFactorCeiling()
     {
         _fx.TenantScopedTableNames.Should().NotBeEmpty();
 
@@ -36,7 +37,7 @@ public class TenantTableStorageParameterTests
         {
             stored.Should().ContainKey(table, $"{table} is a tenant-scoped table and must exist");
             stored[table].Should().Be(TenantTableStorageParameters.AnalyzeScaleFactor,
-                $"{table} must carry the pinned {TenantTableStorageParameters.AnalyzeScaleFactorName}");
+                $"{table} must carry the {TenantTableStorageParameters.AnalyzeScaleFactorName} ceiling");
         }
     }
 
@@ -49,7 +50,7 @@ public class TenantTableStorageParameterTests
     }
 
     [Fact]
-    public async Task Reconcile_OverAPinnedDatabase_AltersNothing()
+    public async Task Reconcile_OverAReconciledDatabase_AltersNothing()
     {
         var altered = await ReconcileAsync();
 
@@ -57,7 +58,7 @@ public class TenantTableStorageParameterTests
     }
 
     [Fact]
-    public async Task Reconcile_RestoresAValueChangedByHand()
+    public async Task Reconcile_LowersAValueRaisedByHand()
     {
         await ExecuteAsMigratorAsync(
             $"ALTER TABLE {ProbeTable} SET ({TenantTableStorageParameters.AnalyzeScaleFactorName} = 0.2)");
@@ -66,6 +67,48 @@ public class TenantTableStorageParameterTests
         var altered = await ReconcileAsync();
 
         altered.Should().Be(1);
+        (await ReadStoredValuesAsync())[ProbeTable].Should().Be(TenantTableStorageParameters.AnalyzeScaleFactor);
+    }
+
+    [Fact]
+    public async Task Reconcile_KeepsAStricterValueSetByHand()
+    {
+        await ExecuteAsMigratorAsync(
+            $"ALTER TABLE {ProbeTable} SET ({TenantTableStorageParameters.AnalyzeScaleFactorName} = 0.005)");
+        try
+        {
+            var altered = await ReconcileAsync();
+
+            altered.Should().Be(0, "an operator's lower value is under the ceiling and must be kept");
+            (await ReadStoredValuesAsync())[ProbeTable].Should().Be("0.005");
+        }
+        finally
+        {
+            await RestoreProbeTableAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Reconcile_SkipsATableWhoseLockIsHeld_AndAltersItOnceReleased()
+    {
+        await ExecuteAsMigratorAsync(
+            $"ALTER TABLE {ProbeTable} RESET ({TenantTableStorageParameters.AnalyzeScaleFactorName})");
+
+        // ALTER TABLE … SET needs SHARE UPDATE EXCLUSIVE, which is self-conflicting; holding it from
+        // another session stands in for an autovacuum of the table.
+        await using var holder = await _fx.OpenMigratorConnectionAsync();
+        await using var holding = await holder.BeginTransactionAsync();
+        await using (var lockCmd = new NpgsqlCommand($"LOCK TABLE {ProbeTable} IN SHARE UPDATE EXCLUSIVE MODE", holder, holding))
+            await lockCmd.ExecuteNonQueryAsync();
+
+        var whileHeld = await ReconcileAsync();
+
+        whileHeld.Should().Be(0, "the lock_timeout must skip the table instead of waiting or throwing");
+        (await ReadStoredValuesAsync())[ProbeTable].Should().BeNull();
+
+        await holding.RollbackAsync();
+
+        (await ReconcileAsync()).Should().Be(1, "the skipped table is picked up on the next run");
         (await ReadStoredValuesAsync())[ProbeTable].Should().Be(TenantTableStorageParameters.AnalyzeScaleFactor);
     }
 
@@ -100,7 +143,19 @@ public class TenantTableStorageParameterTests
         finally
         {
             await ExecuteAsMigratorAsync($"ALTER TABLE {ProbeTable} RESET (autovacuum_vacuum_scale_factor)");
+            await RestoreProbeTableAsync();
         }
+    }
+
+    /// <summary>
+    /// Puts the probe table back to the reconciled state whatever a test left behind: a value
+    /// under the ceiling would otherwise survive the next reconcile and leak into the other tests.
+    /// </summary>
+    private async Task RestoreProbeTableAsync()
+    {
+        await ExecuteAsMigratorAsync(
+            $"ALTER TABLE {ProbeTable} RESET ({TenantTableStorageParameters.AnalyzeScaleFactorName})");
+        await ReconcileAsync();
     }
 
     private Task<int> ReconcileAsync() =>
