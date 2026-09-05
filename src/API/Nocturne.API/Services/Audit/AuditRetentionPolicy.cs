@@ -6,10 +6,17 @@ namespace Nocturne.API.Services.Audit;
 /// resolves the same window so its floor check sees the value that will actually be applied.
 /// </summary>
 /// <remarks>
-/// There is no "kept indefinitely" state. A tenant that has configured nothing is purged at the
-/// platform default, so a null on the config row is the default rather than infinity — an
-/// instance may still disable a default by configuring it to zero or less, which leaves only
-/// explicitly configured tenants purged.
+/// <para>
+/// A tenant that has configured nothing is purged at the platform default, so a null on the
+/// config row is the default rather than infinity.
+/// </para>
+/// <para>
+/// A value of zero or less means opposite things on the two inputs, deliberately. On a
+/// <em>tenant</em> value it is nonsense — a window that puts the cutoff at or after now — so it
+/// is floored to <see cref="MinRetentionDays"/>. On a <em>platform configuration key</em> it is
+/// the operator disabling the default outright, which yields null and leaves only explicitly
+/// configured tenants purged. A tenant cannot switch its own purge off; an operator can.
+/// </para>
 /// </remarks>
 public static class AuditRetentionPolicy
 {

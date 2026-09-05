@@ -27,8 +27,12 @@ namespace Nocturne.Infrastructure.Data.Tests.Rls;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
-public class AuditPurgePinningIntegrationTests
+public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 {
+    // Each factory owns a ServiceProvider or an NpgsqlDataSource, and so a connection pool
+    // against the shared container. Held and disposed per test rather than dropped.
+    private readonly List<IAsyncDisposable> _owned = [];
+
     private const string AuditTable = "mutation_audit_log";
     private static readonly TimeSpan NinetyDays = TimeSpan.FromDays(90);
 
@@ -156,22 +160,34 @@ public class AuditPurgePinningIntegrationTests
 
     private IDbContextFactory<NocturneDbContext> BuildFactory(IInterceptor? extra = null)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpContextAccessor();
-
         if (extra is null)
         {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddHttpContextAccessor();
             services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
-            return services.BuildServiceProvider().GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+
+            var provider = services.BuildServiceProvider();
+            _owned.Add(provider);
+            return provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         }
 
         var dataSource = new NpgsqlDataSourceBuilder(_fx.AppConnectionString).Build();
+        _owned.Add(dataSource);
+
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor(), extra)
             .Options;
         return new PlainContextFactory(options);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var owned in _owned)
+        {
+            await owned.DisposeAsync();
+        }
     }
 
     private async Task<long> CountAsync(Guid tenant)

@@ -84,6 +84,9 @@ public static partial class RetentionPurgeExtensions
 
         // Values are bound as parameters; only the validated identifiers and the batch size are
         // interpolated. The ctid sub-select keeps each statement to a bounded slice of the table.
+        // Composed into a local, which is also why EF1002/EF1003 do not fire on the call below —
+        // the analyzer cannot see the literal, so it is the validation above, not a suppression,
+        // that carries the safety argument.
         var sql = $$"""
             DELETE FROM {{table}}
             WHERE tenant_id = {1}
@@ -98,11 +101,9 @@ public static partial class RetentionPurgeExtensions
 
         do
         {
-#pragma warning disable EF1002
             await using var db = await factory.CreateTenantPinnedContextAsync(tenantId, ct);
 
             batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, [cutoff, tenantId], ct);
-#pragma warning restore EF1002
 
             totalDeleted += batchDeleted;
         }
