@@ -147,16 +147,13 @@ public class UniqueIndexDeduplicationGuardTests
 
     /// <summary>
     /// The table a captured reference names, or <see cref="UnresolvedTable"/> when it is not a
-    /// plain name — an interpolated <c>{table}</c> hole, or a loop variable. A schema qualifier is
-    /// dropped so <c>public.x</c> and <c>x</c> are one table on both the index and the
-    /// <c>CREATE TABLE</c> side; splitting them would red-build a schema-qualified new table.
+    /// plain name — an interpolated <c>{table}</c> hole, or a loop variable.
     /// </summary>
     private static string ResolveTable(string captured)
     {
         var bare = MigrationSourceFiles.BareTableName(captured);
-        var unqualified = bare[(bare.LastIndexOf('.') + 1)..];
 
-        return PlainTableName.IsMatch(unqualified) ? unqualified : UnresolvedTable;
+        return PlainTableName.IsMatch(bare) ? bare : UnresolvedTable;
     }
 
     private static IReadOnlySet<string> TablesCreatedIn(string up) =>

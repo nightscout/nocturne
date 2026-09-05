@@ -340,9 +340,17 @@ public static class DatabaseInitializationExtensions
 
     /// <summary>
     /// Verifies that every supplied tenant-scoped table has Row Level Security
-    /// enabled, forced, and at least one policy. Also checks table ownership and
+    /// enabled, forced, at least one policy, and the share-category policy
+    /// <see cref="ShareRlsPolicy.PolicyName"/> by name. Also checks table ownership and
     /// default privileges, and warns if the connected database user is a superuser
     /// or has BYPASSRLS.
+    ///
+    /// Naming the share policy is what makes a partial reconcile visible: every
+    /// tenant-scoped table carries <c>tenant_isolation</c> from its migration, so a
+    /// table the reconciler skipped still has a non-zero policy count.
+    /// <see cref="ReconcileShareRlsPoliciesAsync"/> applies that policy to every table in
+    /// this same set immediately before this check runs, so the expectation is the
+    /// reconciler's own output rather than a second list.
     ///
     /// Runs at API startup after migrations so accidentally adding a new
     /// tenant-scoped table without an accompanying RLS migration fails loud
@@ -385,7 +393,7 @@ public static class DatabaseInitializationExtensions
             SELECT c.relname,
                    c.relrowsecurity,
                    c.relforcerowsecurity,
-                   (SELECT COUNT(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policy_count
+                   ARRAY(SELECT p.polname::text FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE n.nspname = 'public'
@@ -393,7 +401,7 @@ public static class DatabaseInitializationExtensions
               AND c.relname = ANY(@tables);
             """;
 
-        var rows = new List<(string Table, bool RlsEnabled, bool RlsForced, long PolicyCount)>();
+        var rows = new List<(string Table, bool RlsEnabled, bool RlsForced, string[] Policies)>();
 
         await using (var cmd = connection.CreateCommand())
         {
@@ -410,7 +418,7 @@ public static class DatabaseInitializationExtensions
                     reader.GetString(0),
                     reader.GetBoolean(1),
                     reader.GetBoolean(2),
-                    reader.GetInt64(3)));
+                    reader.GetFieldValue<string[]>(3)));
             }
         }
 
@@ -418,7 +426,11 @@ public static class DatabaseInitializationExtensions
         var missing = tables.Where(t => !foundTables.Contains(t)).ToArray();
         var notEnabled = rows.Where(r => !r.RlsEnabled).Select(r => r.Table).ToArray();
         var notForced = rows.Where(r => r.RlsEnabled && !r.RlsForced).Select(r => r.Table).ToArray();
-        var noPolicy = rows.Where(r => r.RlsEnabled && r.PolicyCount == 0).Select(r => r.Table).ToArray();
+        var noPolicy = rows.Where(r => r.RlsEnabled && r.Policies.Length == 0).Select(r => r.Table).ToArray();
+        var noSharePolicy = rows
+            .Where(r => r.RlsEnabled && r.Policies.Length > 0 && !r.Policies.Contains(ShareRlsPolicy.PolicyName))
+            .Select(r => r.Table)
+            .ToArray();
 
         var problems = new List<string>();
         if (missing.Length > 0)
@@ -437,13 +449,20 @@ public static class DatabaseInitializationExtensions
         {
             problems.Add($"no policy defined on: {string.Join(", ", noPolicy)}");
         }
+        if (noSharePolicy.Length > 0)
+        {
+            problems.Add($"'{ShareRlsPolicy.PolicyName}' policy missing on: {string.Join(", ", noSharePolicy)}");
+        }
 
         if (problems.Count > 0)
         {
             var message =
-                "Row Level Security self-check failed. Tenant-scoped tables must have RLS enabled, forced, and at least one policy. " +
+                "Row Level Security self-check failed. Tenant-scoped tables must have RLS enabled, forced, a " +
+                $"tenant_isolation policy and the '{ShareRlsPolicy.PolicyName}' policy. " +
                 string.Join("; ", problems) +
-                ". Add a migration that runs ENABLE + FORCE ROW LEVEL SECURITY and creates a tenant_isolation policy.";
+                ". Add a migration that runs ENABLE + FORCE ROW LEVEL SECURITY and creates a tenant_isolation " +
+                $"policy; a missing '{ShareRlsPolicy.PolicyName}' means the table was not in the set " +
+                $"{nameof(ReconcileShareRlsPoliciesAsync)} just reconciled.";
             logger.LogCritical("{Message}", message);
             throw new InvalidOperationException(message);
         }
