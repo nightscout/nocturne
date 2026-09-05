@@ -53,8 +53,56 @@ describe("Google Health connector page", () => {
       { dataType: "body-fat", granted: true, count: 3, supported: false },
     ] });
     render(GoogleHealthPage);
-    await expect.element(page.getByText("Connected and importing")).toBeVisible();
+    await expect.element(page.getByText("Import enabled", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Not yet supported by Nocturne")).toBeVisible();
     await expect.element(page.getByText("Step history")).toBeVisible();
+  });
+
+  it("requires preview confirmation before claiming that data is importing", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true, previewRequired: true }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "steps", granted: true, count: 42, supported: true },
+    ] });
+    render(GoogleHealthPage);
+
+    await expect.element(page.getByText("Review the available data below", { exact: false })).toBeVisible();
+    await expect.element(page.getByText("Available to connect", { exact: true })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Sync now" })).toBeDisabled();
+    await expect.element(page.getByRole("button", { name: "Save selection and import" })).toBeEnabled();
+    expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+  });
+
+  it("keeps import status tied to saved selection while checkboxes are edited", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true, selectedTypes: ["steps"] }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "steps", granted: true, count: 42, supported: true },
+      { dataType: "weight", granted: true, count: 3, supported: true },
+    ] });
+    render(GoogleHealthPage);
+    const steps = page.getByRole("row", { name: /Steps/ });
+    const weight = page.getByRole("row", { name: /Weight/ });
+
+    await expect.element(steps.getByText("Import enabled", { exact: true })).toBeVisible();
+    await expect.element(weight.getByText("Available to connect", { exact: true })).toBeVisible();
+    await page.getByRole("checkbox", { name: "Import Steps" }).click();
+    await page.getByRole("checkbox", { name: "Import Weight" }).click();
+
+    await expect.element(steps.getByText("Import enabled", { exact: true })).toBeVisible();
+    await expect.element(weight.getByText("Available to connect", { exact: true })).toBeVisible();
+    expect(googleHealthMocks.save).not.toHaveBeenCalled();
+  });
+
+  it("shows an import error for the affected saved data type", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({
+      configured: true, connected: true, errorCode: "internal_sync_native_write", errorDataTypes: ["steps"],
+    }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "steps", granted: true, count: 42, supported: true },
+      { dataType: "weight", granted: true, count: 3, supported: true },
+    ] });
+    render(GoogleHealthPage);
+
+    await expect.element(page.getByText("Import needs attention", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Import enabled", { exact: true })).toBeVisible();
   });
 });

@@ -1,13 +1,13 @@
 import { errorMessage, errorStatus } from "$lib/forms/submit-error";
 
 const operations = {
-  status: "De koppelingsstatus kon niet worden opgehaald.",
-  readings: "De geïmporteerde metingen konden niet worden opgehaald.",
-  save: "De Google-instellingen konden niet worden opgeslagen.",
-  signin: "De Google-aanmelding kon niet worden gestart.",
-  sync: "De Google-import kon niet worden uitgevoerd.",
-  disconnect: "Google kon niet worden ontkoppeld.",
-  purge: "De Google-import kon niet worden gewist.",
+  status: "The connection status could not be retrieved.",
+  readings: "The available Google Health data could not be retrieved.",
+  save: "The Google settings could not be saved.",
+  signin: "Google sign-in could not be started.",
+  sync: "The Google import could not be completed.",
+  disconnect: "Google could not be disconnected.",
+  purge: "The imported Google data could not be deleted.",
 };
 
 export type GoogleHealthOperation = keyof typeof operations;
@@ -31,17 +31,17 @@ export function describeGoogleHealthError(
   const explanation = known
     ? knownErrors[reason]
     : http === 401
-      ? "Je Nocturne-sessie is verlopen. Log opnieuw in bij Nocturne en laad deze pagina opnieuw."
+      ? "Your Nocturne session is missing or has expired. Sign in to Nocturne and reload this page."
       : http === 403
-        ? "Je Nocturne-account heeft geen toegang tot deze instellingen. Gebruik een beheerder met tenant-instellingenrechten."
+        ? "Your Nocturne account cannot access these settings. Use an administrator account with tenant settings permission."
         : http === 404
-          ? "Deze functie ontbreekt in de geïnstalleerde versie. Controleer of Nocturne Personal is bijgewerkt."
+          ? "This feature is missing from the installed version. Check that Nocturne is up to date."
           : http === 429
-            ? "Er zijn te veel verzoeken gedaan. Probeer het over enkele minuten opnieuw."
+            ? "Too many requests were made. Try again in a few minutes."
             : http && http >= 500
-              ? "Nocturne kon het verzoek niet verwerken. Controleer de serverlog bij deze poging."
-              : "Er trad een fout op in de pagina of verbinding. Laad de pagina opnieuw; blijft dit gebeuren, geef de technische code door.";
+              ? "Nocturne could not process the request. Check the server log for this attempt."
+              : "A page or connection error occurred. Reload the page; if this continues, report the technical code.";
 
   // Only fixed messages and recognized codes may leave the error boundary.
-  return `${operations[operation]} ${explanation} Technische code: ${operation}/${code}${http ? ` · HTTP ${http}` : ""}.`;
+  return `${operations[operation]} ${explanation} Technical code: ${operation}/${code}${http ? ` · HTTP ${http}` : ""}.`;
 }

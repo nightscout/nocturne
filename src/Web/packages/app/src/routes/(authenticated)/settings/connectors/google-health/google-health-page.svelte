@@ -30,7 +30,17 @@
   async function connect() { operation = "save"; await savePersonalGoogleHealth(options(true)); clientSecret = ""; operation = "signin"; const auth = await startPersonalGoogleHealth(); if (auth.url) location.assign(auth.url); }
   async function saveAndImport() { operation = "save"; await savePersonalGoogleHealth(options(false)); operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); }
   async function disconnect() { operation = "disconnect"; await disconnectPersonalGoogleHealth(); preview = null; await refresh(); }
-  function itemStatus(item: NonNullable<GoogleHealthPreview["items"]>[number]) { if (item.errorCode) return `Read failed (${item.errorCode})`; if (!item.supported) return "Not yet supported by Nocturne"; if (!item.granted) return "Permission not granted"; if (item.count > 0 && selected.includes(item.dataType ?? "")) return "Connected and importing"; if (item.count > 0) return "Available to connect"; return "Supported, but no data found"; }
+  function itemStatus(item: NonNullable<GoogleHealthPreview["items"]>[number]) {
+    if (item.errorCode) return `Read failed (${item.errorCode})`;
+    if (!item.supported) return "Not yet supported by Nocturne";
+    if (!item.granted) return "Permission not granted";
+    if (!status?.previewRequired && status?.selectedTypes?.includes(item.dataType ?? "")) {
+      if (status.errorCode && (!status.errorDataTypes?.length || status.errorDataTypes.includes(item.dataType ?? "")))
+        return "Import needs attention";
+      return item.count > 0 ? "Import enabled" : "Import enabled; no data found";
+    }
+    return item.count > 0 ? "Available to connect" : "Supported, but no data found";
+  }
   onMount(() => { let active = true; queueMicrotask(() => { if (active) void run(async () => { const outcome = new URLSearchParams(location.search).get("connection"); await refresh(); if (outcome === "failed") message = "Google sign-in failed or was cancelled."; if (outcome === "provider_denied") message = "Google did not grant the requested read access."; if (outcome === "no_session") message = "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."; }); }); return () => { active = false; }; });
 </script>
 
@@ -51,7 +61,13 @@
         <p class="text-sm text-muted-foreground">Nocturne retrieves every available page from this date. An early start date can make the first import take longer.</p><Button type="submit" disabled={busy}>Save and connect</Button>
       </form>{:else}<p>The encrypted Google Cloud configuration is saved.</p><div class="flex gap-2"><Button disabled={busy} onclick={() => void run(async () => { operation = "signin"; const auth = await startPersonalGoogleHealth(); if (auth.url) location.assign(auth.url); })}>Sign in with Google</Button><Button variant="outline" disabled={busy} onclick={() => void run(disconnect)}><Unplug class="mr-2 h-4 w-4" />Disconnect</Button></div>
         <details><summary class="cursor-pointer text-sm font-medium">Edit connection settings</summary><form class="mt-4 space-y-4" onsubmit={(event) => { event.preventDefault(); void run(connect); }}><label class="block text-sm font-medium">Google client ID<input class="mt-1 w-full rounded border bg-background p-2" required bind:value={clientId} /></label><label class="block text-sm font-medium">Client secret<input class="mt-1 w-full rounded border bg-background p-2" type="password" bind:value={clientSecret} placeholder="Leave empty to keep the saved secret" /></label><label class="block text-sm font-medium">Callback URL<input class="mt-1 w-full rounded border bg-background p-2" type="url" required bind:value={callbackUrl} /></label><label class="block text-sm font-medium">Import data from<input class="mt-1 block rounded border bg-background p-2" type="date" min="2000-01-01" max={day(new Date())} required bind:value={importFrom} /></label><Button type="submit" disabled={busy}>Save and reconnect</Button></form></details>{/if}
-    {:else}<p>Google Health is connected. Automatic sync runs approximately every 15 minutes.</p><p class="text-sm text-muted-foreground">History start: {importFrom}. Disconnect first to change the date or OAuth settings.</p><div class="flex gap-2"><Button variant="outline" disabled={busy} onclick={() => void run(async () => { operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); })}><RefreshCw class="mr-2 h-4 w-4" />Sync now</Button><Button variant="outline" disabled={busy} onclick={() => void run(disconnect)}><Unplug class="mr-2 h-4 w-4" />Disconnect</Button></div>{/if}
+    {:else}
+      <p>{status.previewRequired
+        ? "Google Health is connected. Review the available data below, then save your selection to start importing."
+        : "Google Health is connected. Automatic sync runs approximately every 15 minutes."}</p>
+      <p class="text-sm text-muted-foreground">History start: {importFrom}. Disconnect first to change the date or OAuth settings.</p>
+      <div class="flex gap-2"><Button variant="outline" disabled={busy || status.previewRequired} onclick={() => void run(async () => { operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); })}><RefreshCw class="mr-2 h-4 w-4" />Sync now</Button><Button variant="outline" disabled={busy} onclick={() => void run(disconnect)}><Unplug class="mr-2 h-4 w-4" />Disconnect</Button></div>
+    {/if}
   </CardContent></Card>
 
   {#if status?.connected}<Card><CardHeader><CardTitle>Google Health data</CardTitle><CardDescription>Detected data types and how Nocturne can use them</CardDescription></CardHeader><CardContent class="space-y-4">
