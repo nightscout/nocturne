@@ -58,6 +58,15 @@ describe("Google Health connector page", () => {
     await expect.element(page.getByText("Step history")).toBeVisible();
   });
 
+  it("explains the history safety limit without silently truncating the import", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
+    googleHealthMocks.preview.mockRejectedValue({ status: 400, body: { message: "history_too_large" } });
+    render(GoogleHealthPage);
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Google exceeded the pagination safety limit");
+    await expect.element(page.getByRole("alert")).toHaveTextContent("readings/history_too_large");
+  });
+
   it("requires preview confirmation before claiming that data is importing", async () => {
     googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true, previewRequired: true }));
     googleHealthMocks.preview.mockResolvedValue({ items: [

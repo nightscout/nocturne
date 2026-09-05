@@ -25,6 +25,9 @@ public sealed class GoogleHealthException(
 
 public sealed class GoogleHealthClient(HttpClient http)
 {
+    // A faulty provider can keep issuing unique cursors that bypass cycle detection.
+    internal const int MaximumHistoryPages = 10_000;
+
     public const string ActivityScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
     public const string MetricsScope = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly";
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
@@ -60,7 +63,7 @@ public sealed class GoogleHealthClient(HttpClient http)
         var count = 0;
         var pageToken = "";
         var seen = new HashSet<string>();
-        while (true)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
             ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
@@ -90,6 +93,7 @@ public sealed class GoogleHealthClient(HttpClient http)
             if (pageToken.Length == 0) return count;
             if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "inventory", dataType: type);
         }
+        throw new GoogleHealthException("history_too_large", stage: "inventory", dataType: type);
     }
 
     public async Task<List<SleepSession>> ReadSleepAsync(
@@ -100,7 +104,7 @@ public sealed class GoogleHealthClient(HttpClient http)
         var sessions = new List<SleepSession>();
         var seen = new HashSet<string>();
         var pageToken = "";
-        while (true)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
             ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
@@ -137,6 +141,7 @@ public sealed class GoogleHealthClient(HttpClient http)
             if (pageToken.Length == 0) return sessions;
             if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: "sleep");
         }
+        throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: "sleep");
     }
 
     public Task<JsonElement> ExchangeAuthorizationCodeAsync(Dictionary<string, string> form, CancellationToken ct) =>
@@ -185,7 +190,7 @@ public sealed class GoogleHealthClient(HttpClient http)
         var points = new List<PersonalHealthReading>();
         var seen = new HashSet<string>();
         var pageToken = "";
-        while (true)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
             ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
@@ -225,6 +230,7 @@ public sealed class GoogleHealthClient(HttpClient http)
             if (pageToken.Length == 0) return points;
             if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "data_read", dataType: type);
         }
+        throw new GoogleHealthException("history_too_large", stage: "data_read", dataType: type);
     }
 
     private static async Task<GoogleHealthException> OAuthErrorAsync(

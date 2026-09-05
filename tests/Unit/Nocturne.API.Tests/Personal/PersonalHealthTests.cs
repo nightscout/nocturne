@@ -234,6 +234,41 @@ public class PersonalHealthTests
     }
 
     [Theory]
+    [InlineData("inventory", "inventory", "weight", false)]
+    [InlineData("read", "data_read", "weight", false)]
+    [InlineData("sleep", "data_read", "sleep", false)]
+    [InlineData("inventory", "inventory", "weight", true)]
+    [InlineData("read", "data_read", "weight", true)]
+    [InlineData("sleep", "data_read", "sleep", true)]
+    public async Task Limits_unique_page_tokens_but_allows_completion_on_the_last_page(
+        string operation, string stage, string type, bool completesOnLastPage)
+    {
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            Assert.True(calls <= GoogleHealthClient.MaximumHistoryPages);
+            return Json(completesOnLastPage && calls == GoogleHealthClient.MaximumHistoryPages
+                ? """{"dataPoints":[]}"""
+                : JsonSerializer.Serialize(new { dataPoints = Array.Empty<object>(), nextPageToken = $"page-{calls + 1}" }));
+        }));
+        var client = new GoogleHealthClient(http);
+
+        if (completesOnLastPage)
+        {
+            await ReadHistoryAsync(client, operation, default);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadHistoryAsync(client, operation, default));
+            Assert.Equal("history_too_large", exception.Message);
+            Assert.Equal(stage, exception.Stage);
+            Assert.Equal(type, exception.DataType);
+        }
+        Assert.Equal(GoogleHealthClient.MaximumHistoryPages, calls);
+    }
+
+    [Theory]
     [InlineData("inventory", "inventory", "weight")]
     [InlineData("read", "data_read", "weight")]
     [InlineData("sleep", "data_read", "sleep")]
