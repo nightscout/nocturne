@@ -630,6 +630,36 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsDescending();
         }
 
+        // The connector watermark -- V4RepositoryBase.GetLatestTimestampAsync -- asks for the
+        // newest timestamp of one tenant and one data source. With neither column leading, the
+        // planner walks ix_<table>_timestamp backwards across every other tenant's rows, so a
+        // tenant whose newest row for that source is old reads most of the table to return one
+        // value. The deleted_at filter keeps the scan index-only: soft-deleted rows left in the
+        // index have to be skipped a heap fetch at a time, which is why it is not a size saving.
+        foreach (var entity in V4TimeSeriesRecordEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.DataSource),
+                    nameof(IV4TimeSeriesEntity.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_source_timestamp")
+                .IsDescending(false, false, true)
+                .HasFilter("deleted_at IS NULL");
+        }
+
+        // GetLatestAsync and GetLatestBeforeAsync read a snapshot table newest-first for one
+        // tenant, with no data source to pin, so the watermark index above cannot serve them.
+        // ix_<table>_timestamp answers them today at 2,452 to 20,368 index tuples read per scan.
+        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_timestamp")
+                .IsDescending(false, true)
+                .HasFilter("deleted_at IS NULL");
+        }
+
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
         // system-swept legacy id is a 23505 — see SoftDeleteDedupExtensions.GetBlockingLegacyIdsAsync.
         foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
@@ -1330,14 +1360,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.RecordId })
-            .HasDatabaseName("ix_linked_records_record");
-
-        modelBuilder
-            .Entity<LinkedRecordEntity>()
             .HasIndex(l => new { l.TenantId, l.RecordType, l.RecordId })
             .IsUnique()
             .HasDatabaseName("ix_linked_records_tenant_type_id");
+
+        // DeduplicationService.ReconcileNewLinksAsync pages the tenant's links by creation order.
+        // The unique index above leads with tenant_id but then record_type, so it can only supply
+        // the tenant and the rest is a filter plus a sort of everything that tenant owns.
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.TenantId, l.SysCreatedAt })
+            .HasDatabaseName("ix_linked_records_tenant_created");
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
@@ -1349,10 +1382,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             })
             .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
+        // Every read of this table is tenant-scoped, by the global query filter and again by the
+        // tenant_isolation RLS policy, so leading on record_type made the window scan span all
+        // tenants -- 41,414 index tuples read per scan, the worst ratio in the schema. Serves the
+        // dedup window reads whether or not they also pin is_primary, which is selective enough to
+        // leave as a filter.
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.SourceTimestamp })
-            .HasDatabaseName("ix_linked_records_type_timestamp");
+            .HasIndex(l => new { l.TenantId, l.RecordType, l.SourceTimestamp })
+            .HasDatabaseName("ix_linked_records_tenant_type_timestamp");
 
         // Partial index for the NOT EXISTS anti-join in read queries —
         // only non-primary rows enter the index, keeping it small.
@@ -1603,11 +1641,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.StartTimestamp)
             .HasDatabaseName("ix_temp_basals_start_timestamp")
             .IsDescending();
-
-        modelBuilder
-            .Entity<TempBasalEntity>()
-            .HasIndex(e => e.EndTimestamp)
-            .HasDatabaseName("ix_temp_basals_end_timestamp");
 
         modelBuilder
             .Entity<TempBasalEntity>()
@@ -2051,10 +2084,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_subject");
 
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_mutation_audit_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
-
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_created");
         });
@@ -2069,10 +2098,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_created");
-
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_read_access_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
         });
 
         modelBuilder.Entity<TenantAuditConfigEntity>(entity =>

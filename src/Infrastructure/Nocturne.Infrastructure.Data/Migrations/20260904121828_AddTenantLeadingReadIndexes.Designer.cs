@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260904121828_AddTenantLeadingReadIndexes")]
+    partial class AddTenantLeadingReadIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2562,6 +2565,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TraceId")
+                        .HasDatabaseName("ix_mutation_audit_log_correlation")
+                        .HasFilter("correlation_id IS NOT NULL");
+
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("ix_mutation_audit_log_created");
 
@@ -3302,6 +3309,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("user_agent");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TraceId")
+                        .HasDatabaseName("ix_read_access_log_correlation")
+                        .HasFilter("correlation_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .HasDatabaseName("ix_read_access_log_created");
@@ -7888,6 +7899,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_temp_basals_correlation_id");
 
                     b.HasIndex("DeviceId");
+
+                    b.HasIndex("EndTimestamp")
+                        .HasDatabaseName("ix_temp_basals_end_timestamp");
 
                     b.HasIndex("PatientDeviceId");
 

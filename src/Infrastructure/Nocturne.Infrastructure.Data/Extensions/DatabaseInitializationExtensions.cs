@@ -16,6 +16,58 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 public static class DatabaseInitializationExtensions
 {
     /// <summary>
+    /// The migrator <see cref="NocturneDbContext"/>, with server notices forwarded to
+    /// <paramref name="logger"/>.
+    /// <para>
+    /// A migration that decides something at runtime — which constraints matched a shape, which
+    /// index it had to rebuild, whether it could take a lock before giving up — can only report it
+    /// with <c>RAISE NOTICE</c>, and a notice reaches no log by default: the server's
+    /// <c>log_min_messages</c> is <c>warning</c>, and Npgsql surfaces it as a connection event with
+    /// no subscriber. Forwarding it is the only record such a migration leaves, because one that
+    /// completes gets its history row and is never run again.
+    /// </para>
+    /// <para>
+    /// The subscription has to be on the connection EF executes against, which is why this builds
+    /// the context rather than configuring the data source.
+    /// <c>NpgsqlDataSourceBuilder.UsePhysicalConnectionInitializer</c> looks like the natural hook
+    /// and is not one: it hands out a throwaway <see cref="NpgsqlConnection"/> wrapper for
+    /// initialisation only, so the handler list dies with that instance and the connection EF later
+    /// takes from the pool has none. Subscribing there is silent, not wrong-looking.
+    /// </para>
+    /// </summary>
+    internal static NocturneDbContext CreateMigratorContext(
+        NpgsqlDataSource dataSource,
+        TenantConnectionInterceptor interceptor,
+        ILogger logger)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+
+        // A migration can include long-running DDL — e.g. building an index on a
+        // multi-million-row table — that exceeds Npgsql's default 30s command timeout.
+        // A timed-out migration command surfaces as a transient failure and crashes
+        // startup; under `restart: unless-stopped` the next boot re-runs the migration
+        // from scratch, so the build is killed and restarted forever — an unbreakable
+        // crash loop. Give migration DDL ample time to complete.
+        optionsBuilder.UseNpgsql(
+            dataSource,
+            npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
+        optionsBuilder.AddInterceptors(interceptor);
+
+        var context = new NocturneDbContext(optionsBuilder.Options);
+
+        // Survives the open/close churn EF does around every suppressTransaction boundary:
+        // the DbConnection instance is stable for the context's lifetime, only its physical
+        // connector is returned to the pool and retaken.
+        if (context.Database.GetDbConnection() is NpgsqlConnection npgsql)
+        {
+            npgsql.Notice += (_, args) =>
+                logger.LogInformation("Migration notice: {Notice}", args.Notice.MessageText);
+        }
+
+        return context;
+    }
+
+    /// <summary>
     /// Runs EF Core migrations against the database using a dedicated migrator
     /// connection string. Builds a throwaway NpgsqlDataSource + DbContextOptions
     /// so the migrator DbContext is never registered in the main DI container
@@ -56,19 +108,7 @@ public static class DatabaseInitializationExtensions
                 logger,
                 cancellationToken);
 
-            var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
-            // A migration can include long-running DDL — e.g. building an index on a
-            // multi-million-row table — that exceeds Npgsql's default 30s command timeout.
-            // A timed-out migration command surfaces as a transient failure and crashes
-            // startup; under `restart: unless-stopped` the next boot re-runs the migration
-            // from scratch, so the build is killed and restarted forever — an unbreakable
-            // crash loop. Give migration DDL ample time to complete.
-            optionsBuilder.UseNpgsql(
-                dataSource,
-                npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
-            optionsBuilder.AddInterceptors(interceptor);
-
-            using var context = new NocturneDbContext(optionsBuilder.Options);
+            using var context = CreateMigratorContext(dataSource, interceptor, logger);
             await context.Database.MigrateAsync(cancellationToken);
 
             logger.LogInformation("PostgreSQL database migrations completed");
