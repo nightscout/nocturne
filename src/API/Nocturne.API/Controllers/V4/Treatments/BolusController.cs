@@ -61,51 +61,22 @@ public class BolusController(
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Create([FromBody] CreateBolusRequest request, CancellationToken ct = default)
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(Bolus model, CreateBolusRequest request, CancellationToken ct)
     {
-        var model = MapCreateToModel(request);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped and only ever surface as pseudo-devices.
-        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct);
     }
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Update(Guid id, [FromBody] UpdateBolusRequest request, CancellationToken ct = default)
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        Bolus model, UpdateBolusRequest request, Bolus existing, CancellationToken ct)
     {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct);
     }
 
     /// <summary>Maps a <see cref="CreateBolusRequest"/> to a new <see cref="Bolus"/> domain model.</summary>
@@ -167,14 +138,17 @@ public class BolusController(
     };
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Attribution is the batch form rather than a loop over <see cref="OnBeforeCreateAsync"/>: one
+    /// stamper pass resolves the whole payload, and per-record DataSource drives matching, so no
+    /// batch-level source is needed for a mixed-source upload.
+    /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<Bolus> models, IReadOnlyList<CreateBolusRequest> requests, CancellationToken ct)
     {
         for (var i = 0; i < models.Count; i++)
             await EnrichInsulinContextAsync(models[i], requests[i].PatientInsulinId, ct);
 
-        // Per-record DataSource drives matching, so no batch-level source is needed for a
-        // mixed-source bulk upload.
         var error = await PatientDeviceAttribution.ApplyManyAsync(
             [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
             patientDevices, deviceStamper, DeviceAttributionCategories.Bolus, batchSource: null, ct);

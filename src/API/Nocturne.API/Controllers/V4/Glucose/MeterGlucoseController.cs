@@ -58,48 +58,18 @@ public class MeterGlucoseController(
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<MeterGlucose>> Create([FromBody] UpsertMeterGlucoseRequest request, CancellationToken ct = default)
-    {
-        var model = MapCreateToModel(request);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped and only ever surface as pseudo-devices.
-        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices.
+    /// </remarks>
+    protected override Task<ObjectResult?> OnBeforeCreateAsync(
+        MeterGlucose model, UpsertMeterGlucoseRequest request, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing: null, ct);
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<MeterGlucose>> Update(Guid id, [FromBody] UpsertMeterGlucoseRequest request, CancellationToken ct = default)
-    {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
+    protected override Task<ObjectResult?> OnBeforeUpdateAsync(
+        MeterGlucose model, UpsertMeterGlucoseRequest request, MeterGlucose existing, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
 
     /// <summary>
     /// Maps a <see cref="UpsertMeterGlucoseRequest"/> to a new <see cref="MeterGlucose"/> domain model for creation.
@@ -141,11 +111,14 @@ public class MeterGlucoseController(
     };
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The batch form rather than a loop over <see cref="OnBeforeCreateAsync"/>: one stamper pass
+    /// resolves the whole payload, and per-record DataSource drives matching, so no batch-level
+    /// source is needed for a mixed-source upload.
+    /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<MeterGlucose> models, IReadOnlyList<UpsertMeterGlucoseRequest> requests, CancellationToken ct)
     {
-        // Per-record DataSource drives matching, so no batch-level source is needed for a
-        // mixed-source bulk upload.
         var error = await PatientDeviceAttribution.ApplyManyAsync(
             [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
             patientDevices, deviceStamper, DeviceAttributionCategories.MeterGlucose, batchSource: null, ct);

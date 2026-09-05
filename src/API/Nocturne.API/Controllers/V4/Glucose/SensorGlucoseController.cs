@@ -84,24 +84,25 @@ public class SensorGlucoseController(
         return Ok(new PaginatedResponse<SensorGlucose> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
 
-    public override async Task<ActionResult<SensorGlucose>> Create([FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices. The
+    /// canonical stream still governs reads.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(
+        SensorGlucose model, UpsertSensorGlucoseRequest request, CancellationToken ct)
     {
-        var model = MapCreateToModel(request);
+        await ResolveGlucoseAsync(model, request, ct);
+        return await ApplyAttributionAsync(model, request, existing: null, ct);
+    }
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped and only ever surface as pseudo-devices. The canonical
-        // stream still governs reads.
-        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        SensorGlucose model, UpsertSensorGlucoseRequest request, SensorGlucose existing, CancellationToken ct)
+    {
+        await ResolveGlucoseAsync(model, request, ct);
+        return await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
     }
 
     protected override SensorGlucose MapCreateToModel(UpsertSensorGlucoseRequest request) => new()
@@ -141,43 +142,18 @@ public class SensorGlucoseController(
         AdditionalProperties = existing.AdditionalProperties,
     };
 
-    public override async Task<ActionResult<SensorGlucose>> Update(Guid id, [FromBody] UpsertSensorGlucoseRequest request, CancellationToken ct = default)
-    {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
-
-        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
-
     /// <inheritdoc/>
+    /// <remarks>
+    /// Attribution is the batch form rather than a loop over <see cref="OnBeforeCreateAsync"/>: one
+    /// stamper pass resolves the whole payload, and per-record DataSource drives matching, so no
+    /// batch-level source is needed for a mixed-source upload.
+    /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<SensorGlucose> models, IReadOnlyList<UpsertSensorGlucoseRequest> requests, CancellationToken ct)
     {
         for (var i = 0; i < models.Count; i++)
-            await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
+            await ResolveGlucoseAsync(models[i], requests[i], ct);
 
-        // Per-record DataSource drives matching, so no batch-level source is needed for a
-        // mixed-source bulk upload.
         var error = await PatientDeviceAttribution.ApplyManyAsync(
             [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
             patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
@@ -197,6 +173,9 @@ public class SensorGlucoseController(
 
         return written;
     }
+
+    private Task ResolveGlucoseAsync(SensorGlucose model, UpsertSensorGlucoseRequest request, CancellationToken ct) =>
+        glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
     /// <summary>
     /// Settles the reading's device attribution from the request. Returns a 400 result when an explicit

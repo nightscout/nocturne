@@ -85,47 +85,19 @@ public class DeviceEventController(
         return Ok(new PaginatedResponse<DeviceEvent> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
 
-    public override async Task<ActionResult<DeviceEvent>> Create([FromBody] UpsertDeviceEventRequest request, CancellationToken ct = default)
-    {
-        var model = MapCreateToModel(request);
+    /// <inheritdoc/>
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped.
+    /// </remarks>
+    protected override Task<ObjectResult?> OnBeforeCreateAsync(
+        DeviceEvent model, UpsertDeviceEventRequest request, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing: null, ct);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped.
-        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
-
-    public override async Task<ActionResult<DeviceEvent>> Update(Guid id, [FromBody] UpsertDeviceEventRequest request, CancellationToken ct = default)
-    {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
+    /// <inheritdoc/>
+    protected override Task<ObjectResult?> OnBeforeUpdateAsync(
+        DeviceEvent model, UpsertDeviceEventRequest request, DeviceEvent existing, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
 
     protected override DeviceEvent MapCreateToModel(UpsertDeviceEventRequest request) => new()
     {
@@ -161,15 +133,15 @@ public class DeviceEventController(
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Attributed one at a time rather than in a single stamper pass: the device categories a device
-    /// event can be attributed to are derived from its own event type, so a batch has no one category
-    /// list to share.
+    /// One item at a time rather than a single stamper pass: the device categories a device event can
+    /// be attributed to are derived from its own event type, so a batch has no one category list to
+    /// share.
     /// </remarks>
     protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
         IReadOnlyList<DeviceEvent> models, IReadOnlyList<UpsertDeviceEventRequest> requests, CancellationToken ct)
     {
         for (var i = 0; i < models.Count; i++)
-            if (await ApplyAttributionAsync(models[i], requests[i], existing: null, ct) is { } error)
+            if (await OnBeforeCreateAsync(models[i], requests[i], ct) is { } error)
                 return error;
 
         return null;

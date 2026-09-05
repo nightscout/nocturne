@@ -87,6 +87,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
+        if (await OnBeforeCreateAsync(model, request, ct) is { } error)
+            return error;
+
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
@@ -155,6 +158,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+
+        if (await OnBeforeUpdateAsync(model, request, existing, ct) is { } error)
+            return error;
 
         try
         {
@@ -265,6 +271,29 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The record, potentially enriched by the hook.</returns>
     protected virtual Task<TModel> OnAfterCreateAsync(TModel created, CancellationToken ct) => Task.FromResult(created);
+
+    /// <summary>
+    /// Hook called once a create request has mapped and cleared the timestamp guard, and before it
+    /// persists. Override to enrich or attribute the record, mutating <paramref name="model"/> in place.
+    /// </summary>
+    /// <param name="model">The mapped record.</param>
+    /// <param name="request">The inbound request, for the fields the domain model does not carry.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A problem result rejecting the request, or <c>null</c> to persist.</returns>
+    protected virtual Task<ObjectResult?> OnBeforeCreateAsync(TModel model, TCreateRequest request, CancellationToken ct)
+        => Task.FromResult<ObjectResult?>(null);
+
+    /// <summary>
+    /// Hook called once an update request has mapped and cleared the timestamp guard, and before it
+    /// persists. Override to enrich or attribute the record, mutating <paramref name="model"/> in place.
+    /// </summary>
+    /// <param name="model">The mapped record.</param>
+    /// <param name="request">The inbound request, for the fields the domain model does not carry.</param>
+    /// <param name="existing">The stored record this update replaces.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A problem result rejecting the request, or <c>null</c> to persist.</returns>
+    protected virtual Task<ObjectResult?> OnBeforeUpdateAsync(TModel model, TUpdateRequest request, TModel existing, CancellationToken ct)
+        => Task.FromResult<ObjectResult?>(null);
 
     /// <summary>
     /// Hook called once a bulk payload has mapped and before it persists. Override to enrich or
