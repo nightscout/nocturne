@@ -34,6 +34,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     private readonly List<IAsyncDisposable> _owned = [];
 
     private const string AuditTable = "mutation_audit_log";
+    private const string ProbeTable = "purge_backstop_probe";
     private static readonly TimeSpan NinetyDays = TimeSpan.FromDays(90);
 
     private readonly RlsCompletenessFixture _fx;
@@ -119,6 +120,61 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         delete.Split("tenant_id = ").Length.Should().Be(3,
             "both the outer DELETE and the ctid sub-select must be bounded by tenant_id, so the "
             + "purge cannot cross tenants on a table RLS does not force");
+    }
+
+    /// <summary>
+    /// The whole point of the <c>tenant_id</c> predicate is to bound a delete on a target RLS
+    /// does not, so it cannot be witnessed on a policied table — every behavioural assertion
+    /// there passes with the predicate removed, neutralised to <c>tenant_id = tenant_id</c>, or
+    /// OR'd with true. Against a table carrying no policy, the predicate is the only thing
+    /// standing between one tenant's purge and another tenant's rows.
+    /// </summary>
+    [Fact]
+    public async Task PurgeOlderThanAsync_BoundsByTenant_OnATableRowLevelSecurityDoesNotProtect()
+    {
+        var tenant = Guid.NewGuid();
+        var neighbour = Guid.NewGuid();
+
+        await using (var conn = await _fx.OpenMigratorConnectionAsync())
+        {
+            await ExecAsync(conn, $"""
+                CREATE TABLE IF NOT EXISTS {ProbeTable} (
+                    id uuid PRIMARY KEY,
+                    tenant_id uuid NOT NULL,
+                    created_at timestamptz NOT NULL)
+                """);
+            await ExecAsync(conn, $"TRUNCATE {ProbeTable}");
+            await ExecAsync(conn, $"GRANT SELECT, INSERT, UPDATE, DELETE ON {ProbeTable} TO nocturne_app");
+
+            foreach (var owner in new[] { tenant, neighbour })
+            {
+                for (var i = 0; i < 2; i++)
+                {
+                    await using var insert = conn.CreateCommand();
+                    insert.CommandText =
+                        $"INSERT INTO {ProbeTable} VALUES (gen_random_uuid(), @tid, now() - interval '200 days')";
+                    AddParam(insert, "@tid", owner);
+                    await insert.ExecuteNonQueryAsync();
+                }
+            }
+        }
+
+        try
+        {
+            var purged = await BuildFactory().PurgeOlderThanAsync(
+                tenant, ProbeTable, "created_at", NinetyDays);
+
+            purged.Should().Be(2, "only the purged tenant's rows are expired and in scope");
+            (await ProbeCountAsync(tenant)).Should().Be(0);
+            (await ProbeCountAsync(neighbour)).Should().Be(2,
+                "with no policy on this table the SQL predicate is the only tenant bound, so a "
+                + "purge that lost or neutralised it would take the neighbour's rows too");
+        }
+        finally
+        {
+            await using var conn = await _fx.OpenMigratorConnectionAsync();
+            await ExecAsync(conn, $"DROP TABLE IF EXISTS {ProbeTable}");
+        }
     }
 
     [Theory]
@@ -247,6 +303,22 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tid, false)";
         AddParam(cmd, "@tid", tenant.ToString());
         await cmd.ExecuteScalarAsync();
+    }
+
+    private static async Task ExecAsync(NpgsqlConnection conn, string sql)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task<long> ProbeCountAsync(Guid tenant)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM {ProbeTable} WHERE tenant_id = @tid";
+        AddParam(cmd, "@tid", tenant);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync());
     }
 
     private static void AddParam(DbCommand cmd, string name, object value)
