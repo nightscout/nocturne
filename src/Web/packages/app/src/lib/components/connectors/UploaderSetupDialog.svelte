@@ -41,6 +41,9 @@
 
   function handleRequestApiKey() {
     if (!selectedUploader) return;
+    // Dialogs layer by declaration order rather than open order, so a second one opened over
+    // this one can land underneath it and take no input. Hand off by stepping aside.
+    open = false;
     onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
   }
 

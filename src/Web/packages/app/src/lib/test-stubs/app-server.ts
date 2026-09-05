@@ -27,6 +27,11 @@ export function getRequestEvent(): never {
   throw new Error("getRequestEvent is not available in browser tests");
 }
 
+/** Reached only from inside a command's `refreshes`, which no browser test runs. */
+export function requested(): never {
+  throw new Error("requested is not available in browser tests");
+}
+
 type Implementation = (arg?: unknown) => unknown;
 
 // The framework's `(schema, fn)` and `(fn)` overloads both end at `fn`. Only
