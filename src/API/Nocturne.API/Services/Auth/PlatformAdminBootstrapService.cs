@@ -145,6 +145,10 @@ public class PlatformAdminBootstrapService
     /// shouldn't depend on every present and future call site having checked setup state
     /// first, and the setup OIDC callback in particular is reachable anonymously.
     /// </para>
+    /// <para>
+    /// Single-tenant is counted the way setup counts it (<see cref="DemoExclusionFilter"/>): an
+    /// instance serving a demo alongside the operator's one tenant is still a fresh install.
+    /// </para>
     /// </remarks>
     /// <param name="subjectId">The owner subject that just bound a credential.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -161,7 +165,7 @@ public class PlatformAdminBootstrapService
             return false;
 
         // More than one tenant means this is not a fresh install, whatever the caller thinks.
-        var tenantIds = await db.Tenants.Select(t => t.Id).Take(2).ToListAsync(cancellationToken);
+        var tenantIds = await db.Tenants.ExcludeDemo().Select(t => t.Id).Take(2).ToListAsync(cancellationToken);
         if (tenantIds.Count != 1)
             return false;
 
