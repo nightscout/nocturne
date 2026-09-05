@@ -509,7 +509,7 @@ public class NotificationSettings
 {
     /// <summary>
     /// xDrip+-style alarm configuration stored as JSONB.
-    /// Contains all alarm profiles, quiet hours, channels, and emergency contacts.
+    /// Contains all alarm profiles, channels, and emergency contacts.
     /// </summary>
     [JsonPropertyName("alarmConfiguration")]
     public UserAlarmConfiguration AlarmConfiguration { get; set; } = new();
