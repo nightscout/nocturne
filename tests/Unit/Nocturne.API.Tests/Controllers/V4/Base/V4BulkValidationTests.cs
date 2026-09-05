@@ -145,11 +145,11 @@ public class V4BulkValidationTests
         Rejected((await ApsController().CreateApsSnapshots([])).Result, "APS snapshot data is required");
         Rejected((await PumpController().CreatePumpSnapshots([])).Result, "Pump snapshot data is required");
         Rejected((await UploaderController().CreateUploaderSnapshots([])).Result, "Uploader snapshot data is required");
-        Rejected((await BasalInjections().CreateBasalInjectionsBulk([])).Result, "Basal injection data is required");
-        Rejected((await Boluses().CreateBolusesBulk([])).Result, "Bolus data is required");
+        Rejected((await BasalInjections().CreateBulk([])).Result, "Basal injection data is required");
+        Rejected((await Boluses().CreateBulk([])).Result, "Bolus data is required");
         Rejected((await CarbIntakes().CreateCarbIntakesBulk([])).Result, "Carb intake data is required");
         Rejected((await TempBasals().CreateTempBasals([])).Result, "Temp basal data is required");
-        Rejected((await SensorGlucose().CreateSensorGlucoseBulk([])).Result, "Sensor glucose data is required");
+        Rejected((await SensorGlucose().CreateBulk([])).Result, "Sensor glucose data is required");
     }
 
     [Fact]
@@ -162,10 +162,10 @@ public class V4BulkValidationTests
             (await UploaderController().CreateUploaderSnapshots(Fill(1001, () => new UpsertUploaderSnapshotRequest()))).Result,
             "Bulk operations are limited to 1000 snapshots per request");
         Rejected(
-            (await BasalInjections().CreateBasalInjectionsBulk(Fill(1001, () => new CreateBasalInjectionRequest { Timestamp = T0, Units = 1 }))).Result,
+            (await BasalInjections().CreateBulk(Fill(1001, () => new CreateBasalInjectionRequest { Timestamp = T0, Units = 1 }))).Result,
             "Bulk operations are limited to 1000 injections per request");
         Rejected(
-            (await Boluses().CreateBolusesBulk(Fill(1001, () => new CreateBolusRequest()))).Result,
+            (await Boluses().CreateBulk(Fill(1001, () => new CreateBolusRequest()))).Result,
             "Bulk operations are limited to 1000 boluses per request");
         Rejected(
             (await CarbIntakes().CreateCarbIntakesBulk(Fill(1001, () => new CreateCarbIntakeRequest()))).Result,
@@ -174,7 +174,7 @@ public class V4BulkValidationTests
             (await TempBasals().CreateTempBasals(Fill(1001, () => new CreateTempBasalRequest()))).Result,
             "Bulk operations are limited to 1000 temp basals per request");
         Rejected(
-            (await SensorGlucose().CreateSensorGlucoseBulk(Fill(1001, () => new UpsertSensorGlucoseRequest()))).Result,
+            (await SensorGlucose().CreateBulk(Fill(1001, () => new UpsertSensorGlucoseRequest()))).Result,
             "Bulk operations are limited to 1000 readings per request");
     }
 
@@ -185,7 +185,7 @@ public class V4BulkValidationTests
     {
         var repo = new Mock<ISensorGlucoseRepository>();
 
-        var result = await SensorGlucose(repo).CreateSensorGlucoseBulk(
+        var result = await SensorGlucose(repo).CreateBulk(
             [new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = 120 }, new UpsertSensorGlucoseRequest { Mgdl = 115 }]);
 
         Rejected(result.Result, "Timestamp must be set on every reading");
@@ -199,7 +199,7 @@ public class V4BulkValidationTests
     {
         var repo = new Mock<IBasalInjectionRepository>();
 
-        var result = await BasalInjections(repo).CreateBasalInjectionsBulk(
+        var result = await BasalInjections(repo).CreateBulk(
             [new CreateBasalInjectionRequest { Timestamp = T0, Units = 12 }, new CreateBasalInjectionRequest { Timestamp = default, Units = 12 }]);
 
         Rejected(result.Result, "Timestamp must be set on every injection");
@@ -332,7 +332,7 @@ public class V4BulkValidationTests
     {
         var repo = new Mock<ISensorGlucoseRepository>();
 
-        var result = await WithValidators(SensorGlucose(repo)).CreateSensorGlucoseBulk(
+        var result = await WithValidators(SensorGlucose(repo)).CreateBulk(
             [new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = -1 }]);
 
         Rejected(result.Result, "Sensor glucose at index 0 is invalid: Mgdl: Mgdl must be between 0 and 10000");
@@ -344,7 +344,7 @@ public class V4BulkValidationTests
     [Fact]
     public async Task SensorGlucoseBulk_NamesTheIndexOfTheOffendingReading()
     {
-        var result = await WithValidators(SensorGlucose()).CreateSensorGlucoseBulk(
+        var result = await WithValidators(SensorGlucose()).CreateBulk(
         [
             new UpsertSensorGlucoseRequest { Timestamp = T0, Mgdl = 120 },
             new UpsertSensorGlucoseRequest { Timestamp = T0.AddMinutes(5), Mgdl = 115 },
@@ -361,7 +361,7 @@ public class V4BulkValidationTests
         repo.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<Core.Models.V4.SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<Core.Models.V4.SensorGlucose> models, WriteOrigin _, CancellationToken _) => [.. models]);
 
-        var result = await WithValidators(SensorGlucose(repo)).CreateSensorGlucoseBulk(
+        var result = await WithValidators(SensorGlucose(repo)).CreateBulk(
         [
             new UpsertSensorGlucoseRequest
             {

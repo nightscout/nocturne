@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertMeterGlucoseRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Glucose.MeterGlucoseController"/>
-public class UpsertMeterGlucoseRequest
+public class UpsertMeterGlucoseRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the meter reading was taken.
@@ -46,4 +46,10 @@ public class UpsertMeterGlucoseRequest
     /// Glucose reading in mg/dL (validated 0-10,000).
     /// </summary>
     public double Mgdl { get; set; }
+
+    /// <summary>
+    /// Always <c>null</c>: <see cref="Nocturne.Core.Models.V4.MeterGlucose"/> carries no sync key, so a bulk
+    /// payload of these has nothing for the upsert to match on.
+    /// </summary>
+    string? IBulkUpsertRequest.SyncIdentifier => null;
 }

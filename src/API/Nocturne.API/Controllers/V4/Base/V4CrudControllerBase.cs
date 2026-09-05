@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -32,9 +33,9 @@ namespace Nocturne.API.Controllers.V4.Base;
 public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateRequest, TRepository>(TRepository repository)
     : V4ReadOnlyControllerBase<TModel, TRepository>(repository), IWriteScopedController
     where TModel : class, IV4Record
-    where TCreateRequest : class
+    where TCreateRequest : class, IBulkUpsertRequest
     where TUpdateRequest : class
-    where TRepository : IV4Repository<TModel>
+    where TRepository : IV4Repository<TModel>, IBulkCreateRepository<TModel>
 {
     /// <summary>
     /// The OAuth readwrite scope for this controller's data category (see <see cref="Scope"/>),
@@ -43,6 +44,11 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// (guest links, follower and public-share grants), which must not be able to write.
     /// </summary>
     public abstract string WriteScope { get; }
+
+    /// <summary>
+    /// How <see cref="CreateBulk"/> names this controller's records when it rejects a payload.
+    /// </summary>
+    protected abstract V4BulkNaming BulkNaming { get; }
 
     /// <summary>
     /// Maps a create request DTO to the domain model.
@@ -84,6 +90,43 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
+
+    /// <summary>Creates or updates many records in one request, and returns them.</summary>
+    /// <param name="requests">The records to write, at most <see cref="V4BulkValidation.MaxItems"/> of them.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    /// Array semantics are per-item, not all-or-nothing: on the record types whose repository upserts
+    /// on the sync key, an item carrying both `dataSource` and `syncIdentifier` updates the row already
+    /// matched by that pair; every other item inserts.
+    ///
+    /// The payload is validated as a whole — an empty body, more than the cap, an item with an unset
+    /// `timestamp`, an item supplying `syncIdentifier` without `dataSource`, or an item any registered
+    /// validator rejects, all fail the request with `400 Bad Request` before anything is persisted.
+    ///
+    /// On success, responds with `201 Created` and the written records.
+    /// </remarks>
+    [HttpPost("bulk")]
+    [RequireDeclaredWriteScope]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public virtual async Task<ActionResult<TModel[]>> CreateBulk(
+        [FromBody] TCreateRequest[] requests, CancellationToken ct = default)
+    {
+        var naming = BulkNaming;
+        if (await this.ValidateBulkAsync(requests, naming.Subject, naming.Singular, naming.Plural, ct) is { } invalid)
+            return invalid;
+
+        var models = new List<TModel>(requests.Length);
+        foreach (var request in requests)
+            models.Add(MapCreateToModel(request));
+
+        if (await OnBeforeBulkCreateAsync(models, requests, ct) is { } error)
+            return error;
+
+        var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
+        return StatusCode(StatusCodes.Status201Created, await OnAfterBulkCreateAsync(written, ct));
     }
 
     /// <summary>Updates an existing record by ID and returns the updated record.</summary>
@@ -222,6 +265,34 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The record, potentially enriched by the hook.</returns>
     protected virtual Task<TModel> OnAfterCreateAsync(TModel created, CancellationToken ct) => Task.FromResult(created);
+
+    /// <summary>
+    /// Hook called once a bulk payload has mapped and before it persists. Override to enrich or
+    /// attribute the batch in one pass, mutating <paramref name="models"/> in place.
+    /// </summary>
+    /// <param name="models">The mapped records, positionally aligned with <paramref name="requests"/>.</param>
+    /// <param name="requests">The inbound requests, for the fields the domain model does not carry.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A problem result rejecting the whole request, or <c>null</c> to persist.</returns>
+    protected virtual Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<TModel> models, IReadOnlyList<TCreateRequest> requests, CancellationToken ct)
+        => Task.FromResult<ObjectResult?>(null);
+
+    /// <summary>
+    /// Hook called after a bulk create. Runs <see cref="OnAfterCreateAsync"/> once per written record,
+    /// so a per-record side effect fires exactly as often as it would through <see cref="Create"/>.
+    /// Override where the effect is batch-wide rather than per-record.
+    /// </summary>
+    /// <param name="written">The records as persisted.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records, potentially enriched by the hook.</returns>
+    protected virtual async Task<TModel[]> OnAfterBulkCreateAsync(TModel[] written, CancellationToken ct)
+    {
+        for (var i = 0; i < written.Length; i++)
+            written[i] = await OnAfterCreateAsync(written[i], ct);
+
+        return written;
+    }
 
     /// <summary>
     /// Hook called after a record is restored. Override to add post-restore side effects

@@ -45,6 +45,9 @@ public class SensorGlucoseController(
     /// <remarks>CGM readings are glucose data; the legacy equivalent is a v1 entry.</remarks>
     public override string WriteScope => Scope.GlucoseReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Sensor glucose", "reading", "readings");
+
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
     /// list surface: when set, results are that registered device's raw readings (canonical stream selection is
@@ -166,42 +169,33 @@ public class SensorGlucoseController(
         }
     }
 
-    /// <summary>
-    /// Create multiple sensor glucose readings in bulk (max 1000).
-    /// </summary>
-    [HttpPost("bulk")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(typeof(SensorGlucose[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<SensorGlucose[]>> CreateSensorGlucoseBulk(
-        [FromBody] UpsertSensorGlucoseRequest[] requests,
-        CancellationToken ct = default)
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<SensorGlucose> models, IReadOnlyList<UpsertSensorGlucoseRequest> requests, CancellationToken ct)
     {
-        if (await this.ValidateBulkAsync(requests, "Sensor glucose", "reading", "readings", ct) is { } invalid)
-            return invalid;
-
-        var models = requests.Select(MapCreateToModel).ToList();
-
         for (var i = 0; i < models.Count; i++)
             await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
 
-        // Attribute the batch before persisting (see Create). Per-record DataSource drives matching,
-        // so no batch-level source is needed for a mixed-source bulk upload.
-        var attributionError = await PatientDeviceAttribution.ApplyManyAsync(
+        // Per-record DataSource drives matching, so no batch-level source is needed for a
+        // mixed-source bulk upload.
+        var error = await PatientDeviceAttribution.ApplyManyAsync(
             [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
             patientDevices, deviceStamper, DeviceAttributionCategories.SensorGlucose, batchSource: null, ct);
-        if (attributionError is not null)
-            return Problem(detail: attributionError, statusCode: 400, title: "Bad Request");
 
-        var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
-        var createdArray = created.ToArray();
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
+    }
 
-        // Alarms evaluate against the canonical stream, not the just-created batch.
-        if (createdArray.Any(r => r.Mgdl > 0))
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One pass for the whole batch: alarms evaluate against the canonical stream rather than the
+    /// records just written, so a per-record pass would repeat the same evaluation.
+    /// </remarks>
+    protected override async Task<SensorGlucose[]> OnAfterBulkCreateAsync(SensorGlucose[] written, CancellationToken ct)
+    {
+        if (written.Any(r => r.Mgdl > 0))
             await alertEvaluator.EvaluateAsync(ct);
 
-        return StatusCode(201, createdArray);
+        return written;
     }
 
     /// <summary>

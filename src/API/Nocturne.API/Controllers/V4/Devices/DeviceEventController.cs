@@ -52,6 +52,9 @@ public class DeviceEventController(
     /// </remarks>
     public override string WriteScope => Scope.DevicesReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Device event", "event", "events");
+
     /// <summary>
     /// Lists device events. Adds an optional <c>patientDeviceId</c> query filter on top of the base list
     /// surface: when set, only events linked to that registered device are returned. Pagination totals
@@ -155,6 +158,22 @@ public class DeviceEventController(
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
     };
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Attributed one at a time rather than in a single stamper pass: the device categories a device
+    /// event can be attributed to are derived from its own event type, so a batch has no one category
+    /// list to share.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<DeviceEvent> models, IReadOnlyList<UpsertDeviceEventRequest> requests, CancellationToken ct)
+    {
+        for (var i = 0; i < models.Count; i++)
+            if (await ApplyAttributionAsync(models[i], requests[i], existing: null, ct) is { } error)
+                return error;
+
+        return null;
+    }
 
     /// <summary>
     /// Settles the event's device attribution from the request. Returns a 400 result when an explicit

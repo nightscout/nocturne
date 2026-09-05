@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertCalibrationRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Glucose.CalibrationController"/>
-public class UpsertCalibrationRequest
+public class UpsertCalibrationRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the calibration was performed.
@@ -46,4 +46,10 @@ public class UpsertCalibrationRequest
     /// Calibration scale factor.
     /// </summary>
     public double? Scale { get; set; }
+
+    /// <summary>
+    /// Always <c>null</c>: <see cref="Nocturne.Core.Models.V4.Calibration"/> carries no sync key, so a bulk
+    /// payload of these has nothing for the upsert to match on.
+    /// </summary>
+    string? IBulkUpsertRequest.SyncIdentifier => null;
 }

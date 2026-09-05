@@ -5,6 +5,16 @@ using Nocturne.API.Models.Requests.V4;
 namespace Nocturne.API.Controllers.V4.Base;
 
 /// <summary>
+/// How a bulk endpoint names what it takes, in the three places a rejection message needs it:
+/// <c>"Bolus data is required"</c>, <c>"limited to 1000 boluses per request"</c>,
+/// <c>"Timestamp must be set on every bolus"</c>.
+/// </summary>
+/// <param name="Subject">The payload's name, capitalised as it opens a sentence ("Bolus").</param>
+/// <param name="Singular">One item ("bolus").</param>
+/// <param name="Plural">Many items ("boluses").</param>
+public readonly record struct V4BulkNaming(string Subject, string Singular, string Plural);
+
+/// <summary>
 /// The checks a V4 bulk create-or-update endpoint runs over its payload before it maps or
 /// persists anything.
 /// </summary>
