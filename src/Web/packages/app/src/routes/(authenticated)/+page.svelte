@@ -91,16 +91,6 @@
 
       {#if isMainEnabled(WidgetId.GlucoseChart)}
         {#snippet glucoseChart()}
-          <GlucoseChartCard
-            showPredictions={isMainEnabled(WidgetId.Predictions) &&
-              predictionEnabled}
-            defaultFocusHours={focusHours}
-            initialChartData={data.initialChartData}
-            streamedHistoricalData={data.streamed?.historicalChartData}
-          />
-        {/snippet}
-
-        {#if hasDataNow}
           <div
             {@attach coachmark({
               key: "quick-tour.chart",
@@ -109,15 +99,22 @@
                 "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
             })}
           >
-            {@render glucoseChart()}
+            <GlucoseChartCard
+              showPredictions={isMainEnabled(WidgetId.Predictions) &&
+                predictionEnabled}
+              defaultFocusHours={focusHours}
+              initialChartData={data.initialChartData}
+              streamedHistoricalData={data.streamed?.historicalChartData}
+            />
           </div>
-        {:else}
-          <FirstReadingChartArea
-            chart={glucoseChart}
-            {recentHistoryReady}
-            {hasRecentHistory}
-          />
-        {/if}
+        {/snippet}
+
+        <FirstReadingChartArea
+          chart={glucoseChart}
+          bypass={hasDataNow}
+          {recentHistoryReady}
+          {hasRecentHistory}
+        />
       {/if}
     </div>
 

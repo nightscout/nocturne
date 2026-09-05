@@ -95,6 +95,13 @@ class QueryResource<T> implements RemoteQueryStub<T> {
     this.#promise = Promise.resolve();
   }
 
+  settleError(error: unknown) {
+    this.#read = null;
+    this.#loading = false;
+    this.#error = error;
+    this.#promise = Promise.resolve();
+  }
+
   #overridden(read: () => T): T {
     return this.#overrides.reduce<T>((value, apply) => apply(value), read());
   }
@@ -185,6 +192,20 @@ export function createQueryResource<T>(
 export function remoteQuery<T>(read: () => T): RemoteQueryStub<T> {
   const resource = new QueryResource<T>(async () => read());
   resource.settle(read);
+  return resource;
+}
+
+/**
+ * A query resource that is already settled into an error, for a test standing
+ * in for a remote module whose call rejected (e.g. a 403). `current` stays
+ * undefined and `error` holds the reason, synchronously, so a component reads
+ * the failed state on its first render rather than hanging on a pending fetch.
+ */
+export function remoteQueryError<T>(error: unknown): RemoteQueryStub<T> {
+  const resource = new QueryResource<T>(async () => {
+    throw error;
+  });
+  resource.settleError(error);
   return resource;
 }
 

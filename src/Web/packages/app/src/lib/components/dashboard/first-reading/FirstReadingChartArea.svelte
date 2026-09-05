@@ -1,71 +1,44 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
-  import FirstReadingEmptyState from "./FirstReadingEmptyState.svelte";
-  import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
+  import FirstReadingEmptyStateLoader from "./FirstReadingEmptyStateLoader.svelte";
 
   interface Props {
-    /**
-     * The real glucose chart, rendered once the instance has ever had a
-     * reading.
-     */
+    /** The real glucose chart. This component owns the only instance of it. */
     chart: Snippet;
     /**
-     * Whether the realtime store's initial load has settled. Until it has, the
-     * decision is held in loading so the empty state can never flash ahead of
-     * the recent-history fetch resolving.
+     * Whether the instance already has data on hand (server-loaded glucose or a
+     * realtime value/history). When true the chart shows and the empty-state
+     * check is skipped entirely, so a populated dashboard fires no status
+     * query.
      */
+    bypass: boolean;
+    /** Passed through to the empty-state loader; see its docs. */
     recentHistoryReady: boolean;
-    /**
-     * Whether the realtime store's initial, undated most-recent fetch returned
-     * any entries. This is the authoritative "has data recently" signal for an
-     * uploader-only instance, which carries no managed-connector count.
-     */
+    /** Passed through to the empty-state loader; see its docs. */
     hasRecentHistory: boolean;
   }
 
-  let { chart, recentHistoryReady, hasRecentHistory }: Props = $props();
+  let { chart, bypass, recentHistoryReady, hasRecentHistory }: Props = $props();
 
-  const connectorStatusesQuery = getConnectorStatuses();
+  let emptyStateShown = $state(false);
 
-  const connectors = $derived<ConnectorStatusDto[]>(
-    connectorStatusesQuery.current ?? []
-  );
-
-  const loading = $derived(
-    connectorStatusesQuery.current === undefined || !recentHistoryReady
-  );
-
-  const configuredConnectors = $derived(
-    connectors.filter((c) => c.hasDatabaseConfig || c.isEnabled)
-  );
-
-  /**
-   * Whether a reading has ever arrived. Read from the realtime store's recent
-   * history and each connector's lifetime import count — never the connector
-   * health flag, which reports a freshly synced connector that fetched nothing
-   * as healthy. Note the two counts differ:
-   * <c>ConnectorStatusDto.totalEntries</c> is genuinely lifetime, whereas the
-   * data-source count from the services overview is a trailing 30-day window,
-   * so it is not used here — the realtime recent-history fetch covers an
-   * uploader-only instance instead.
-   */
-  const hasEverReceivedReading = $derived(
-    hasRecentHistory || connectors.some((c) => (c.totalEntries ?? 0) > 0)
-  );
-
-  const showEmptyState = $derived(!loading && !hasEverReceivedReading);
+  // The chart is rendered once, here, so it is never destroyed and remounted as
+  // the empty state comes and goes; it is only hidden behind the empty state.
+  const chartHidden = $derived(!bypass && emptyStateShown);
 </script>
 
-<!--
-  The chart stays mounted so its hydratable queries keep their tracking
-  context; it is only hidden while the empty state is shown, mirroring
-  ResourceGuard.
--->
-<div hidden={showEmptyState} aria-hidden={showEmptyState}>
+<div hidden={chartHidden} aria-hidden={chartHidden}>
   {@render chart()}
 </div>
 
-{#if showEmptyState}
-  <FirstReadingEmptyState connectors={configuredConnectors} />
+<!--
+  The loader owns the connector-status query, so keeping it unmounted while the
+  instance already has data is what spares a populated dashboard that query.
+-->
+{#if !bypass}
+  <FirstReadingEmptyStateLoader
+    {recentHistoryReady}
+    {hasRecentHistory}
+    onResolve={(show) => (emptyStateShown = show)}
+  />
 {/if}

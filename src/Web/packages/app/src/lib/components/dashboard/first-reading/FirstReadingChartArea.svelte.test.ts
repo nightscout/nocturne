@@ -20,7 +20,23 @@ const chart = createRawSnippet(() => ({
 }));
 
 describe("FirstReadingChartArea", () => {
-  it("shows the empty state when no reading has ever arrived", async () => {
+  it("shows the chart and no empty state when data is already present", async () => {
+    state.connectors = [];
+
+    render(FirstReadingChartArea, {
+      chart,
+      bypass: true,
+      recentHistoryReady: false,
+      hasRecentHistory: false,
+    });
+
+    await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
+    await expect
+      .element(page.getByTestId("first-reading-empty-state"))
+      .not.toBeInTheDocument();
+  });
+
+  it("hides the chart behind the empty state for an instance that never had a reading", async () => {
     state.connectors = [
       {
         id: "dexcom",
@@ -32,6 +48,7 @@ describe("FirstReadingChartArea", () => {
 
     render(FirstReadingChartArea, {
       chart,
+      bypass: false,
       recentHistoryReady: true,
       hasRecentHistory: false,
     });
@@ -42,50 +59,14 @@ describe("FirstReadingChartArea", () => {
     await expect.element(page.getByText("CHART SHOWN")).not.toBeVisible();
   });
 
-  it("shows the chart when a connector has imported readings before", async () => {
-    state.connectors = [
-      {
-        id: "dexcom",
-        name: "Dexcom Share",
-        hasDatabaseConfig: true,
-        totalEntries: 288,
-      },
-    ];
-
-    render(FirstReadingChartArea, {
-      chart,
-      recentHistoryReady: true,
-      hasRecentHistory: false,
-    });
-
-    await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
-    await expect
-      .element(page.getByTestId("first-reading-empty-state"))
-      .not.toBeInTheDocument();
-  });
-
-  it("shows the chart for a dormant uploader-only instance that has recent history but no connector", async () => {
+  it("shows the chart for a dormant uploader-only instance that has recent history", async () => {
     state.connectors = [];
 
     render(FirstReadingChartArea, {
       chart,
+      bypass: false,
       recentHistoryReady: true,
       hasRecentHistory: true,
-    });
-
-    await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
-    await expect
-      .element(page.getByTestId("first-reading-empty-state"))
-      .not.toBeInTheDocument();
-  });
-
-  it("does not render the empty state while the recent-history load is in flight", async () => {
-    state.connectors = [];
-
-    render(FirstReadingChartArea, {
-      chart,
-      recentHistoryReady: false,
-      hasRecentHistory: false,
     });
 
     await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
