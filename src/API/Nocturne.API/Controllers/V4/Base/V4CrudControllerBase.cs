@@ -96,14 +96,14 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     }
 
     /// <summary>Creates or updates many records in one request, and returns them.</summary>
-    /// <param name="requests">The records to write, at most <see cref="V4BulkValidation.MaxItems"/> of them.</param>
+    /// <param name="requests">The records to write, at most 1000 of them.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// Array semantics are per-item, not all-or-nothing. A record type whose repository derives from
-    /// <c>SyncUpsertRepositoryBase</c> — sensor glucose, meter readings, boluses, carb intakes, basal
-    /// injections and the device-status snapshots — updates in place the row already matched by an
-    /// item's (`dataSource`, `syncIdentifier`) pair; every other type, and every item not carrying both
-    /// halves of that pair, inserts.
+    /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, basal
+    /// injections and sensor glucose upsert on the sync key: an item carrying both `dataSource` and
+    /// `syncIdentifier` updates in place the row already matched by that pair. Every other type —
+    /// notes, device events, BG checks, calibrations, meter readings and bolus calculations — inserts,
+    /// as does any item not carrying both halves of the pair.
     ///
     /// The payload is validated as a whole — an empty body, more than the cap, an item with an unset
     /// `timestamp`, an item supplying `syncIdentifier` without `dataSource`, or an item any registered

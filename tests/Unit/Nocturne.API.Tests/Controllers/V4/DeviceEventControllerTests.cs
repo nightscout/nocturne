@@ -54,9 +54,10 @@ public class DeviceEventControllerTests
             .ReturnsAsync(new PatientDevice { Id = patientDeviceId, DeviceCategory = DeviceCategory.InsulinPump });
 
     [Fact]
-    public async Task CreateBulk_StampsEveryEventThatDidNotClearAttribution()
+    public async Task CreateBulk_StampsEachEventTypeWithItsOwnCategories()
     {
         var stamped = Guid.NewGuid();
+        var passes = new List<(IReadOnlyList<DeviceCategory> Categories, DeviceEventType[] Events)>();
         _deviceStamperMock
             .Setup(s => s.StampAsync(
                 It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
@@ -64,8 +65,9 @@ public class DeviceEventControllerTests
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
-                (records, _, _, _) =>
+                (records, categories, _, _) =>
                 {
+                    passes.Add((categories, [.. records.Cast<DeviceEvent>().Select(e => e.EventType)]));
                     foreach (var record in records)
                         record.PatientDeviceId = stamped;
                 })
@@ -79,14 +81,24 @@ public class DeviceEventControllerTests
 
         await CreateController().CreateBulk(
         [
-            ValidRequest(patientDeviceId: Guid.Empty),
+            ValidRequest(eventType: DeviceEventType.SiteChange),
             ValidRequest(eventType: DeviceEventType.SensorChange),
+            ValidRequest(patientDeviceId: Guid.Empty, eventType: DeviceEventType.ReservoirChange),
+            ValidRequest(eventType: DeviceEventType.SensorStart),
         ]);
+
+        passes.Should().HaveCount(2, "one pass per distinct category list, not one per item");
+        passes.Should().ContainSingle(pass => pass.Categories.Single() == DeviceCategory.CGM)
+            .Which.Events.Should().Equal(DeviceEventType.SensorChange, DeviceEventType.SensorStart);
+        passes.Should().ContainSingle(pass => pass.Categories.Single() == DeviceCategory.InsulinPump)
+            .Which.Events.Should().Equal(DeviceEventType.SiteChange);
 
         persisted.Should().NotBeNull();
         persisted!.Should().SatisfyRespectively(
+            site => site.PatientDeviceId.Should().Be(stamped),
+            sensorChange => sensorChange.PatientDeviceId.Should().Be(stamped),
             cleared => cleared.PatientDeviceId.Should().BeNull(),
-            attributed => attributed.PatientDeviceId.Should().Be(stamped));
+            sensorStart => sensorStart.PatientDeviceId.Should().Be(stamped));
     }
 
     [Fact]

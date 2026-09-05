@@ -143,10 +143,28 @@ public class V4BulkValidationTests
     // ── The wording each endpoint gives them ────────────────────────
 
     /// <summary>
-    /// Every controller reached through <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
-    /// driven through its own <c>bulk</c> action, so a new one cannot ship with wording nobody read.
-    /// The controllers below this are the bulk endpoints that do NOT come off that base and so are
-    /// still named one at a time.
+    /// The words every controller reached through
+    /// <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/> puts in its
+    /// <c>bulk</c> rejections, pinned as literals rather than read back off the controller — a naming
+    /// this table agrees with is a naming somebody chose.
+    /// </summary>
+    private static readonly Dictionary<Type, V4BulkNaming> ExpectedNaming = new()
+    {
+        [typeof(BasalInjectionController)] = new("Basal injection", "injection", "injections"),
+        [typeof(BGCheckController)] = new("BG check", "check", "checks"),
+        [typeof(BolusCalculationController)] = new("Bolus calculation", "calculation", "calculations"),
+        [typeof(BolusController)] = new("Bolus", "bolus", "boluses"),
+        [typeof(CalibrationController)] = new("Calibration", "calibration", "calibrations"),
+        [typeof(DeviceEventController)] = new("Device event", "event", "events"),
+        [typeof(MeterGlucoseController)] = new("Meter glucose", "reading", "readings"),
+        [typeof(NoteController)] = new("Note", "note", "notes"),
+        [typeof(SensorGlucoseController)] = new("Sensor glucose", "reading", "readings"),
+    };
+
+    /// <summary>
+    /// Drives every one of those controllers' own <c>bulk</c> action and checks the three rejections
+    /// against <see cref="ExpectedNaming"/>. The bulk endpoints that do NOT come off that base are
+    /// still named one at a time, below.
     /// </summary>
     [Theory]
     [MemberData(nameof(CrudControllers))]
@@ -154,6 +172,7 @@ public class V4BulkValidationTests
     {
         var naming = BulkNamingOf(controllerType);
 
+        naming.Should().Be(ExpectedNaming[controllerType]);
         naming.Subject.Should().MatchRegex("^[A-Z]", "the subject opens a sentence");
         naming.Singular.Should().Be(naming.Singular.ToLowerInvariant(), "the singular sits mid-sentence");
         naming.Plural.Should().Be(naming.Plural.ToLowerInvariant(), "the plural sits mid-sentence");
@@ -173,7 +192,9 @@ public class V4BulkValidationTests
             .OrderBy(t => t.FullName, StringComparer.Ordinal)
             .ToList();
 
-        controllers.Should().NotBeEmpty("the sweep proves nothing if it discovers no controllers");
+        controllers.Should().HaveCount(
+            ExpectedNaming.Count, "a new CRUD controller ships with a reviewed row in ExpectedNaming");
+        controllers.Should().OnlyContain(t => ExpectedNaming.ContainsKey(t));
 
         var data = new TheoryData<Type>();
         foreach (var type in controllers)
