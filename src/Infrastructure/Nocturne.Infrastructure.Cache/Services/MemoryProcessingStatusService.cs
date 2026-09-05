@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Cache.Services;
 /// Tracks async processing status in process memory. State is per-node and does not survive a
 /// restart, so a correlation ID minted by one node is unknown to any other.
 /// </summary>
-public class MemoryProcessingStatusService : IProcessingStatusService
+public class MemoryProcessingStatusService : IProcessingStatusService, IDisposable
 {
     private readonly ILogger<MemoryProcessingStatusService> _logger;
     private readonly TimeProvider _timeProvider;

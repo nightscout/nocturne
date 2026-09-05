@@ -9,13 +9,17 @@ namespace Nocturne.Infrastructure.Cache.Tests;
 
 /// <summary>
 /// The processing-status TTL, the background sweep and the completion poll are all clock-driven,
-/// on intervals (an hour, five minutes, a ten-minute timeout) no test can wait out. Driving them
-/// from <see cref="FakeTimeProvider"/> asserts each boundary at the exact tick instead.
+/// on intervals (an hour, five minutes, and a long poll up to five more) no test can wait out.
+/// Driving them from <see cref="FakeTimeProvider"/> asserts each boundary at the exact tick instead.
 /// </summary>
 public class MemoryProcessingStatusServiceTimeTests
 {
     private static readonly TimeSpan Ttl = CacheConstants.DefaultTtl.ProcessingStatus;
     private static readonly DateTimeOffset Origin = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    // The longest wait a caller can actually ask for: ProcessingController rejects
+    // timeoutSeconds above 300.
+    private static readonly TimeSpan MaxLongPoll = TimeSpan.FromSeconds(300);
 
     private static (MemoryProcessingStatusService Service, FakeTimeProvider Time, CapturingLogger Log) Build()
     {
@@ -89,9 +93,26 @@ public class MemoryProcessingStatusServiceTimeTests
         var (service, time, _) = Build();
         await service.InitializeAsync("run", 1, TestContext.Current.CancellationToken);
 
-        var wait = service.WaitForCompletionAsync("run", TimeSpan.FromMinutes(10), TestContext.Current.CancellationToken);
-        time.Advance(TimeSpan.FromMinutes(10));
+        var wait = service.WaitForCompletionAsync("run", MaxLongPoll, TestContext.Current.CancellationToken);
+        time.Advance(MaxLongPoll);
 
+        var result = await wait.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Cache")]
+    public async Task WaitForCompletion_Should_EndWhenTheCallerCancels()
+    {
+        var (service, _, _) = Build();
+        await service.InitializeAsync("run", 1, TestContext.Current.CancellationToken);
+
+        using var caller = new CancellationTokenSource();
+        var wait = service.WaitForCompletionAsync("run", MaxLongPoll, caller.Token);
+        await caller.CancelAsync();
+
+        // The clock never moves, so only the caller's token can end this wait.
         var result = await wait.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
@@ -104,7 +125,7 @@ public class MemoryProcessingStatusServiceTimeTests
         var (service, time, _) = Build();
         await service.InitializeAsync("run", 1, TestContext.Current.CancellationToken);
 
-        var wait = service.WaitForCompletionAsync("run", TimeSpan.FromMinutes(10), TestContext.Current.CancellationToken);
+        var wait = service.WaitForCompletionAsync("run", MaxLongPoll, TestContext.Current.CancellationToken);
         await service.MarkCompletedAsync("run", null, TestContext.Current.CancellationToken);
         time.Advance(TimeSpan.FromSeconds(1));
 

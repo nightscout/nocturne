@@ -184,8 +184,8 @@ public static class ServiceRegistrationExtensions
     )
     {
         // Every service that takes TimeProvider by constructor resolves it from here. Without this
-        // it resolves only because some framework extension the host calls registers it in passing,
-        // which would make the alerting and cache subsystems depend on that call staying put.
+        // it resolves only because AddAuthentication TryAdds the same instance in passing, which
+        // would make the alerting and cache subsystems depend on that call staying put.
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddScoped<IStatusService, StatusService>();
