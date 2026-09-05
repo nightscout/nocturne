@@ -374,17 +374,64 @@ public class PasskeyServiceTests
 
     #endregion
 
+    #region DescribeRpIdMismatch
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsTheRpId_AllowsTheCeremony()
+    {
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("cgm.example.com").Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsATenantSubdomain_AllowsTheCeremony()
+    {
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("rhys.cgm.example.com").Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostIsElsewhere_NamesBothAddressesAndTheSetting()
+    {
+        var service = CreateService("Production", "localhost");
+
+        var detail = service.DescribeRpIdMismatch("cgm.example.com");
+
+        detail.Should().NotBeNull();
+        detail.Should().Contain("localhost")
+            .And.Contain("cgm.example.com")
+            .And.Contain("BASE_DOMAIN");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_InDevelopment_AllowsAnyHost()
+    {
+        // Dev is served from loopback on a port assigned at launch, which no rpId can name.
+        var service = CreateService("Development", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("localhost").Should().BeNull();
+    }
+
+    #endregion
+
     #region Helpers
 
-    private PasskeyService CreateService()
+    private PasskeyService CreateService(
+        string environmentName = "Development", string rpId = "localhost")
     {
         // We use a mock Fido2 - it won't be called for DB-only tests.
         // For methods that call Fido2, integration tests are needed.
         var fido2Config = new Fido2Configuration
         {
-            ServerDomain = "localhost",
+            ServerDomain = rpId,
             ServerName = "Test",
-            Origins = new HashSet<string> { "https://localhost" },
+            Origins = new HashSet<string> { $"https://{rpId}" },
         };
         var fido2 = new Fido2NetLib.Fido2(fido2Config);
 
@@ -392,7 +439,7 @@ public class PasskeyServiceTests
         var fido2Options = Options.Create(fido2Config);
         var logger = NullLogger<PasskeyService>.Instance;
 
-        var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Development");
+        var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
         return new PasskeyService(_dbContext, fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 

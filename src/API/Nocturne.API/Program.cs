@@ -302,6 +302,18 @@ else
         rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
 }
 
+// The same key decides the WebAuthn relying-party id, which is fixed at startup and cannot fail
+// closed the way CORS does: left unset it binds to localhost, and the browser reports the
+// resulting refusal as an opaque security error that names nothing an operator can search for.
+if (string.IsNullOrWhiteSpace(rawCorsBaseDomain) && !app.Environment.IsDevelopment() && !isTesting)
+{
+    app.Logger.LogError(
+        "{ConfigKey} is not set. Passkeys are bound to 'localhost', so browsers will refuse to "
+        + "create or use one on any other address, and OIDC sign-in has no redirect URI to send. "
+        + "Set it to the address people browse to and restart.",
+        BaseDomainOptions.ConfigKey);
+}
+
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();

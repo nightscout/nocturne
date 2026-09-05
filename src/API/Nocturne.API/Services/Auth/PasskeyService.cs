@@ -5,6 +5,7 @@ using Fido2NetLib.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Nocturne.API.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -61,6 +62,34 @@ public class PasskeyService : IPasskeyService
     }
 
     /// <summary>
+    /// Whether a browser at <paramref name="host"/> can complete a ceremony against the
+    /// configured rpId. WebAuthn admits the rpId's own host and any host beneath it, nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Development is exempt because it is served from loopback on a port assigned at launch,
+    /// which no configured rpId can name.
+    /// </remarks>
+    private bool CanUseConfiguredRpId(string host)
+    {
+        var rpId = _fido2Config.ServerDomain;
+        return _environment.IsDevelopment()
+            || string.Equals(host, rpId, StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith($".{rpId}", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc/>
+    public string? DescribeRpIdMismatch(string requestHost)
+    {
+        if (CanUseConfiguredRpId(requestHost))
+            return null;
+
+        return $"Passkeys on this server are set up for '{_fido2Config.ServerDomain}', but this "
+            + $"page is served from '{requestHost}'. A browser will only create or use a passkey "
+            + "when those match. Whoever runs this server needs to set "
+            + $"{BaseDomainOptions.ConfigKey} to the address people browse to, then restart it.";
+    }
+
+    /// <summary>
     /// Extracts the origin from the WebAuthn clientDataJSON and, if it is a
     /// subdomain of the configured rpId, adds it to the FIDO2 allowed origins.
     /// This is required for tenant subdomains where the browser
@@ -79,9 +108,7 @@ public class PasskeyService : IPasskeyService
                 return;
 
             var uri = new Uri(origin);
-            var rpId = _fido2Config.ServerDomain;
-            if (_environment.IsDevelopment() ||
-                uri.Host == rpId || uri.Host.EndsWith($".{rpId}", StringComparison.OrdinalIgnoreCase))
+            if (CanUseConfiguredRpId(uri.Host))
             {
                 ((HashSet<string>)_fido2Config.Origins).Add(origin);
 
