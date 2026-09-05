@@ -32,7 +32,6 @@
     maxWidgets = 3,
   }: Props = $props();
 
-  // Local state for drag operations
   let draggedIndex: number | null = $state(null);
   let dragOverIndex: number | null = $state(null);
 
@@ -42,7 +41,6 @@
   );
   const canAddMore = $derived(selectedWidgets.length < maxWidgets);
 
-  // Get widget display name
   function getWidgetName(id: TopWidgetId): string {
     // Convert camelCase to Title Case
     return id
@@ -53,7 +51,6 @@
       .join(' ');
   }
 
-  // Drag handlers for reordering
   function handleDragStart(event: DragEvent, index: number) {
     draggedIndex = index;
     if (event.dataTransfer) {
@@ -92,14 +89,12 @@
     dragOverIndex = null;
   }
 
-  // Add widget
   function addWidget(id: TopWidgetId) {
     if (canAddMore) {
       onchange?.([...selectedWidgets, id]);
     }
   }
 
-  // Remove widget
   function removeWidget(index: number) {
     const newValue = [...selectedWidgets];
     newValue.splice(index, 1);

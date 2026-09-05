@@ -3,35 +3,32 @@ import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import DashboardWidgetConfigurator from "./DashboardWidgetConfigurator.svelte";
 import { WidgetId } from "$lib/api/generated/nocturne-api-client";
-import {
-  TOP_WIDGET_IDS,
-  type TopWidgetId,
-} from "$lib/components/dashboard/widget-registry";
+import type { TopWidgetId } from "$lib/components/dashboard/widget-registry";
 
-/** Mirrors the component's camelCase-to-Title-Case label. */
-function label(id: string): string {
-  return id.replace(/([A-Z])/g, " $1").trim();
-}
+/**
+ * Spelled out rather than derived from the registry: the point of the test is
+ * that the picker cannot drift from the widgets the grid can render.
+ */
+const OFFERED = [
+  "Bg Delta",
+  "Last Updated",
+  "Connection Status",
+  "Meals",
+  "Trackers",
+  "Tir Chart",
+  "Daily Summary",
+  "Clock",
+  "Tdd",
+];
 
 describe("DashboardWidgetConfigurator", () => {
   it("offers exactly the widgets the grid has a loader for", async () => {
     render(DashboardWidgetConfigurator, { props: { value: [] } });
 
-    for (const id of TOP_WIDGET_IDS) {
-      await expect
-        .element(page.getByRole("button", { name: label(id) }))
-        .toBeVisible();
+    for (const name of OFFERED) {
+      await expect.element(page.getByRole("button", { name })).toBeVisible();
     }
-
-    const notRenderable = Object.values(WidgetId).filter(
-      (id) => !TOP_WIDGET_IDS.some((known) => known === id)
-    );
-    expect(notRenderable.length).toBeGreaterThan(0);
-    for (const id of notRenderable) {
-      await expect
-        .element(page.getByRole("button", { name: label(id) }))
-        .not.toBeInTheDocument();
-    }
+    expect(page.getByRole("button").elements()).toHaveLength(OFFERED.length);
   });
 
   it("ignores a stored widget id the grid cannot render", async () => {
@@ -45,10 +42,10 @@ describe("DashboardWidgetConfigurator", () => {
 
     expect(page.getByRole("listitem").elements()).toHaveLength(2);
     await expect
-      .element(page.getByText(label(WidgetId.GlucoseChart), { exact: true }))
+      .element(page.getByText("Glucose Chart", { exact: true }))
       .not.toBeInTheDocument();
 
-    await page.getByRole("button", { name: label(WidgetId.Clock) }).click();
+    await page.getByRole("button", { name: "Clock" }).click();
 
     expect(writes.at(-1)).toEqual([
       WidgetId.BgDelta,

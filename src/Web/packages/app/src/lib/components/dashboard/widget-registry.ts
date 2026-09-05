@@ -1,8 +1,7 @@
 /**
- * The top widget grid's registry: every widget id that has a component, with
- * the loader that fetches it. `WidgetId` also carries ids for the dashboard's
- * main sections, which are not grid widgets, so this — not the enum — is the
- * set the grid renders and the settings picker offers.
+ * `WidgetId` also carries ids for the dashboard's main sections, which are not
+ * grid widgets, so this — not the enum — is the set the grid renders and the
+ * settings picker offers.
  */
 
 import { WidgetId } from "$lib/api/generated/nocturne-api-client";
@@ -27,7 +26,7 @@ const TOP_WIDGET_LOADERS = {
 export type TopWidgetId = keyof typeof TOP_WIDGET_LOADERS;
 
 function isTopWidgetId(id: string): id is TopWidgetId {
-  return id in TOP_WIDGET_LOADERS;
+  return Object.hasOwn(TOP_WIDGET_LOADERS, id);
 }
 
 /** Every widget offerable in settings, in the order the picker lists them. */
@@ -41,11 +40,12 @@ export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
 ];
 
 /**
- * Selections persist per user and outlive any one release, so a stored list can
- * name an id this build has no component for.
+ * Selections persist per user, outlive any one release, and arrive from a
+ * cookie any tenant subdomain can write, so a stored list can name an id this
+ * build has no component for — or no id at all.
  */
 export function knownTopWidgets(
-  ids: readonly WidgetId[] | undefined
+  ids: readonly string[] | undefined
 ): TopWidgetId[] {
   return (ids ?? []).filter(isTopWidgetId);
 }
