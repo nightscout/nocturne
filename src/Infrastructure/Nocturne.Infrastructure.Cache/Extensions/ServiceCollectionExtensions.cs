@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
@@ -34,11 +33,6 @@ public static class ServiceCollectionExtensions
 
         // Register in-memory cache service
         services.AddSingleton<ICacheService, MemoryCacheService>();
-
-        // No registration in this tree owns the clock — it is only ever reached incidentally,
-        // through whichever framework extension the host happened to call. TryAdd so this
-        // assembly's services resolve one either way, without displacing a host-supplied clock.
-        services.TryAddSingleton(TimeProvider.System);
 
         // Register processing status service (in-memory)
         services.AddSingleton<IProcessingStatusService, MemoryProcessingStatusService>();

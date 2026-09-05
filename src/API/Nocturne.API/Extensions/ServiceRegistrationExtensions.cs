@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
@@ -182,6 +183,11 @@ public static class ServiceRegistrationExtensions
         IConfiguration configuration
     )
     {
+        // Every service that takes TimeProvider by constructor resolves it from here. Without this
+        // it resolves only because some framework extension the host calls registers it in passing,
+        // which would make the alerting and cache subsystems depend on that call staying put.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();
         services.AddSingleton<IXmlDocumentationService, XmlDocumentationService>();

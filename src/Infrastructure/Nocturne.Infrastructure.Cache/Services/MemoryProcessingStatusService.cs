@@ -7,7 +7,8 @@ using Nocturne.Infrastructure.Cache.Constants;
 namespace Nocturne.Infrastructure.Cache.Services;
 
 /// <summary>
-/// In-memory implementation of processing status service for development and testing
+/// Tracks async processing status in process memory. State is per-node and does not survive a
+/// restart, so a correlation ID minted by one node is unknown to any other.
 /// </summary>
 public class MemoryProcessingStatusService : IProcessingStatusService
 {
