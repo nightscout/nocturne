@@ -3,8 +3,13 @@
   import FirstReadingEmptyStateLoader from "./FirstReadingEmptyStateLoader.svelte";
 
   interface Props {
-    /** The real glucose chart. This component owns the only instance of it. */
-    chart: Snippet;
+    /**
+     * The real glucose chart. This component owns the only instance of it. The
+     * boolean argument is whether the chart is currently shown (not hidden
+     * behind the empty state), so the caller can gate a coach mark on it — a
+     * mark attached to a hidden element positions against a zero rect.
+     */
+    chart: Snippet<[boolean]>;
     /**
      * Whether the instance already has data on hand (server-loaded glucose or a
      * realtime value/history). When true the chart shows and the empty-state
@@ -28,7 +33,7 @@
 </script>
 
 <div hidden={chartHidden} aria-hidden={chartHidden}>
-  {@render chart()}
+  {@render chart(!chartHidden)}
 </div>
 
 <!--

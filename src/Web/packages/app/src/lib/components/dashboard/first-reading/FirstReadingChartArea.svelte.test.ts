@@ -5,6 +5,7 @@ import { createRawSnippet } from "svelte";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
 import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 import FirstReadingChartArea from "./FirstReadingChartArea.svelte";
+import CoachHarness from "./FirstReadingCoachHarness.test.svelte";
 
 const state = vi.hoisted(() => {
   const connectors: ConnectorStatusDto[] = [];
@@ -73,5 +74,43 @@ describe("FirstReadingChartArea", () => {
     await expect
       .element(page.getByTestId("first-reading-empty-state"))
       .not.toBeInTheDocument();
+  });
+
+  it("does not mark the chart coach-eligible while the empty state is shown", async () => {
+    state.connectors = [
+      {
+        id: "dexcom",
+        name: "Dexcom Share",
+        hasDatabaseConfig: true,
+        totalEntries: 0,
+      },
+    ];
+
+    render(CoachHarness, {
+      bypass: false,
+      recentHistoryReady: true,
+      hasRecentHistory: false,
+    });
+
+    await expect
+      .element(page.getByTestId("first-reading-empty-state"))
+      .toBeVisible();
+    await expect
+      .element(page.getByTestId("coach-eligible"))
+      .toHaveTextContent("no");
+  });
+
+  it("marks the chart coach-eligible when the chart is shown", async () => {
+    state.connectors = [];
+
+    render(CoachHarness, {
+      bypass: true,
+      recentHistoryReady: false,
+      hasRecentHistory: false,
+    });
+
+    await expect
+      .element(page.getByTestId("coach-eligible"))
+      .toHaveTextContent("yes");
   });
 });

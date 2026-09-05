@@ -90,14 +90,16 @@
       {/if}
 
       {#if isMainEnabled(WidgetId.GlucoseChart)}
-        {#snippet glucoseChart()}
+        {#snippet glucoseChart(chartVisible)}
           <div
-            {@attach coachmark({
-              key: "quick-tour.chart",
-              title: "Interactive chart",
-              description:
-                "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
-            })}
+            {@attach chartVisible
+              ? coachmark({
+                  key: "quick-tour.chart",
+                  title: "Interactive chart",
+                  description:
+                    "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
+                })
+              : undefined}
           >
             <GlucoseChartCard
               showPredictions={isMainEnabled(WidgetId.Predictions) &&
