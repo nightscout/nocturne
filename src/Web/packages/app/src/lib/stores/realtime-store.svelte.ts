@@ -649,7 +649,7 @@ export class RealtimeStore {
     });
 
     if (additions.length > 0) {
-      this.entries = [...this.entries, ...additions]
+      this.entries = [...additions.reverse(), ...this.entries]
         .sort((a, b) => (b.mills || 0) - (a.mills || 0))
         .slice(0, 1000);
     }

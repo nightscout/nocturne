@@ -217,6 +217,32 @@ describe("RealtimeStore entry create batching", () => {
 
     store.destroy();
   });
+
+  it("keeps later creates first when timestamps are equal", async () => {
+    const store = makeStore();
+    store.entries = [
+      { _id: "existing", type: "sgv", sgv: 90, mills: 1_000 },
+    ];
+
+    store.handleCreate({
+      colName: "entries",
+      doc: { _id: "first-create", type: "sgv", sgv: 100, mills: 1_000 },
+    });
+    store.handleCreate({
+      colName: "entries",
+      doc: { _id: "second-create", type: "sgv", sgv: 110, mills: 1_000 },
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(store.entries.map((entry) => entry._id)).toEqual([
+      "second-create",
+      "first-create",
+      "existing",
+    ]);
+
+    store.destroy();
+  });
 });
 
 describe("RealtimeStore sync progress", () => {
