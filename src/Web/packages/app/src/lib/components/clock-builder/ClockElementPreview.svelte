@@ -40,10 +40,9 @@
     <TrendArrow direction={glucose.direction} {size} />
   </div>
 {:else if element.type === "tracker"}
-  <!-- Tracker element with icon and time remaining -->
   {@const def = getTrackerDefinition(element.definitionId, trackerDefinitions)}
   {@const size = element.size || ELEMENT_INFO.tracker.defaultSize}
-  {@const showOptions = element.show ?? ["name", "remaining"]}
+  {@const showOptions = element.show ?? ["name"]}
   <div
     class="flex items-center gap-1 {getFontClass(
       element.style?.font
@@ -62,9 +61,6 @@
     {/if}
     {#if showOptions.includes("name")}
       <span class="leading-none">{def?.name ?? "Select tracker"}</span>
-    {/if}
-    {#if showOptions.includes("remaining")}
-      <span class="leading-none tabular-nums opacity-70">2d 4h</span>
     {/if}
   </div>
 {:else if value}

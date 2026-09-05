@@ -45,6 +45,10 @@ describe("isClockReadingStale", () => {
       true
     );
   });
+
+  it("is never stale without a reading to have aged", () => {
+    expect(isClockReadingStale(15, null, lastUpdated + 60 * MIN)).toBe(false);
+  });
 });
 
 describe("readingAgeLabel", () => {

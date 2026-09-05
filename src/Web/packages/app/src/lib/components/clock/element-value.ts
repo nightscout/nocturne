@@ -18,15 +18,20 @@ export function renderClockElementValue(
   glucose: ClockGlucoseSource,
   now: Date
 ): string {
+  const { currentBG, lastUpdated } = glucose;
   switch (element.type) {
     case "sg":
-      return String(bg(glucose.currentBG));
+      return currentBG === null ? "--" : String(bg(currentBG));
     case "delta": {
+      // A delta needs a reading, and a second one to be a delta from.
+      if (currentBG === null || glucose.bgDelta === null) return "";
       const delta = bgDelta(glucose.bgDelta);
       return element.showUnits !== false ? `${delta} ${bgLabel()}` : delta;
     }
     case "age":
-      return readingAgePhrase(glucose.lastUpdated, now.getTime());
+      return lastUpdated === null
+        ? ""
+        : readingAgePhrase(lastUpdated, now.getTime());
     case "time":
       return formatClockTime(now, element.format);
     // No runtime source for insulin/carbs on board; an explicit placeholder

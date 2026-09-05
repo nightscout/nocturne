@@ -5,7 +5,7 @@
  * and other utilities used by the clock face builder.
  */
 
-import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
+import type { ClockElement, ClockSettings, TrackerDefinitionDto } from "$lib/api";
 import {
   TEXT_ELEMENT_TYPES,
   elementInfo,
@@ -21,6 +21,8 @@ function resolveCssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+const DEFAULT_ELEMENT_COLOR = "#ffffff";
+
 /**
  * Get BG color based on glucose value
  */
@@ -30,6 +32,25 @@ export function getBgColor(bg: number): string {
   if (bg > 250) return resolveCssVar("--glucose-very-high");
   if (bg > 180) return resolveCssVar("--glucose-high");
   return resolveCssVar("--glucose-in-range");
+}
+
+/**
+ * Background of a whole clock face. A face set to colour itself by glucose
+ * takes `fallback` when there is no reading, rather than painting the screen
+ * with the colour of a value nothing reported.
+ */
+export function clockBackgroundStyle(
+  settings: ClockSettings | undefined,
+  currentBG: number | null,
+  fallback: string
+): string {
+  if (settings?.backgroundImage) {
+    return `background-image: url(${settings.backgroundImage}); background-size: cover; background-position: center;`;
+  }
+  if (settings?.bgColor && currentBG !== null) {
+    return `background-color: ${getBgColor(currentBG)};`;
+  }
+  return `background-color: ${fallback};`;
 }
 
 /**
@@ -90,12 +111,19 @@ export function getFontWeightClass(weight: string | undefined): string {
 }
 
 /**
- * Get element text color from style
+ * Get element text color from style. A null `currentBG` has no glucose colour:
+ * a dynamic element falls back to the static default rather than painting the
+ * absence of a reading as a severe low.
  */
-export function getElementColor(element: ClockElement, currentBG: number): string {
+export function getElementColor(
+  element: ClockElement,
+  currentBG: number | null
+): string {
   const color = element.style?.color;
-  if (color === "dynamic") return getBgColor(currentBG);
-  return color || "#ffffff";
+  if (color === "dynamic") {
+    return currentBG === null ? DEFAULT_ELEMENT_COLOR : getBgColor(currentBG);
+  }
+  return color || DEFAULT_ELEMENT_COLOR;
 }
 
 /**
@@ -112,7 +140,10 @@ export function buildCustomCssString(element: ClockElement): string {
 /**
  * Build inline style string from element.style (including custom properties)
  */
-export function buildStyleString(element: ClockElement, currentBG: number): string {
+export function buildStyleString(
+  element: ClockElement,
+  currentBG: number | null
+): string {
   const style = element.style;
   const parts: string[] = [];
 

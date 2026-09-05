@@ -258,8 +258,6 @@ export const VISIBILITY_OPTIONS: SelectOption[] = [
 export const TRACKER_SHOW_OPTIONS: SelectOption[] = [
   { value: "name", label: "Name" },
   { value: "icon", label: "Icon" },
-  { value: "remaining", label: "Time remaining" },
-  { value: "urgency", label: "Urgency badge" },
 ];
 
 export const TRACKER_CATEGORIES = [
