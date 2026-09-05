@@ -308,7 +308,7 @@ else
 if (string.IsNullOrWhiteSpace(rawCorsBaseDomain) && !app.Environment.IsDevelopment() && !isTesting)
 {
     app.Logger.LogError(
-        "{ConfigKey} is not set. Passkeys are bound to 'localhost', so browsers will refuse to "
+        "{ConfigKey} is unset or blank. Passkeys are bound to 'localhost', so browsers will refuse to "
         + "create or use one on any other address, and OIDC sign-in has no redirect URI to send. "
         + "Set it to the address people browse to and restart.",
         BaseDomainOptions.ConfigKey);
