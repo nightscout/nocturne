@@ -31,7 +31,6 @@ import {
   ShieldCheck,
   Building2,
   Wrench,
-  HeartPulse,
   ListChecks,
   Users,
   KeyRound,
@@ -146,10 +145,6 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
 
   const readOnly = readOnlyNav(items, viewer);
   if (readOnly) return readOnly;
-
-  if (satisfiesScope(viewer.grantedScopes, "tenant.settings")) {
-    items.push({ title: "Personal", href: "/personal", icon: HeartPulse });
-  }
 
   if (viewer.tenantCount > 1) {
     items.push({
