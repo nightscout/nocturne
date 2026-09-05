@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
@@ -38,6 +39,14 @@ public interface IShareLinkService
     /// authoritative.
     /// </summary>
     Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
+    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
+    /// on the frontend's own defaults.
+    /// </summary>
+    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -187,6 +196,27 @@ public sealed class ShareLinkService : IShareLinkService
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member);
+    }
+
+    /// <inheritdoc />
+    public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        // The longest-standing owner, so a tenant with several owners renders one settled way
+        // instead of changing appearance as the membership list shifts. System subjects are
+        // excluded: the Public subject the share itself runs as never carries an owner role, and
+        // a service account's blank preferences would silently win over a person's.
+        var ownerPreferences = await _dbContext.TenantMembers.AsNoTracking()
+            .Where(m => m.TenantId == tenantId
+                && m.RevokedAt == null
+                && !m.Subject!.IsSystemSubject
+                && m.Subject.IsActive
+                && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+            .OrderBy(m => m.SysCreatedAt)
+            .ThenBy(m => m.Id)
+            .Select(m => m.Subject!.Preferences)
+            .FirstOrDefaultAsync(ct);
+
+        return UserDisplayPreferences.Deserialize(ownerPreferences).ToPresentationOnly();
     }
 
     private Task<TenantMemberEntity?> GetPublicMemberAsync(Guid tenantId, CancellationToken ct) =>

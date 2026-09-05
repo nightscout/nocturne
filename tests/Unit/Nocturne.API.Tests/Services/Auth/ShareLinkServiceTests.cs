@@ -11,6 +11,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
@@ -261,5 +262,80 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         dto.Enabled.Should().BeFalse();
         (await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId)).ShareToken.Should().BeNull();
+    }
+
+    /// <summary>Stores display preferences against the seeded owner subject.</summary>
+    private async Task GiveTheOwnerPreferencesAsync(UserDisplayPreferences preferences)
+    {
+        var owner = await _db.Subjects.FirstAsync(s => s.Id == TestDatabaseSeeder.TestSubjectId);
+        owner.Preferences = preferences.Serialize();
+        await _db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task SharedAppearance_is_the_owners_presentation_settings()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
+        {
+            GlucoseUnits = "mmol",
+            TimeFormat = "24",
+            RegionFormat = "en-GB",
+            ColorTheme = "trio",
+            Chart = new ChartPreferences { LineColorMode = "threshold", Lookback = 6 },
+            Prediction = new PredictionPreferences { Enabled = true, Minutes = 45 },
+        });
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol");
+        appearance.TimeFormat.Should().Be("24");
+        appearance.RegionFormat.Should().Be("en-GB");
+        appearance.ColorTheme.Should().Be("trio");
+        appearance.Chart!.LineColorMode.Should().Be("threshold");
+        appearance.Chart.Lookback.Should().Be(6);
+        appearance.Prediction!.Minutes.Should().Be(45);
+    }
+
+    [Fact]
+    public async Task SharedAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
+        {
+            GlucoseUnits = "mmol",
+            DashboardTopWidgets = [WidgetId.Tdd, WidgetId.Meals],
+            NightModeSchedule = true,
+        });
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol");
+        appearance.DashboardTopWidgets.Should().BeNull(
+            "the widgets an owner pins describe what they track, not how it looks");
+        appearance.NightModeSchedule.Should().BeNull(
+            "it tells a stranger holding the link roughly when the owner sleeps");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_is_empty_when_the_tenant_has_no_owner_left()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+
+        var owner = await _db.TenantMembers.FirstAsync(m => m.SubjectId == TestDatabaseSeeder.TestSubjectId);
+        owner.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().BeNull("a revoked member no longer speaks for the tenant");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_another_tenants_owner()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+
+        var appearance = await _service.GetSharedAppearanceAsync(Guid.NewGuid());
+
+        appearance.GlucoseUnits.Should().BeNull();
     }
 }

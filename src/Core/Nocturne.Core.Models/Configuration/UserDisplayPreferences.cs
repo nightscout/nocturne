@@ -143,6 +143,28 @@ public class UserDisplayPreferences
         }
     }
 
+    /// <summary>
+    /// A copy carrying only the fields that describe how data is drawn, for disclosure to a
+    /// viewer who is not the owner (the anonymous public share). The projection names every
+    /// field it copies, so a preference added later is withheld until someone decides it is
+    /// presentation rather than a fact about the owner.
+    /// <para>
+    /// Two fields fail that test. <see cref="DashboardTopWidgets"/>: which widgets an owner pins
+    /// says what they treat and track. <see cref="NightModeSchedule"/>: it reveals roughly when
+    /// they sleep, to a stranger who may only have been handed a link — and when a viewer's own
+    /// screen dims is theirs to decide, not the owner's.
+    /// </para>
+    /// </summary>
+    public UserDisplayPreferences ToPresentationOnly() => new()
+    {
+        GlucoseUnits = GlucoseUnits,
+        TimeFormat = TimeFormat,
+        RegionFormat = RegionFormat,
+        ColorTheme = ColorTheme,
+        Prediction = Prediction,
+        Chart = Chart,
+    };
+
     /// <summary>Glucose units: "mg/dl" or "mmol".</summary>
     [JsonPropertyName("glucoseUnits")]
     public string? GlucoseUnits { get; set; }
