@@ -1,58 +1,22 @@
-using Microsoft.Extensions.Configuration;
 using Nocturne.Infrastructure.Data.Configuration;
 
 namespace Nocturne.Infrastructure.Data.Tests.Configuration;
 
 /// <summary>
-/// Guards <see cref="PostgreSqlConfiguration.ResolveForEnvironment"/> — the assembly of the
-/// options the API's own PostgreSQL registration is given. The registration itself sits behind
-/// <c>if (!isTesting)</c> in <c>Program.cs</c> and every fixture forces the Testing environment,
-/// so nothing that boots the host can observe it; these drive the resolution directly instead.
+/// Guards <see cref="PostgreSqlConfiguration.ResolveForEnvironment"/>, the assembly of the options
+/// the API's own PostgreSQL registration is given. The registration itself sits behind
+/// <c>if (!isTesting)</c> in <c>Program.cs</c> and every fixture forces the Testing environment, so
+/// nothing that boots the host reaches it; these drive the resolution directly instead.
 /// </summary>
 [Trait("Category", "Unit")]
 public class PostgreSqlConfigurationResolveTests
 {
-    private const string ConnectionString = "Host=localhost;Database=nocturne;Username=nocturne_app;Password=pw";
-
-    private static IConfiguration SectionWith(params (string Key, string Value)[] settings) =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(settings.ToDictionary(
-                s => $"{PostgreSqlConfiguration.SectionName}:{s.Key}",
-                s => (string?)s.Value))
-            .Build();
-
-    [Fact]
-    public void ConfiguredSection_ReachesEverySettingOnTheResolvedOptions()
-    {
-        var config = PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString,
-            SectionWith(
-                ("MaxPoolSize", "33"),
-                ("StatementTimeoutSeconds", "12"),
-                ("CommandTimeoutSeconds", "45"),
-                ("MaxRetryCount", "7"),
-                ("MaxRetryDelaySeconds", "90")),
-            isDevelopment: false);
-
-        config.MaxPoolSize.Should().Be(33);
-        config.StatementTimeoutSeconds.Should().Be(12);
-        config.CommandTimeoutSeconds.Should().Be(45);
-        config.MaxRetryCount.Should().Be(7);
-        config.MaxRetryDelaySeconds.Should().Be(90);
-        config.ConnectionString.Should().Be(ConnectionString);
-    }
-
-    /// <summary>
-    /// The regression the extracted resolution exists to catch: dropping the configuration — the
-    /// argument that was previously passed by a line no test could reach — has to change the
-    /// resolved options, or nothing observes it being passed at all.
-    /// </summary>
     [Fact]
     public void ConfiguredSection_ResolvesDifferentlyFromTheCompiledInDefaults()
     {
         var configured = PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString,
-            SectionWith(("MaxPoolSize", "33"), ("StatementTimeoutSeconds", "12")),
+            PostgreSqlSection.AppConnectionString,
+            PostgreSqlSection.With(("MaxPoolSize", "33"), ("StatementTimeoutSeconds", "12")),
             isDevelopment: false);
 
         var defaults = new PostgreSqlConfiguration();
@@ -61,21 +25,21 @@ public class PostgreSqlConfigurationResolveTests
         configured.StatementTimeoutSeconds.Should().NotBe(defaults.StatementTimeoutSeconds);
     }
 
+    /// <summary>
+    /// <c>PostgreSql:ConnectionString</c> is a real key that the design-time factory reads, so a
+    /// self-hoster running <c>dotnet ef</c> may have it pointed at the migrator role. The host's
+    /// own connection string has to survive the bind, or the runtime pool connects as that role.
+    /// </summary>
     [Fact]
-    public void EmptySection_KeepsTheDocumentedDefaults()
+    public void SuppliedConnectionString_SurvivesTheBind()
     {
         var config = PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString,
-            new ConfigurationBuilder().Build(),
+            PostgreSqlSection.AppConnectionString,
+            PostgreSqlSection.With(
+                ("ConnectionString", "Host=WRONGHOST;Database=nocturne;Username=nocturne_migrator;Password=pw")),
             isDevelopment: false);
 
-        var defaults = new PostgreSqlConfiguration();
-
-        config.MaxPoolSize.Should().Be(defaults.MaxPoolSize);
-        config.StatementTimeoutSeconds.Should().Be(defaults.StatementTimeoutSeconds);
-        config.CommandTimeoutSeconds.Should().Be(defaults.CommandTimeoutSeconds);
-        config.MaxRetryCount.Should().Be(defaults.MaxRetryCount);
-        config.MaxRetryDelaySeconds.Should().Be(defaults.MaxRetryDelaySeconds);
+        config.ConnectionString.Should().Be(PostgreSqlSection.AppConnectionString);
     }
 
     [Theory]
@@ -84,8 +48,8 @@ public class PostgreSqlConfigurationResolveTests
     public void EfDiagnostics_FollowTheEnvironment(bool isDevelopment)
     {
         var config = PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString,
-            new ConfigurationBuilder().Build(),
+            PostgreSqlSection.AppConnectionString,
+            PostgreSqlSection.With(),
             isDevelopment);
 
         config.EnableDetailedErrors.Should().Be(isDevelopment);
@@ -93,30 +57,20 @@ public class PostgreSqlConfigurationResolveTests
     }
 
     /// <summary>
-    /// Both flags put query parameters — patient data — into logs and exception text, so a
-    /// deployed appsettings or environment variable must not be able to turn them on outside
-    /// development.
+    /// Both flags put query parameters — patient data — into logs and exception text, so a deployed
+    /// appsettings or environment variable must not be able to turn them on outside development.
     /// </summary>
     [Fact]
     public void EfDiagnosticsInConfiguration_CannotOverrideTheEnvironment()
     {
         var config = PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString,
-            SectionWith(
+            PostgreSqlSection.AppConnectionString,
+            PostgreSqlSection.With(
                 ("EnableSensitiveDataLogging", "true"),
                 ("EnableDetailedErrors", "true")),
             isDevelopment: false);
 
         config.EnableSensitiveDataLogging.Should().BeFalse();
         config.EnableDetailedErrors.Should().BeFalse();
-    }
-
-    [Fact]
-    public void MissingConfiguration_FailsRatherThanFallingBackToDefaults()
-    {
-        var resolve = () => PostgreSqlConfiguration.ResolveForEnvironment(
-            ConnectionString, configuration: null!, isDevelopment: false);
-
-        resolve.Should().Throw<ArgumentNullException>();
     }
 }

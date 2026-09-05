@@ -24,32 +24,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Add PostgreSQL data services, taking the connection string from
-    /// <c>PostgreSql:ConnectionString</c>.
-    /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <param name="configuration">Configuration</param>
-    /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddPostgreSqlInfrastructure(
-        this IServiceCollection services,
-        IConfiguration configuration
-    )
-    {
-        var connectionString = configuration
-            .GetSection(PostgreSqlConfiguration.SectionName)[nameof(PostgreSqlConfiguration.ConnectionString)];
-
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new InvalidOperationException(
-                "PostgreSQL connection string must be provided in configuration section 'PostgreSql:ConnectionString'"
-            );
-        }
-
-        return services.AddPostgreSqlInfrastructure(
-            PostgreSqlConfiguration.Resolve(connectionString, configuration));
-    }
-
     // Replaces the registered IDbContextFactory<NocturneDbContext> with a decorator that
     // normalizes the carrier properties on every acquisition. Applied immediately after
     // AddDbContextFactory so the descriptor it wraps is the registered factory.
@@ -107,26 +81,19 @@ public static class ServiceCollectionExtensions
     /// every other overload resolves its options through
     /// <see cref="PostgreSqlConfiguration.Resolve"/> and lands here.
     /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <param name="config">Resolved PostgreSQL options</param>
     /// <returns>Service collection for chaining</returns>
     public static IServiceCollection AddPostgreSqlInfrastructure(
         this IServiceCollection services,
         PostgreSqlConfiguration config
     )
     {
-        // Register configuration
-        services.Configure<PostgreSqlConfiguration>(options =>
+        if (string.IsNullOrEmpty(config.ConnectionString))
         {
-            options.ConnectionString = config.ConnectionString;
-            options.EnableSensitiveDataLogging = config.EnableSensitiveDataLogging;
-            options.EnableDetailedErrors = config.EnableDetailedErrors;
-            options.MaxRetryCount = config.MaxRetryCount;
-            options.MaxRetryDelaySeconds = config.MaxRetryDelaySeconds;
-            options.CommandTimeoutSeconds = config.CommandTimeoutSeconds;
-            options.StatementTimeoutSeconds = config.StatementTimeoutSeconds;
-            options.MaxPoolSize = config.MaxPoolSize;
-        });
+            throw new ArgumentException(
+                "Connection string cannot be null or empty",
+                nameof(config)
+            );
+        }
 
         // Register interceptors as singletons so caches are shared across all DbContext instances.
         services.TryAddSingleton<TenantConnectionInterceptor>();

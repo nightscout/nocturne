@@ -95,13 +95,18 @@ var aspirePostgreSqlConnection = builder.Configuration.GetConnectionString(Servi
         $"ConnectionStrings:{ServiceNames.PostgreSql} is required."));
 var migratorConnectionString = builder.Configuration.GetConnectionString($"{ServiceNames.PostgreSql}-migrator");
 
+var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
+    aspirePostgreSqlConnection,
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+
+// Registered whether or not the pool is built, so the resolution above is observable from a test
+// host, which always runs as Testing and so never reaches the registration below.
+builder.Services.AddSingleton(postgreSqlOptions);
+
 if (!isTesting)
 {
-    builder.Services.AddPostgreSqlInfrastructure(
-        PostgreSqlConfiguration.ResolveForEnvironment(
-            aspirePostgreSqlConnection,
-            builder.Configuration,
-            builder.Environment.IsDevelopment()));
+    builder.Services.AddPostgreSqlInfrastructure(postgreSqlOptions);
 }
 else
 {
