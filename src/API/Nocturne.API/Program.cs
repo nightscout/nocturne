@@ -293,25 +293,27 @@ else if (app.Environment.IsDevelopment())
         + "disabled (loopback origins are still allowed in Development).",
         rawCorsBaseDomain);
 }
+// The key decides more than CORS, and the rest cannot fail closed the way CORS does: the
+// WebAuthn relying-party id is fixed at startup, and a browser reports the refusal it causes as
+// an opaque security error naming nothing an operator can search for. Split by cause so each
+// names the rp.id the deployment actually ended up with.
+else if (string.IsNullOrWhiteSpace(rawCorsBaseDomain))
+{
+    app.Logger.LogError(
+        "{ConfigKey} is unset or blank. Cross-origin CORS is disabled (fail closed), passkeys "
+        + "are bound to 'localhost' so browsers will refuse to create or use one on any other "
+        + "address, and OIDC sign-in has no redirect URI to send. Set it to the address people "
+        + "browse to and restart.",
+        BaseDomainOptions.ConfigKey);
+}
 else
 {
     app.Logger.LogError(
         "CORS base domain '{RawCorsBaseDomain}' is not a valid multi-label host ({ConfigKey}). "
         + "Cross-origin CORS is disabled (fail closed) — tenant and share subdomains will be "
-        + "rejected until this is corrected.",
+        + "rejected until this is corrected, and passkeys are bound to a relying-party id derived "
+        + "from the same value, so browsers will refuse them too.",
         rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
-}
-
-// The same key decides the WebAuthn relying-party id, which is fixed at startup and cannot fail
-// closed the way CORS does: left unset it binds to localhost, and the browser reports the
-// resulting refusal as an opaque security error that names nothing an operator can search for.
-if (string.IsNullOrWhiteSpace(rawCorsBaseDomain) && !app.Environment.IsDevelopment() && !isTesting)
-{
-    app.Logger.LogError(
-        "{ConfigKey} is unset or blank. Passkeys are bound to 'localhost', so browsers will refuse to "
-        + "create or use one on any other address, and OIDC sign-in has no redirect URI to send. "
-        + "Set it to the address people browse to and restart.",
-        BaseDomainOptions.ConfigKey);
 }
 
 // Configure middleware pipeline

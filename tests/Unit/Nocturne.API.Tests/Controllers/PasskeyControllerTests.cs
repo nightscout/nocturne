@@ -1227,7 +1227,7 @@ public class PasskeyControllerTests : IDisposable
     [Fact]
     public async Task LoginOptions_WhenTheHostCannotUseTheRpId_RefusesWithTheReason()
     {
-        const string detail = "Passkeys on this server are set up for 'localhost' … BASE_DOMAIN";
+        const string detail = "Passkeys on this server are set up for 'localhost' ... BASE_DOMAIN";
         _controller.HttpContext.Request.Host = new HostString("cgm.example.com");
         _passkeyService.Setup(s => s.DescribeRpIdMismatch("cgm.example.com")).Returns(detail);
 
@@ -1247,6 +1247,11 @@ public class PasskeyControllerTests : IDisposable
     public async Task LoginOptions_WhenTheHostCanUseTheRpId_IssuesOptions()
     {
         _controller.HttpContext.Request.Host = new HostString("rhys.cgm.example.com");
+        // Explicit, not Moq's loose default: the point of the test is that the guard consulted
+        // the service about this host and was answered, not that a null fell out of nowhere.
+        _passkeyService
+            .Setup(s => s.DescribeRpIdMismatch("rhys.cgm.example.com"))
+            .Returns((string?)null);
         _passkeyService
             .Setup(s => s.GenerateAssertionOptionsAsync("someone", _tenantId))
             .ReturnsAsync(new PasskeyAssertionOptions("{\"challenge\":\"abc\"}", "token-data"));
@@ -1254,6 +1259,7 @@ public class PasskeyControllerTests : IDisposable
         var result = await _controller.LoginOptions(new PasskeyLoginOptionsRequest { Username = "someone" });
 
         Assert.IsType<OkObjectResult>(result.Result);
+        _passkeyService.Verify(s => s.DescribeRpIdMismatch("rhys.cgm.example.com"), Times.Once);
     }
 
     #endregion

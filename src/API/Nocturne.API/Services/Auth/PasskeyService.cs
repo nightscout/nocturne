@@ -66,8 +66,10 @@ public class PasskeyService : IPasskeyService
     /// configured rpId. WebAuthn admits the rpId's own host and any host beneath it, nothing else.
     /// </summary>
     /// <remarks>
-    /// Development is exempt because it is served from loopback on a port assigned at launch,
-    /// which no configured rpId can name.
+    /// Development is exempt to keep the gateway-bypassing routes usable. The dev rpId is the
+    /// gateway's own host (<c>nocturne.localhost</c>), which the gateway and its tenant
+    /// subdomains already satisfy; what the exemption buys is reaching the API or the web app
+    /// directly on <c>localhost</c> at a port Aspire assigns.
     /// </remarks>
     private bool CanUseConfiguredRpId(string host)
     {

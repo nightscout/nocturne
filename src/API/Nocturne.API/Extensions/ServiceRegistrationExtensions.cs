@@ -308,9 +308,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
         // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
-        // unset — it is what the shipped .env.example leaves behind, and it would otherwise build
-        // the origin "https://", which Fido2Configuration rejects with an unhandled
-        // UriFormatException the first time any passkey endpoint resolves it.
+        // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
+        // one Fido2Configuration refuses to parse.
         var configuredBaseDomain = configuration[BaseDomainOptions.ConfigKey];
         var baseDomain = string.IsNullOrWhiteSpace(configuredBaseDomain)
             ? "localhost:1612"

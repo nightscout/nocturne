@@ -396,6 +396,17 @@ public class PasskeyServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void DescribeRpIdMismatch_WhenHostMerelyEndsWithTheRpId_Refuses()
+    {
+        // The label boundary is the whole guarantee: "evilcgm.example.com" is a stranger's host,
+        // not a tenant. This predicate also decides which origins reach the FIDO2 allow-list.
+        var service = CreateService("Production", "cgm.example.com");
+
+        service.DescribeRpIdMismatch("evilcgm.example.com").Should().NotBeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void DescribeRpIdMismatch_WhenHostIsElsewhere_NamesBothAddressesAndTheSetting()
     {
         var service = CreateService("Production", "localhost");
@@ -412,8 +423,9 @@ public class PasskeyServiceTests
     [Trait("Category", "Unit")]
     public void DescribeRpIdMismatch_InDevelopment_AllowsAnyHost()
     {
-        // Dev is served from loopback on a port assigned at launch, which no rpId can name.
-        var service = CreateService("Development", "cgm.example.com");
+        // What the exemption buys is reaching the API or the web app directly on localhost,
+        // past the gateway whose host the dev rpId already names.
+        var service = CreateService("Development", "nocturne.localhost");
 
         service.DescribeRpIdMismatch("localhost").Should().BeNull();
     }
