@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Responses;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -235,16 +236,12 @@ public class AuditController : ControllerBase
         // session variable both scope to this tenant — pooling does not reset TenantId.
         db.TenantId = tenantId;
 
-        // Mutation audit must outlive any soft-deleted entity it describes, otherwise a
-        // user-delete's audit row ages out before the entity is hard-deleted and the dedup
-        // discriminator (which reads that row) lets a connector resync silently recreate the
-        // deleted record. Compare against the effective soft-delete window the cleanup
-        // service actually applies — including the instance default for tenants with no
-        // retention row (there is no "kept indefinitely" state) — so the floor holds even
-        // when the audit config is the only retention setting present. A null (infinite)
-        // audit retention always covers it. The symmetric check (rejecting a soft-delete
-        // bump above audit retention) belongs on the TenantDataRetentionConfig update
-        // endpoint when it exists.
+        // Mutation audit must outlive any soft-deleted entity it describes, so a user-delete's
+        // attribution is still on record for as long as the entity itself is recoverable.
+        // Compare against the effective windows both sweeps actually apply — neither side has a
+        // "kept indefinitely" state, so a null on either config row means that side's platform
+        // default, not infinity. The symmetric check (rejecting a soft-delete bump above audit
+        // retention) belongs on the TenantDataRetentionConfig update endpoint when it exists.
         var softDeleteRow = await db.TenantDataRetentionConfig
             .Where(c => c.TenantId == tenantId)
             .Select(c => new { c.SoftDeleteRetentionDays })
@@ -253,16 +250,27 @@ public class AuditController : ControllerBase
         var effectiveSoftDeleteDays = SoftDeleteRetentionPolicy.ResolveDays(
             softDeleteRow?.SoftDeleteRetentionDays, _configuration);
 
-        if (request.MutationAuditRetentionDays is int ma && ma < effectiveSoftDeleteDays)
+        if (request.MutationAuditRetentionDays is int requested && requested < effectiveSoftDeleteDays)
         {
             return BadRequest(new
             {
-                error = $"Mutation audit retention ({ma} days) must be >= the effective "
+                error = $"Mutation audit retention ({requested} days) must be >= the effective "
                       + $"soft-delete retention ({effectiveSoftDeleteDays} days). Audit rows "
                       + "must outlive the soft-deleted entities they describe, otherwise "
-                      + "user-delete attribution is lost and connector resyncs can silently "
-                      + "undo user deletes.",
+                      + "user-delete attribution is lost while the entity is still recoverable.",
             });
+        }
+
+        // A null defers to the platform default, which an instance may configure below this
+        // tenant's soft-delete window. Store the floor rather than refusing: the tenant did not
+        // choose the failing value, and rejecting would leave them unable to change any other
+        // audit setting, including turning read auditing off.
+        var mutationDays = request.MutationAuditRetentionDays;
+        if (mutationDays is null
+            && AuditRetentionPolicy.ResolveMutationDays(null, _configuration) is int platformDays
+            && platformDays < effectiveSoftDeleteDays)
+        {
+            mutationDays = effectiveSoftDeleteDays;
         }
 
         var entity = await db.TenantAuditConfig
@@ -278,7 +286,7 @@ public class AuditController : ControllerBase
                 TenantId = tenantId,
                 ReadAuditEnabled = request.ReadAuditEnabled,
                 ReadAuditRetentionDays = request.ReadAuditRetentionDays,
-                MutationAuditRetentionDays = request.MutationAuditRetentionDays,
+                MutationAuditRetentionDays = mutationDays,
                 SysCreatedAt = now,
                 SysUpdatedAt = now,
             };
@@ -288,7 +296,7 @@ public class AuditController : ControllerBase
         {
             entity.ReadAuditEnabled = request.ReadAuditEnabled;
             entity.ReadAuditRetentionDays = request.ReadAuditRetentionDays;
-            entity.MutationAuditRetentionDays = request.MutationAuditRetentionDays;
+            entity.MutationAuditRetentionDays = mutationDays;
             entity.SysUpdatedAt = now;
         }
 
