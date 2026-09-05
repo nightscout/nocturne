@@ -36,6 +36,10 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
   // register cannot be enrolled. Its deletion matters too: the API spends the cookie once the
   // credential exists.
   AUTH_COOKIE_NAMES.recoverySession,
+  // The passkey and authenticator sign-ins complete inside a remote function, so the API's
+  // Set-Cookie for the last-used-method hint has to be forwarded or only the OIDC flow — which
+  // is a browser redirect — would ever record one.
+  AUTH_COOKIE_NAMES.lastSignIn,
 ]);
 
 /**
