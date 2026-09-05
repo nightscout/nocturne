@@ -21,17 +21,22 @@
   const settingsStore = getSettingsStore();
   const realtimeStore = tryGetRealtimeStore();
 
-  // Whether the current chart window (server-loaded recent data, or anything the
-  // realtime feed has delivered this session) holds any glucose. When it does the
-  // chart renders directly; only an empty window pays for the first-reading check.
+  // Whether we already know this instance has data: server-loaded recent glucose,
+  // or anything the realtime feed has surfaced (a live value, or its initial
+  // undated most-recent fetch). When it does, the chart renders directly and the
+  // first-reading check never runs; only an instance with nothing on hand pays
+  // for it.
   const hasInitialGlucose = $derived(
     (data.initialChartData?.glucoseData?.length ?? 0) > 0
   );
-  const hasWindowData = $derived(
+  const hasRecentHistory = $derived(
+    realtimeStore?.entries.length ? true : false
+  );
+  const recentHistoryReady = $derived(realtimeStore?.isReady ?? true);
+  const hasDataNow = $derived(
     hasInitialGlucose ||
-      (realtimeStore
-        ? realtimeStore.currentBG > 0 || realtimeStore.entries.length > 0
-        : false)
+      hasRecentHistory ||
+      (realtimeStore ? realtimeStore.currentBG > 0 : false)
   );
 
   // Get widgets array from settings (for main section visibility)
@@ -95,7 +100,7 @@
           />
         {/snippet}
 
-        {#if hasWindowData}
+        {#if hasDataNow}
           <div
             {@attach coachmark({
               key: "quick-tour.chart",
@@ -107,7 +112,11 @@
             {@render glucoseChart()}
           </div>
         {:else}
-          <FirstReadingChartArea chart={glucoseChart} />
+          <FirstReadingChartArea
+            chart={glucoseChart}
+            {recentHistoryReady}
+            {hasRecentHistory}
+          />
         {/if}
       {/if}
     </div>

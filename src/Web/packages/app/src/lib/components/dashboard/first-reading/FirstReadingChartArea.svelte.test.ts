@@ -3,24 +3,16 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import type {
-  ConnectorStatusDto,
-  ServicesOverview,
-} from "$lib/api/generated/nocturne-api-client";
+import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 import FirstReadingChartArea from "./FirstReadingChartArea.svelte";
 
 const state = vi.hoisted(() => {
   const connectors: ConnectorStatusDto[] = [];
-  const services: ServicesOverview = { activeDataSources: [] };
-  return { connectors, services };
+  return { connectors };
 });
 
 vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
   getStatus: () => remoteQuery(() => state.connectors),
-}));
-
-vi.mock("$api/generated/services.generated.remote", () => ({
-  getServicesOverview: () => remoteQuery(() => state.services),
 }));
 
 const chart = createRawSnippet(() => ({
@@ -37,9 +29,12 @@ describe("FirstReadingChartArea", () => {
         totalEntries: 0,
       },
     ];
-    state.services = { activeDataSources: [] };
 
-    render(FirstReadingChartArea, { chart });
+    render(FirstReadingChartArea, {
+      chart,
+      recentHistoryReady: true,
+      hasRecentHistory: false,
+    });
 
     await expect
       .element(page.getByTestId("first-reading-empty-state"))
@@ -56,9 +51,12 @@ describe("FirstReadingChartArea", () => {
         totalEntries: 288,
       },
     ];
-    state.services = { activeDataSources: [] };
 
-    render(FirstReadingChartArea, { chart });
+    render(FirstReadingChartArea, {
+      chart,
+      recentHistoryReady: true,
+      hasRecentHistory: false,
+    });
 
     await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
     await expect
@@ -66,13 +64,29 @@ describe("FirstReadingChartArea", () => {
       .not.toBeInTheDocument();
   });
 
-  it("shows the chart when an uploader source has readings but no connector exists", async () => {
+  it("shows the chart for a dormant uploader-only instance that has recent history but no connector", async () => {
     state.connectors = [];
-    state.services = {
-      activeDataSources: [{ id: "xdrip", name: "xDrip", totalEntries: 12 }],
-    };
 
-    render(FirstReadingChartArea, { chart });
+    render(FirstReadingChartArea, {
+      chart,
+      recentHistoryReady: true,
+      hasRecentHistory: true,
+    });
+
+    await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
+    await expect
+      .element(page.getByTestId("first-reading-empty-state"))
+      .not.toBeInTheDocument();
+  });
+
+  it("does not render the empty state while the recent-history load is in flight", async () => {
+    state.connectors = [];
+
+    render(FirstReadingChartArea, {
+      chart,
+      recentHistoryReady: false,
+      hasRecentHistory: false,
+    });
 
     await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
     await expect
