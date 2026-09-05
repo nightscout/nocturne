@@ -77,7 +77,8 @@
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
   import { resolve } from "$app/paths";
-  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import { knownTopWidgets } from "$lib/components/dashboard/widget-registry";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -87,7 +88,7 @@
 
   // Dashboard widgets - use persisted state for immediate localStorage persistence
   function handleWidgetsChange(widgets: WidgetId[]) {
-    dashboardTopWidgets.current = widgets;
+    dashboardTopWidgets.current = knownTopWidgets(widgets);
   }
 
   // Theme state - reactive wrapper around store (color theme: nocturne/trio)
