@@ -8,14 +8,14 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </summary>
 /// <remarks>
 /// Carb ratio schedules store the time-of-day-based grams-per-unit schedules associated with a
-/// therapy settings profile. Extends <see cref="IV4Repository{T}"/> with profile-name lookups
-/// and bulk operations used during profile decomposition.
+/// therapy settings profile. The profile-scoped lookups they share with the other decomposed
+/// siblings live on <see cref="IProfileScopedRepository{TRecord}"/>.
 /// </remarks>
 /// <seealso cref="CarbRatioSchedule"/>
 /// <seealso cref="IBasalScheduleRepository"/>
 /// <seealso cref="ISensitivityScheduleRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface ICarbRatioScheduleRepository : ILegacyKeyedRepository<CarbRatioSchedule>
+public interface ICarbRatioScheduleRepository : IProfileScopedRepository<CarbRatioSchedule>
 {
     /// <summary>Retrieve a page of <see cref="CarbRatioSchedule"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
@@ -34,37 +34,6 @@ public interface ICarbRatioScheduleRepository : ILegacyKeyedRepository<CarbRatio
         int limit = 100,
         int offset = 0,
         bool descending = true,
-        CancellationToken ct = default
-    );
-
-    /// <summary>Retrieve all <see cref="CarbRatioSchedule"/> records belonging to a named therapy profile.</summary>
-    /// <param name="profileName">The profile name to filter by.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IEnumerable<CarbRatioSchedule>> GetByProfileNameAsync(string profileName, CancellationToken ct = default);
-
-    /// <summary>
-    /// Returns the most recent <see cref="CarbRatioSchedule"/> record for the given profile name
-    /// that was active at-or-before the specified timestamp.
-    /// </summary>
-    /// <param name="profileName">The profile name to filter by.</param>
-    /// <param name="timestamp">The point-in-time to query against.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<CarbRatioSchedule?> GetActiveAtAsync(string profileName, DateTime timestamp, CancellationToken ct = default);
-
-    /// <summary>
-    /// Delete all <see cref="CarbRatioSchedule"/> records whose legacy ObjectId starts with <paramref name="prefix"/>.
-    /// </summary>
-    /// <remarks>Used during profile decomposition to replace an entire profile upload atomically.</remarks>
-    /// <param name="prefix">Legacy ObjectId prefix to match.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Retrieve all <see cref="CarbRatioSchedule"/> records sharing the same correlation identifier.</summary>
-    /// <param name="correlationId">Correlation ID linking related records (e.g., from one profile upload).</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IEnumerable<CarbRatioSchedule>> GetByCorrelationIdAsync(
-        Guid correlationId,
         CancellationToken ct = default
     );
 }

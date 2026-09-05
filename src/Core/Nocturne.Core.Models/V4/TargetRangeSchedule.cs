@@ -20,7 +20,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="TherapySettings"/>
 /// <seealso cref="ProfileSummary"/>
 [JsonSchemaFlatten]
-public class TargetRangeSchedule : V4RecordBase
+public class TargetRangeSchedule : V4RecordBase, IProfileScoped
 {
     /// <summary>
     /// Named profile this schedule belongs to
