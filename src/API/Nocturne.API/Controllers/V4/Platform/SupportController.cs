@@ -163,7 +163,12 @@ public class SupportController(
     /// Returns operator support configuration for the frontend.
     /// When no operator is configured, accountBilling is null and the default GitHub flow applies.
     /// </summary>
+    /// <remarks>
+    /// Anonymous because the hosts that most need the operator's address — an inactive tenant's,
+    /// and the apex with no tenant — are the ones no session can be established on.
+    /// </remarks>
     [HttpGet("config")]
+    [AllowAnonymous]
     [RemoteQuery]
     [ProducesResponseType(typeof(SupportConfigResponse), StatusCodes.Status200OK)]
     public ActionResult<SupportConfigResponse> GetSupportConfig()
