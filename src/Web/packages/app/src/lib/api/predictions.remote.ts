@@ -2,6 +2,7 @@
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
+import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
 
 const getPredictionsSchema = z.object({
   profileId: z.string().optional(),
@@ -93,7 +94,7 @@ export const getPredictions = query(getPredictionsSchema, async (props) => {
       return null;
     }
     console.error("Error loading predictions:", err);
-    throw error(500, "Failed to load predictions");
+    throw error(500, PREDICTIONS_UNAVAILABLE);
   }
 });
 

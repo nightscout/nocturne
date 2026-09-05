@@ -120,6 +120,64 @@ function offences(): { found: Offence[]; scanned: number } {
   return { found, scanned };
 }
 
+/**
+ * The other way a site loses the copy it chose: `errorMessage` is the raw
+ * accessor for `body.message`, which reports what NSwag, SvelteKit or our own
+ * codegen synthesized as readily as what the server wrote. A `??` on it
+ * therefore renders "An unexpected server error occurred." exactly where the
+ * fallback beside it was meant to stand in. `describeSubmitError` and
+ * `remoteErrorMessage` take that same sentence as their fallback and consult
+ * `CLIENT_WRITTEN_REASONS` first.
+ *
+ * Reading the value for something other than display — matching it against a
+ * closed set of failure codes, as `totp-errors` does — is not this shape and is
+ * not asked about.
+ *
+ * Limits: the argument may nest one level of parentheses; a value bound on one
+ * line and defaulted on the next, or defaulted through a ternary, is not seen.
+ */
+const RAW_FALLBACK = /\berrorMessage\((?:[^()]|\([^()]*\))*\)\s*(?:\?\?|\|\|)/g;
+
+function rawFallbacks(): { found: Offence[]; scanned: number } {
+  const found: Offence[] = [];
+  const files = sourceFiles();
+
+  for (const file of files) {
+    const source = readFileSync(`${SRC}/${file}`, "utf8");
+    for (const match of source.matchAll(RAW_FALLBACK)) {
+      found.push({
+        file,
+        line: source.slice(0, match.index!).split("\n").length,
+      });
+    }
+  }
+
+  return { found, scanned: files.length };
+}
+
+describe("fallbacks beside a remote call's reason", () => {
+  it("are reached through a helper that knows who wrote it", () => {
+    const { found, scanned } = rawFallbacks();
+
+    expect(scanned).toBeGreaterThan(400);
+    expect(found).toEqual([]);
+  });
+
+  it("still recognises a raw fallback when it sees one", () => {
+    const lossy = `oidcError = errorMessage(err) ?? "Failed to delete provider.";`;
+
+    expect([...lossy.matchAll(RAW_FALLBACK)]).toHaveLength(1);
+  });
+
+  it("leaves a read that is not a fallback alone", () => {
+    const matching = `const body = errorMessage(err)?.trim();`;
+    const wrapped = `return remoteErrorMessage(err, "Failed to load.");`;
+
+    expect([...matching.matchAll(RAW_FALLBACK)]).toHaveLength(0);
+    expect([...wrapped.matchAll(RAW_FALLBACK)]).toHaveLength(0);
+  });
+});
+
 describe("catches around generated remote calls", () => {
   it("bind the error, or say why they do not", () => {
     const { found, scanned } = offences();

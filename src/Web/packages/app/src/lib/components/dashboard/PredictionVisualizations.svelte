@@ -2,6 +2,8 @@
   import { Area, Spline, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
   import type { PredictionData } from "$api/predictions.remote";
+  import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
 
   interface Props {
@@ -142,7 +144,7 @@
       dy="-0.355em"
       class="text-xs fill-red-400"
     >
-      Prediction unavailable: {error instanceof Error ? error.message : "Error"}
+      {remoteErrorMessage(error, PREDICTIONS_UNAVAILABLE)}
     </text>
   {/snippet}
 
@@ -281,7 +283,7 @@
       dy="-0.355em"
       class="text-xs fill-red-400"
     >
-      Prediction unavailable
+      {predictionError}
     </text>
   {/if}
 </svelte:boundary>
