@@ -35,10 +35,12 @@
     createOpen = $bindable(false),
     prefillLabel = "",
     prefillScopes = [] as string[],
+    onCreateClose,
   }: {
     createOpen?: boolean;
     prefillLabel?: string;
     prefillScopes?: string[];
+    onCreateClose?: () => void;
   } = $props();
 
   // ============================================================================
@@ -117,7 +119,7 @@
       await loadGrants();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to create token.");
-      showCreateDialog = false;
+      closeCreateDialog();
     } finally {
       isCreating = false;
     }
@@ -134,12 +136,16 @@
     }
   }
 
+  // The only close path. bits-ui reports its own dismissals (escape, overlay, the X) through
+  // onOpenChange but says nothing about a programmatic one, so anything that closes this dialog
+  // from script comes through here.
   function closeCreateDialog() {
     showCreateDialog = false;
     createdToken = null;
     copiedToken = false;
     newTokenLabel = "";
     newTokenScopes = [];
+    onCreateClose?.();
   }
 
   // ============================================================================
@@ -302,7 +308,10 @@
 {/if}
 
 <!-- Create Token Dialog -->
-<Dialog.Root bind:open={showCreateDialog}>
+<Dialog.Root
+  bind:open={showCreateDialog}
+  onOpenChange={(open) => !open && closeCreateDialog()}
+>
   <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
     {#if createdToken}
       <!-- Token created - show the value -->

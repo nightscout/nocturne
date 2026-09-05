@@ -59,7 +59,7 @@
           key: "quick-tour.widgets",
           title: "Customizable widgets",
           description:
-            "Reorder or swap these in Settings \u2192 Appearance. You can choose from over a dozen stats.",
+            "Reorder or swap these in Settings \u2192 Appearance to show the stats you care about.",
         })}
       >
         <WidgetGrid widgets={topWidgets} maxWidgets={3} />

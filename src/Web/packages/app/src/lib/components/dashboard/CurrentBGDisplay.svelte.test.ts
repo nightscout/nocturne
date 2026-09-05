@@ -27,7 +27,9 @@ vi.mock("$lib/stores/settings-store.svelte", () => ({
   }),
 }));
 
-import CurrentBGDisplay from "./CurrentBGDisplay.svelte";
+// The value indicator uses Tooltip.Root, whose provider Sidebar.Provider supplies in the
+// app layout; the wrapper stands in for it.
+import CurrentBGDisplay from "./current-bg-display-test-wrapper.svelte";
 
 describe("CurrentBGDisplay", () => {
   it("renders status text without reading a Symbol timeSinceReading value", () => {

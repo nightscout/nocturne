@@ -23,6 +23,7 @@ import { clientAddressHeaders } from "$lib/server/client-address";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import {
   STATIC_ASSET_PREFIXES,
+  TENANT_INACTIVE_PATH,
   statusProbeRedirect,
 } from "$lib/server/public-routes";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
@@ -192,13 +193,14 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
   const pathname = event.url.pathname;
 
   // Skip the status probe entirely for static assets, for pages that ARE
-  // the setup/recovery/auth/share-unavailable destinations (probing those would cause infinite
+  // the setup/recovery/auth/share-unavailable/tenant-inactive destinations (probing those would cause infinite
   // redirect loops), and for external webhook/bot endpoints that must respond
   // regardless of setup state — third-party services like Discord cannot
   // follow HTML redirects and will treat any non-2xx as a hard failure.
   const skipProbe =
     STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith(SHARE_UNAVAILABLE_PATH) ||
+    pathname.startsWith(TENANT_INACTIVE_PATH) ||
     pathname.startsWith("/setup") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api/v4/webhooks") ||
@@ -242,6 +244,7 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
         isShareHost: event.locals.isShareHost,
         apiStatus: (error as any).status,
         recoveryMode: body.recoveryMode === true,
+        errorCode: typeof body.error === "string" ? body.error : undefined,
         marketingUrl: env.MARKETING_URL,
       });
 

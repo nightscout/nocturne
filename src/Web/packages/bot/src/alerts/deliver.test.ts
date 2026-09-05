@@ -14,6 +14,24 @@ vi.mock("../lib/logger.js", () => ({
 
 const ADAPTERS_WITH_DM = ["discord", "slack", "telegram", "whatsapp", "resend"];
 
+const TENANT = "11111111-1111-1111-1111-111111111111";
+const EXCURSION = "33333333-3333-3333-3333-333333333333";
+
+/** Card elements nest through `children`, which holds arrays as well as elements. */
+function buttonValue(node: unknown, id: string): string | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = buttonValue(child, id);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (node === null || typeof node !== "object") return undefined;
+  const el = node as { props?: Record<string, unknown>; children?: unknown };
+  if (el.props?.id === id) return el.props.value as string;
+  return buttonValue(el.children, id);
+}
+
 function createBot(options: { adaptersWithDm?: string[] } = {}) {
   const withDm = options.adaptersWithDm ?? ADAPTERS_WITH_DM;
 
@@ -48,7 +66,8 @@ function createEvent(
     destination,
     tenantSlug: "acme",
     payload: {
-      tenantId: "11111111-1111-1111-1111-111111111111",
+      tenantId: TENANT,
+      excursionId: EXCURSION,
       ruleName: "Urgent low",
       subjectName: "Alex",
       glucoseValue: 54,
@@ -171,6 +190,32 @@ describe("AlertDeliveryHandler adapter routing", () => {
     expect(apiBits.markFailed).toHaveBeenCalledExactlyOnceWith("delivery-1", {
       error: "Adapter 'resend' cannot open a direct message",
     });
+  });
+});
+
+describe("AlertDeliveryHandler card actions", () => {
+  it("addresses the acknowledge button at the excursion, not just the tenant", async () => {
+    const bits = createBot();
+    const apiBits = createApi();
+
+    await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
+      createEvent("discord_dm", "123456789012345678"),
+    );
+
+    expect(buttonValue(bits.post.mock.calls[0]?.[0], "ack_alert")).toBe(
+      `${TENANT}:${EXCURSION}`,
+    );
+  });
+
+  it("leaves the mute button addressing the tenant alone", async () => {
+    const bits = createBot();
+    const apiBits = createApi();
+
+    await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
+      createEvent("discord_dm", "123456789012345678"),
+    );
+
+    expect(buttonValue(bits.post.mock.calls[0]?.[0], "mute_30")).toBe(TENANT);
   });
 });
 

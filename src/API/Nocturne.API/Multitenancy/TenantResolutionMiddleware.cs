@@ -62,6 +62,13 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
+    /// The operator's own support and billing links, read from configuration alone. Named once
+    /// because it is on both lists below and a typo would silently split them.
+    /// </summary>
+    private static readonly TenantlessPath SupportConfigPath =
+        new("/api/v4/support/config", HttpMethods.Get);
+
+    /// <summary>
     /// Paths that operate across all tenants and don't require a resolved tenant context.
     /// These are allowed through even when no matching tenant is found.
     /// </summary>
@@ -94,6 +101,8 @@ public class TenantResolutionMiddleware
         // only presentation: the dashboard tiles render glucose in the units held here, so a 404
         // shows an mmol/L user their children's readings in mg/dL.
         "/api/v4/user/preferences",
+        // A host that resolves no tenant still needs somewhere to send the visitor.
+        SupportConfigPath,
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
         // OIDC login can be initiated from the apex (no subdomain) — e.g. the
@@ -183,9 +192,33 @@ public class TenantResolutionMiddleware
     ];
 
     /// <summary>
+    /// The slice of <see cref="TenantlessAllowedPaths"/> still served when the resolved tenant is
+    /// inactive. None of these reads tenant data.
+    /// </summary>
+    /// <remarks>
+    /// <c>/api/v4/status</c> is deliberately not here: it answers for the tenant, and a 200 there
+    /// would have the web shell render the app over an API refusing every read.
+    /// </remarks>
+    private static readonly TenantlessPath[] InactiveTenantAllowedPaths =
+    [
+        "/health",
+        "/alive",
+        SupportConfigPath,
+    ];
+
+    /// <summary>
+    /// The machine-readable code an inactive tenant's refusal carries, alongside
+    /// <c>setup_required</c> on the fresh-install 503.
+    /// </summary>
+    public const string TenantInactiveCode = "tenant_inactive";
+
+    /// <summary>
     /// The entries themselves, for the guard that asserts each one still names a routed endpoint.
     /// </summary>
     public static IReadOnlyList<TenantlessPath> TenantlessPaths => TenantlessAllowedPaths;
+
+    /// <summary>The inactive-tenant slice, for the guard that asserts it is one.</summary>
+    public static IReadOnlyList<TenantlessPath> InactiveTenantPaths => InactiveTenantAllowedPaths;
 
     /// <summary>
     /// Whether a request is served without a resolved tenant. Public so the authorization
@@ -198,6 +231,14 @@ public class TenantResolutionMiddleware
     /// </param>
     public static bool IsTenantlessAllowed(string path, string? method = null) =>
         TenantlessAllowedPaths.Any(p => p.Matches(path, method));
+
+    /// <summary>
+    /// Whether a request is served even though the resolved tenant is inactive.
+    /// </summary>
+    /// <param name="path">The request path.</param>
+    /// <param name="method">The request method, or null to ask about any method.</param>
+    public static bool IsInactiveTenantAllowed(string path, string? method = null) =>
+        InactiveTenantAllowedPaths.Any(p => p.Matches(path, method));
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -323,8 +364,16 @@ public class TenantResolutionMiddleware
 
         if (!tenantContext.IsActive)
         {
+            if (IsInactiveTenantAllowed(path, context.Request.Method))
+            {
+                await _next(context);
+                return;
+            }
+
             _logger.LogWarning("Tenant '{Slug}' is inactive", slug);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = TenantInactiveCode });
             return;
         }
 
