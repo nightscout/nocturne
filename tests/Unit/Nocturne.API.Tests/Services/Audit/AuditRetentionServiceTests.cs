@@ -48,6 +48,37 @@ public class AuditRetentionServiceTests
         return new NocturneDbContext(options);
     }
 
+    /// <summary>
+    /// With the platform defaults disabled and no tenant carrying its own window, the sweep has
+    /// nothing to do — and that is precisely the state the audit-restore procedure puts the
+    /// instance into before putting rows back. The operator confirms retention is off by seeing
+    /// this line, so it must be emitted at Information and must report zero tenants, which is
+    /// what distinguishes "switched off" from "ran and found nothing".
+    /// </summary>
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_RetentionDisabledEntirely_StillLogsTheCycleSummary()
+    {
+        var configContext = CreateInMemoryContext();
+        configContext.Tenants.Add(new TenantEntity { Id = Guid.CreateVersion7(), Slug = "any" });
+        await configContext.SaveChangesAsync();
+
+        _contextFactory
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(configContext);
+
+        // Both platform keys disabled, no per-tenant config rows.
+        await CreateService().PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("swept 0 tenants")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
     [Fact]
     public async Task PurgeExpiredRecordsAsync_NoConfiguredRetention_DeletesNothing()
     {

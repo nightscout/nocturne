@@ -81,12 +81,6 @@ public class AuditRetentionService(
             tenantIds.UnionWith(allTenantIds);
         }
 
-        if (tenantIds.Count == 0)
-        {
-            logger.LogDebug("No tenants with effective audit retention; skipping purge");
-            return;
-        }
-
         var cycleReadDeleted = 0;
         var cycleMutationDeleted = 0;
 
@@ -133,8 +127,11 @@ public class AuditRetentionService(
             }
         }
 
-        // Unconditional: a zero-deletion cycle is the signature of a purge that cannot see its
-        // rows, which a per-tenant log gated on a non-zero count cannot distinguish from idleness.
+        // Unconditional, including the zero-tenant case, which is why there is no early return
+        // above: a zero-deletion cycle is the signature of a purge that cannot see its rows, and
+        // a log gated on a non-zero count cannot distinguish that from idleness. The tenant count
+        // separates the two states an operator needs to tell apart — zero tenants means retention
+        // is switched off, a full count with zero deletions means it ran and found nothing.
         logger.LogInformation(
             "Audit retention purge swept {TenantCount} tenants: {ReadDeleted} read, {MutationDeleted} mutation records deleted",
             tenantIds.Count, cycleReadDeleted, cycleMutationDeleted);
