@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
@@ -206,6 +207,79 @@ public static class DatabaseInitializationExtensions
                 await dataSource.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Applies <see cref="TenantTableStorageParameters"/> to every tenant-scoped table (the
+    /// rationale lives there). Runs under the migrator role right after migrations, like
+    /// <see cref="ReconcileShareRlsPoliciesAsync"/>, and derives the table set from the EF model so
+    /// a new tenant-scoped entity is covered on its first startup. Only tables whose stored value
+    /// is absent or above the ceiling are altered, so a steady-state startup issues no DDL. A table
+    /// whose lock cannot be taken within the statement's <c>lock_timeout</c> is skipped with a
+    /// warning and picked up on the next startup.
+    /// </summary>
+    /// <param name="migratorConnectionString">Connection string for the schema-owning migrator role.</param>
+    /// <param name="logger">Logger for progress and diagnostics.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The number of tables altered.</returns>
+    public static async Task<int> ReconcileTenantTableStorageParametersAsync(
+        string migratorConnectionString,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+
+        var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+        optionsBuilder.UseNpgsql(dataSource);
+        using var context = new NocturneDbContext(optionsBuilder.Options);
+        var tables = ShareRlsPolicy.TenantScopedTableNames(context.Model);
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var drifted = new List<string>();
+        await using (var query = connection.CreateCommand())
+        {
+            query.CommandText = TenantTableStorageParameters.DriftQuerySql;
+            query.Parameters.AddWithValue(tables.ToArray());
+            query.Parameters.AddWithValue(TenantTableStorageParameters.AnalyzeScaleFactorName);
+            query.Parameters.AddWithValue(TenantTableStorageParameters.AnalyzeScaleFactor);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                drifted.Add(reader.GetString(0));
+        }
+
+        var altered = 0;
+        foreach (var table in drifted)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = TenantTableStorageParameters.BuildSetSql(table);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                altered++;
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.LockNotAvailable)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                logger.LogWarning(
+                    "Skipped setting {Parameter} on {Table}: {Message}. It will be retried on the next startup.",
+                    TenantTableStorageParameters.AnalyzeScaleFactorName, table, ex.MessageText);
+            }
+        }
+
+        if (altered > 0)
+        {
+            logger.LogInformation(
+                "Set {Parameter} = {Value} on {Count} tenant-scoped tables.",
+                TenantTableStorageParameters.AnalyzeScaleFactorName,
+                TenantTableStorageParameters.AnalyzeScaleFactor,
+                altered);
+        }
+
+        return altered;
     }
 
     /// <summary>
