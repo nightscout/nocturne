@@ -28,6 +28,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using OpenTelemetry.Logs;
@@ -97,14 +98,10 @@ var migratorConnectionString = builder.Configuration.GetConnectionString($"{Serv
 if (!isTesting)
 {
     builder.Services.AddPostgreSqlInfrastructure(
-        aspirePostgreSqlConnection,
-        builder.Configuration,
-        config =>
-        {
-            config.EnableDetailedErrors = builder.Environment.IsDevelopment();
-            config.EnableSensitiveDataLogging = builder.Environment.IsDevelopment();
-        }
-    );
+        PostgreSqlConfiguration.ResolveForEnvironment(
+            aspirePostgreSqlConnection,
+            builder.Configuration,
+            builder.Environment.IsDevelopment()));
 }
 else
 {

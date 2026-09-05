@@ -25,7 +25,8 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add PostgreSQL data services to the service collection
+    /// Add PostgreSQL data services, taking the connection string from
+    /// <c>PostgreSql:ConnectionString</c>.
     /// </summary>
     /// <param name="services">Service collection</param>
     /// <param name="configuration">Configuration</param>
@@ -35,113 +36,18 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration
     )
     {
-        // Register configuration
-        var configSection = configuration.GetSection(PostgreSqlConfiguration.SectionName);
-        services.Configure<PostgreSqlConfiguration>(configSection);
+        var connectionString = configuration
+            .GetSection(PostgreSqlConfiguration.SectionName)[nameof(PostgreSqlConfiguration.ConnectionString)];
 
-        var postgreSqlConfig =
-            configSection.Get<PostgreSqlConfiguration>() ?? new PostgreSqlConfiguration();
-
-        // Validate configuration
-        if (string.IsNullOrEmpty(postgreSqlConfig.ConnectionString))
+        if (string.IsNullOrEmpty(connectionString))
         {
             throw new InvalidOperationException(
                 "PostgreSQL connection string must be provided in configuration section 'PostgreSql:ConnectionString'"
             );
         }
 
-        // Register interceptors as singletons so caches are shared across all DbContext instances.
-        services.TryAddSingleton<TenantConnectionInterceptor>();
-        services.TryAddSingleton<MutationAuditInterceptor>();
-
-        // Audit config cache (singleton — uses IDbContextFactory internally)
-        services.TryAddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
-
-        // Register NpgsqlDataSource as a singleton - this manages the connection pool
-        var dataSource = PostgresRuntimeOptions.BuildRuntimeDataSource(postgreSqlConfig);
-        services.AddSingleton(dataSource);
-
-        // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
-        // is never returned to a pool and reused, so a fault cannot poison later callers. Database
-        // connections are pooled by the NpgsqlDataSource singleton.
-        services.AddDbContextFactory<NocturneDbContext>(
-            (sp, options) =>
-            {
-                options.UseNpgsql(
-                    dataSource,
-                    npgsqlOptions =>
-                    {
-                        npgsqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: postgreSqlConfig.MaxRetryCount,
-                            maxRetryDelay: TimeSpan.FromSeconds(postgreSqlConfig.MaxRetryDelaySeconds),
-                            errorCodesToAdd: null
-                        );
-
-                        npgsqlOptions.CommandTimeout(postgreSqlConfig.CommandTimeoutSeconds);
-                    }
-                );
-
-                if (postgreSqlConfig.EnableSensitiveDataLogging)
-                {
-                    options.EnableSensitiveDataLogging();
-                }
-
-                if (postgreSqlConfig.EnableDetailedErrors)
-                {
-                    options.EnableDetailedErrors();
-                }
-
-                options.EnableServiceProviderCaching();
-                options.AddInterceptors(
-                    sp.GetRequiredService<TenantConnectionInterceptor>(),
-                    sp.GetRequiredService<MutationAuditInterceptor>());
-            }
-        );
-
-        // Normalize the context carriers to fail-closed defaults on every acquisition, so raw
-        // IDbContextFactory callers start from a known-safe tenant/subject/share state. See
-        // CarrierResettingDbContextFactory.
-        DecorateWithCarrierReset(services);
-
-        // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
-        // All existing constructor injections of NocturneDbContext continue to work.
-        // The context is disposed when the scope ends.
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var context = factory.CreateDbContext();
-            var tenantAccessor = sp.GetService<ITenantAccessor>();
-            if (tenantAccessor?.IsResolved == true)
-            {
-                context.TenantId = tenantAccessor.TenantId;
-            }
-            // Mark the scoped context as a share when the request is one. Carrier defaults (CSV
-            // null) are already set by CarrierResettingDbContextFactory; this path never resolves
-            // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
-            // through ITenantDbContextFactory, which carries the CSV.
-            context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
-            return context;
-        });
-
-        // Per-request public-share category context, read by the factory and the scoped
-        // context above to stamp the RLS carrier properties.
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
-
-        // Register tenant-aware context factory for V4 repositories
-        services.AddScoped<ITenantDbContextFactory, TenantDbContextFactory>();
-
-        // Register deduplication service (required by repositories)
-        services.AddScoped<IDeduplicationService, DeduplicationService>();
-
-        // Register all repositories via their port interfaces
-        services.AddScoped<IFoodRepository, FoodRepository>();
-
-        services.AddScoped<ISettingsRepository, SettingsRepository>();
-
-        // Register avatar storage
-        services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
-
-        return services;
+        return services.AddPostgreSqlInfrastructure(
+            PostgreSqlConfiguration.Resolve(connectionString, configuration));
     }
 
     // Replaces the registered IDbContextFactory<NocturneDbContext> with a decorator that
@@ -193,35 +99,22 @@ public static class ServiceCollectionExtensions
         IConfiguration? configuration,
         Action<PostgreSqlConfiguration>? configure = null
     )
+        => services.AddPostgreSqlInfrastructure(
+            PostgreSqlConfiguration.Resolve(connectionString, configuration, configure));
+
+    /// <summary>
+    /// Add PostgreSQL data services from already-resolved options. The single registration path:
+    /// every other overload resolves its options through
+    /// <see cref="PostgreSqlConfiguration.Resolve"/> and lands here.
+    /// </summary>
+    /// <param name="services">Service collection</param>
+    /// <param name="config">Resolved PostgreSQL options</param>
+    /// <returns>Service collection for chaining</returns>
+    public static IServiceCollection AddPostgreSqlInfrastructure(
+        this IServiceCollection services,
+        PostgreSqlConfiguration config
+    )
     {
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new ArgumentException(
-                "Connection string cannot be null or empty",
-                nameof(connectionString)
-            );
-        }
-
-        // Create and configure options. The section is bound first so an explicit configure
-        // action — which carries values the host derives at startup — still wins over it.
-        var config = new PostgreSqlConfiguration { ConnectionString = connectionString };
-        configuration?.GetSection(PostgreSqlConfiguration.SectionName).Bind(config);
-
-        // Restored after the bind, not before it. PostgreSql:ConnectionString is a documented key
-        // that the design-time factory reads, so a self-hoster may well have it set; letting it
-        // survive here would repoint the runtime pool at whatever role that key names.
-        config.ConnectionString = connectionString;
-
-        configure?.Invoke(config);
-
-        // Validate connection string is still set after configure action
-        if (string.IsNullOrEmpty(config.ConnectionString))
-        {
-            throw new InvalidOperationException(
-                "Connection string was cleared by the configure action"
-            );
-        }
-
         // Register configuration
         services.Configure<PostgreSqlConfiguration>(options =>
         {

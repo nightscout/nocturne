@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace Nocturne.Infrastructure.Data.Configuration;
 
 /// <summary>
@@ -60,4 +62,72 @@ public class PostgreSqlConfiguration
     /// Increase alongside Postgres max_connections when deploying at high concurrency.
     /// </summary>
     public int MaxPoolSize { get; set; } = 100;
+
+    /// <summary>
+    /// Resolves the options the runtime pool is built from: the compiled-in defaults on this type,
+    /// with <see cref="SectionName"/> bound over them and <paramref name="configure"/> applied last
+    /// for values the host only knows at startup.
+    /// </summary>
+    /// <param name="connectionString">
+    /// The connection string the host resolved. Always wins over the section's own
+    /// <see cref="ConnectionString"/> key, which the design-time factory reads and a self-hoster
+    /// may have pointed at the migrator role.
+    /// </param>
+    /// <param name="configuration">
+    /// Configuration to bind the section from. <see langword="null"/> is a decision to run on
+    /// compiled-in defaults.
+    /// </param>
+    /// <param name="configure">Overrides applied after the section.</param>
+    public static PostgreSqlConfiguration Resolve(
+        string connectionString,
+        IConfiguration? configuration,
+        Action<PostgreSqlConfiguration>? configure = null)
+    {
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentException(
+                "Connection string cannot be null or empty",
+                nameof(connectionString)
+            );
+        }
+
+        var config = new PostgreSqlConfiguration { ConnectionString = connectionString };
+        configuration?.GetSection(SectionName).Bind(config);
+
+        // Restored after the bind, not before it: see the connectionString parameter.
+        config.ConnectionString = connectionString;
+
+        configure?.Invoke(config);
+
+        if (string.IsNullOrEmpty(config.ConnectionString))
+        {
+            throw new InvalidOperationException(
+                "Connection string was cleared by the configure action"
+            );
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// Resolves the options the API itself runs on: <see cref="Resolve"/> plus the EF diagnostics
+    /// the host derives from its environment. Both leak query parameters — patient data — into
+    /// logs and error text, so they follow development and nothing else.
+    /// </summary>
+    /// <param name="connectionString">The connection string the host resolved.</param>
+    /// <param name="configuration">Configuration to bind <see cref="SectionName"/> from.</param>
+    /// <param name="isDevelopment">Whether the host is running in the Development environment.</param>
+    public static PostgreSqlConfiguration ResolveForEnvironment(
+        string connectionString,
+        IConfiguration configuration,
+        bool isDevelopment)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return Resolve(connectionString, configuration, config =>
+        {
+            config.EnableDetailedErrors = isDevelopment;
+            config.EnableSensitiveDataLogging = isDevelopment;
+        });
+    }
 }
