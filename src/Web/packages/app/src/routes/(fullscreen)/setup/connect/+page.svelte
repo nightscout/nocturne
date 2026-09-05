@@ -151,7 +151,7 @@
         showToggle={false}
         showDangerZone={false}
         showCapabilities={false}
-        primaryAction="save-and-sync"
+        primaryAction="save-and-finish"
       />
     </div>
 

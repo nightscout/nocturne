@@ -26,7 +26,7 @@
   <!-- Connector setup -->
   <ConnectorSetup
     connectorId="nightscout"
-    primaryAction="save-and-sync"
+    primaryAction="save-and-finish"
     showToggle={false}
     showDangerZone={false}
     showCapabilities={true}
