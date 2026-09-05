@@ -533,6 +533,11 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // so they cannot drift from the code. Runs under the migrator role like migrations.
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
 
+        // Pin the autoanalyze cadence on tenant-scoped tables so a newly provisioned tenant enters
+        // the planner statistics within minutes of its backfill rather than days. Same role and
+        // idempotency as the RLS reconciler.
+        await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
+
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
         await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
