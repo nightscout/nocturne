@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  GLUCOSE_HEATMAP_LEGEND_STOPS,
+  getGlucoseHeatmapFill,
+} from "./chart-colors";
+import {
   colorFocusGradient,
   getFocusedIntensityFill,
   parseColorFocusPreferences,
   resolveColorFocusRange,
+  resolveGlucoseColorThresholds,
+  glucoseColorFocusStops,
   type ColorFocusRange,
 } from "./metric-color-focus";
 
@@ -42,6 +48,62 @@ describe("resolveColorFocusRange", () => {
     ].map((candidate) => ({ candidate }))
   )("rejects invalid range $candidate", ({ candidate }) => {
     expect(resolveColorFocusRange(candidate)).toBeNull();
+  });
+});
+
+describe("resolveGlucoseColorThresholds", () => {
+  it("accepts four strictly increasing glucose boundaries", () => {
+    expect(resolveGlucoseColorThresholds([54, 70, 180, 250])).toEqual([
+      54, 70, 180, 250,
+    ]);
+  });
+
+  it.each(
+    [
+      null,
+      [54, 70, 180],
+      [54, 70, 70, 250],
+      [40, 70, 180, 250],
+      [54, 70, 180, 350],
+      [-1, 70, 180, 250],
+      [54, 70, 180, Infinity],
+      [54, "70", 180, 250],
+      [54, 70, 180, 170],
+    ].map((value) => ({ value }))
+  )("rejects invalid boundaries $value", ({ value }) =>
+    expect(resolveGlucoseColorThresholds(value)).toBeNull()
+  );
+});
+
+describe("glucoseColorFocusStops", () => {
+  it("preserves every original color when using the default boundaries", () => {
+    expect(glucoseColorFocusStops([54, 70, 180, 250])).toEqual(
+      GLUCOSE_HEATMAP_LEGEND_STOPS
+    );
+  });
+
+  it("moves palette anchors continuously and uses those same stops for cells", () => {
+    const stops = glucoseColorFocusStops([60, 100, 200, 280]);
+    expect(stops.find((stop) => stop.mgdl === 100)?.color).toBe(
+      "var(--glucose-heatmap-3)"
+    );
+    expect(stops.find((stop) => stop.mgdl === 200)?.color).toBe(
+      "var(--glucose-heatmap-6)"
+    );
+    expect(stops.some((stop) => stop.mgdl === 280)).toBe(true);
+    expect(
+      stops.every(
+        (stop, index) => index === 0 || stop.mgdl > stops[index - 1].mgdl
+      )
+    ).toBe(true);
+    expect(getGlucoseHeatmapFill(100 + (50 / 110) * 100, stops)).toBe(
+      getGlucoseHeatmapFill(120)
+    );
+    expect(getGlucoseHeatmapFill(-1, stops)).toBe("var(--glucose-heatmap-1)");
+    expect(getGlucoseHeatmapFill(500, stops)).toBe("var(--glucose-heatmap-9)");
+    expect(getGlucoseHeatmapFill(120, stops)).not.toBe(
+      getGlucoseHeatmapFill(120)
+    );
   });
 });
 
@@ -108,6 +170,7 @@ describe("colorFocusGradient", () => {
 describe("parseColorFocusPreferences", () => {
   it("restores independent ranges for supported metrics", () => {
     const preferences = {
+      avgGlucose: [54, 70, 180, 250],
       tir: [70, 100],
       bolus: [10, 70],
       basal: [0, 20],

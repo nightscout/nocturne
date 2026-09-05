@@ -1,8 +1,9 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
+  import GlucoseColorThresholds from "./GlucoseColorThresholds.svelte";
+  import type { GlucoseColorThresholds as GlucoseThresholds } from "$lib/utils/metric-color-focus";
 
   type HeatmapMetric =
     | "avgGlucose"
@@ -17,25 +18,23 @@
     units,
     METRIC_OPTIONS,
     HEATMAP_STOPS,
-    LEGEND_W,
-    LEGEND_THRESHOLDS,
-    legendX,
     METRIC_CSS_VARS,
     getMetricMax,
     focusRange = null,
     onFocusRangeChange = () => {},
+    glucoseThresholds,
+    onGlucoseThresholdsChange = () => {},
   } = $props<{
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
     METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
     HEATMAP_STOPS: ReadonlyArray<{ mgdl: number; color: string }>;
-    LEGEND_W: number;
-    LEGEND_THRESHOLDS: number[];
-    legendX: (mgdl: number) => number;
     METRIC_CSS_VARS: Record<Exclude<HeatmapMetric, "avgGlucose">, string>;
     getMetricMax: (metric: HeatmapMetric) => number;
     focusRange?: readonly [number, number] | null;
     onFocusRangeChange?: (range: [number, number] | null) => void;
+    glucoseThresholds: GlucoseThresholds;
+    onGlucoseThresholdsChange?: (value: GlucoseThresholds | null) => void;
   }>();
 </script>
 
@@ -65,94 +64,12 @@
           {/each}
         </Select.Content>
       </Select.Root>
-      <svg
-        viewBox="0 0 {LEGEND_W} 48"
-        class="h-12 w-full max-w-[420px] text-muted-foreground"
-        overflow="visible"
-        role="img"
-        aria-label="Glucose color scale legend"
-      >
-        <defs>
-          <linearGradient id="heatmap-grad">
-            {#each HEATMAP_STOPS as heatmapStop}
-              <stop
-                offset="{(legendX(heatmapStop.mgdl) / LEGEND_W) * 100}%"
-                stop-color={heatmapStop.color}
-              />
-            {/each}
-          </linearGradient>
-        </defs>
-
-        <!-- Zone labels -->
-        <text
-          x={legendX(55)}
-          y="10"
-          text-anchor="middle"
-          font-size="10"
-          fill="currentColor"
-        >
-          Low
-        </text>
-        <text
-          x={legendX(125)}
-          y="10"
-          text-anchor="middle"
-          font-size="10"
-          fill="currentColor"
-        >
-          In Range
-        </text>
-        <text
-          x={legendX(215)}
-          y="10"
-          text-anchor="middle"
-          font-size="10"
-          fill="currentColor"
-        >
-          High
-        </text>
-        <text
-          x={legendX(300)}
-          y="10"
-          text-anchor="middle"
-          font-size="10"
-          fill="currentColor"
-        >
-          Very High
-        </text>
-
-        <!-- Gradient bar -->
-        <rect
-          x="0"
-          y="14"
-          width={LEGEND_W}
-          height="14"
-          rx="2"
-          fill="url(#heatmap-grad)"
-        />
-
-        <!-- Threshold markers -->
-        {#each LEGEND_THRESHOLDS as threshold}
-          {@const x = legendX(threshold)}
-          <line
-            x1={x}
-            y1={14}
-            x2={x}
-            y2={32}
-            stroke="currentColor"
-            stroke-opacity="0.3"
-          />
-          <text
-            {x}
-            y={44}
-            text-anchor="middle"
-            font-size="10"
-            fill="currentColor"
-          >
-            {formatGlucoseValue(threshold, units)}
-          </text>
-        {/each}
-      </svg>
+      <GlucoseColorThresholds
+        {units}
+        thresholds={glucoseThresholds}
+        stops={HEATMAP_STOPS}
+        onThresholdsChange={onGlucoseThresholdsChange}
+      />
       <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <span
           class="inline-block h-3 w-3 rounded-sm"

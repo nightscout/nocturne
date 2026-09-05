@@ -28,3 +28,11 @@ expire after seven days. Production use can require additional Google verificati
 
 Use **Sync now** for a manual retry. Errors include a stable technical code; correlate
 that code and the attempt time with the API server log when troubleshooting.
+
+## Year overview color focus
+
+The year overview remembers color settings per metric, user and tenant in the current
+browser. TDD, bolus, basal, carbohydrates and Time in Range use two adjustable bounds.
+Average glucose uses four boundaries on the continuous color bar, with matching numeric
+inputs in mg/dL or mmol/L. Reset restores the default glucose color scale. These display
+settings do not change glucose targets, Time in Range calculations or measured values.

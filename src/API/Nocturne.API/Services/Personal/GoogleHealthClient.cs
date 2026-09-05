@@ -25,6 +25,9 @@ public sealed class GoogleHealthException(
 
 public sealed class GoogleHealthClient(HttpClient http)
 {
+    // A faulty provider can keep issuing unique cursors that bypass cycle detection.
+    internal const int MaximumHistoryPages = 10_000;
+
     public const string ActivityScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
     public const string MetricsScope = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly";
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
@@ -60,8 +63,9 @@ public sealed class GoogleHealthClient(HttpClient http)
         var count = 0;
         var pageToken = "";
         var seen = new HashSet<string>();
-        for (var page = 0; page < 100; page++)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -100,8 +104,9 @@ public sealed class GoogleHealthClient(HttpClient http)
         var sessions = new List<SleepSession>();
         var seen = new HashSet<string>();
         var pageToken = "";
-        for (var page = 0; page < 100; page++)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -185,8 +190,9 @@ public sealed class GoogleHealthClient(HttpClient http)
         var points = new List<PersonalHealthReading>();
         var seen = new HashSet<string>();
         var pageToken = "";
-        for (var page = 0; page < 100; page++)
+        for (var page = 0; page < MaximumHistoryPages; page++)
         {
+            ct.ThrowIfCancellationRequested();
             var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

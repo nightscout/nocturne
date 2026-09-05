@@ -183,6 +183,137 @@ public class PersonalHealthTests
     }
 
     [Theory]
+    [InlineData("inventory", "weight", "10000")]
+    [InlineData("inventory", "sleep", "25")]
+    [InlineData("read", "weight", "10000")]
+    [InlineData("sleep", "sleep", "25")]
+    public async Task Reads_history_beyond_one_hundred_pages_without_changing_the_time_window(
+        string operation, string type, string pageSize)
+    {
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var to = from.AddDays(1);
+        var field = type == "sleep" ? "sleep.interval.start_time" : "weight.sample_time.physical_time";
+        var expectedFilter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
+        var calls = 0;
+        var sample = type == "sleep"
+            ? """{"name":"users/example/dataTypes/sleep/dataPoints/last-night","sleep":{"interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"}}}"""
+            : """{"weight":{"sampleTime":{"physicalTime":"2026-09-01T00:00:00Z"},"weightGrams":72500}}""";
+        using var http = new HttpClient(new StubHandler(request =>
+        {
+            var query = QueryHelpers.ParseQuery(request.RequestUri!.Query);
+            Assert.Equal(expectedFilter, query["filter"].ToString());
+            Assert.Equal(pageSize, query["pageSize"].ToString());
+            Assert.Equal(calls == 0 ? "" : $"page-{calls + 1}",
+                query.TryGetValue("pageToken", out var pageToken) ? pageToken.ToString() : "");
+            Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+            Assert.Equal("synthetic-token", request.Headers.Authorization?.Parameter);
+            calls++;
+            return Json(calls < 101
+                ? JsonSerializer.Serialize(new { dataPoints = Array.Empty<object>(), nextPageToken = $"page-{calls + 1}" })
+                : "{\"dataPoints\":[" + sample + "]}");
+        }));
+        var client = new GoogleHealthClient(http);
+
+        switch (operation)
+        {
+            case "inventory":
+                Assert.Equal(1, await client.CountAsync("synthetic-token", type, from, to, default));
+                break;
+            case "read":
+                var reading = Assert.Single(await client.ReadAsync("synthetic-token", type, from, to, default));
+                Assert.Equal(72.5m, reading.Value);
+                Assert.Equal(from.ToUnixTimeMilliseconds(), reading.Mills);
+                break;
+            case "sleep":
+                var session = Assert.Single(await client.ReadSleepAsync("synthetic-token", from, to, default));
+                Assert.EndsWith("last-night", session.OriginalId);
+                Assert.Equal(from.ToUnixTimeMilliseconds(), session.StartMills);
+                break;
+        }
+        Assert.Equal(101, calls);
+    }
+
+    [Theory]
+    [InlineData("inventory", "inventory", "weight", false)]
+    [InlineData("read", "data_read", "weight", false)]
+    [InlineData("sleep", "data_read", "sleep", false)]
+    [InlineData("inventory", "inventory", "weight", true)]
+    [InlineData("read", "data_read", "weight", true)]
+    [InlineData("sleep", "data_read", "sleep", true)]
+    public async Task Limits_unique_page_tokens_but_allows_completion_on_the_last_page(
+        string operation, string stage, string type, bool completesOnLastPage)
+    {
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            Assert.True(calls <= GoogleHealthClient.MaximumHistoryPages);
+            return Json(completesOnLastPage && calls == GoogleHealthClient.MaximumHistoryPages
+                ? """{"dataPoints":[]}"""
+                : JsonSerializer.Serialize(new { dataPoints = Array.Empty<object>(), nextPageToken = $"page-{calls + 1}" }));
+        }));
+        var client = new GoogleHealthClient(http);
+
+        if (completesOnLastPage)
+        {
+            await ReadHistoryAsync(client, operation, default);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadHistoryAsync(client, operation, default));
+            Assert.Equal("history_too_large", exception.Message);
+            Assert.Equal(stage, exception.Stage);
+            Assert.Equal(type, exception.DataType);
+        }
+        Assert.Equal(GoogleHealthClient.MaximumHistoryPages, calls);
+    }
+
+    [Theory]
+    [InlineData("inventory", "inventory", "weight")]
+    [InlineData("read", "data_read", "weight")]
+    [InlineData("sleep", "data_read", "sleep")]
+    public async Task Rejects_pagination_cycles_for_each_history_operation(string operation, string stage, string type)
+    {
+        var calls = 0;
+        string[] tokens = ["first", "second", "first"];
+        using var http = new HttpClient(new StubHandler(_ =>
+            Json(JsonSerializer.Serialize(new { nextPageToken = tokens[calls++] }))));
+        var client = new GoogleHealthClient(http);
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadHistoryAsync(client, operation, default));
+
+        Assert.Equal("pagination_failed", exception.Message);
+        Assert.Equal(stage, exception.Stage);
+        Assert.Equal(type, exception.DataType);
+        Assert.Equal(3, calls);
+    }
+
+    [Theory]
+    [InlineData("inventory", true)]
+    [InlineData("read", true)]
+    [InlineData("sleep", true)]
+    [InlineData("inventory", false)]
+    [InlineData("read", false)]
+    [InlineData("sleep", false)]
+    public async Task Stops_history_requests_when_cancelled(string operation, bool cancelBeforeFirstPage)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            if (calls == 3) cancellation.Cancel();
+            return Json(JsonSerializer.Serialize(new { dataPoints = Array.Empty<object>(), nextPageToken = $"page-{calls + 1}" }));
+        }));
+        var client = new GoogleHealthClient(http);
+        if (cancelBeforeFirstPage) cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ReadHistoryAsync(client, operation, cancellation.Token));
+
+        Assert.Equal(cancelBeforeFirstPage ? 0 : 3, calls);
+    }
+
+    [Theory]
     [InlineData("ACCOUNT_NOT_LINKED", "account_not_linked", true)]
     [InlineData("INVALID_PAGE_TOKEN", "invalid_google_request", true)]
     [InlineData("API_PRIVATE_PREVIEW_ACCESS_DENIED", "preview_access_denied", false)]
@@ -486,6 +617,19 @@ public class PersonalHealthTests
         Assert.Equal(502, response.StatusCode);
         var problem = Assert.IsType<ProblemDetails>(response.Value);
         Assert.Equal("google_unavailable", problem.Detail);
+    }
+
+    private static Task ReadHistoryAsync(GoogleHealthClient client, string operation, CancellationToken ct)
+    {
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var to = from.AddDays(1);
+        return operation switch
+        {
+            "inventory" => client.CountAsync("synthetic-token", "weight", from, to, ct),
+            "read" => client.ReadAsync("synthetic-token", "weight", from, to, ct),
+            "sleep" => client.ReadSleepAsync("synthetic-token", from, to, ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
     }
 
     private static GoogleHealthOptions Options() => new() { ClientId = "synthetic.apps.googleusercontent.com", ClientSecret = "synthetic-secret", CallbackUrl = "https://example.test:8450/personal/google/callback", DataTypes = ["weight"] };

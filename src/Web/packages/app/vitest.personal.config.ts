@@ -68,7 +68,7 @@ export default defineConfig({
   test: {
     include: [
       "src/**/google-health-page.svelte.test.ts",
-      "src/lib/personal/google-health-error.test.ts",
+      "src/lib/connectors/google-health-error.test.ts",
       "src/lib/utils/metric-color-focus.test.ts",
       "src/**/color-focus-range.svelte.test.ts",
       "src/**/year-color-focus.svelte.test.ts",
