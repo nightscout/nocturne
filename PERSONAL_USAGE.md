@@ -1,164 +1,30 @@
-# Nocturne Personal — Google Health en medicatielogboek
+# Google Health connector
 
-Deze functies bestaan uitsluitend in de Personal-broncode. Je huidige Official en
-Latest veranderen niet. Een wijziging in deze broncode is pas een HA-update nadat
-de aparte HA-containercontrole is geslaagd.
+Google Health is available under **Settings -> Connectors & Apps -> Server Connectors**.
+It uses read-only OAuth access and stores supported measurements in Nocturne's existing
+step, heart-rate, body-weight, and sleep records.
 
-## Waar vind ik het?
+## Google Cloud setup
 
-Log in als beheerder van je Personal-instantie en kies **Personal** in het menu.
-De rechtstreekse paden zijn `/personal/google` en `/personal/medications`.
-Gebruik je vertrouwde HTTPS-domein en de Personal-poort (standaard 8450).
+1. Enable the Google Health API in a Google Cloud project.
+2. Configure the OAuth consent screen and add test users while the app is in testing.
+3. Create an OAuth client of type **Web application**.
+4. Register the callback URL shown by Nocturne. It must use HTTPS and end in
+   `/personal/google/callback`.
+5. Enter the client ID and client secret, choose the history start date, and sign in.
+6. Review the detected data types before confirming the first import.
 
-## Google: eenmalige voorbereiding
+The client secret and refresh token are encrypted at rest. Google test-mode grants may
+expire after seven days. Production use can require additional Google verification.
 
-1. Volg de [Google Health Cloud-setup](https://developers.google.com/health/setup):
-   maak een eigen Google Cloud-project en activeer de Google Health API.
-2. Configureer het OAuth-toestemmingsscherm. Voeg bij een app in testmodus je eigen
-   Google-account toe aan de testgebruikers.
-3. Maak een OAuth-client van het type **Web application**.
-4. Voeg de callback-URL uit Personal exact toe als **Authorized redirect URI**,
-   bijvoorbeeld `https://jouw-domein.example:8450/personal/google/callback`.
-   Geen IP-adres, andere poort, extra slash of queryparameters.
-5. Vul de client-ID en het client-secret alleen in het Personal-scherm in.
-   Het secret en de refresh-token worden met Nocturne Data Protection versleuteld
-   in de Personal-database bewaard. Bewaar backups beveiligd: ze bevatten ook de
-   sleutels waarmee de tokens teruggelezen kunnen worden.
-6. Kies de gewenste typen en een terugkijkperiode, en klik **Inloggen bij Google**.
-   Log in bij Google en geef zelf toestemming. De browser keert terug naar Personal.
-7. Personal start na een geslaagde terugkeer direct de eerste synchronisatie.
-   Controleer de laatste poging, de laatste geslaagde import en de echte metingen
-   onderaan. Daarna wordt ongeveer elke 15 minuten gesynchroniseerd.
+## Import behaviour
 
-Na deze eenmalige configuratie blijft het client-secret versleuteld opgeslagen.
-Bij opnieuw koppelen toont Personal daarom alleen **Inloggen met Google**; de
-geavanceerde instellingen hoeven niet opnieuw te worden ingevuld.
+- Nocturne retrieves every available result page from the selected start date.
+- Steps, heart rate, weight, and sleep are written to their native Nocturne stores.
+- Known types without a Nocturne destination are shown but are not imported.
+- Automatic synchronization runs approximately every 15 minutes and reconciles the
+  configured history range.
+- A missing measurement is not stored as zero.
 
-Vanaf Personal 0.2.5 wordt de koppelingsstatus pas na het opbouwen van de pagina
-opgevraagd. Dit herstelt het lege formulier met ontbrekende importkeuzes na een
-geslaagde Google-aanmelding (`connection=connected`). Laad na de update de pagina
-opnieuw; een reeds opgeslagen koppeling hoeft hiervoor niet opnieuw te worden gemaakt.
-Bij een laadfout verschijnt **Opnieuw laden**, met de mislukte stap en een veilige
-technische code (en HTTP-status indien beschikbaar). Een laadfout wordt niet als een
-lege import getoond. **Ontkoppelen** is ook beschikbaar als er alleen een opgeslagen
-configuratie is, bijvoorbeeld na een mislukte of verlopen Google-aanmelding.
-Bij een mislukte aanvraag na het kiezen van een ander gegevenstype of een andere
-pagina verdwijnen de vorige regels uit het overzicht. **Metingen opnieuw laden**
-probeert dezelfde selectie nogmaals; opgeslagen metingen blijven behouden.
-
-De OAuth-koppeling vraagt alleen read-only Health-scopes en `openid`. Dat laatste
-bindt de import aan hetzelfde Google-account; naam, e-mail en profielfoto worden
-niet opgeslagen. Een accountwissel vereist ontkoppelen en daarna expliciet wissen
-van de eerdere Google-import, zodat twee personen niet stilzwijgend gemengd raken.
-
-Google geeft bij de callback een kortlevend access-token en een refresh-token voor
-offline toegang. Personal bewaart beide versleuteld, gebruikt het access-token tot
-kort voor de door Google opgegeven vervaltijd en vraagt pas dan met de refresh-token
-een nieuwe sessie aan. Daardoor is de zojuist aangemaakte sessie meteen bruikbaar en
-wordt Google niet bij iedere synchronisatie onnodig om een nieuw token gevraagd.
-Tokens worden nooit in de interface of in diagnostische logs getoond.
-De callback gebruikt tegelijk de bestaande Nocturne-sessie om tenant, gebruiker,
-OAuth-state en koppeling aan elkaar te binden. Rond het aanmelden daarom in dezelfde
-browser af. Bij een ontbrekende Nocturne-cookie wordt nu expliciet `no_session`
-getoond in plaats van een onverklaarde mislukking.
-
-### Wat wordt opgehaald?
-
-| Keuze | Google-veld | Opslag/weergave |
-|---|---|---|
-| Stappen | `steps.count` met begin/eindtijd | Aantal in het interval, niet een dagtotaal |
-| Hartslag | `heartRate.beatsPerMinute` | Slagen per minuut; geen verzonnen nauwkeurigheid |
-| Gewicht | `weight.weightGrams` | Omgerekend naar kilogram |
-
-De import gebruikt de officiële `dataPoints:reconcile`-route: Google combineert
-overlappende bronnen. Alle antwoordpagina's moeten slagen voordat een tijdvenster
-wordt vervangen. Herhalen geeft geen dubbele regels; correcties en verwijderingen
-binnen de ingestelde periode worden meegenomen. Oudere import blijft staan. Verhoog
-zo nodig de periode (maximaal 90 dagen); oudere verwijderingen worden niet automatisch
-ontdekt. Er is geen onbeperkte historische backfill in deze eerste versie.
-
-Gedeeltelijke toestemming is zichtbaar: alleen geselecteerde én toegestane typen
-worden opgehaald. Ontbrekende gegevens worden niet als nul gepresenteerd. Bij een
-fout blijft de eerdere import behouden. Na quota- of netwerkfouten probeert de
-achtergrondtaak later opnieuw. Bij ingetrokken toestemming moet je opnieuw koppelen.
-De status toont een stabiele technische foutcode, de betrokken gegevenstypen, de
-laatste poging en zo nodig het eerstvolgende probeertijdstip. De serverlog vermeldt
-alleen fase, gegevenstype, HTTP-status en de stabiele Google-redencode; nooit tokens,
-metingen of vrije providerteksten. `no_google_data` betekent dat Google de aanvraag
-wel accepteerde maar voor die typen niets in de gekozen periode teruggaf.
-
-**Ontkoppelen** stopt lokaal de synchronisatie en probeert tevens de Google-token
-in te trekken. Als dat niet bevestigd kon worden, verschijnt de instructie om de
-app-toegang zelf bij Google in te trekken. Metingen blijven behouden.
-Als een versleutelde koppeling na een herstel of migratie niet meer kan worden
-gelezen, blijft lokaal ontkoppelen beschikbaar. Voer daarna client-ID, client-secret
-en callback-URL opnieuw in; eerder geïmporteerde metingen blijven behouden.
-Ook een selectie uit een oudere Personal-versie kan de statuspagina niet meer
-blokkeren: ondersteunde typen blijven zichtbaar en ontkoppelen blijft beschikbaar.
-**Google-import wissen** verwijdert, na bevestiging en alleen na ontkoppelen, alle
-Google-metingen uit Personal. Het verwijdert niets bij Google en geen medicatielog.
-
-### Grenzen
-
-- Google Health is geen rechtstreekse externe toegang tot de lokale Android
-  Health Connect-database. Niet alle vroegere Google Fit- of Samsung Health-data
-  hoeven in de Google-cloud beschikbaar te zijn.
-- Google kan `ACCOUNT_NOT_LINKED` teruggeven wanneer het gekozen Google-account
-  nog niet aan een Fitbit-account is gekoppeld. Personal toont dit afzonderlijk
-  van netwerk- en OAuth-fouten.
-- Slaap en andere typen zijn nog niet selecteerbaar in deze versie.
-- De Personal-metingen staan nog niet in de bestaande Nocturne-rapporten; er is
-  bewust geen automatische invloed op behandelprofielen of doseringsfuncties.
-- In Google OAuth-testmodus kunnen refresh-tokens na zeven dagen verlopen.
-  Een openbare client vraagt afzonderlijke Google-verificatie en privacy-informatie.
-- Gebruik een vertrouwd HTTPS-domein. Voor deze uitgaande import is geen nieuwe
-  poortforward naar het internet nodig als de browser de callback lokaal kan bereiken.
-
-## Mounjaro en soortgelijke medicatie
-
-1. Kies **Personal → Medicatielogboek**.
-2. Vul het middel en de werkzame stof van je verpakking/voorschrift in; Mounjaro
-   bevat tirzepatide ([EMA-productinformatie](https://www.ema.europa.eu/en/medicines/human/EPAR/mounjaro)).
-3. Kies **Toegediend / ingenomen** en vul de werkelijk toegediende hoeveelheid en
-   expliciete eenheid in: **mg** of **microgram**. Er staat geen standaarddosis ingevuld.
-4. Noteer het werkelijke tijdstip, de toedieningswijze en desgewenst plaats/notities.
-5. Klik **Opslaan** en controleer de regel in de geschiedenis.
-6. Kies voor een overgeslagen toediening **Overgeslagen**. Er wordt dan geen dosis
-   opgeslagen. Een toekomstige geplande dosis is geen werkelijke toediening en
-   wordt hier niet geregistreerd.
-
-Je kunt een regel wijzigen of na bevestiging verwijderen. Een achterhaalde versie
-mag niet ongemerkt een recentere wijziging overschrijven. De UTC-tijd en ingevoerde
-UTC-offset blijven bewaard; de lijst toont tijdstippen in de tijdzone van je browser.
-
-Dit logboek is niet voor insuline-eenheden, penklikken of milliliters. Het rekent
-geen concentraties om, bepaalt geen opbouwschema, adviseert geen gemiste dosis en
-beïnvloedt geen IOB/insulineberekening. Gebruik je voorschrift voor behandelbeslissingen.
-
-## Kleurbereik in het jaaroverzicht
-
-In **Reports → Year Overview** kun je voor TDD, bolus, basaal, koolhydraten en
-Time in Range twee schuifpunten in de kleurenbalk verplaatsen. Met **Min** en
-**Max** kun je ook exacte grenzen invoeren, bijvoorbeeld 10 en 70 U voor TDD.
-De kleur verloopt alleen tussen die grenzen; daarbuiten blijft de eindkleur gelijk.
-Metingen en getoonde getallen worden niet aangepast. Ontbrekende gegevens blijven
-onderscheiden van nul. De vaste glucosekleuren blijven ongewijzigd.
-
-Het bereik wordt per meetwaarde, gebruiker en tenant in deze browser onthouden;
-het synchroniseert niet naar andere apparaten. Ook bij het laden van andere jaren
-blijft een handmatig bereik staan. **Auto** verwijdert alleen de instelling voor
-de gekozen meetwaarde en volgt weer het maximum van de geladen jaren (voor Time
-in Range altijd 0–100%). Als browseropslag niet beschikbaar is, blijven de
-schuifpunten bruikbaar en meldt de pagina dat de keuze niet wordt onthouden.
-
-## Veilig testen
-
-Begin met een herkenbare testregistratie, controleer wijzigen/verwijderen en maak
-een beveiligde Personal-backup voordat je echte gegevens toevoegt. Controleer na
-een herstart of registratie en verbinding behouden zijn. De automatische tests
-gebruiken uitsluitend kunstmatige gegevens; echte Google-consent en bronbeschikbaarheid
-moeten met je eigen client/account nog worden gecontroleerd.
-
-Technische referenties: [Google scopes](https://developers.google.com/health/scopes),
-[reconcile](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/reconcile),
-[gegevensschema's](https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints).
+Use **Sync now** for a manual retry. Errors include a stable technical code; correlate
+that code and the attempt time with the API server log when troubleshooting.

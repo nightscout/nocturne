@@ -9,6 +9,7 @@ public class GoogleHealthOptions
     [Required, MaxLength(500)] public string CallbackUrl { get; set; } = "";
     [MinLength(1), MaxLength(32)] public string[] DataTypes { get; set; } = [];
     [Range(1, 90)] public int HistoryDays { get; set; } = 7;
+    public DateTimeOffset? ImportFrom { get; set; }
     public bool PreviewOnly { get; set; }
 }
 
@@ -22,6 +23,7 @@ public class GoogleHealthStatus
     public string[] SelectedTypes { get; set; } = [];
     public string[] GrantedTypes { get; set; } = [];
     public int HistoryDays { get; set; } = 7;
+    public DateTimeOffset? ImportFrom { get; set; }
     public DateTimeOffset? AccessTokenExpiresAt { get; set; }
     public DateTimeOffset? LastAttempt { get; set; }
     public DateTimeOffset? LastSync { get; set; }
@@ -42,12 +44,14 @@ public class GoogleHealthPreviewItem
     public bool Granted { get; set; }
     public int Count { get; set; }
     public string? ErrorCode { get; set; }
+    public bool Supported { get; set; }
 }
 
 public class GoogleHealthCapability
 {
     public string DataType { get; set; } = "";
     public bool Supported { get; set; }
+    public string? Destination { get; set; }
 }
 
 public class GoogleHealthAuthorize { public string Url { get; set; } = ""; }
@@ -65,37 +69,4 @@ public class PersonalHealthReading
     public int? UtcOffsetMinutes { get; set; }
     public decimal Value { get; set; }
     public string Unit { get; set; } = "";
-}
-
-public class PersonalMedicationInput : IValidatableObject
-{
-    [Required, MaxLength(120)] public string Name { get; set; } = "";
-    [Required, MaxLength(120)] public string Ingredient { get; set; } = "";
-    public decimal? Amount { get; set; }
-    [Required, RegularExpression("^(mg|microgram)$")] public string Unit { get; set; } = "mg";
-    [Required, RegularExpression("^(taken|skipped)$")] public string Status { get; set; } = "taken";
-    [Required, RegularExpression("^(subcutaneous|oral|other)$")] public string Route { get; set; } = "subcutaneous";
-    public long Mills { get; set; }
-    [Range(-840, 840)] public int UtcOffsetMinutes { get; set; }
-    [MaxLength(120)] public string? Site { get; set; }
-    [MaxLength(2000)] public string? Notes { get; set; }
-    public Guid Revision { get; set; }
-
-    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-    {
-        if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Ingredient))
-            yield return new ValidationResult("medication_name_required", [nameof(Name)]);
-        if (Status == "taken" && (Amount is null || Amount <= 0 || Amount > 100000 || decimal.Round(Amount.Value, 4) != Amount))
-            yield return new ValidationResult("medication_amount_invalid", [nameof(Amount)]);
-        if (Status == "skipped" && Amount is not null)
-            yield return new ValidationResult("skipped_has_no_dose", [nameof(Amount)]);
-        if (Mills < 0 || Mills > DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds())
-            yield return new ValidationResult("actual_time_required", [nameof(Mills)]);
-    }
-}
-
-public class PersonalMedicationRecord : PersonalMedicationInput
-{
-    public Guid Id { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }
 }

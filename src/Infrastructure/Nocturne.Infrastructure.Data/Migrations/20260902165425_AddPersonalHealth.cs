@@ -61,37 +61,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "personal_medications",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
-                    ingredient = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
-                    amount = table.Column<decimal>(type: "numeric", nullable: true),
-                    unit = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    route = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    mills = table.Column<long>(type: "bigint", nullable: false),
-                    utc_offset_minutes = table.Column<int>(type: "integer", nullable: false),
-                    site = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: true),
-                    notes = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
-                    revision = table.Column<Guid>(type: "uuid", nullable: false),
-                    sys_created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    sys_updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_personal_medications", x => x.id);
-                    table.ForeignKey(
-                        name: "FK_personal_medications_tenants_tenant_id",
-                        column: x => x.tenant_id,
-                        principalTable: "tenants",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
             migrationBuilder.CreateIndex(
                 name: "IX_personal_google_connections_tenant_id",
                 table: "personal_google_connections",
@@ -109,12 +78,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: new[] { "tenant_id", "data_type", "source_key" },
                 unique: true);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_personal_medications_tenant_id_mills",
-                table: "personal_medications",
-                columns: new[] { "tenant_id", "mills" });
-
-            foreach (var table in new[] { "personal_google_connections", "personal_health_readings", "personal_medications" })
+            foreach (var table in new[] { "personal_google_connections", "personal_health_readings" })
             {
                 migrationBuilder.Sql($"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;");
                 migrationBuilder.Sql($"ALTER TABLE {table} FORCE ROW LEVEL SECURITY;");
@@ -137,8 +101,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
             migrationBuilder.DropTable(
                 name: "personal_health_readings");
 
-            migrationBuilder.DropTable(
-                name: "personal_medications");
         }
     }
 }

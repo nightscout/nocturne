@@ -30,18 +30,67 @@ public sealed class GoogleHealthClient(HttpClient http)
     public const string SleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
     public static readonly GoogleHealthCapability[] Capabilities =
     [
-        new() { DataType = "steps", Supported = true }, new() { DataType = "heart-rate", Supported = true },
-        new() { DataType = "weight", Supported = true }, new() { DataType = "sleep", Supported = true }, new() { DataType = "body-fat" },
+        new() { DataType = "steps", Supported = true, Destination = "step-counts" },
+        new() { DataType = "heart-rate", Supported = true, Destination = "heart-rates" },
+        new() { DataType = "weight", Supported = true, Destination = "body-weights" },
+        new() { DataType = "sleep", Supported = true, Destination = "sleep-sessions" }, new() { DataType = "body-fat" },
         new() { DataType = "distance" }, new() { DataType = "oxygen-saturation" }, new() { DataType = "heart-rate-variability" }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static string ScopeFor(string type) => type switch
     {
         "steps" => ActivityScope,
-        "heart-rate" or "weight" => MetricsScope,
+        "heart-rate" or "weight" or "body-fat" or "oxygen-saturation" or "heart-rate-variability" => MetricsScope,
+        "distance" => ActivityScope,
         "sleep" => SleepScope,
         _ => throw new GoogleHealthException("unsupported_type")
     };
+
+    public async Task<int> CountAsync(string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    {
+        var field = type switch
+        {
+            "steps" or "distance" => $"{type.Replace('-', '_')}.interval.start_time",
+            "sleep" => "sleep.interval.start_time",
+            _ => $"{type.Replace('-', '_')}.sample_time.physical_time"
+        };
+        var filter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
+        var pageSize = type == "sleep" ? 25 : 10000;
+        var root = $"https://health.googleapis.com/v4/users/me/dataTypes/{type}/dataPoints:reconcile?pageSize={pageSize}&filter={Uri.EscapeDataString(filter)}";
+        var count = 0;
+        var pageToken = "";
+        var seen = new HashSet<string>();
+        for (var page = 0; page < 100; page++)
+        {
+            var url = pageToken.Length == 0 ? root : root + "&pageToken=" + Uri.EscapeDataString(pageToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                throw await ErrorAsync(response, response.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized => "access_token_rejected",
+                    System.Net.HttpStatusCode.Forbidden => "permission_denied",
+                    System.Net.HttpStatusCode.BadRequest => "invalid_google_request",
+                    System.Net.HttpStatusCode.NotFound => "google_resource_not_found",
+                    _ => "google_unavailable"
+                }, type, ct);
+            try
+            {
+                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+                if (json.RootElement.TryGetProperty("dataPoints", out var data) && data.ValueKind == JsonValueKind.Array)
+                    count += data.GetArrayLength();
+                pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+            {
+                throw new GoogleHealthException("invalid_google_response", stage: "inventory", dataType: type);
+            }
+            if (pageToken.Length == 0) return count;
+            if (!seen.Add(pageToken)) throw new GoogleHealthException("pagination_failed", stage: "inventory", dataType: type);
+        }
+        throw new GoogleHealthException("history_too_large", stage: "inventory", dataType: type);
+    }
 
     public async Task<List<SleepSession>> ReadSleepAsync(
         string token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)

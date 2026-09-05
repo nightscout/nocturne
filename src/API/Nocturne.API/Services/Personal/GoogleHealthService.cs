@@ -145,7 +145,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
             return new()
             {
                 Capabilities = GoogleHealthClient.Capabilities, Configured = true, Connected = true,
-                ClientId = settings.ClientId, CallbackUrl = settings.CallbackUrl, HistoryDays = settings.HistoryDays,
+                ClientId = settings.ClientId, CallbackUrl = settings.CallbackUrl, HistoryDays = settings.HistoryDays, ImportFrom = settings.ImportFrom,
                 SelectedTypes = selectedTypes, LastAttempt = row.LastAttempt, LastSync = row.LastSync,
                 NextAttempt = row.NextAttempt,
                 ErrorCode = "stored_google_configuration_unreadable"
@@ -155,7 +155,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
         return new()
         {
             Capabilities = GoogleHealthClient.Capabilities, Configured = true, Connected = token is not null, ClientId = settings.ClientId,
-            CallbackUrl = settings.CallbackUrl, HistoryDays = settings.HistoryDays,
+            CallbackUrl = settings.CallbackUrl, HistoryDays = settings.HistoryDays, ImportFrom = settings.ImportFrom,
             SelectedTypes = selectedTypes, GrantedTypes = GoogleHealthClient.SupportedTypes.Where(t => token?.Scopes.Contains(GoogleHealthClient.ScopeFor(t)) == true).ToArray(),
             AccessTokenExpiresAt = token?.AccessTokenExpiresAt, LastAttempt = row.LastAttempt, LastSync = row.LastSync,
             NextAttempt = row.NextAttempt, ErrorCode = selectionIsValid ? storedError.Code : "unsupported_type",
@@ -167,7 +167,8 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
     {
         if (options.DataTypes is null || options.DataTypes.Length == 0 || options.DataTypes.Length > 32 || options.DataTypes.Distinct().Count() != options.DataTypes.Length || options.DataTypes.Except(GoogleHealthClient.SupportedTypes).Any())
             throw new GoogleHealthException("unsupported_type");
-        if (!options.ClientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal) || options.HistoryDays is < 1 or > 90)
+        if (!options.ClientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal) || options.HistoryDays is < 1 or > 90 ||
+            options.ImportFrom is { } importFrom && (importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) || importFrom > DateTimeOffset.UtcNow.AddDays(1)))
             throw new GoogleHealthException("invalid_configuration");
         if (!Uri.TryCreate(options.CallbackUrl, UriKind.Absolute, out var callback) || callback.Scheme != "https" || callback.HostNameType != UriHostNameType.Dns || callback.UserInfo != "" || callback.Query != "" || callback.Fragment != "" || callback.AbsolutePath != "/personal/google/callback")
             throw new GoogleHealthException("invalid_callback");
@@ -358,26 +359,25 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 row.ProtectedToken = Protect(token);
                 await db.SaveChangesAsync(ct);
             }
-            var from = now.AddDays(-settings.HistoryDays);
+            var from = settings.ImportFrom ?? now.AddDays(-settings.HistoryDays);
             var items = new List<GoogleHealthPreviewItem>();
-            foreach (var type in GoogleHealthClient.SupportedTypes)
+            foreach (var capability in GoogleHealthClient.Capabilities)
             {
+                var type = capability.DataType;
                 var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
                 if (!granted)
                 {
-                    items.Add(new() { DataType = type, Granted = false });
+                    items.Add(new() { DataType = type, Granted = false, Supported = capability.Supported });
                     continue;
                 }
                 try
                 {
-                    var count = type == "sleep"
-                        ? (await google.ReadSleepAsync(token.AccessToken!, from, now, ct)).Count
-                        : (await google.ReadAsync(token.AccessToken!, type, from, now, ct)).Count;
-                    items.Add(new() { DataType = type, Granted = true, Count = count });
+                    var count = await google.CountAsync(token.AccessToken!, type, from, now, ct);
+                    items.Add(new() { DataType = type, Granted = true, Count = count, Supported = capability.Supported });
                 }
                 catch (GoogleHealthException ex)
                 {
-                    items.Add(new() { DataType = type, Granted = true, ErrorCode = ex.Message });
+                    items.Add(new() { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = capability.Supported });
                 }
             }
             return new() { Items = items.ToArray() };
@@ -431,7 +431,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 stage = "scope_validation";
                 var active = settings.DataTypes.Where(t => token.Scopes.Contains(GoogleHealthClient.ScopeFor(t))).ToArray();
                 if (active.Length == 0) throw new GoogleHealthException("permission_denied", stage: "scope_validation");
-                var to = DateTimeOffset.UtcNow; var from = to.AddDays(-settings.HistoryDays);
+                var to = DateTimeOffset.UtcNow; var from = settings.ImportFrom ?? to.AddDays(-settings.HistoryDays);
                 async Task<(List<PersonalHealthReading> Readings, List<Nocturne.Core.Models.SleepSession> SleepSessions)> ReadAllAsync()
                 {
                     var result = new List<PersonalHealthReading>();

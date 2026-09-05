@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -162,20 +161,6 @@ public class PersonalHealthTests
     {
         var options = Options(); options.CallbackUrl = url;
         Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
-    }
-
-    [Fact]
-    public void Medication_validation_has_no_default_dose_or_future_plan()
-    {
-        var input = Medication();
-        Assert.True(Valid(input));
-        input.Amount = null; Assert.False(Valid(input));
-        input.Status = "skipped"; Assert.True(Valid(input));
-        input.Amount = 1; Assert.False(Valid(input));
-        input.Status = "taken"; input.Unit = "units"; Assert.False(Valid(input));
-        input.Unit = "mL"; Assert.False(Valid(input));
-        input.Unit = "mg"; input.Amount = 0; Assert.False(Valid(input));
-        input.Amount = 1; input.Mills = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeMilliseconds(); Assert.False(Valid(input));
     }
 
     [Fact]
@@ -467,22 +452,27 @@ public class PersonalHealthTests
     }
 
     [Fact]
-    public async Task Medication_crud_preserves_dose_and_rejects_stale_edits()
+    public async Task Inventory_counts_known_types_without_importing_unsupported_data()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
-        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
-        await db.Database.EnsureCreatedAsync(); db.TenantId = Guid.NewGuid();
-        db.Tenants.Add(new TenantEntity { Id = db.TenantId, Slug = "synthetic", DisplayName = "Synthetic", IsActive = true }); await db.SaveChangesAsync();
-        var controller = new PersonalMedicationController(db); var id = Guid.NewGuid(); var input = Medication();
-        var saved = Assert.IsType<PersonalMedicationRecord>(Assert.IsType<OkObjectResult>((await controller.SavePersonalMedication(id, input, default)).Result).Value);
-        Assert.Equal(1.25m, saved.Amount); Assert.Equal("mg", saved.Unit);
-        Assert.IsType<ConflictResult>((await controller.SavePersonalMedication(id, input, default)).Result);
-        input.Revision = saved.Revision; input.Status = "skipped"; input.Amount = null;
-        var updated = Assert.IsType<PersonalMedicationRecord>(Assert.IsType<OkObjectResult>((await controller.SavePersonalMedication(id, input, default)).Result).Value);
-        Assert.Null(updated.Amount); Assert.Equal("skipped", updated.Status);
-        Assert.IsType<ConflictResult>(await controller.DeletePersonalMedication(id, saved.Revision, default));
-        Assert.IsType<NoContentResult>(await controller.DeletePersonalMedication(id, updated.Revision, default));
-        Assert.Empty(await db.PersonalMedications.ToListAsync());
+        var handler = new StubHandler(_ => Json("""{"dataPoints":[{},{}]}"""));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var count = await client.CountAsync("token", "body-fat", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, default);
+
+        Assert.Equal(2, count);
+        Assert.NotNull(handler.LastRequestUri);
+        Assert.Contains("dataTypes/body-fat/dataPoints:reconcile", handler.LastRequestUri.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Explicit_history_start_accepts_full_history_and_rejects_future_dates()
+    {
+        var options = Options();
+        options.ImportFrom = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        GoogleHealthService.ValidateOptions(options);
+
+        options.ImportFrom = DateTimeOffset.UtcNow.AddDays(2);
+        Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
     }
 
     [Fact]
@@ -498,9 +488,7 @@ public class PersonalHealthTests
         Assert.Equal("google_unavailable", problem.Detail);
     }
 
-    private static bool Valid(object value) => Validator.TryValidateObject(value, new ValidationContext(value), new List<ValidationResult>(), true);
     private static GoogleHealthOptions Options() => new() { ClientId = "synthetic.apps.googleusercontent.com", ClientSecret = "synthetic-secret", CallbackUrl = "https://example.test:8450/personal/google/callback", DataTypes = ["weight"] };
-    private static PersonalMedicationInput Medication() => new() { Name = "Synthetic medicine", Ingredient = "Synthetic ingredient", Amount = 1.25m, Mills = DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeMilliseconds() };
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
     private sealed class ThrowingGoogleHealthService : IPersonalGoogleHealthService
     {
@@ -517,7 +505,12 @@ public class PersonalHealthTests
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
     {
         public Func<HttpRequestMessage, HttpResponseMessage> Responder { get; set; } = responder;
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(Responder(request));
+        public Uri? LastRequestUri { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequestUri = request.RequestUri;
+            return Task.FromResult(Responder(request));
+        }
     }
 
     private sealed class TestRetryingExecutionStrategy(ExecutionStrategyDependencies dependencies)

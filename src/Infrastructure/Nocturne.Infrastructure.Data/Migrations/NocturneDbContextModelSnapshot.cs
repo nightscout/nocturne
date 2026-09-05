@@ -3289,89 +3289,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("personal_health_readings");
                 });
 
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PersonalMedicationEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal?>("Amount")
-                        .HasColumnType("numeric")
-                        .HasColumnName("amount");
-
-                    b.Property<string>("Ingredient")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("ingredient");
-
-                    b.Property<long>("Mills")
-                        .HasColumnType("bigint")
-                        .HasColumnName("mills");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("notes");
-
-                    b.Property<Guid>("Revision")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid")
-                        .HasColumnName("revision");
-
-                    b.Property<string>("Route")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("route");
-
-                    b.Property<string>("Site")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("site");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTime>("SysCreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_created_at");
-
-                    b.Property<DateTime>("SysUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_updated_at");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("unit");
-
-                    b.Property<int>("UtcOffsetMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("utc_offset_minutes");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Mills");
-
-                    b.ToTable("personal_medications");
-                });
-
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PlatformSettingsEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8939,15 +8856,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PersonalHealthReadingEntity", b =>
-                {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PersonalMedicationEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()

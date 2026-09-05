@@ -35,24 +35,3 @@ public class PersonalHealthReadingEntity : ITenantScoped
     public decimal Value { get; set; }
     [MaxLength(16)] public string Unit { get; set; } = "";
 }
-
-[Table("personal_medications")]
-[Index(nameof(TenantId), nameof(Mills))]
-public class PersonalMedicationEntity : ITenantScoped, ISystemTimestamped, IAuditable
-{
-    [Key] public Guid Id { get; set; }
-    [Column("tenant_id")] public Guid TenantId { get; set; }
-    [MaxLength(120)] public string Name { get; set; } = "";
-    [MaxLength(120)] public string Ingredient { get; set; } = "";
-    public decimal? Amount { get; set; }
-    [MaxLength(16)] public string Unit { get; set; } = "mg";
-    [MaxLength(16)] public string Status { get; set; } = "taken";
-    [MaxLength(20)] public string Route { get; set; } = "subcutaneous";
-    public long Mills { get; set; }
-    public int UtcOffsetMinutes { get; set; }
-    [MaxLength(120)] public string? Site { get; set; }
-    [MaxLength(2000)] public string? Notes { get; set; }
-    [ConcurrencyCheck] public Guid Revision { get; set; }
-    public DateTime SysCreatedAt { get; set; }
-    public DateTime SysUpdatedAt { get; set; }
-}
