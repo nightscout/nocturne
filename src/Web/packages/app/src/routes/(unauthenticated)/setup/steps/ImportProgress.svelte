@@ -31,6 +31,10 @@
   // A run can complete having imported only part of what was asked for; the server says which
   // collections did not arrive. Without this the wizard shows that run as an unqualified success.
   let caveat = $state<string | null>(null);
+  // Whether that summary reports a fault. A collection can also be skipped — a read-only API
+  // secret cannot list sign-ins, which is how most sites are set up — and colouring that as a
+  // warning would put one on every healthy import.
+  let caveatIsFault = $state(false);
   let loading = $state(true);
   let done = $state(false); // backend says completed
   let wasAlreadyDone = $state(false); // migration was already complete when we mounted
@@ -173,6 +177,7 @@
             if (firstPoll) wasAlreadyDone = true;
             done = true;
             caveat = status.errorMessage ?? null;
+            caveatIsFault = Object.values(cp).some((col) => col.failureReason);
             realProgress = 100;
             break;
           }
@@ -325,7 +330,7 @@
           {#if failed}
             <span class="text-amber-400">{error}</span>
           {:else if caveat}
-            <span class="text-amber-400">{caveat}</span>
+            <span class={caveatIsFault ? "text-amber-400" : ""}>{caveat}</span>
           {:else if etaText}
             About <span class="font-semibold text-white/60">{etaText}</span>
             remaining &middot; {formatCount(totalMigrated)} records

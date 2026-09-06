@@ -135,6 +135,17 @@ public record CollectionProgress
     /// same time — <see cref="IsComplete"/> only means nothing more will be attempted for it.
     /// </summary>
     public string? FailureReason { get; init; }
+
+    /// <summary>
+    /// Why this collection was passed over, or <see langword="null"/> when it was attempted.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="FailureReason"/> because a skip is a property of the source's
+    /// configuration rather than a fault: a read-only API secret is refused by Nightscout's admin
+    /// routes and is otherwise perfectly good, and that is the ordinary case, not an incident.
+    /// Counting it as a failure would put a warning on every run of a healthy site.
+    /// </remarks>
+    public string? SkippedReason { get; init; }
 }
 
 /// <summary>

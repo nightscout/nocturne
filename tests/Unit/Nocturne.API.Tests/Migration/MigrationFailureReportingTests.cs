@@ -194,21 +194,63 @@ public class MigrationFailureReportingTests
     }
 
     [Fact]
-    public async Task Subjects_alone_being_refused_is_tolerated_and_named()
+    public async Task A_read_only_secret_skips_subjects_without_putting_the_run_at_fault()
     {
-        // The admin route refuses a read-only secret that is otherwise correct, so this rejection
-        // must not condemn the run — but it is still the reason no sign-ins came across.
+        // Nightscout's admin routes refuse a read-only secret, and that is the ordinary way a
+        // hosted site is configured — so this must not put a fault on an otherwise clean import.
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v2/authorization/subjects" => Json(HttpStatusCode.Forbidden),
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "subjects", "entries");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["subjects"].SkippedReason.Should().Be(
+            "Skipped: listing the people and devices that can sign in needs an admin API secret.");
+        status.CollectionProgress["subjects"].FailureReason.Should().BeNull();
+        status.ErrorMessage.Should().Be(
+            "1 of 2 collections imported, 1 skipped. "
+            + "Skipped: listing the people and devices that can sign in needs an admin API secret.");
+        status.ErrorMessage.Should().NotContain("failed");
+    }
+
+    [Fact]
+    public async Task A_subjects_route_that_errors_is_still_a_failure_rather_than_a_skip()
+    {
+        // Only the credential case is ordinary. A 500 there is a fault, and calling it a skip
+        // would hide it behind the same untroubled wording.
         var handler = new RoutedNightscout(path => path == "/api/v2/authorization/subjects"
-            ? Json(HttpStatusCode.Forbidden)
+            ? Json(HttpStatusCode.InternalServerError)
             : Json(HttpStatusCode.NotFound));
 
         await using var provider = MigrationJobHarness.BuildProvider(handler);
         var status = await MigrationJobHarness.RunAsync(provider, "subjects");
 
-        status.State.Should().Be(MigrationJobState.Completed);
-        status.CollectionProgress["subjects"].FailureReason.Should().Be(
-            "Nightscout would not list the people and devices that can sign in. This usually "
-            + "means the API secret is not an admin one.");
+        status.CollectionProgress["subjects"].SkippedReason.Should().BeNull();
+        status.CollectionProgress["subjects"].FailureReason.Should()
+            .Be("Nightscout answered 500 for subjects.");
+    }
+
+    [Fact]
+    public async Task A_skipped_collection_is_not_taken_as_proof_the_source_is_healthy()
+    {
+        // Subjects is skipped before entries is tried. If the skip counted as a clean completion,
+        // the entries failure would look like a partial success and the run would report Completed
+        // with nothing imported at all.
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v2/authorization/subjects" => Json(HttpStatusCode.Forbidden),
+            _ => Json(HttpStatusCode.InternalServerError),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "subjects", "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
     }
 
     [Fact]

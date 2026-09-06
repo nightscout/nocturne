@@ -854,9 +854,15 @@ internal class MigrationJob
         if (_collectionProgress.Values.Any(c => c.DocumentsMigrated > 0))
             return false;
 
-        return IsConnectionLevel(cause)
-            || !_collectionProgress.Values.Any(c => c.IsComplete && c.FailureReason is null);
+        return IsConnectionLevel(cause) || !_collectionProgress.Values.Any(IsCleanCompletion);
     }
+
+    /// <summary>
+    /// A collection that was attempted and finished. A skip is excluded: Nightscout refusing an
+    /// admin route says nothing about whether the rest of the source is answering.
+    /// </summary>
+    private static bool IsCleanCompletion(CollectionProgress c) =>
+        c.IsComplete && c.FailureReason is null && c.SkippedReason is null;
 
     /// <summary>
     /// What to record against the collection that failed. A rejection arriving after other data
@@ -870,14 +876,25 @@ internal class MigrationJob
             : failure.Message;
 
     /// <summary>Marks a collection finished-and-failed, keeping whatever it managed to import.</summary>
-    private void RecordCollectionFailure(string collectionName, string reason)
-    {
-        var progress = _collectionProgress.TryGetValue(collectionName, out var existing)
+    private void RecordCollectionFailure(string collectionName, string reason) =>
+        _collectionProgress[collectionName] = Progress(collectionName) with
+        {
+            IsComplete = true,
+            FailureReason = reason,
+        };
+
+    /// <summary>Marks a collection passed over rather than attempted. See <see cref="CollectionProgress.SkippedReason"/>.</summary>
+    private void RecordCollectionSkipped(string collectionName, string reason) =>
+        _collectionProgress[collectionName] = Progress(collectionName) with
+        {
+            IsComplete = true,
+            SkippedReason = reason,
+        };
+
+    private CollectionProgress Progress(string collectionName) =>
+        _collectionProgress.TryGetValue(collectionName, out var existing)
             ? existing
             : new CollectionProgress { CollectionName = collectionName };
-
-        _collectionProgress[collectionName] = progress with { IsComplete = true, FailureReason = reason };
-    }
 
     /// <summary>
     /// How much of the run got through, each collection that did not and why, and — once — the
@@ -887,21 +904,33 @@ internal class MigrationJob
     /// <remarks>
     /// A collection is "not attempted" when it never completed and recorded no reason of its own:
     /// the run stopped before reaching it. Naming those separately is what keeps one connection
-    /// failure from being reported as six.
+    /// failure from being reported as six. A skip is counted apart again — see
+    /// <see cref="CollectionProgress.SkippedReason"/> — so a summary can be entirely untroubled.
     /// </remarks>
     private string? FailureSummary()
     {
         var failed = _collectionProgress.Values.Where(c => c.FailureReason is not null).ToList();
-        var notAttempted = _collectionProgress.Values.Count(c => c.FailureReason is null && !c.IsComplete);
-        if (failed.Count == 0 && notAttempted == 0)
+        var skipped = _collectionProgress.Values.Where(c => c.SkippedReason is not null).ToList();
+        var notAttempted = _collectionProgress.Values
+            .Count(c => c.FailureReason is null && c.SkippedReason is null && !c.IsComplete);
+
+        if (failed.Count == 0 && skipped.Count == 0 && notAttempted == 0)
             return null;
 
         var total = _collectionProgress.Count;
-        var counts = $"{total - failed.Count - notAttempted} of {total} collections imported, {failed.Count} failed";
+        var counts = $"{total - failed.Count - skipped.Count - notAttempted} of {total} collections imported";
+        if (failed.Count > 0)
+            counts += $", {failed.Count} failed";
+        if (skipped.Count > 0)
+            counts += $", {skipped.Count} skipped";
         if (notAttempted > 0)
             counts += $", {notAttempted} not attempted";
 
         var detail = failed.Select(c => $"{c.CollectionName}: {c.FailureReason}").ToList();
+
+        // A skip reason already names what was passed over, so prefixing the collection repeats it.
+        detail.AddRange(skipped.Select(c => c.SkippedReason!));
+
         if (_abandonedAfter is { } cause && notAttempted > 0)
         {
             detail.Add(cause is MigrationFailureCause.Unreachable
@@ -954,6 +983,9 @@ internal class MigrationJob
     private const string UnreachableMessage =
         "Could not reach your Nightscout server. Check it is online and that it allows connections "
         + "from Nocturne.";
+
+    private const string SubjectsNeedAdminSecretMessage =
+        "Skipped: listing the people and devices that can sign in needs an admin API secret.";
 
     private const string PartialAccessMessage =
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
@@ -1626,15 +1658,18 @@ internal class MigrationJob
         }
         catch (MigrationSourceException ex) when (ex.Cause is not MigrationFailureCause.Unreachable)
         {
-            // A read-only API secret is refused by the admin routes and is otherwise perfectly
-            // good, so a rejection here says nothing about the rest of the run.
-            _logger.LogWarning(
-                "Failed to fetch subjects: {Reason} The API secret may lack admin access. Skipping subject migration.",
-                ex.Message);
-            RecordCollectionFailure(
-                collectionName,
-                "Nightscout would not list the people and devices that can sign in. This usually "
-                + "means the API secret is not an admin one.");
+            if (ex.Cause is MigrationFailureCause.ApiSecretRejected)
+            {
+                _logger.LogInformation(
+                    "Skipping subject migration: the API secret lacks admin access ({Reason})", ex.Message);
+                RecordCollectionSkipped(collectionName, SubjectsNeedAdminSecretMessage);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to fetch subjects: {Reason}", ex.Message);
+                RecordCollectionFailure(collectionName, ex.Message);
+            }
+
             return;
         }
 
