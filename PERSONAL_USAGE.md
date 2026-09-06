@@ -31,6 +31,9 @@ expire after seven days. Production use can require additional Google verificati
 - Known types without a Nocturne destination are shown but are not imported.
 - Automatic synchronization runs approximately every 15 minutes and reconciles the
   configured history range.
+- Manual imports run in the server background. The connector page remains available
+  and reports the current phase, data type, completed types, and Google pages read.
+  Leaving the page does not cancel the server-side import.
 - An empty result is not a connector error and a missing measurement is not stored as
   zero. Real permission, provider and parsing failures remain visible.
 
@@ -42,5 +45,6 @@ that code and the attempt time with the API server log when troubleshooting.
 The year overview remembers color settings per metric, user and tenant in the current
 browser. TDD, bolus, basal, carbohydrates and Time in Range use two adjustable bounds.
 Average glucose uses four boundaries on the continuous color bar, with matching numeric
-inputs in mg/dL or mmol/L. Reset restores the default glucose color scale. These display
-settings do not change glucose targets, Time in Range calculations or measured values.
+inputs in mg/dL or mmol/L. Very-low averages are black so they remain distinct from the
+low range. Reset restores the default glucose color scale. These display settings do not
+change glucose targets, Time in Range calculations or measured values.
