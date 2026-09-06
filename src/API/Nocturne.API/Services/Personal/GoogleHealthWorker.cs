@@ -37,27 +37,31 @@ public sealed class GoogleHealthWorker(
     private async Task ProcessScheduleAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                using var listing = scopes.CreateScope();
-                var tenants = await listing.ServiceProvider.GetRequiredService<ITenantService>().GetAllAsync(stoppingToken);
-                foreach (var tenant in tenants.Where(t => t.IsActive))
+                try
                 {
-                    if (!coordinator.StartScheduled(tenant.Id)) continue;
-                    try
+                    using var listing = scopes.CreateScope();
+                    var tenants = await listing.ServiceProvider.GetRequiredService<ITenantService>().GetAllAsync(stoppingToken);
+                    foreach (var tenant in tenants.Where(t => t.IsActive))
                     {
-                        await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, false, stoppingToken);
+                        if (!coordinator.StartScheduled(tenant.Id)) continue;
+                        try
+                        {
+                            await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, false, stoppingToken);
+                        }
+                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                        catch (Exception) { logger.LogWarning("Personal Google Health sync failed; details are not logged to protect health data and credentials"); }
+                        finally { coordinator.Complete(tenant.Id); }
                     }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-                    catch (Exception) { logger.LogWarning("Personal Google Health sync failed; details are not logged to protect health data and credentials"); }
-                    finally { coordinator.Complete(tenant.Id); }
                 }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (Exception) { logger.LogWarning("Personal Google Health scheduler could not enumerate tenants"); }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception) { logger.LogWarning("Personal Google Health scheduler could not enumerate tenants"); }
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }
 
     private async Task SyncTenantAsync(Guid id, string slug, string displayName, bool force, CancellationToken ct)
