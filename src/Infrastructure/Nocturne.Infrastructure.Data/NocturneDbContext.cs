@@ -124,6 +124,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<BodyWeightEntity> BodyWeights { get; set; }
 
+    public DbSet<GoogleHealthConnectionEntity> GoogleHealthConnections { get; set; }
+    public DbSet<GoogleHealthReadingEntity> GoogleHealthReadings { get; set; }
+
     public DbSet<DiscrepancyAnalysisEntity> DiscrepancyAnalyses { get; set; }
 
     public DbSet<DiscrepancyDetailEntity> DiscrepancyDetails { get; set; }

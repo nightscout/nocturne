@@ -329,6 +329,7 @@ public class V4WriteScopeGatingTests
             // therapy: body_weights has no category scope of its own. The record is patient clinical
             // configuration written from the Patient Record settings form alongside therapy settings.
             ["BodyWeightController"] = Scope.TherapyReadWrite,
+            ["GoogleHealthController"] = Scope.TenantSettings,
 
             // treatments: state_spans is the decomposed form of the legacy treatment events
             // (temporary target, profile switch, exercise, illness, travel) and of the temp-basal

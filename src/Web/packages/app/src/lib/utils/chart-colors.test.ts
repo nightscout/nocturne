@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 vi.mock("$app/environment", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
@@ -85,6 +86,12 @@ describe("getGlucoseHeatmapFill", () => {
     expect(getGlucoseHeatmapFill(85)).toBe(
       "color-mix(in srgb, var(--glucose-heatmap-3) 50.00%, var(--glucose-heatmap-4))"
     );
+  });
+
+  it("renders the complete very-low average range in black", () => {
+    const theme = readFileSync(new URL("../../../../ui/src/styles/nocturne-theme.css", import.meta.url), "utf8");
+    expect(theme).toMatch(/--glucose-heatmap-1:\s*#000000;/);
+    expect(theme).toMatch(/--glucose-heatmap-2:\s*#000000;/);
   });
 });
 
