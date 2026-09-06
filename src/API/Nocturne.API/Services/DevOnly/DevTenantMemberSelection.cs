@@ -11,10 +11,9 @@ namespace Nocturne.API.Services.DevOnly;
 /// </summary>
 public static class DevTenantMemberSelection
 {
-    /// <summary>Active, non-system member subjects.</summary>
     public static List<TenantMemberEntity> Candidates(IEnumerable<TenantMemberEntity> members) =>
         members
-            .Where(m => m.Subject is { IsActive: true, IsSystemSubject: false })
+            .Where(m => m.RevokedAt is null && m.Subject is { IsActive: true, IsSystemSubject: false })
             .ToList();
 
     /// <summary>The tenant's longest-standing owner, else the first candidate.</summary>
