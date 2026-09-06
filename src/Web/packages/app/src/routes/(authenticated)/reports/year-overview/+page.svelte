@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
+  import { page } from "$app/state";
   import { Loader2, CalendarDays } from "lucide-svelte";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
@@ -19,11 +20,19 @@
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
   import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
-  import {
-    GLUCOSE_HEATMAP_LEGEND_STOPS,
-    getGlucoseHeatmapFill,
-  } from "$lib/utils/chart-colors";
+  import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import {
+    getFocusedIntensityFill,
+    parseColorFocusPreferences,
+    resolveColorFocusRange,
+    resolveGlucoseColorThresholds,
+    DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
+    glucoseColorFocusStops,
+    type ColorFocusPreferences,
+    type ColorFocusRange,
+    type GlucoseColorThresholds,
+  } from "$lib/utils/metric-color-focus";
   import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -64,6 +73,71 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
+  let colorFocusPreferences = $state<ColorFocusPreferences>({});
+  let loadedColorFocusKey = $state<string | null>(null);
+  let colorFocusStorageFailed = $state(false);
+  const colorFocusStorageKey = $derived(
+    `nocturne-year-color-focus-v1:${JSON.stringify([page.data.tenantSlug ?? null, page.data.user?.subjectId ?? null])}`
+  );
+  const focusRange = $derived(
+    selectedMetric === "avgGlucose"
+      ? null
+      : (colorFocusPreferences[selectedMetric] ?? null)
+  );
+  const glucoseThresholds = $derived(
+    colorFocusPreferences.avgGlucose ?? DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+  );
+  const glucoseLegendStops = $derived(
+    glucoseColorFocusStops(glucoseThresholds)
+  );
+
+  function saveColorPreferences(next: ColorFocusPreferences) {
+    colorFocusPreferences = next;
+    try {
+      if (loadedColorFocusKey !== colorFocusStorageKey) return;
+      window.localStorage.setItem(colorFocusStorageKey, JSON.stringify(next));
+      colorFocusStorageFailed = false;
+    } catch {
+      colorFocusStorageFailed = true;
+    }
+  }
+
+  function setFocusRange(candidate: ColorFocusRange | null) {
+    if (selectedMetric === "avgGlucose") return;
+    const range = resolveColorFocusRange(candidate);
+    if (
+      candidate !== null &&
+      (!range || (selectedMetric === "tir" && range[1] > 100))
+    )
+      return;
+    const next = { ...colorFocusPreferences };
+    if (range) next[selectedMetric] = range;
+    else delete next[selectedMetric];
+    saveColorPreferences(next);
+  }
+
+  function setGlucoseThresholds(candidate: GlucoseColorThresholds | null) {
+    const thresholds = resolveGlucoseColorThresholds(candidate);
+    if (candidate !== null && !thresholds) return;
+    const next = { ...colorFocusPreferences };
+    if (thresholds) next.avgGlucose = thresholds;
+    else delete next.avgGlucose;
+    saveColorPreferences(next);
+  }
+
+  $effect(() => {
+    const key = colorFocusStorageKey;
+    try {
+      colorFocusPreferences = parseColorFocusPreferences(
+        window.localStorage.getItem(key)
+      );
+      colorFocusStorageFailed = false;
+    } catch {
+      colorFocusPreferences = {};
+      colorFocusStorageFailed = true;
+    }
+    loadedColorFocusKey = key;
+  });
 
   /** All known data types that can appear in counts */
   const ALL_DATA_TYPES = [
@@ -97,18 +171,6 @@
       "var(--glucose-high)",
       "var(--glucose-very-high)",
     ]);
-
-  // Ends of the heatmap ramp, which the legend maps onto its gradient bar.
-  const HEATMAP_MIN = GLUCOSE_HEATMAP_LEGEND_STOPS[0].mgdl;
-  const HEATMAP_MAX =
-    GLUCOSE_HEATMAP_LEGEND_STOPS[GLUCOSE_HEATMAP_LEGEND_STOPS.length - 1].mgdl;
-
-  const LEGEND_W = 420;
-  const LEGEND_THRESHOLDS = [70, 180, 250];
-
-  function legendX(mgdl: number): number {
-    return ((mgdl - HEATMAP_MIN) / (HEATMAP_MAX - HEATMAP_MIN)) * LEGEND_W;
-  }
 
   /** CSS variable names for each metric's hue */
   const METRIC_CSS_VARS: Record<
@@ -148,7 +210,7 @@
             val = day.averageGlucoseMgdl;
             break;
         }
-        if (val != null && val > max) max = val;
+        if (val != null && Number.isFinite(val) && val > max) max = val;
       }
     }
     return max || 1;
@@ -184,36 +246,29 @@
     }
   }
 
-  function getIntensityFill(
-    value: number,
-    maxVal: number,
-    cssVarName: string
-  ): string {
-    const intensity = Math.min(value / maxVal, 1);
-    // Scale from 15% opacity (min visible) to 100%
-    const alpha = 0.15 + intensity * 0.85;
-    return `color-mix(in srgb, var(${cssVarName}) ${Math.round(alpha * 100)}%, transparent)`;
-  }
-
   function getCellFill(data: CalendarDatum | undefined): string {
     if (!data) return "rgb(0 0 0 / 5%)";
 
     if (selectedMetric === "avgGlucose") {
-      if (data.value != null) return getGlucoseHeatmapFill(data.value);
+      if (data.value != null && Number.isFinite(data.value))
+        return getGlucoseHeatmapFill(data.value, glucoseLegendStops);
       if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
 
     const metricValue = getMetricCellValue(data);
-    if (metricValue == null) {
+    if (metricValue == null || !Number.isFinite(metricValue)) {
       if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
 
-    const maxVal = metricMaxCached;
     const cssVar =
       METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
-    return getIntensityFill(metricValue, maxVal, cssVar);
+    return getFocusedIntensityFill(
+      metricValue,
+      focusRange ?? [0, metricMaxCached],
+      cssVar
+    );
   }
 
   // =========================================================================
@@ -565,13 +620,22 @@
       bind:selectedMetric
       {units}
       {METRIC_OPTIONS}
-      HEATMAP_STOPS={GLUCOSE_HEATMAP_LEGEND_STOPS}
-      {LEGEND_W}
-      {LEGEND_THRESHOLDS}
-      {legendX}
+      HEATMAP_STOPS={glucoseLegendStops}
       {METRIC_CSS_VARS}
       {getMetricMax}
+      {focusRange}
+      onFocusRangeChange={setFocusRange}
+      {glucoseThresholds}
+      onGlucoseThresholdsChange={setGlucoseThresholds}
     />
+    <p
+      class="-mt-4 mb-6 text-xs text-muted-foreground print:hidden"
+      role={colorFocusStorageFailed ? "status" : undefined}
+    >
+      {colorFocusStorageFailed
+        ? "This browser could not save the color settings. Changes apply only until you leave this page."
+        : "Color settings are remembered per metric in this browser."}
+    </p>
 
     <!-- Loading state for metadata -->
     {#if metadataLoading && !metadataLoaded}

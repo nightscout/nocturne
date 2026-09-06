@@ -2,7 +2,7 @@
  * Chart color utilities for resolving backend ChartColor enum values to CSS variables
  * ChartColor enum values are kebab-case strings that match CSS custom property names
  */
-import { type ChartColor } from '$lib/api';
+import type { ChartColor } from '$lib/api';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference
@@ -133,17 +133,20 @@ export const GLUCOSE_HEATMAP_LEGEND_STOPS: ReadonlyArray<{ mgdl: number; color: 
  * variables: interpolation would have to read their computed values back out of
  * the document and re-read them on every theme change.
  */
-export function getGlucoseHeatmapFill(mgdl: number): string {
-	const upper = GLUCOSE_HEATMAP_STOPS.findIndex(([anchor]) => mgdl <= anchor);
+export function getGlucoseHeatmapFill(
+	mgdl: number,
+	stops = GLUCOSE_HEATMAP_LEGEND_STOPS
+): string {
+	const upper = stops.findIndex(({ mgdl: anchor }) => mgdl <= anchor);
 
 	// Above every anchor (no match) or at/below the first one — clamp to an end stop.
-	if (upper === -1) return `var(${GLUCOSE_HEATMAP_STOPS[GLUCOSE_HEATMAP_STOPS.length - 1][1]})`;
-	if (upper === 0) return `var(${GLUCOSE_HEATMAP_STOPS[0][1]})`;
+	if (upper === -1) return stops[stops.length - 1].color;
+	if (upper === 0) return stops[0].color;
 
-	const [loAnchor, loVar] = GLUCOSE_HEATMAP_STOPS[upper - 1];
-	const [hiAnchor, hiVar] = GLUCOSE_HEATMAP_STOPS[upper];
+	const { mgdl: loAnchor, color: loColor } = stops[upper - 1];
+	const { mgdl: hiAnchor, color: hiColor } = stops[upper];
 	const loShare = ((hiAnchor - mgdl) / (hiAnchor - loAnchor)) * 100;
-	return `color-mix(in srgb, var(${loVar}) ${loShare.toFixed(2)}%, var(${hiVar}))`;
+	return `color-mix(in srgb, ${loColor} ${loShare.toFixed(2)}%, ${hiColor})`;
 }
 
 /**

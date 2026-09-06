@@ -47,6 +47,8 @@
     actions?: Snippet;
     onclick?: () => void;
     subtitle?: string;
+    logo?: Snippet;
+    metrics?: Snippet;
   }
 
   let {
@@ -66,6 +68,8 @@
     actions,
     onclick,
     subtitle,
+    logo,
+    metrics,
   }: Props = $props();
 
   function getIconColors(s: DataSourceStatus): {
@@ -159,7 +163,11 @@
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {iconColors.bg}"
       >
-        <AppLogo {icon} invertMode />
+        {#if logo}
+          {@render logo()}
+        {:else}
+          <AppLogo {icon} invertMode />
+        {/if}
       </div>
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap">
@@ -251,7 +259,9 @@
         </div>
 
         <!-- Metrics line -->
-        {#if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
+        {#if metrics}
+          {@render metrics()}
+        {:else if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
         <p class="text-sm text-blue-600 dark:text-blue-400">
           {formatSyncMessage(syncProgress.messageType, syncProgress.messageParams)}
         </p>
