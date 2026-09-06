@@ -142,6 +142,12 @@ public static class ServiceRegistrationExtensions
         // ceiling room for reloads and for a clinic behind one NAT.
         ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
         ("guest-activate", 5, TimeSpan.FromMinutes(10)),
+        // Redeeming a login code. The code is a random string of refresh-token length, so grinding
+        // one is infeasible at any rate; the ceiling bounds what an anonymous attempt costs, which
+        // is one indexed lookup and the audit row a refusal writes. A browser handed a code spends
+        // one permit, and every code its holder could legitimately present was minted in the last
+        // five minutes.
+        ("login-handoff", 10, TimeSpan.FromMinutes(1)),
         // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
@@ -274,6 +280,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IDirectGrantService, DirectGrantService>();
         services.AddScoped<IJwtService, JwtService>();
+        services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
