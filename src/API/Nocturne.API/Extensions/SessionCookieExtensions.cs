@@ -18,6 +18,29 @@ public static class SessionCookieExtensions
     public const string IsAuthenticatedCookieName = "IsAuthenticated";
 
     /// <summary>
+    /// The non-HttpOnly preference cookie naming the method that last completed a sign-in, so the
+    /// login form can lead with it instead of a fixed order. Written by
+    /// <see cref="SetLastSignInCookie"/>; the web app only reads it.
+    /// </summary>
+    public const string LastSignInCookieName = "LastSignIn";
+
+    /// <summary>
+    /// The sign-in methods <see cref="LastSignInCookieName"/> can name. The web app's
+    /// <c>last-sign-in.ts</c> parses these same values.
+    /// </summary>
+    public static class SignInMethods
+    {
+        public const string Passkey = "passkey";
+        public const string Oidc = "oidc";
+    }
+
+    /// <summary>
+    /// How long the sign-in hint outlives the sign-in that wrote it. It is the memory a
+    /// signed-out visitor comes back to, so it has to survive far longer than any session.
+    /// </summary>
+    private static readonly TimeSpan LastSignInLifetime = TimeSpan.FromDays(365);
+
+    /// <summary>
     /// Derive the session-cookie <c>Domain</c> attribute from the configured base domain, so a
     /// session established on one tenant subdomain is carried to the apex dashboard and to sibling
     /// tenants the subject belongs to. Returns null (host-only cookies) when widening is unsafe.
@@ -133,6 +156,36 @@ public static class SessionCookieExtensions
             Domain = options.Cookie.SessionDomain,
             Expires = refreshExpiresAt,
         });
+    }
+
+    /// <summary>
+    /// Record which method just completed a sign-in, so the login form can lead with it next time.
+    /// Written at the same <c>Domain</c> as the session cookies, so one answer serves a tenant
+    /// subdomain, its siblings and the apex alike.
+    /// </summary>
+    /// <param name="method">One of <see cref="SignInMethods"/>.</param>
+    /// <param name="providerId">The identity provider, for <see cref="SignInMethods.Oidc"/>.</param>
+    /// <remarks>
+    /// Not folded into <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions)"/>:
+    /// a silent token refresh writes session cookies too and knows nothing about how the session
+    /// began, so it would overwrite the hint with a guess. Deliberately not cleared on sign-out.
+    /// </remarks>
+    public static void SetLastSignInCookie(
+        this HttpResponse response, string method, string? providerId, OidcOptions options)
+    {
+        response.Cookies.Append(
+            LastSignInCookieName,
+            string.IsNullOrEmpty(providerId) ? method : $"{method}:{providerId}",
+            new CookieOptions
+            {
+                HttpOnly = false,
+                Secure = options.Cookie.Secure,
+                SameSite = MapSameSiteMode(options.Cookie.SameSite),
+                Path = options.Cookie.Path,
+                Domain = options.Cookie.SessionDomain,
+                IsEssential = true,
+                Expires = DateTimeOffset.UtcNow.Add(LastSignInLifetime),
+            });
     }
 
     /// <summary>

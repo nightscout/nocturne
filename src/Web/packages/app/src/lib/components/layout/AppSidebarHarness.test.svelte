@@ -7,7 +7,14 @@
   const {
     user = null,
     isGuestSession = false,
-  }: { user?: AuthUser | null; isGuestSession?: boolean } = $props();
+    currentSlug = null,
+    baseDomain = null,
+  }: {
+    user?: AuthUser | null;
+    isGuestSession?: boolean;
+    currentSlug?: string | null;
+    baseDomain?: string | null;
+  } = $props();
 
   // The glucose widget reads the store from context. Never initialized, so no socket opens.
   createRealtimeStore({
@@ -21,5 +28,5 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar {user} {isGuestSession} />
+  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} />
 </Sidebar.Provider>

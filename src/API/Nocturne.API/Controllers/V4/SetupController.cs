@@ -178,6 +178,9 @@ public partial class SetupController : ControllerBase
     public async Task<IActionResult> OwnerOptions(
         [FromBody] SetupOwnerOptionsRequest request, CancellationToken ct)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var (tenant, error) = await GetSoleTenantWithoutOwnerAsync(ct);
         if (error != null)
             return error;

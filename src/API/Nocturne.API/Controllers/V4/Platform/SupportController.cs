@@ -161,7 +161,7 @@ public class SupportController(
 
     /// <summary>
     /// Returns operator support configuration for the frontend.
-    /// When no operator is configured, accountBilling is null and the default GitHub flow applies.
+    /// When no operator is configured, both channels are null and the default GitHub flow applies.
     /// </summary>
     /// <remarks>
     /// Anonymous because the hosts that most need the operator's address — an inactive tenant's,
@@ -175,6 +175,8 @@ public class SupportController(
     {
         var config = operatorOptions.Value;
         var ab = config.Support.AccountBilling;
+        var portal = config.Support.AccountPortal;
+        var operatorLabel = config.Name is not null ? $"Contact {config.Name}" : null;
 
         return Ok(new SupportConfigResponse
         {
@@ -183,7 +185,14 @@ public class SupportController(
                 {
                     Mode = ab.Mode == OperatorSupportMode.Redirect ? "redirect" : "api",
                     Url = ab.Url,
-                    Label = ab.Label ?? (config.Name is not null ? $"Contact {config.Name}" : null),
+                    Label = ab.Label ?? operatorLabel,
+                }
+                : null,
+            AccountPortal = portal is not null && !string.IsNullOrWhiteSpace(portal.Url)
+                ? new AccountPortalConfig
+                {
+                    Url = portal.Url,
+                    Label = portal.Label ?? operatorLabel,
                 }
                 : null,
         });

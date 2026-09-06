@@ -52,6 +52,9 @@ public class DeviceEventController(
     /// </remarks>
     public override string WriteScope => Scope.DevicesReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Device event", "event", "events");
+
     /// <summary>
     /// Lists device events. Adds an optional <c>patientDeviceId</c> query filter on top of the base list
     /// surface: when set, only events linked to that registered device are returned. Pagination totals
@@ -82,47 +85,19 @@ public class DeviceEventController(
         return Ok(new PaginatedResponse<DeviceEvent> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
     }
 
-    public override async Task<ActionResult<DeviceEvent>> Create([FromBody] UpsertDeviceEventRequest request, CancellationToken ct = default)
-    {
-        var model = MapCreateToModel(request);
+    /// <inheritdoc/>
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped.
+    /// </remarks>
+    protected override Task<ObjectResult?> OnBeforeCreateAsync(
+        DeviceEvent model, UpsertDeviceEventRequest request, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing: null, ct);
 
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped.
-        if (await ApplyAttributionAsync(model, request, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
-
-    public override async Task<ActionResult<DeviceEvent>> Update(Guid id, [FromBody] UpsertDeviceEventRequest request, CancellationToken ct = default)
-    {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
-        if (await ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-    }
+    /// <inheritdoc/>
+    protected override Task<ObjectResult?> OnBeforeUpdateAsync(
+        DeviceEvent model, UpsertDeviceEventRequest request, DeviceEvent existing, CancellationToken ct)
+        => ApplyAttributionAsync(model, request, existing.PatientDeviceId, ct);
 
     protected override DeviceEvent MapCreateToModel(UpsertDeviceEventRequest request) => new()
     {
@@ -155,6 +130,35 @@ public class DeviceEventController(
         SyncIdentifier = existing.SyncIdentifier,
         AdditionalProperties = existing.AdditionalProperties,
     };
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One stamper pass per distinct category list rather than one for the payload: the categories a
+    /// device event can be attributed to are derived from its own event type. There is no batch-level
+    /// source for the same reason as the other bulk writers — per-record DataSource drives matching.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<DeviceEvent> models, IReadOnlyList<UpsertDeviceEventRequest> requests, CancellationToken ct)
+    {
+        // DeviceAttributionCategories.DeviceEvent hands back one of two cached lists, so this is two
+        // passes however long the payload is; were it ever to allocate per call, the grouping would
+        // degrade to one pass per item rather than becoming wrong.
+        var byCategories = models
+            .Select((model, i) => (Model: model, requests[i].PatientDeviceId))
+            .GroupBy(item => DeviceAttributionCategories.DeviceEvent(item.Model.EventType));
+
+        foreach (var group in byCategories)
+        {
+            var error = await PatientDeviceAttribution.ApplyManyAsync(
+                [.. group.Select(item => ((IDeviceAttributed)item.Model, item.PatientDeviceId))],
+                patientDevices, deviceStamper, group.Key, batchSource: null, ct);
+
+            if (error is not null)
+                return Problem(detail: error, statusCode: 400, title: "Bad Request");
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Settles the event's device attribution from the request. Returns a 400 result when an explicit

@@ -33,6 +33,23 @@ public class OperatorConfiguration
 public class OperatorSupportConfiguration
 {
     public OperatorSupportChannelConfiguration? AccountBilling { get; set; }
+
+    public OperatorAccountPortalConfiguration? AccountPortal { get; set; }
+}
+
+/// <summary>
+/// A page the operator hosts for managing the account. Only ever opened in a browser, so it has
+/// no mode: an operator whose <see cref="OperatorSupportConfiguration.AccountBilling"/> is an API
+/// endpoint still has somewhere to send a visitor.
+/// </summary>
+public class OperatorAccountPortalConfiguration
+{
+    public string Url { get; set; } = "";
+
+    /// <summary>
+    /// Optional button/link text. Falls back to "Contact {Operator.Name}".
+    /// </summary>
+    public string? Label { get; set; }
 }
 
 public class OperatorSupportChannelConfiguration

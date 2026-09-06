@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Docs;
 
@@ -274,6 +275,7 @@ public sealed class ScalarAuthProvider
         {
             var soleTenants = await db.Set<TenantEntity>()
                 .AsNoTracking()
+                .ExcludeDemo()
                 .Where(t => t.IsActive)
                 .OrderBy(t => t.Id)
                 .Take(2)

@@ -150,6 +150,9 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PasskeyOptionsResponse>> RegisterOptions([FromBody] PasskeyRegisterOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var subjectId = ResolveRegistrationSubject();
         if (subjectId == null)
         {
@@ -312,6 +315,9 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> RecoveryModeOptions(
         [FromBody] PasskeyLoginOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
         if (subject == null)
         {
@@ -494,8 +500,12 @@ public class PasskeyController : ControllerBase
     [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PasskeyOptionsResponse>> DiscoverableLoginOptions()
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateDiscoverableAssertionOptionsAsync(tenantId);
 
@@ -517,6 +527,9 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PasskeyOptionsResponse>> LoginOptions([FromBody] PasskeyLoginOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         if (string.IsNullOrEmpty(request.Username))
         {
             return Problem(detail: "Username is required", statusCode: 400, title: "Bad Request");
@@ -584,6 +597,8 @@ public class PasskeyController : ControllerBase
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetLastSignInCookie(
+                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -916,6 +931,9 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptions(
         [FromBody] AccessRequestOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var tenantId = _tenantAccessor.TenantId;
         var tenant = await _dbContext.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId);
@@ -1035,8 +1053,7 @@ public class PasskeyController : ControllerBase
             await using var ownerCtx = await _dbContextFactory.CreateTenantPinnedContextAsync(
                 tenant.Id, HttpContext.RequestAborted);
             var ownerIds = await ownerCtx.TenantMembers
-                .Where(tm => tm.TenantId == tenant.Id
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == Core.Models.Authorization.RoleSeeds.Owner))
+                .OwnersOf(tenant.Id)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync();
 
@@ -1087,6 +1104,9 @@ public class PasskeyController : ControllerBase
         [FromBody] InviteOptionsRequest request,
         [FromServices] IMemberInviteService memberInviteService)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         if (string.IsNullOrWhiteSpace(request.Token) ||
             string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.DisplayName))

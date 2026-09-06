@@ -34,6 +34,9 @@ public class CalibrationController(ICalibrationRepository repo)
     public override string WriteScope => Scope.GlucoseReadWrite;
 
     /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Calibration", "calibration", "calibrations");
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a calibration the
     /// patient just entered must not be invisible until a cached list body expires.

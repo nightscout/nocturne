@@ -7,10 +7,8 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// Registered as singleton — all fields must be thread-safe.
 /// </summary>
 /// <param name="timeProvider">
-/// Clock used for the recovery window. Defaults to <see cref="TimeProvider.System"/>
-/// when not supplied, so DI registration and tests both work unchanged. Nothing
-/// registers a <see cref="TimeProvider"/> in the container today; if something ever
-/// does, this singleton will start resolving it instead of the default.
+/// Clock used for the recovery window. The container supplies
+/// <see cref="TimeProvider.System"/>, so the default applies only to direct construction.
 /// </param>
 public class NightscoutCircuitBreaker(TimeProvider? timeProvider = null)
 {

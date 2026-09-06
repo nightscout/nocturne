@@ -253,6 +253,10 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc,
+            result.ProviderId?.ToString(),
+            _options);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,

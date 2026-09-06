@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -97,6 +98,45 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         (await _db.Subjects.AsNoTracking().AnyAsync(s => s.IsPlatformAdmin)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ATenantWhoseOnlyOwnerIsDeactivatedIsSkippedForTheNextOldest()
+    {
+        var deactivated = await AddTenantAsync(
+            "deactivated-oldest", new DateTime(2019, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+        var owner = await AddTenantWithOwnerAsync("owned", new DateTime(2020, 1, 1));
+
+        await BootstrapAsync();
+
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TheFirstOwnerOfTheSoleTenantIsGrantedOnSetupCompletion()
+    {
+        var owner = await AddTenantWithOwnerAsync("only", new DateTime(2020, 1, 1));
+
+        (await EnsureFirstOwnerAsync(owner)).Should().BeTrue();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ADeactivatedOwnerOfTheSoleTenantIsNotGrantedOnSetupCompletion()
+    {
+        var deactivated = await AddTenantAsync(
+            "only", new DateTime(2020, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+
+        (await EnsureFirstOwnerAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+    }
+
+    private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
+        new PlatformAdminBootstrapService(
+            _sqlite.ContextFactory,
+            Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
+            NullLogger<PlatformAdminBootstrapService>.Instance)
+            .EnsureFirstOwnerIsPlatformAdminAsync(subjectId, CancellationToken.None);
+
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
             _sqlite.ContextFactory,
@@ -134,13 +174,13 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
     private async Task<Guid> AddTenantWithoutOwnerAsync(string slug, DateTime createdAt) =>
         await AddTenantAsync(slug, createdAt, RoleSeeds.Viewer);
 
-    private async Task<Guid> AddTenantAsync(string slug, DateTime createdAt, string roleSlug)
+    private async Task<Guid> AddTenantAsync(
+        string slug,
+        DateTime createdAt,
+        string roleSlug,
+        bool subjectIsActive = true)
     {
         var tenantId = Guid.CreateVersion7();
-        var subjectId = await AddSubjectAsync($"{slug}-member");
-        var roleId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
-
         _db.Tenants.Add(new TenantEntity
         {
             Id = tenantId,
@@ -149,28 +189,13 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             IsActive = true,
             SysCreatedAt = createdAt,
         });
-        _db.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = roleId,
-            TenantId = tenantId,
-            Name = roleSlug,
-            Slug = roleSlug,
-            Permissions = [],
-            IsSystem = true,
-        });
-        _db.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = memberId,
-            TenantId = tenantId,
-            SubjectId = subjectId,
-        });
-        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = roleId,
-        });
         await _db.SaveChangesAsync();
+
+        var subjectId = await TestDatabaseSeeder.SeedMemberAsync(
+            _db, tenantId, roleSlug,
+            name: $"{slug}-member",
+            isActive: subjectIsActive);
+
         _db.ChangeTracker.Clear();
         return subjectId;
     }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
@@ -24,15 +25,12 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// time-in-range, glycemic variability, GMI, GRI, basal/bolus ratios, and AID system metrics.
 /// </summary>
 /// <remarks>
-/// Several computation endpoints accept large payloads and are decorated with
-/// <c>[RequestSizeLimit(ComputeBodyLimitBytes)]</c>.
+/// <c>GET /periods</c> caches for five minutes through <see cref="ICacheService"/>;
+/// <c>GET /range-analytics</c> and <c>GET /weekday-averages</c> carry a 60-second
+/// <see cref="ResponseCacheAttribute"/>. No other action caches.
 ///
-/// <c>GET /periods</c> and <c>GET /basal-analysis</c> fetch data directly from the database
-/// using the injected V4 repositories, apply profile-based scheduled-basal fallback when no
-/// TempBasal records exist, and cache results for 5 minutes to absorb rapid dashboard refreshes.
-///
-/// All repositories use <c>ITenantDbContextFactory</c> so each call creates its own independent
-/// DbContext; independent repository calls within a single request are parallelised with <c>Task.WhenAll</c>.
+/// Repositories create their own DbContext per call from <c>ITenantDbContextFactory</c>, so
+/// independent reads within one request are issued together under <c>Task.WhenAll</c>.
 /// </remarks>
 /// <seealso cref="IStatisticsService"/>
 /// <seealso cref="ISensorGlucoseRepository"/>
@@ -45,10 +43,11 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
 [BadRequestOnInvalidInput]
+[RequestSizeLimit(StatisticsController.ComputeBodyLimitBytes)]
 public class StatisticsController : ControllerBase
 {
     /// <summary>
-    /// Body ceiling for the actions that compute over a caller-supplied collection. A report
+    /// Body ceiling for every action here that computes over a caller-supplied collection. A report
     /// covering a year posts every reading in the range in one body, so the bound is set by the
     /// longest range a report can ask for rather than by a typical request.
     /// </summary>
@@ -121,6 +120,64 @@ public class StatisticsController : ControllerBase
         _canonicalGlucose = canonicalGlucose;
     }
 
+    private readonly record struct InsulinRecords(
+        List<Bolus> ManualBoluses,
+        List<Bolus> AlgorithmBoluses,
+        List<TempBasal> TempBasals,
+        List<BasalInjection> BasalInjections);
+
+    /// <param name="limit">Per collection. An AID pump writes a TempBasal and often an SMB every
+    /// ~5 minutes, so anything short of <c>int.MaxValue</c> truncates a multi-month window to its
+    /// oldest records and understates every total computed from it.</param>
+    /// <param name="alongside">Reads the caller started before calling, joined into the same
+    /// <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.</param>
+    private async Task<InsulinRecords> FetchInsulinRecordsAsync(
+        DateTime from, DateTime to, int limit, CancellationToken ct = default, params Task[] alongside)
+    {
+        var manualTask    = _bolusRepository.GetAsync(from, to, null, null, limit, descending: false, kind: BolusKind.Manual, ct: ct);
+        var algorithmTask = _bolusRepository.GetAsync(from, to, null, null, limit, descending: false, kind: BolusKind.Algorithm, ct: ct);
+        var tempBasalTask = _tempBasalRepository.GetAsync(from, to, null, null, limit, descending: false, ct: ct);
+        var injectionTask = _basalInjectionRepository.GetAsync(from, to, null, null, limit, 0, false, ct);
+
+        await Task.WhenAll([manualTask, algorithmTask, tempBasalTask, injectionTask, .. alongside]);
+
+        return new InsulinRecords(
+            (await manualTask).ToList(),
+            (await algorithmTask).ToList(),
+            (await tempBasalTask).ToList(),
+            (await injectionTask).ToList());
+    }
+
+    /// <summary>
+    /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
+    /// when the pump reported none.
+    /// </summary>
+    /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
+    /// suppresses the fallback, because a profile baseline on top of MDI injections would
+    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.</param>
+    private async Task AddScheduledBasalFallbackAsync(
+        List<TempBasal> tempBasals,
+        DateTime startUtc,
+        DateTime endUtc,
+        IReadOnlyCollection<BasalInjection>? recordedBasal)
+    {
+        if (tempBasals.Count > 0 || recordedBasal is { Count: > 0 }) return;
+        if (!await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted)) return;
+
+        var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
+        {
+            tempBasals.Add(new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
+                Rate = seg.UnitsPerHour,
+                Origin = TempBasalOrigin.Scheduled,
+            });
+        }
+    }
+
     /// <summary>
     /// Calculate basic glucose statistics from provided glucose values
     /// </summary>
@@ -167,7 +224,6 @@ public class StatisticsController : ControllerBase
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<TimeInRangeMetrics> CalculateTimeInRange(
         [FromBody] TimeInRangeRequest request
     )
@@ -187,7 +243,6 @@ public class StatisticsController : ControllerBase
     [HttpPost("glucose-distribution")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<DistributionDataPoint>> CalculateGlucoseDistribution(
         [FromBody] GlucoseDistributionRequest request
     )
@@ -208,7 +263,6 @@ public class StatisticsController : ControllerBase
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
         [FromBody] SensorGlucose[] entries
     )
@@ -264,7 +318,6 @@ public class StatisticsController : ControllerBase
     [HttpPost("comprehensive-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<GlucoseAnalytics> AnalyzeGlucoseData(
         [FromBody] GlucoseAnalyticsRequest request
     )
@@ -286,7 +339,6 @@ public class StatisticsController : ControllerBase
     [HttpPost("extended-analytics")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<ExtendedGlucoseAnalytics> AnalyzeGlucoseDataExtended(
         [FromBody] ExtendedGlucoseAnalyticsRequest request
     )
@@ -317,8 +369,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         [FromQuery] DiabetesPopulation population = DiabetesPopulation.Type1Adult,
         [FromQuery] Guid? patientDeviceId = null,
         CancellationToken cancellationToken = default
@@ -407,8 +459,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -669,17 +721,12 @@ public class StatisticsController : ControllerBase
             var startDate = now.AddDays(-days);
             var endDate = now;
 
-            var startTimestamp = startDate;
-            var endTimestamp = endDate;
+            var glucoseTask = _sensorGlucoseRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+            var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
 
-            var glucoseTask = _sensorGlucoseRepository.GetAsync(from: (DateTime?)startTimestamp, to: (DateTime?)endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-            var bolusTask   = _bolusRepository.GetAsync(from: (DateTime?)startTimestamp, to: (DateTime?)endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, kind: BolusKind.Manual, ct: cancellationToken);
-            var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startTimestamp, to: (DateTime?)endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-
-            await Task.WhenAll(glucoseTask, bolusTask, carbTask);
-
+            var (filteredBoluses, algorithmBoluses, tempBasals, basalInjections) =
+                await FetchInsulinRecordsAsync(startDate, endDate, int.MaxValue, cancellationToken, glucoseTask, carbTask);
             var filteredEntries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
-            var filteredBoluses = (await bolusTask).ToList();
             var filteredCarbs   = (await carbTask).ToList();
 
             // Calculate analytics if we have sufficient data
@@ -701,14 +748,6 @@ public class StatisticsController : ControllerBase
                     filteredCarbs
                 );
 
-                // Fetch TempBasals and algorithm boluses for basal data
-                // Deduplicate by 30s window + rate to eliminate duplicates from multiple connectors
-                // Awaited sequentially: these reads share the request-scoped NocturneDbContext,
-                // which does not support concurrent operations.
-                var tempBasals       = (await _tempBasalRepository.GetAsync(from: startTimestamp, to: endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken)).ToList();
-                var algorithmBoluses = (await _bolusRepository.GetAsync(from: startTimestamp, to: endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, kind: BolusKind.Algorithm, ct: cancellationToken)).ToList();
-                var basalInjections  = (await _basalInjectionRepository.GetAsync(startTimestamp, endTimestamp, null, null, int.MaxValue, 0, false, cancellationToken)).ToList();
-
                 insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
                     filteredBoluses,
                     algorithmBoluses,
@@ -727,8 +766,8 @@ public class StatisticsController : ControllerBase
                     && hasProfileData
                 )
                 {
-                    var fromMs = new DateTimeOffset(startTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                    var toMs = new DateTimeOffset(endTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
                     var profileBasal = Math.Round(
                         await _basalSegments.GetSegmentsAsync(fromMs, toMs, cancellationToken).SumUnitsAsync(cancellationToken)
                         * 100) / 100;
@@ -852,7 +891,6 @@ public class StatisticsController : ControllerBase
     [HttpPost("site-change-impact")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
-    [RequestSizeLimit(ComputeBodyLimitBytes)]
     public ActionResult<SiteChangeImpactAnalysis> CalculateSiteChangeImpact(
         [FromBody] SiteChangeImpactRequest request
     )
@@ -877,19 +915,15 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
-        // Awaited sequentially: these reads share the request-scoped NocturneDbContext,
-        // which does not support concurrent operations.
-        var boluses          = await _bolusRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false, kind: BolusKind.Manual);
-        var tempBasals       = (await _tempBasalRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false)).ToList();
-        var algorithmBoluses = await _bolusRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false, kind: BolusKind.Algorithm);
-        var basalInjections  = (await _basalInjectionRepository.GetAsync(startDt, endDt, null, null, 10000, 0, false)).ToList();
+        var (boluses, algorithmBoluses, tempBasals, basalInjections) =
+            await FetchInsulinRecordsAsync(startDt, endDt, 10000);
 
         var tzId = await _therapySettingsResolver.GetTimezoneAsync();
         var tz = !string.IsNullOrEmpty(tzId)
@@ -919,8 +953,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -934,15 +968,15 @@ public class StatisticsController : ControllerBase
         var startDt = TimeZoneInfo.ConvertTimeToUtc(startLocalDate, tz);
         var endDt = TimeZoneInfo.ConvertTimeToUtc(endLocalDate.AddDays(1).AddTicks(-1), tz);
 
-        // Awaited sequentially: these reads share the request-scoped NocturneDbContext,
-        // which does not support concurrent operations.
-        var rawGlucose       = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, 100_000, descending: false, ct: cancellationToken)).ToList();
-        var glucoseData      = (await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken)).ToList();
-        var manualBoluses    = (await _bolusRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, kind: BolusKind.Manual, ct: cancellationToken)).ToList();
-        var carbs            = (await _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, ct: cancellationToken)).ToList();
-        var algorithmBoluses = (await _bolusRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, kind: BolusKind.Algorithm, ct: cancellationToken)).ToList();
-        var tempBasals       = (await _tempBasalRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, ct: cancellationToken)).ToList();
-        var basalInjections  = (await _basalInjectionRepository.GetAsync(startDt, endDt, null, null, 10_000, 0, false, ct: cancellationToken)).ToList();
+        var rawGlucoseTask = _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, 100_000, descending: false, ct: cancellationToken);
+        var carbTask       = _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, ct: cancellationToken);
+
+        var (manualBoluses, algorithmBoluses, tempBasals, basalInjections) =
+            await FetchInsulinRecordsAsync(startDt, endDt, 10_000, cancellationToken, rawGlucoseTask, carbTask);
+
+        var rawGlucose  = (await rawGlucoseTask).ToList();
+        var glucoseData = (await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken)).ToList();
+        var carbs       = (await carbTask).ToList();
 
         // Daily basal totals come from the existing service path so the calendar's "totalBasal"
         // matches what /daily-basal-bolus-ratios would return for the same window.
@@ -1007,14 +1041,6 @@ public class StatisticsController : ControllerBase
             var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
             var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
 
-            var dur = tir?.Durations;
-            var totalMinutes = (dur?.VeryLow ?? 0) + (dur?.Low ?? 0)
-                + (dur?.Target ?? 0) + (dur?.High ?? 0) + (dur?.VeryHigh ?? 0);
-            var totalReadings = (int)Math.Round(totalMinutes / 5.0);
-            var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
-            var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
-            var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
-
             var rangeStats = tir?.RangeStats;
             var avgGlucose = rangeStats?.Target?.Mean ?? rangeStats?.Low?.Mean ?? 0;
 
@@ -1031,6 +1057,12 @@ public class StatisticsController : ControllerBase
                 .OrderBy(e => e.Mills)
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();
+
+            // The counts are readings, so they come from the readings, not from durations.
+            var totalReadings = entries.Count;
+            var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
+            var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
+            var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
 
             var dayStats = new PunchCardDay
             {
@@ -1116,8 +1148,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -1126,14 +1158,12 @@ public class StatisticsController : ControllerBase
         var startMs = new DateTimeOffset(startDt, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var endMs   = new DateTimeOffset(endDt,   TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        // These reads share the request-scoped NocturneDbContext, which is not safe for
-        // concurrent operations, so they are awaited sequentially rather than via Task.WhenAll.
-        var boluses          = await _bolusRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false, kind: BolusKind.Manual);
-        var tempBasals       = (await _tempBasalRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false)).ToList();
-        var algorithmBoluses = await _bolusRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false, kind: BolusKind.Algorithm);
-        var carbs            = await _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false);
-        var basalInjections  = (await _basalInjectionRepository.GetAsync(startDt, endDt, null, null, 10000, 0, false)).ToList();
-        var rateAt           = await _basalRateResolver.BuildResolverAsync(startMs, endMs);
+        var carbTask = _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false);
+
+        var (boluses, algorithmBoluses, tempBasals, basalInjections) =
+            await FetchInsulinRecordsAsync(startDt, endDt, 10000, default, carbTask);
+        var carbs  = await carbTask;
+        var rateAt = await _basalRateResolver.BuildResolverAsync(startMs, endMs);
 
         foreach (var tb in tempBasals)
         {
@@ -1163,22 +1193,16 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
-        [FromQuery] DateTime? startDate = null,
-        [FromQuery] DateTime? endDate = null
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
-        if (startDate is null || endDate is null)
-            return Problem(detail: "startDate and endDate are required.", statusCode: 400, title: "Bad Request");
-
         // Force UTC kind to avoid DateTimeOffset throwing when the server's local
         // timezone offset would push DateTime.MinValue/MaxValue out of the valid range.
-        var startUtc = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
-        var endUtc = DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc);
+        var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
-        // Fetch TempBasals and algorithm boluses
-        // Deduplicate by 30s window + rate to eliminate duplicates from multiple connectors
-        // No practical fetch cap — see GetHourlyInsulinDelivery: a 10k cap
-        // silently truncates ~5-minute AID records past ~35 days.
+        // Uncapped for the reason given on FetchInsulinRecordsAsync's limit.
         var tempBasalTask = _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false);
         var algoTask      = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm);
 
@@ -1187,25 +1211,7 @@ public class StatisticsController : ControllerBase
         var tempBasals       = (await tempBasalTask).ToList();
         var algorithmBoluses = await algoTask;
 
-        // Fall back to profile-based scheduled rates when no TempBasals exist.
-        // Each segment becomes one synthetic TempBasal; CalculateBasalAnalysis distributes
-        // each across the user-local hour-of-day buckets it overlaps, weighted by duration.
-        var hasTherapyData = await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted);
-        if (tempBasals.Count == 0 && hasTherapyData)
-        {
-            var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
-            {
-                tempBasals.Add(new TempBasal
-                {
-                    StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
-                    EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
-                    Rate = seg.UnitsPerHour,
-                    Origin = TempBasalOrigin.Scheduled,
-                });
-            }
-        }
+        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, recordedBasal: null);
 
         var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: HttpContext.RequestAborted);
         var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
@@ -1234,49 +1240,17 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<HourlyInsulinDeliveryResponse>> GetHourlyInsulinDelivery(
-        [FromQuery] DateTime? startDate = null,
-        [FromQuery] DateTime? endDate = null
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
-        if (startDate is null || endDate is null)
-            return Problem(detail: "startDate and endDate are required.", statusCode: 400, title: "Bad Request");
+        var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
-        var startUtc = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
-        var endUtc = DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc);
+        var (boluses, algorithmBoluses, tempBasals, basalInjections) =
+            await FetchInsulinRecordsAsync(startUtc, endUtc, int.MaxValue);
 
-        // No practical fetch cap: AID pumps write a TempBasal (and often an
-        // SMB) every ~5 minutes, so 90 days is ~26k records per type — a
-        // 10k cap would silently truncate to the oldest ~35 days and
-        // understate every average.
-        // Awaited sequentially: these reads share the request-scoped NocturneDbContext,
-        // which does not support concurrent operations.
-        var tempBasals       = (await _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false)).ToList();
-        var boluses          = await _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Manual);
-        var algorithmBoluses = await _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm);
-        var basalInjections  = (await _basalInjectionRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, 0, false)).ToList();
-
-        // Fall back to profile-based scheduled rates when no TempBasals exist,
-        // mirroring GetBasalAnalysis: each segment becomes one synthetic
-        // TempBasal that gets duration-weighted across the hours it overlaps.
-        // Skip the profile fallback when basal injections exist: MDI injections are the
-        // actual basal source, so synthesizing scheduled rates from the profile on top of
-        // them would double-count the day's baseline coverage.
-        var hasTherapyData = await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted);
-        if (tempBasals.Count == 0 && basalInjections.Count == 0 && hasTherapyData)
-        {
-            var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
-            {
-                tempBasals.Add(new TempBasal
-                {
-                    StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
-                    EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
-                    Rate = seg.UnitsPerHour,
-                    Origin = TempBasalOrigin.Scheduled,
-                });
-            }
-        }
+        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, basalInjections);
 
         var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: HttpContext.RequestAborted);
         var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
@@ -1311,8 +1285,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<AidSystemMetrics>> GetAidSystemMetrics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
+  import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -14,10 +15,7 @@
   } from "lucide-svelte";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import { FormError, FormField, useSubmission } from "$lib/forms";
-  import {
-    startAuthentication,
-    type PublicKeyCredentialRequestOptionsJSON,
-  } from "@simplewebauthn/browser";
+  import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
     setAuthCookies,
@@ -30,7 +28,14 @@
     loginComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
   import { goto, invalidateAll } from "$app/navigation";
-  import { describePasskeyError, parseCeremonyOptions } from "./passkey-errors";
+  import { page } from "$app/state";
+  import { describePasskeyError } from "./passkey-errors";
+  import {
+    offerPasskeyInAutofill,
+    runPasskeyAssertion,
+    type CeremonyOptionsResponse,
+  } from "./passkey-login";
+  import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
 
   interface Props {
@@ -48,6 +53,24 @@
   let { returnUrl = "/", onSuccess, tenantless = false }: Props = $props();
 
   const oidcQuery = getOidcProviders();
+
+  /**
+   * The method that last completed a sign-in on this browser, read from the cookie the API wrote
+   * (see `last-sign-in.ts`). It decides which control leads, so that someone who signs in with an
+   * identity provider is not shown the passkey button first every time.
+   */
+  const lastSignIn = $derived(page.data.lastSignIn ?? null);
+
+  const providers = $derived(oidcQuery.current?.providers ?? []);
+  const hasOidc = $derived(
+    (oidcQuery.current?.enabled ?? false) && providers.length > 0
+  );
+  const orderedProviders = $derived(withLastUsedFirst(providers, lastSignIn));
+  /** Whether an identity provider leads the form, ahead of the passkey controls. */
+  const providerFirst = $derived(
+    isLastUsed(lastSignIn, "oidc", orderedProviders[0]?.id)
+  );
+  const passkeyLastUsed = $derived(isLastUsed(lastSignIn, "passkey"));
 
   // UI mode
   type LoginMode = "default" | "username" | "recovery" | "totp";
@@ -135,63 +158,67 @@
   }
 
   /**
-   * Discoverable ("just tap the button") passkey sign-in. The WebAuthn ceremony
-   * runs in the browser, so this path can't work without JavaScript.
+   * A passkey sign-in the visitor asked for by pressing a button, so a failure is theirs to see.
+   * The WebAuthn ceremony runs in the browser, which is why neither entry point has a
+   * server-side counterpart that works without JavaScript.
    */
+  async function signInWithPasskey(
+    requestOptions: () => Promise<CeremonyOptionsResponse>
+  ) {
+    isLoading = true;
+    passkeyError = null;
+
+    try {
+      await handleAuthResult(
+        await runPasskeyAssertion(requestOptions, loginComplete)
+      );
+    } catch (err) {
+      console.error("Passkey sign-in failed:", err);
+      passkeyError = describePasskeyError(err, "login");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  /** Discoverable ("just tap the button") passkey sign-in. */
   async function handleDiscoverableLogin(event: SubmitEvent) {
     event.preventDefault();
-    isLoading = true;
-    passkeyError = null;
-
-    try {
-      const response = await discoverableLoginOptions();
-      const options = parseCeremonyOptions<PublicKeyCredentialRequestOptionsJSON>(
-        response.options
-      );
-      const challengeToken = response.challengeToken ?? "";
-
-      const assertion = await startAuthentication({ optionsJSON: options });
-
-      const result = await loginComplete({
-        assertionResponseJson: JSON.stringify(assertion),
-        challengeToken,
-      });
-      await handleAuthResult(result);
-    } catch (err) {
-      console.error("Discoverable passkey sign-in failed:", err);
-      passkeyError = describePasskeyError(err, "login");
-    } finally {
-      isLoading = false;
-    }
+    await signInWithPasskey(discoverableLoginOptions);
   }
 
-  /** Username-first passkey sign-in. Also JavaScript-only, same reason. */
+  /** Username-first passkey sign-in. */
   async function handleUsernameLogin(event: SubmitEvent) {
     event.preventDefault();
-    isLoading = true;
-    passkeyError = null;
-
-    try {
-      const response = await loginOptions({ username: username.trim() });
-      const options = parseCeremonyOptions<PublicKeyCredentialRequestOptionsJSON>(
-        response.options
-      );
-      const challengeToken = response.challengeToken ?? "";
-
-      const assertion = await startAuthentication({ optionsJSON: options });
-
-      const result = await loginComplete({
-        assertionResponseJson: JSON.stringify(assertion),
-        challengeToken,
-      });
-      await handleAuthResult(result);
-    } catch (err) {
-      console.error("Username passkey sign-in failed:", err);
-      passkeyError = describePasskeyError(err, "login");
-    } finally {
-      isLoading = false;
-    }
+    await signInWithPasskey(() => loginOptions({ username: username.trim() }));
   }
+
+  /**
+   * While the username field is on screen, offer the passkey in the browser's own autofill
+   * dropdown rather than making the visitor press anything. The challenge has to be requested
+   * before they touch the field, so this starts on the way in and is abandoned on the way out:
+   * a browser allows only one WebAuthn request at a time, and a stale one would swallow the
+   * explicit buttons. Silent throughout — a browser without conditional mediation, and a
+   * dropdown nobody used, are both just the ordinary form.
+   */
+  $effect(() => {
+    if (mode !== "username" || tenantless || !passkeysSupported) return;
+
+    let abandoned = false;
+
+    void offerPasskeyInAutofill(async () => {
+      const result = await runPasskeyAssertion(
+        discoverableLoginOptions,
+        loginComplete,
+        true
+      );
+      if (!abandoned) await handleAuthResult(result);
+    }).catch(() => {});
+
+    return () => {
+      abandoned = true;
+      WebAuthnAbortService.cancelCeremony();
+    };
+  });
 
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
@@ -236,6 +263,82 @@
   {/if}
 {/snippet}
 
+{#snippet lastUsedBadge()}
+  <Badge variant="secondary" class="ml-2 text-[10px] uppercase">
+    Last used
+  </Badge>
+{/snippet}
+
+{#snippet divider(label: string)}
+  <div class="relative">
+    <div class="absolute inset-0 flex items-center">
+      <span class="w-full border-t"></span>
+    </div>
+    <div class="relative flex justify-center text-xs uppercase">
+      <span class="bg-background px-2 text-muted-foreground">{label}</span>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet passkeyButtons()}
+  <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
+       WebAuthn ceremony, so there is no server-side counterpart. -->
+  <form onsubmit={handleDiscoverableLogin}>
+    <Button
+      type="submit"
+      data-testid="passkey-sign-in"
+      class="w-full h-12"
+      size="lg"
+      disabled={isLoading || isRedirecting || !passkeysSupported}
+    >
+      {#if isLoading}
+        <Loader2 class="mr-2 h-5 w-5 animate-spin" />
+        Waiting for passkey...
+      {:else}
+        <Fingerprint class="mr-2 h-5 w-5" />
+        {signInMethodLabels.passkey}
+        {#if passkeyLastUsed}{@render lastUsedBadge()}{/if}
+      {/if}
+    </Button>
+  </form>
+
+  <!-- Secondary: username-based sign-in -->
+  <Button
+    variant="outline"
+    class="w-full"
+    disabled={isLoading || isRedirecting || !passkeysSupported}
+    onclick={() => switchMode("username")}
+  >
+    <User class="mr-2 h-4 w-4" />
+    {signInMethodLabels.username}
+  </Button>
+{/snippet}
+
+{#snippet providerButtons()}
+  <div class="space-y-3">
+    {#each orderedProviders as provider}
+      <Button
+        variant="outline"
+        class="w-full h-11 relative"
+        style={getButtonStyle(provider.buttonColor)}
+        disabled={isLoading || isRedirecting || !provider.id}
+        onclick={() => provider.id && loginWithProvider(provider.id)}
+      >
+        {#if isRedirecting && selectedProvider === provider.id}
+          <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+          Redirecting...
+        {:else}
+          {@render providerIcon(provider.name)}
+          Sign in with {provider.name}
+          {#if isLastUsed(lastSignIn, "oidc", provider.id)}
+            {@render lastUsedBadge()}
+          {/if}
+        {/if}
+      </Button>
+    {/each}
+  </div>
+{/snippet}
+
 {#snippet otherMethodLinks()}
   <Button
     variant="link"
@@ -265,9 +368,6 @@
     <Loader2 class="h-8 w-8 animate-spin text-primary" />
   </div>
 {:else}
-  {@const oidc = oidcQuery.current}
-  {@const hasOidc = oidc?.enabled && oidc.providers.length > 0}
-
   <div class="space-y-4">
     {#if tenantless}
       <p class="text-sm text-muted-foreground">
@@ -291,72 +391,23 @@
     <FormError issues={passkeyError} focusOnShow />
 
     {#if mode === "default"}
-      {#if !tenantless}
-        <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
-             WebAuthn ceremony, so there is no server-side counterpart. -->
-        <form onsubmit={handleDiscoverableLogin}>
-          <Button
-            type="submit"
-            data-testid="passkey-sign-in"
-            class="w-full h-12"
-            size="lg"
-            disabled={isLoading || isRedirecting || !passkeysSupported}
-          >
-            {#if isLoading}
-              <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-              Waiting for passkey...
-            {:else}
-              <Fingerprint class="mr-2 h-5 w-5" />
-              {signInMethodLabels.passkey}
-            {/if}
-          </Button>
-        </form>
-
-        <!-- Secondary: username-based sign-in -->
-        <Button
-          variant="outline"
-          class="w-full"
-          disabled={isLoading || isRedirecting || !passkeysSupported}
-          onclick={() => switchMode("username")}
-        >
-          <User class="mr-2 h-4 w-4" />
-          {signInMethodLabels.username}
-        </Button>
+      <!-- The method that last worked leads; everything else keeps its usual place. -->
+      {#if providerFirst}
+        {@render providerButtons()}
       {/if}
 
-      {#if hasOidc && oidc}
-        {#if !tenantless}
-          <div class="relative">
-            <div class="absolute inset-0 flex items-center">
-              <span class="w-full border-t"></span>
-            </div>
-            <div class="relative flex justify-center text-xs uppercase">
-              <span class="bg-background px-2 text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
-          </div>
+      {#if !tenantless}
+        {#if providerFirst}
+          {@render divider("Or continue with a passkey")}
         {/if}
+        {@render passkeyButtons()}
+      {/if}
 
-        <div class="space-y-3">
-          {#each oidc.providers as provider}
-            <Button
-              variant="outline"
-              class="w-full h-11 relative"
-              style={getButtonStyle(provider.buttonColor)}
-              disabled={isLoading || isRedirecting || !provider.id}
-              onclick={() => provider.id && loginWithProvider(provider.id)}
-            >
-              {#if isRedirecting && selectedProvider === provider.id}
-                <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-                Redirecting...
-              {:else}
-                {@render providerIcon(provider.name)}
-                Sign in with {provider.name}
-              {/if}
-            </Button>
-          {/each}
-        </div>
+      {#if hasOidc && !providerFirst}
+        {#if !tenantless}
+          {@render divider("Or continue with")}
+        {/if}
+        {@render providerButtons()}
       {/if}
 
       {#if !tenantless}

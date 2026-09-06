@@ -8,7 +8,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertBolusCalculationRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Treatments.BolusCalculationController"/>
-public class UpsertBolusCalculationRequest
+public class UpsertBolusCalculationRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the bolus calculation was performed.
@@ -99,4 +99,7 @@ public class UpsertBolusCalculationRequest
     /// Pre-bolus time in minutes (insulin given before eating).
     /// </summary>
     public double? PreBolus { get; set; }
+
+    // Bolus calculations carry no sync key.
+    string? IBulkUpsertRequest.SyncIdentifier => null;
 }

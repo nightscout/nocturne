@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Nocturne.API.Extensions;
@@ -249,6 +250,108 @@ public sealed class SessionCookieExtensionsTests
     }
 
     [Fact]
+    public void SetLastSignInCookie_is_readable_by_page_script_at_the_session_scope()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"));
+
+        var written = Written(cookies(), SessionCookieExtensions.LastSignInCookieName);
+
+        // Same Domain as the session cookies, or the hint written on a tenant subdomain would be
+        // invisible to the apex login form and to sibling tenants.
+        written.Should()
+            .Contain("domain=.nocturne.run")
+            .And.NotContain("httponly", "the login form reads this from the browser")
+            .And.Contain("secure")
+            .And.Contain("samesite=lax");
+
+        // A session-length hint would be forgotten by the visitor's next sign-in, which is the
+        // only moment it is worth anything.
+        var expires = ExpiryOf(written);
+        expires.Should().BeAfter(DateTimeOffset.UtcNow.AddDays(300));
+    }
+
+    [Fact]
+    public void SetLastSignInCookie_names_the_method_alone_when_there_is_no_provider()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"));
+
+        ValueOf(Written(cookies(), SessionCookieExtensions.LastSignInCookieName))
+            .Should().Be("passkey");
+    }
+
+    [Fact]
+    public void SetLastSignInCookie_names_the_provider_the_login_form_keys_its_buttons_by()
+    {
+        var (response, cookies) = NewResponse();
+        var providerId = Guid.Parse("2f6a4c9e-1d3b-4a58-9f27-8c0b5e6d1a44");
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, providerId.ToString(), Options(".nocturne.run"));
+
+        // The web app's last-sign-in parser splits on the first colon; a shape change here
+        // silently stops the badge ever matching a provider.
+        ValueOf(Written(cookies(), SessionCookieExtensions.LastSignInCookieName))
+            .Should().Be($"oidc:{providerId}");
+    }
+
+    [Fact]
+    public void SetLastSignInCookie_stays_host_scoped_when_the_session_cookies_do()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(null));
+
+        Written(cookies(), SessionCookieExtensions.LastSignInCookieName).Should().NotContain("domain=");
+    }
+
+    [Fact]
+    public void SetLastSignInCookie_carries_no_identity()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, "2f6a4c9e-1d3b-4a58-9f27-8c0b5e6d1a44",
+            Options(".nocturne.run"));
+
+        // Readable by any script on any subdomain, including the anonymous share hosts.
+        var value = ValueOf(Written(cookies(), SessionCookieExtensions.LastSignInCookieName));
+        value.Split(':').Should().HaveCount(2, "only the method and the provider belong in here");
+    }
+
+    [Fact]
+    public void ClearSessionCookies_leaves_the_sign_in_hint_alone()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.ClearSessionCookies(Options(".nocturne.run"));
+
+        // Signing out is exactly when the hint has to survive: it is what the login form reads.
+        cookies().Should().NotContain(c =>
+            c.StartsWith($"{SessionCookieExtensions.LastSignInCookieName}=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SetSessionCookies_does_not_guess_a_sign_in_method()
+    {
+        var (response, cookies) = NewResponse();
+
+        response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
+            Options(".nocturne.run"));
+
+        // A silent token refresh funnels through here and knows nothing about how the session
+        // began, so folding the hint in would overwrite a true answer with a guess.
+        cookies().Should().NotContain(c =>
+            c.StartsWith($"{SessionCookieExtensions.LastSignInCookieName}=", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void SetStateCookie_stamps_the_state_domain_so_the_apex_callback_can_read_it()
     {
         var (response, cookies) = NewResponse();
@@ -310,6 +413,23 @@ public sealed class SessionCookieExtensionsTests
         headers.Should().AllSatisfy(h => h.Should().Contain("expires=Thu, 01 Jan 1970"));
         headers.Should().ContainSingle(h => h.Contains("domain=.nocturne.run", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>The cookie's value as the browser will hold it: ASP.NET escapes it on write.</summary>
+    private static string ValueOf(string setCookieHeader)
+    {
+        var pair = setCookieHeader.Split(';', 2)[0];
+        return Uri.UnescapeDataString(pair[(pair.IndexOf('=') + 1)..]);
+    }
+
+    /// <summary>The cookie's Expires attribute.</summary>
+    private static DateTimeOffset ExpiryOf(string setCookieHeader) =>
+        DateTimeOffset.Parse(
+            setCookieHeader
+                .Split(';')
+                .Select(part => part.Trim())
+                .Single(part => part.StartsWith("expires=", StringComparison.OrdinalIgnoreCase))
+                ["expires=".Length..],
+            CultureInfo.InvariantCulture);
 
     /// <summary>The live (non-expiring) Set-Cookie header for a cookie name.</summary>
     private static string Written(IReadOnlyList<string> cookies, string name) =>

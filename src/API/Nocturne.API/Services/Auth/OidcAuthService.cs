@@ -405,7 +405,7 @@ public class OidcAuthService : IOidcAuthService
             provider.Name
         );
 
-        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl);
+        return OidcCallbackResult.Succeeded(tokens, userInfo, stateData.ReturnUrl, provider.Id);
     }
 
     /// <summary>

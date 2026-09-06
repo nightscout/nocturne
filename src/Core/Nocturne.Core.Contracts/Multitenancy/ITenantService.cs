@@ -46,7 +46,11 @@ public interface ITenantService
     /// </summary>
     Task<MemberRemovalResult> RemoveMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct = default);
 
-    /// <summary>Returns all tenants that the specified subject is a member of.</summary>
+    /// <summary>
+    /// Returns all tenants that the specified subject is a member of: tenants the subject owns
+    /// first, then oldest membership, ties on slug. Callers read the first entry as a tenant
+    /// that person owns.
+    /// </summary>
     Task<List<TenantDto>> GetTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 
     /// <summary>Checks whether a slug is valid and available for use.</summary>

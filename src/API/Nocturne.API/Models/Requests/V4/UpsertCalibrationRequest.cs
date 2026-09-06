@@ -5,7 +5,7 @@ namespace Nocturne.API.Models.Requests.V4;
 /// </summary>
 /// <seealso cref="Validators.V4.UpsertCalibrationRequestValidator"/>
 /// <seealso cref="Nocturne.API.Controllers.V4.Glucose.CalibrationController"/>
-public class UpsertCalibrationRequest
+public class UpsertCalibrationRequest : IBulkUpsertRequest
 {
     /// <summary>
     /// When the calibration was performed.
@@ -46,4 +46,7 @@ public class UpsertCalibrationRequest
     /// Calibration scale factor.
     /// </summary>
     public double? Scale { get; set; }
+
+    // Calibrations carry no sync key.
+    string? IBulkUpsertRequest.SyncIdentifier => null;
 }
