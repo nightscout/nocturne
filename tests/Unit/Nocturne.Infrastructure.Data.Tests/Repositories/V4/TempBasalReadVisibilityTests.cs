@@ -1,6 +1,4 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -23,30 +21,14 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 public class TempBasalReadVisibilityTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly DbConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TempBasalRepository _repo;
 
     public TempBasalReadVisibilityTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
-
-        var contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seedContext = new NocturneDbContext(contextOptions))
-        {
-            seedContext.TenantId = TestTenantId;
-            seedContext.Database.EnsureCreated();
-            seedContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seedContext.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(contextOptions);
-        _context.TenantId = TestTenantId;
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
+        _context = _db.CreateContext();
 
         _repo = new TempBasalRepository(
             new TestTenantDbContextFactory(_context),
@@ -58,7 +40,7 @@ public class TempBasalReadVisibilityTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 

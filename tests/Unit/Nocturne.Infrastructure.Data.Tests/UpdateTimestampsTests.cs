@@ -1,8 +1,7 @@
-using System.Data.Common;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -23,7 +22,7 @@ public class UpdateTimestampsTests : IDisposable
     // A clearly-stale sentinel so a freshly-stamped utcNow value is unambiguously newer.
     private static readonly DateTime Stale = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private readonly List<DbConnection> _connections = [];
+    private readonly List<SqliteTestDatabase> _databases = [];
 
     [Fact]
     public async Task SystemTimestamped_StampsBothOnInsert_AndBumpsUpdatedOnModify()
@@ -338,31 +337,22 @@ public class UpdateTimestampsTests : IDisposable
     /// </summary>
     private DbContextOptions<NocturneDbContext> NewStore(params Guid[] tenantIds)
     {
-        var connection = new SqliteConnection("Filename=:memory:");
-        connection.Open();
-        _connections.Add(connection);
+        var db = TestDbContextFactory.CreateSqlite();
+        _databases.Add(db);
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using var seed = new NocturneDbContext(options);
-        seed.Database.EnsureCreated();
         foreach (var tenantId in tenantIds)
         {
-            seed.Tenants.Add(new TenantEntity { Id = tenantId, Slug = $"t{tenantId:N}"[..12] });
+            db.SeedTenant(tenantId, $"t{tenantId:N}"[..12]);
         }
-        seed.SaveChanges();
 
-        return options;
+        return db.Options;
     }
 
     public void Dispose()
     {
-        foreach (var connection in _connections)
+        foreach (var db in _databases)
         {
-            connection.Dispose();
+            db.Dispose();
         }
         GC.SuppressFinalize(this);
     }
