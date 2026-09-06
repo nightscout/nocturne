@@ -75,19 +75,19 @@
       <CurrentBGDisplay />
     </div>
 
-    <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
-      {#if isMainEnabled(WidgetId.Statistics)}
-        <div
-          {@attach coachmark({
-            key: "quick-tour.widgets",
-            title: "Customizable widgets",
-            description:
-              "Reorder or swap these in Settings \u2192 Appearance. You can choose from over a dozen stats.",
-          })}
-        >
-          <WidgetGrid widgets={topWidgets} maxWidgets={3} />
-        </div>
-      {/if}
+  <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
+    {#if isMainEnabled(WidgetId.Statistics)}
+      <div
+        {@attach coachmark({
+          key: "quick-tour.widgets",
+          title: "Customizable widgets",
+          description:
+            "Reorder or swap these in Settings \u2192 Appearance to show the stats you care about.",
+        })}
+      >
+        <WidgetGrid widgets={topWidgets} maxWidgets={3} />
+      </div>
+    {/if}
 
       {#if isMainEnabled(WidgetId.GlucoseChart)}
         {#snippet glucoseChart(chartVisible)}

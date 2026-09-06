@@ -48,6 +48,7 @@
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
+  import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
   import DemoDataSection from "$lib/components/connectors/DemoDataSection.svelte";
@@ -140,6 +141,7 @@
   let apiTokenCreateOpen = $state(false);
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
+  const uploaderHandoff = createUploaderTokenHandoff();
 
   // Deduplication state
   let showDeduplicationDialog = $state(false);
@@ -716,6 +718,9 @@
         bind:createOpen={apiTokenCreateOpen}
         prefillLabel={apiTokenPrefillLabel}
         prefillScopes={apiTokenPrefillScopes}
+        onCreateClose={() => {
+          if (uploaderHandoff.resumes()) showSetupDialog = true;
+        }}
       />
     </div>
   {/if}
@@ -728,6 +733,7 @@
   onRequestApiKey={(label, scopes) => {
     apiTokenPrefillLabel = label;
     apiTokenPrefillScopes = scopes;
+    uploaderHandoff.handOff();
     apiTokenCreateOpen = true;
   }}
 />

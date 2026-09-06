@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { statusProbeRedirect } from "./public-routes";
+import {
+  TENANT_INACTIVE_CODE,
+  TENANT_INACTIVE_PATH,
+  statusProbeRedirect,
+} from "./public-routes";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 
 describe("statusProbeRedirect", () => {
@@ -45,8 +49,30 @@ describe("statusProbeRedirect", () => {
     ).toEqual({ location: "https://nocturne.run", status: 302 });
   });
 
+  it("sends an inactive tenant's host to the page that explains it", () => {
+    expect(
+      statusProbeRedirect({
+        ...selfHosted,
+        apiStatus: 403,
+        errorCode: TENANT_INACTIVE_CODE,
+      })
+    ).toEqual({ location: TENANT_INACTIVE_PATH, status: 303 });
+  });
+
+  it("keeps a share host on its own page when its tenant is the inactive one", () => {
+    // The share page names nothing; a stranger holding a link learns only that it isn't working.
+    expect(
+      statusProbeRedirect({
+        ...selfHosted,
+        isShareHost: true,
+        apiStatus: 403,
+        errorCode: TENANT_INACTIVE_CODE,
+      })
+    ).toEqual({ location: SHARE_UNAVAILABLE_PATH, status: 303 });
+  });
+
   it("sends nowhere on a status neither branch answers for", () => {
-    // 403 is among them: only a share host reads it as a suspended tenant.
+    // 403 is among them: without the code, only a share host reads it as a dead host.
     for (const apiStatus of [401, 403, 500, undefined, null, "404"]) {
       expect(statusProbeRedirect({ ...selfHosted, apiStatus }), String(apiStatus)).toBeNull();
     }
