@@ -74,6 +74,16 @@ export class RealtimeStore {
   private websocketClient!: WebSocketClient;
   private _initStarted = false;
 
+  /**
+   * Storage creates can arrive as hundreds of individual Socket.IO messages
+   * during connector catch-up. Applying each one immediately replaces and
+   * sorts the full entries array, which also recomputes every chart derived
+   * from it. Buffer a short burst and commit it as one reactive update.
+   */
+  private pendingEntryCreates = new Map<string, Entry>();
+  private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+  private static readonly ENTRY_CREATE_BATCH_MS = 100;
+
   /** Loading state - false until initial data is loaded */
   isReady = $state(false);
 
@@ -569,18 +579,7 @@ export class RealtimeStore {
     this.updateLastDataReceived();
 
     if (colName === "entries" && this.isEntry(doc)) {
-      // Check for duplicates
-      const exists = this.entries.some(
-        (entry) =>
-          entry._id === doc._id ||
-          (entry.mills === doc.mills && entry.sgv === doc.sgv)
-      );
-
-      if (!exists) {
-        this.entries = [doc, ...this.entries]
-          .sort((a, b) => (b.mills || 0) - (a.mills || 0))
-          .slice(0, 1000);
-      }
+      this.queueEntryCreate(doc);
     } else if (colName === "devicestatus" && this.isDeviceStatus(doc)) {
       const exists = this.deviceStatuses.some(
         (ds) => ds._id === doc._id
@@ -593,6 +592,66 @@ export class RealtimeStore {
       }
 
       this.scheduleDecompositionRefresh();
+    }
+  }
+
+  private entryIdentity(entry: Entry): string {
+    return entry._id
+      ? `id:${entry._id}`
+      : this.entryReadingIdentity(entry);
+  }
+
+  private entryReadingIdentity(entry: Entry): string {
+    return `reading:${entry.mills ?? ""}:${entry.sgv ?? ""}`;
+  }
+
+  private queueEntryCreate(entry: Entry): void {
+    // A later event with the same identity wins. This also makes an update that
+    // arrives before the batch flush replace the pending create cleanly.
+    this.pendingEntryCreates.set(this.entryIdentity(entry), entry);
+    if (this.entryCreateFlushTimeout !== null) {
+      clearTimeout(this.entryCreateFlushTimeout);
+    }
+
+    this.entryCreateFlushTimeout = setTimeout(
+      () => this.flushPendingEntryCreates(),
+      RealtimeStore.ENTRY_CREATE_BATCH_MS,
+    );
+  }
+
+  private flushPendingEntryCreates(): void {
+    this.entryCreateFlushTimeout = null;
+    if (this.pendingEntryCreates.size === 0) return;
+
+    const pending = [...this.pendingEntryCreates.values()];
+    this.pendingEntryCreates.clear();
+
+    const knownIds = new Set(
+      this.entries
+        .map((entry) => entry._id)
+        .filter((id): id is string => typeof id === "string"),
+    );
+    const knownReadings = new Set(
+      this.entries.map((entry) => this.entryReadingIdentity(entry)),
+    );
+    const additions = pending.filter((entry) => {
+      const readingIdentity = this.entryReadingIdentity(entry);
+      if (
+        (typeof entry._id === "string" && knownIds.has(entry._id)) ||
+        knownReadings.has(readingIdentity)
+      ) {
+        return false;
+      }
+
+      if (typeof entry._id === "string") knownIds.add(entry._id);
+      knownReadings.add(readingIdentity);
+      return true;
+    });
+
+    if (additions.length > 0) {
+      this.entries = [...additions.reverse(), ...this.entries]
+        .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+        .slice(0, 1000);
     }
   }
 
@@ -620,6 +679,7 @@ export class RealtimeStore {
     const { colName, doc } = event;
 
     if (colName === "entries") {
+      this.pendingEntryCreates.delete(this.entryIdentity(doc));
       this.entries = this.entries.filter((entry) => entry._id !== doc._id);
     }
   }
@@ -898,6 +958,12 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+
+    if (this.entryCreateFlushTimeout !== null) {
+      clearTimeout(this.entryCreateFlushTimeout);
+      this.entryCreateFlushTimeout = null;
+    }
+    this.pendingEntryCreates.clear();
 
     // Clear the module-level singleton so the next createRealtimeStore() builds
     // a fresh store rather than resurrecting this torn-down instance with stale

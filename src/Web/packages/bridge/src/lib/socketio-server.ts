@@ -468,7 +468,10 @@ class SocketIOServer {
     logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients${tenantSlug ? ` (tenant: ${tenantSlug})` : ''}`);
 
     if (clientCount === 0) {
-      logger.warn('No Socket.IO clients connected - events will not be delivered to frontend');
+      // This is normal while the service starts or a connector catches up
+      // before anyone opens the UI. Keep it at debug level so a backfill does
+      // not turn hundreds of harmless undeliverable events into a log storm.
+      logger.debug('No Socket.IO clients connected - event will not be delivered to frontend');
     }
 
     target.emit(eventType, data);
