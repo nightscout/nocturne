@@ -146,6 +146,37 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
+    /// when the pump reported none, so a tenant with a profile still gets a basal shape. Callers
+    /// distribute each across the user-local hour-of-day buckets it overlaps, weighted by duration.
+    /// </summary>
+    /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
+    /// suppresses the fallback, because a profile baseline on top of MDI injections would
+    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.</param>
+    private async Task AddScheduledBasalFallbackAsync(
+        List<TempBasal> tempBasals,
+        DateTime startUtc,
+        DateTime endUtc,
+        IReadOnlyCollection<BasalInjection>? recordedBasal)
+    {
+        if (tempBasals.Count > 0 || recordedBasal is { Count: > 0 }) return;
+        if (!await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted)) return;
+
+        var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
+        {
+            tempBasals.Add(new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
+                Rate = seg.UnitsPerHour,
+                Origin = TempBasalOrigin.Scheduled,
+            });
+        }
+    }
+
+    /// <summary>
     /// Calculate basic glucose statistics from provided glucose values
     /// </summary>
     /// <param name="values">Array of glucose values in mg/dL</param>
@@ -688,14 +719,11 @@ public class StatisticsController : ControllerBase
             var startDate = now.AddDays(-days);
             var endDate = now;
 
-            var startTimestamp = startDate;
-            var endTimestamp = endDate;
-
-            var glucoseTask = _sensorGlucoseRepository.GetAsync(from: (DateTime?)startTimestamp, to: (DateTime?)endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
-            var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startTimestamp, to: (DateTime?)endTimestamp, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+            var glucoseTask = _sensorGlucoseRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
+            var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
 
             var (filteredBoluses, algorithmBoluses, tempBasals, basalInjections) =
-                await FetchInsulinRecordsAsync(startTimestamp, endTimestamp, int.MaxValue, cancellationToken);
+                await FetchInsulinRecordsAsync(startDate, endDate, int.MaxValue, cancellationToken);
             var filteredEntries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
             var filteredCarbs   = (await carbTask).ToList();
 
@@ -736,8 +764,8 @@ public class StatisticsController : ControllerBase
                     && hasProfileData
                 )
                 {
-                    var fromMs = new DateTimeOffset(startTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                    var toMs = new DateTimeOffset(endTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
                     var profileBasal = Math.Round(
                         await _basalSegments.GetSegmentsAsync(fromMs, toMs, cancellationToken).SumUnitsAsync(cancellationToken)
                         * 100) / 100;
@@ -1184,25 +1212,7 @@ public class StatisticsController : ControllerBase
         var tempBasals       = (await tempBasalTask).ToList();
         var algorithmBoluses = await algoTask;
 
-        // Fall back to profile-based scheduled rates when no TempBasals exist.
-        // Each segment becomes one synthetic TempBasal; CalculateBasalAnalysis distributes
-        // each across the user-local hour-of-day buckets it overlaps, weighted by duration.
-        var hasTherapyData = await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted);
-        if (tempBasals.Count == 0 && hasTherapyData)
-        {
-            var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
-            {
-                tempBasals.Add(new TempBasal
-                {
-                    StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
-                    EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
-                    Rate = seg.UnitsPerHour,
-                    Origin = TempBasalOrigin.Scheduled,
-                });
-            }
-        }
+        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, recordedBasal: null);
 
         var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: HttpContext.RequestAborted);
         var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
@@ -1241,28 +1251,7 @@ public class StatisticsController : ControllerBase
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
             await FetchInsulinRecordsAsync(startUtc, endUtc, int.MaxValue);
 
-        // Fall back to profile-based scheduled rates when no TempBasals exist,
-        // mirroring GetBasalAnalysis: each segment becomes one synthetic
-        // TempBasal that gets duration-weighted across the hours it overlaps.
-        // Skip the profile fallback when basal injections exist: MDI injections are the
-        // actual basal source, so synthesizing scheduled rates from the profile on top of
-        // them would double-count the day's baseline coverage.
-        var hasTherapyData = await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted);
-        if (tempBasals.Count == 0 && basalInjections.Count == 0 && hasTherapyData)
-        {
-            var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
-            {
-                tempBasals.Add(new TempBasal
-                {
-                    StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
-                    EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
-                    Rate = seg.UnitsPerHour,
-                    Origin = TempBasalOrigin.Scheduled,
-                });
-            }
-        }
+        await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, basalInjections);
 
         var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: HttpContext.RequestAborted);
         var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);

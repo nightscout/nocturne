@@ -20,6 +20,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Analytics;
 /// the API's CPU and the bytes it reads. The sweep pins the rule rather than today's action list,
 /// so a new compute POST that ships without the policy fails here.
 /// </remarks>
+[Trait("Category", "Unit")]
 public class StatisticsComputeLimitTests
 {
     [Fact]

@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Xunit;
@@ -28,6 +29,7 @@ public class StatisticsControllerTests
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepoMock = new();
     private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
+    private readonly Mock<IBasalSegmentService> _basalSegmentsMock = new();
 
     private StatisticsController CreateController(ICanonicalGlucoseService? canonicalGlucose = null)
     {
@@ -36,7 +38,7 @@ public class StatisticsControllerTests
             Mock.Of<ICacheService>(),
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IBasalRateResolver>(),
-            Mock.Of<IBasalSegmentService>(),
+            _basalSegmentsMock.Object,
             _therapySettingsResolverMock.Object,
             _glucoseRepoMock.Object,
             _bolusRepoMock.Object,
@@ -336,6 +338,57 @@ public class StatisticsControllerTests
             new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
 
         usedTz.Should().Be(TimeZoneInfo.Utc);
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_WithNoTempBasals_SynthesizesOneScheduledTempBasalPerProfileSegment()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var segments = new[]
+        {
+            new BasalSegment(Mills(start), Mills(start.AddHours(6)), 0.8, 0.8, "Default"),
+            new BasalSegment(Mills(start.AddHours(6)), Mills(start.AddHours(18)), 1.2, 1.2, "Default"),
+            new BasalSegment(Mills(start.AddHours(18)), Mills(start.AddDays(1)), 0.9, 0.9, "Default"),
+        };
+
+        SetupEmptyTreatments();
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(AsAsync(segments));
+
+        List<TempBasal>? synthesized = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateBasalAnalysis(
+                It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, DateTime, DateTime, TimeZoneInfo?>(
+                (tempBasals, _, _, _, _) => synthesized = tempBasals.ToList())
+            .Returns(new BasalAnalysisResponse());
+
+        await CreateController().GetBasalAnalysis(start, start.AddDays(1));
+
+        synthesized.Should().NotBeNull();
+        synthesized!.Should().OnlyContain(t => t.Origin == TempBasalOrigin.Scheduled);
+        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate)).Should().Equal(
+            segments.Select(s => (
+                DateTimeOffset.FromUnixTimeMilliseconds(s.StartMills).UtcDateTime,
+                (DateTime?)DateTimeOffset.FromUnixTimeMilliseconds(s.EndMills).UtcDateTime,
+                s.UnitsPerHour)));
+    }
+
+    private static long Mills(DateTime utc) => new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private static async IAsyncEnumerable<BasalSegment> AsAsync(IEnumerable<BasalSegment> segments)
+    {
+        foreach (var segment in segments)
+        {
+            yield return segment;
+        }
+
+        await Task.CompletedTask;
     }
 
     [Fact]
