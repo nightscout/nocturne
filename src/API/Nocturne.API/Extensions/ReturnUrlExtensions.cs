@@ -6,7 +6,6 @@ public static class ReturnUrlExtensions
 {
     /// <summary>
     /// Whether a caller-supplied return URL is safe to redirect a browser to after a sign-in.
-    /// Every path that accepts one applies this, so the open-redirect rule has one definition.
     /// </summary>
     public static bool IsValidReturnUrl(this BaseDomainOptions baseDomain, string returnUrl)
     {

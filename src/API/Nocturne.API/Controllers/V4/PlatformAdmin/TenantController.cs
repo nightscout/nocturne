@@ -263,7 +263,8 @@ public class TenantController : ControllerBase
     /// trail rather than the member.
     /// </remarks>
     [HttpPost("{id:guid}/members/{subjectId:guid}/login-code")]
-    [ProducesResponseType(typeof(LoginCodeResponse), StatusCodes.Status200OK)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -292,7 +293,7 @@ public class TenantController : ControllerBase
             AuthAuditActor.From(HttpContext.GetAuthContext()),
             ct);
 
-        return Ok(new LoginCodeResponse(issued.Code, issued.ExpiresAt));
+        return Ok(issued);
     }
 
     /// <summary>
@@ -338,6 +339,3 @@ public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<Oi
 public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);
 public record OidcIdentityDto(Guid Id, string Provider, string? Email);
 public record AdminAttachOidcRequest(Guid ProviderId, string OidcSubjectId, string Issuer, string? Email);
-
-/// <summary>A minted login code and the moment it stops being redeemable.</summary>
-public record LoginCodeResponse(string Code, DateTime ExpiresAt);

@@ -199,10 +199,10 @@ public class TenantControllerLoginCodeTests : IDisposable
         await _controller.IssueLoginCode(
             tenantId, subjectId, _db.ContextFactory, _loginCodeService, CancellationToken.None);
 
-    private async Task<LoginCodeResponse> IssueAsync(Guid subjectId)
+    private async Task<LoginCode> IssueAsync(Guid subjectId)
     {
         var result = await InvokeAsync(_tenantId, subjectId);
         return result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeOfType<LoginCodeResponse>().Subject;
+            .Which.Value.Should().BeOfType<LoginCode>().Subject;
     }
 }
