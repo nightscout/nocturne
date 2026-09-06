@@ -79,17 +79,8 @@ export function classifyHost(
 }
 
 /**
- * Whether the host serves the cross-tenant dashboard rather than a single tenant's app.
- *
- * A reserved dashboard slug always does — that is what the operator reserved it for. The apex
- * does so only when nothing resolved behind it: a single-tenant install auto-resolves its sole
- * tenant there and must keep serving the full app, or its owner is trimmed to a dashboard and
- * then bounced to a wildcard subdomain that may not even have a certificate.
- */
-/**
  * Classify the host a request arrived on, against the configured base domain and reserved
- * dashboard slugs. Both settings come back with the answer, since a caller that has to know
- * which tenant it is serving generally has to know where the other tenants live too.
+ * dashboard slugs.
  */
 export function classifyRequestHost(request: Request): {
   kind: HostKind;
@@ -107,6 +98,14 @@ export function classifyRequestHost(request: Request): {
   };
 }
 
+/**
+ * Whether the host serves the cross-tenant dashboard rather than a single tenant's app.
+ *
+ * A reserved dashboard slug always does — that is what the operator reserved it for. The apex
+ * does so only when nothing resolved behind it: a single-tenant install auto-resolves its sole
+ * tenant there and must keep serving the full app, or its owner is trimmed to a dashboard and
+ * then bounced to a wildcard subdomain that may not even have a certificate.
+ */
 export function isTenantlessHost(kind: HostKind, apexResolvesTenant: boolean): boolean {
   if (kind === "dashboard-slug") return true;
   if (kind === "apex") return !apexResolvesTenant;

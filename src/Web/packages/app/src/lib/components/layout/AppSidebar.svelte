@@ -133,20 +133,6 @@
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
 
-  // Check if current path matches or starts with a nav item path
-  // const isActive = (item: NavItem): boolean => {
-  //   if (item.href) {
-  //     if (item.href === "/") {
-  //       return page.url.pathname === "/";
-  //     }
-  //     return page.url.pathname.startsWith(item.href);
-  //   }
-  //   if (item.children) {
-  //     return item.children.some((child) => isActive(child));
-  //   }
-  //   return false;
-  // };
-
   const isActive = (item: NavItem): boolean => {
     if (item.href && item?.strict) {
       return page.url.pathname === item.href;

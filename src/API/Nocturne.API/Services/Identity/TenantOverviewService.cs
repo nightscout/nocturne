@@ -89,6 +89,8 @@ public class TenantOverviewService : ITenantOverviewService
             .Include(tm => tm.Tenant)
             .Include(tm => tm.MemberRoles).ThenInclude(mr => mr.TenantRole)
             .Where(tm => tm.SubjectId == subjectId)
+            .OrderBy(tm => tm.SysCreatedAt)
+            .ThenBy(tm => tm.Tenant!.Slug)
             .ToListAsync(ct);
 
         var result = new List<GlucoseReadTenant>();

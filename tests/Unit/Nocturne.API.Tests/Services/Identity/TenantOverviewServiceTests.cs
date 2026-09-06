@@ -316,6 +316,27 @@ public class TenantOverviewServiceTests
         delegated.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The dashboard lays out one tile per entry in the order given, so an unordered read would
+    /// reshuffle a caregiver's tiles between requests.
+    /// </summary>
+    [Fact]
+    public async Task GetGlucoseReadTenants_ordersByWhenTheSubjectJoined()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+
+        SeedMembership(options, subjectId, "alpha", [Scope.GlucoseRead],
+            joinedAt: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+        SeedMembership(options, subjectId, "zulu", [Scope.GlucoseRead],
+            joinedAt: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var tenants = await NewService(options).GetGlucoseReadTenantsAsync(
+            subjectId, FullTokenScopes, AuthType.SessionCookie);
+
+        tenants.Select(t => t.Tenant.Slug).Should().Equal("zulu", "alpha");
+    }
+
     [Fact]
     public async Task GetGlucoseReadTenants_superuserMembership_widensOnlyForUnscopedCredentials()
     {
@@ -554,7 +575,8 @@ public class TenantOverviewServiceTests
         List<string>? rolePermissions,
         List<string>? directPermissions = null,
         bool revoked = false,
-        bool tenantActive = true)
+        bool tenantActive = true,
+        DateTime? joinedAt = null)
     {
         using var db = new NocturneDbContext(options);
         var tenant = new TenantEntity
@@ -596,6 +618,15 @@ public class TenantOverviewServiceTests
         }
 
         db.SaveChanges();
+
+        if (joinedAt is not null)
+        {
+            // Inserting stamps SysCreatedAt with the current time, so a past join date can only
+            // be written afterwards.
+            member.SysCreatedAt = joinedAt.Value;
+            db.SaveChanges();
+        }
+
         return tenant.Id;
     }
 
