@@ -247,6 +247,15 @@ export const FONT_WEIGHT_OPTIONS: SelectOption[] = [
   { value: "bold", label: "Bold" },
 ];
 
+/** `custom` is not a stored colour — it reveals the hex picker. */
+export const CUSTOM_COLOR_OPTION = "custom";
+
+export const COLOR_OPTIONS: SelectOption[] = [
+  { value: "dynamic", label: "Dynamic (by glucose)" },
+  { value: "muted", label: "Muted" },
+  { value: CUSTOM_COLOR_OPTION, label: "Custom" },
+];
+
 export const VISIBILITY_OPTIONS: SelectOption[] = [
   { value: "always", label: "Always show" },
   { value: "info", label: "Info or higher" },

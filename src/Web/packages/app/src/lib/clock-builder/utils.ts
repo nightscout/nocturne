@@ -21,7 +21,17 @@ function resolveCssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-const DEFAULT_ELEMENT_COLOR = "#ffffff";
+export const DEFAULT_ELEMENT_COLOR = "#ffffff";
+
+/**
+ * Named colours a face may carry, resolved to CSS the browser will accept.
+ * `dynamic` is resolved separately because it needs the reading.
+ */
+const NAMED_ELEMENT_COLORS: Record<string, string> = {
+  muted: "var(--muted-foreground)",
+};
+
+const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /**
  * Get BG color based on glucose value
@@ -113,7 +123,9 @@ export function getFontWeightClass(weight: string | undefined): string {
 /**
  * Get element text color from style. A null `currentBG` has no glucose colour:
  * a dynamic element falls back to the static default rather than painting the
- * absence of a reading as a severe low.
+ * absence of a reading as a severe low. Anything that is neither a known token
+ * nor a hex literal takes the default too — emitting it raw would be a colour
+ * the browser discards, leaving the element to inherit the page foreground.
  */
 export function getElementColor(
   element: ClockElement,
@@ -123,7 +135,11 @@ export function getElementColor(
   if (color === "dynamic") {
     return currentBG === null ? DEFAULT_ELEMENT_COLOR : getBgColor(currentBG);
   }
-  return color || DEFAULT_ELEMENT_COLOR;
+  if (!color) return DEFAULT_ELEMENT_COLOR;
+  return (
+    NAMED_ELEMENT_COLORS[color] ??
+    (HEX_COLOR.test(color) ? color : DEFAULT_ELEMENT_COLOR)
+  );
 }
 
 /**

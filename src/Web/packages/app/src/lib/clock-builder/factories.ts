@@ -8,6 +8,7 @@
 import { randomUUID } from "$lib/utils";
 import type { ClockElement, ClockFaceConfig } from "$lib/api";
 import { DEFAULT_CLOCK_TIME_FORMAT } from "$lib/components/clock/clock-time";
+import { DEFAULT_ELEMENT_COLOR } from "./utils";
 import {
   ELEMENT_INFO,
   DEFAULT_SETTINGS,
@@ -26,7 +27,7 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
     type,
     size: info.defaultSize,
     style: {
-      color: info.defaultDynamicColor ? "dynamic" : "#ffffff",
+      color: info.defaultDynamicColor ? "dynamic" : DEFAULT_ELEMENT_COLOR,
       font: "system",
       fontWeight: "medium",
       opacity: 1.0,
