@@ -107,6 +107,32 @@ public class ActivityControllerV4Tests
             Times.Never);
     }
 
+    /// <summary>
+    /// The payload here is a regular activity, which needs no category scope of its own — only the
+    /// record being edited is a sleep session, so the gate has to look at both.
+    /// </summary>
+    [Fact]
+    public async Task UpdateActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
+    {
+        const string id = "sleep-session-1";
+        GrantScopes(Scope.TreatmentsReadWrite);
+        _service.Setup(x => x.GetActivityByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = id, Type = "sleep" });
+        _decomposer.Setup(d => d.RequiredWriteScope(It.Is<Activity>(a => a.Type == "sleep")))
+            .Returns(Scope.SleepReadWrite);
+
+        var result = await _controller.UpdateActivity(
+            id,
+            new UpsertActivityRequest { Type = "exercise", Mills = 1700000000000 },
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _service.Verify(
+            x => x.UpdateActivityAsync(It.IsAny<string>(), It.IsAny<Activity>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task DeleteActivity_ExistingRecordIsSleep_WithoutSleepScope_ReturnsForbidden()
     {
