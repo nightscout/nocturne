@@ -10,6 +10,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Xunit;
@@ -28,6 +29,7 @@ public class StatisticsControllerTests
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepoMock = new();
     private readonly Mock<IBasalInjectionRepository> _basalInjectionRepoMock = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
+    private readonly Mock<IBasalSegmentService> _basalSegmentsMock = new();
 
     private StatisticsController CreateController(ICanonicalGlucoseService? canonicalGlucose = null)
     {
@@ -36,7 +38,7 @@ public class StatisticsControllerTests
             Mock.Of<ICacheService>(),
             Mock.Of<IProfileProjectionService>(),
             Mock.Of<IBasalRateResolver>(),
-            Mock.Of<IBasalSegmentService>(),
+            _basalSegmentsMock.Object,
             _therapySettingsResolverMock.Object,
             _glucoseRepoMock.Object,
             _bolusRepoMock.Object,
@@ -336,6 +338,167 @@ public class StatisticsControllerTests
             new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
 
         usedTz.Should().Be(TimeZoneInfo.Utc);
+    }
+
+    [Fact]
+    public async Task GetBasalAnalysis_WithNoTempBasals_SynthesizesOneScheduledTempBasalPerProfileSegment()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var segments = new[]
+        {
+            new BasalSegment(Mills(start), Mills(start.AddHours(6)), 0.8, 0.8, "Default"),
+            new BasalSegment(Mills(start.AddHours(6)), Mills(start.AddHours(18)), 1.2, 1.2, "Default"),
+            new BasalSegment(Mills(start.AddHours(18)), Mills(start.AddDays(1)), 0.9, 0.9, "Default"),
+        };
+
+        SetupEmptyTreatments();
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(AsAsync(segments));
+
+        List<TempBasal>? synthesized = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateBasalAnalysis(
+                It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, DateTime, DateTime, TimeZoneInfo?>(
+                (tempBasals, _, _, _, _) => synthesized = tempBasals.ToList())
+            .Returns(new BasalAnalysisResponse());
+
+        await CreateController().GetBasalAnalysis(start, start.AddDays(1));
+
+        synthesized.Should().NotBeNull();
+        synthesized!.Should().OnlyContain(t => t.Origin == TempBasalOrigin.Scheduled);
+        synthesized.Select(t => (t.StartTimestamp, t.EndTimestamp, t.Rate)).Should().Equal(
+            segments.Select(s => (
+                DateTimeOffset.FromUnixTimeMilliseconds(s.StartMills).UtcDateTime,
+                (DateTime?)DateTimeOffset.FromUnixTimeMilliseconds(s.EndMills).UtcDateTime,
+                s.UnitsPerHour)));
+    }
+
+    [Fact]
+    public async Task GetHourlyInsulinDelivery_WithBasalInjections_DoesNotSynthesizeScheduledBasal()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        SetupEmptyTreatments();
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<BasalInjection> { new() { Timestamp = start, Units = 22 } });
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(AsAsync([new BasalSegment(Mills(start), Mills(start.AddDays(1)), 1.0, 1.0, "Default")]));
+
+        List<TempBasal>? passed = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyInsulinDelivery(
+                It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>()))
+            .Callback<IEnumerable<TempBasal>, IEnumerable<Bolus>, IEnumerable<Bolus>, DateTime, DateTime, TimeZoneInfo?, IEnumerable<BasalInjection>?>(
+                (tempBasals, _, _, _, _, _, _) => passed = tempBasals.ToList())
+            .Returns(new HourlyInsulinDeliveryResponse());
+
+        await CreateController().GetHourlyInsulinDelivery(start, start.AddDays(1));
+
+        passed.Should().BeEmpty(
+            "MDI injections are already the day's basal, so a profile baseline on top would double-count it");
+        _basalSegmentsMock.Verify(
+            s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetInsulinDeliveryStatistics_KeepsManualAndAlgorithmBolusesInTheirOwnArguments()
+    {
+        var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var manual = new List<Bolus> { new() { Timestamp = start, Insulin = 4.5 } };
+        var algorithm = new List<Bolus>
+        {
+            new() { Timestamp = start.AddMinutes(5), Insulin = 0.15 },
+            new() { Timestamp = start.AddMinutes(10), Insulin = 0.2 },
+        };
+
+        SetupEmptyTreatments();
+        SetupBoluses(BolusKind.Manual, manual);
+        SetupBoluses(BolusKind.Algorithm, algorithm);
+
+        List<Bolus>? passedManual = null;
+        List<Bolus>? passedAlgorithm = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateInsulinDeliveryStatistics(
+                It.IsAny<IEnumerable<Bolus>>(), It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<IEnumerable<BasalInjection>?>()))
+            .Callback<IEnumerable<Bolus>, IEnumerable<Bolus>, IEnumerable<TempBasal>, IEnumerable<CarbIntake>, DateTime, DateTime, IEnumerable<BasalInjection>?>(
+                (m, a, _, _, _, _, _) => { passedManual = m.ToList(); passedAlgorithm = a.ToList(); })
+            .Returns(new InsulinDeliveryStatistics());
+
+        await CreateController().GetInsulinDeliveryStatistics(start, start.AddDays(1));
+
+        passedManual.Should().BeEquivalentTo(manual);
+        passedAlgorithm.Should().BeEquivalentTo(algorithm);
+
+        VerifyBolusLimit(BolusKind.Manual, 10000);
+        VerifyBolusLimit(BolusKind.Algorithm, 10000);
+    }
+
+    [Fact]
+    public async Task GetHourlyInsulinDelivery_FetchesUncapped()
+    {
+        var start = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyInsulinDelivery(
+                It.IsAny<IEnumerable<TempBasal>>(), It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<Bolus>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<TimeZoneInfo?>(), It.IsAny<IEnumerable<BasalInjection>?>()))
+            .Returns(new HourlyInsulinDeliveryResponse());
+
+        await CreateController().GetHourlyInsulinDelivery(start, start.AddDays(90));
+
+        VerifyBolusLimit(BolusKind.Manual, int.MaxValue);
+        VerifyBolusLimit(BolusKind.Algorithm, int.MaxValue);
+    }
+
+    private void SetupBoluses(BolusKind kind, IEnumerable<Bolus> boluses) =>
+        _bolusRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), kind,
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(boluses);
+
+    private void VerifyBolusLimit(BolusKind kind, int limit) =>
+        _bolusRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            limit, It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<bool>(), kind,
+            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+    private static long Mills(DateTime utc) => new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private static async IAsyncEnumerable<BasalSegment> AsAsync(IEnumerable<BasalSegment> segments)
+    {
+        foreach (var segment in segments)
+        {
+            yield return segment;
+        }
+
+        await Task.CompletedTask;
     }
 
     [Fact]
