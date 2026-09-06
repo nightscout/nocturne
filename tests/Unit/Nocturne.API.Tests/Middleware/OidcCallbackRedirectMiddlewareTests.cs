@@ -179,11 +179,6 @@ public class OidcCallbackRedirectMiddlewareTests
         called.Should().BeTrue();
     }
 
-    /// <summary>
-    /// The forwarded-headers middleware leaves the header in place whenever it declined to apply
-    /// it, so a header naming a tenant subdomain must not make an apex callback look like one that
-    /// already reached the tenant — that would strand the user on the apex with no session.
-    /// </summary>
     [Fact]
     public async Task Stray_forwarded_host_header_does_not_stand_in_for_a_subdomain()
     {

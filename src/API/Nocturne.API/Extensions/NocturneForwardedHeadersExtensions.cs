@@ -51,8 +51,7 @@ public static class NocturneForwardedHeadersExtensions
     /// <remarks>
     /// <see cref="HostAndSchemeOptions"/> validates <c>X-Forwarded-Proto</c> as a scheme token and
     /// not as a web scheme, so <see cref="HttpRequest.Scheme"/> carries whatever scheme-shaped
-    /// value the caller sent. A deployment with an edge in front of it terminates TLS there, so
-    /// https is the answer for anything else.
+    /// value the caller sent. Anything that is not a web scheme falls back to https.
     /// </remarks>
     public static string PublicScheme(this HttpRequest request) =>
         request.Scheme is "http" or "https" ? request.Scheme : "https";
