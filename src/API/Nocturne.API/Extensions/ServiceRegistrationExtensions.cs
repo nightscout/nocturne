@@ -342,7 +342,13 @@ public static class ServiceRegistrationExtensions
                 if (config.Support.AccountBilling is { } ab)
                     return !string.IsNullOrWhiteSpace(ab.Url);
                 return true;
-            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured");
+            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured")
+            .Validate(config =>
+            {
+                if (config.Support.AccountPortal is { } portal)
+                    return !string.IsNullOrWhiteSpace(portal.Url);
+                return true;
+            }, "Operator:Support:AccountPortal:Url is required when AccountPortal is configured");
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
