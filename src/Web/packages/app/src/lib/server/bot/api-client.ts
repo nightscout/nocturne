@@ -32,6 +32,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       },
     },
     alerts: {
+      getActiveAlerts: (signal) => api.alerts.getActiveAlerts(signal),
       acknowledge: (request, signal) => api.alerts.acknowledge(request, signal),
       acknowledgeExcursion: (excursionId, request, signal) =>
         api.alerts.acknowledgeExcursion(excursionId, request, signal),

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Chat } from "chat";
 import { AlertDeliveryHandler } from "./deliver.js";
 import type { AlertDispatchEvent, BotApiClient } from "../types.js";
-import { cardButtons } from "../cards/card-buttons.test-utils.js";
+import { cardButtons } from "../cards/card.test-utils.js";
 import { encodeActionValue } from "../lib/action-value.js";
 
 vi.mock("../lib/logger.js", () => ({
@@ -184,21 +184,31 @@ describe("AlertDeliveryHandler adapter routing", () => {
 });
 
 describe("AlertDeliveryHandler card actions", () => {
-  it.each(["ack_alert", "mute_30"])(
-    "addresses the %s button at the tenant and the excursion",
-    async (id) => {
-      const bits = createBot();
-      const apiBits = createApi();
+  it("addresses the ack_alert button at the tenant and the excursion", async () => {
+    const bits = createBot();
+    const apiBits = createApi();
 
-      await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
-        createEvent("discord_dm", "123456789012345678"),
-      );
+    await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
+      createEvent("discord_dm", "123456789012345678"),
+    );
 
-      expect(buttonValue(bits.post.mock.calls[0]?.[0], id)).toBe(
-        encodeActionValue({ tenantId: TENANT, excursionId: EXCURSION }),
-      );
-    },
-  );
+    expect(buttonValue(bits.post.mock.calls[0]?.[0], "ack_alert")).toBe(
+      encodeActionValue({ tenantId: TENANT, excursionId: EXCURSION }),
+    );
+  });
+
+  it("delivers no button the bot cannot act on", async () => {
+    const bits = createBot();
+    const apiBits = createApi();
+
+    await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
+      createEvent("discord_dm", "123456789012345678"),
+    );
+
+    expect(cardButtons(bits.post.mock.calls[0]?.[0]).map((b) => b.id)).toEqual([
+      "ack_alert",
+    ]);
+  });
 });
 
 describe("AlertDeliveryHandler outcome reporting", () => {

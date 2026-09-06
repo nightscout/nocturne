@@ -26,3 +26,9 @@ export function formatGlucose(mgdl: number, unit: "mg/dL" | "mmol/L"): string {
 export function trendArrow(direction: string): string {
   return TREND_ARROWS[canonicalDirection(direction)] ?? UNKNOWN_DIRECTION_GLYPH;
 }
+
+export function timeAgo(dateMs: number): string {
+  const minutes = Math.round((Date.now() - dateMs) / 60000);
+  if (minutes < 1) return "just now";
+  return `${minutes} min ago`;
+}
