@@ -47,7 +47,7 @@ public class PersonalGoogleHealthController(IPersonalGoogleHealthService service
     [HttpPost("sync"), RemoteCommand, RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthStatus), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 502)]
-    public Task<ActionResult<GoogleHealthStatus>> SyncPersonalGoogleHealth(CancellationToken ct) => Run(async () => await service.SyncAsync(true, ct), ct);
+    public Task<ActionResult<GoogleHealthStatus>> SyncPersonalGoogleHealth(CancellationToken ct) => Run(async () => await service.QueueSyncAsync(ct), ct);
 
     [HttpPost("preview"), RemoteCommand, RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(typeof(GoogleHealthPreview), 200)]

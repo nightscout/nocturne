@@ -159,4 +159,19 @@ describe("Google Health connector page", () => {
     await expect.element(page.getByText("Import needs attention", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Import enabled", { exact: true })).toBeVisible();
   });
+
+  it("shows server-side progress while a large import continues in the background", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({
+      configured: true, connected: true, isSyncing: true, syncPhase: "reading", syncDataType: "steps",
+      syncCompletedDataTypes: 1, syncTotalDataTypes: 4, syncPagesRead: 12, syncProgressPercent: 22,
+    }));
+    render(GoogleHealthPage);
+
+    await expect.element(page.getByText("Import running in the background")).toBeVisible();
+    await expect.element(page.getByText("Reading Steps")).toBeVisible();
+    await expect.element(page.getByText("12 Google pages read for this data type")).toBeVisible();
+    await expect.element(page.getByRole("progressbar", { name: "Google Health import progress" })).toHaveAttribute("aria-valuenow", "22");
+    await expect.element(page.getByRole("button", { name: "Sync now" })).toBeDisabled();
+    expect(googleHealthMocks.preview).not.toHaveBeenCalled();
+  });
 });

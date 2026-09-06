@@ -97,7 +97,8 @@ public sealed class GoogleHealthClient(HttpClient http)
     }
 
     public async Task<List<SleepSession>> ReadSleepAsync(
-        string token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+        string token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct,
+        Action<int>? onPageRead = null)
     {
         var filter = $"sleep.interval.start_time >= \"{from.UtcDateTime:O}\" AND sleep.interval.start_time < \"{to.UtcDateTime:O}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
@@ -132,6 +133,7 @@ public sealed class GoogleHealthClient(HttpClient http)
                         sessions.Add(session);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
+                onPageRead?.Invoke(page + 1);
             }
             catch (GoogleHealthException) { throw; }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -182,7 +184,9 @@ public sealed class GoogleHealthClient(HttpClient http)
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subject)));
     }
 
-    public async Task<List<PersonalHealthReading>> ReadAsync(string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    public async Task<List<PersonalHealthReading>> ReadAsync(
+        string token, string type, DateTimeOffset from, DateTimeOffset to, CancellationToken ct,
+        Action<int>? onPageRead = null)
     {
         var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
         var filter = $"{field} >= \"{from.UtcDateTime:O}\" AND {field} < \"{to.UtcDateTime:O}\"";
@@ -218,6 +222,7 @@ public sealed class GoogleHealthClient(HttpClient http)
                         points.Add(point);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
+                onPageRead?.Invoke(page + 1);
             }
             catch (GoogleHealthException)
             {

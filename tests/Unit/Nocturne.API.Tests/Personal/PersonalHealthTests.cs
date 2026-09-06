@@ -288,6 +288,51 @@ public class PersonalHealthTests
         Assert.Equal(3, calls);
     }
 
+    [Fact]
+    public async Task Reports_each_completed_import_page()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            return Json(calls == 1
+                ? """{"dataPoints":[],"nextPageToken":"second"}"""
+                : """{"dataPoints":[]}""");
+        }));
+        var pages = new List<int>();
+        var client = new GoogleHealthClient(http);
+
+        await client.ReadAsync("synthetic-token", "weight", DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow, default, pages.Add);
+
+        Assert.Equal([1, 2], pages);
+    }
+
+    [Fact]
+    public async Task Queues_only_one_manual_import_per_tenant_and_tracks_progress()
+    {
+        var tenant = Guid.NewGuid();
+        var coordinator = new GoogleHealthCoordinator();
+
+        Assert.True(coordinator.Queue(tenant, 4));
+        Assert.False(coordinator.Queue(tenant, 4));
+        await using var requests = coordinator.ReadRequestsAsync(default).GetAsyncEnumerator();
+        Assert.True(await requests.MoveNextAsync());
+        Assert.Equal(tenant, requests.Current);
+        Assert.True(coordinator.StartQueued(tenant));
+        coordinator.Report(tenant, "reading", "steps", 1, 4, 3);
+
+        var progress = Assert.IsType<GoogleHealthCoordinator.SyncProgress>(coordinator.Progress(tenant));
+        Assert.Equal("reading", progress.Phase);
+        Assert.Equal("steps", progress.DataType);
+        Assert.Equal(1, progress.CompletedDataTypes);
+        Assert.Equal(4, progress.TotalDataTypes);
+        Assert.Equal(3, progress.PagesRead);
+
+        coordinator.Complete(tenant);
+        Assert.Null(coordinator.Progress(tenant));
+    }
+
     [Theory]
     [InlineData("inventory", true)]
     [InlineData("read", true)]
@@ -689,7 +734,8 @@ public class PersonalHealthTests
         public Task DisconnectAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
         public Task PurgeAsync(Guid subject, CancellationToken ct) => Task.CompletedTask;
         public Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct) => Task.FromResult(new GoogleHealthPreview());
-        public Task SyncAsync(bool force, CancellationToken ct) => throw new HttpRequestException("synthetic");
+        public Task QueueSyncAsync(CancellationToken ct) => throw new HttpRequestException("synthetic");
+        public Task SyncAsync(bool force, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
