@@ -48,8 +48,8 @@ public interface ITenantService
 
     /// <summary>
     /// Returns all tenants that the specified subject is a member of: tenants the subject owns
-    /// first, then oldest membership, ties on slug. Callers read the first entry as the
-    /// subject's own tenant.
+    /// first, then oldest membership, ties on slug. Callers read the first entry as a tenant
+    /// that person owns.
     /// </summary>
     Task<List<TenantDto>> GetTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 

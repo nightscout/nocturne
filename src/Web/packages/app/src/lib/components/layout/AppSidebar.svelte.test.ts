@@ -111,9 +111,11 @@ describe("AppSidebar", () => {
       .not.toHaveAttribute("aria-selected");
   });
 
-  it("goes to the tenant the visitor picks, and nowhere for the one on screen", async () => {
+  it("goes to the host of the tenant the visitor picks", async () => {
     renderViewingBravo();
 
+    // Re-picking the selection fires no change event, so this stands guard over the switcher's
+    // value rather than over the handler: a value that has drifted off the host reloads it.
     await group("Bravo (bravo)").click();
     await option("Bravo (bravo)").click();
     expect(visited.urls).toEqual([]);

@@ -41,7 +41,8 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         Mock.Of<ITenantRoleService>(),
         Mock.Of<ILogger<TenantService>>());
 
-    private void SeedMembership(string slug, DateTime joinedAt, bool owner = false)
+    /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>
+    private void SeedMembership(string slug, DateTime joinedAt, string? role = null)
     {
         var tenantId = Guid.CreateVersion7();
         using var db = _db.CreateContext(tenantId);
@@ -55,23 +56,23 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         };
         db.TenantMembers.Add(member);
 
-        if (owner)
+        if (role is not null)
         {
-            var role = new TenantRoleEntity
+            var tenantRole = new TenantRoleEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
-                Name = "Owner",
-                Slug = RoleSeeds.Owner,
-                Permissions = [Scope.FullAccess],
+                Name = role,
+                Slug = role,
+                Permissions = RoleSeeds.Permissions[role],
                 IsSystem = true,
             };
-            db.TenantRoles.Add(role);
+            db.TenantRoles.Add(tenantRole);
             db.TenantMemberRoles.Add(new TenantMemberRoleEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantMemberId = member.Id,
-                TenantRoleId = role.Id,
+                TenantRoleId = tenantRole.Id,
             });
         }
 
@@ -91,8 +92,10 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
     [Fact]
     public async Task GetTenantsForSubjectAsync_putsAnOwnedTenantAheadOfAnOlderInvitation()
     {
-        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), owner: true);
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Viewer);
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Owner);
 
         var tenants = await Service().GetTenantsForSubjectAsync(_subjectId);
 
