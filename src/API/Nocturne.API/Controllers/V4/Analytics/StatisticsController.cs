@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
@@ -128,15 +129,17 @@ public class StatisticsController : ControllerBase
     /// <param name="limit">Per collection. An AID pump writes a TempBasal and often an SMB every
     /// ~5 minutes, so anything short of <c>int.MaxValue</c> truncates a multi-month window to its
     /// oldest records and understates every total computed from it.</param>
+    /// <param name="alongside">Reads the caller started before calling, joined into the same
+    /// <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.</param>
     private async Task<InsulinRecords> FetchInsulinRecordsAsync(
-        DateTime from, DateTime to, int limit, CancellationToken ct = default)
+        DateTime from, DateTime to, int limit, CancellationToken ct = default, params Task[] alongside)
     {
         var manualTask    = _bolusRepository.GetAsync(from, to, null, null, limit, descending: false, kind: BolusKind.Manual, ct: ct);
         var algorithmTask = _bolusRepository.GetAsync(from, to, null, null, limit, descending: false, kind: BolusKind.Algorithm, ct: ct);
         var tempBasalTask = _tempBasalRepository.GetAsync(from, to, null, null, limit, descending: false, ct: ct);
         var injectionTask = _basalInjectionRepository.GetAsync(from, to, null, null, limit, 0, false, ct);
 
-        await Task.WhenAll(manualTask, algorithmTask, tempBasalTask, injectionTask);
+        await Task.WhenAll([manualTask, algorithmTask, tempBasalTask, injectionTask, .. alongside]);
 
         return new InsulinRecords(
             (await manualTask).ToList(),
@@ -366,8 +369,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         [FromQuery] DiabetesPopulation population = DiabetesPopulation.Type1Adult,
         [FromQuery] Guid? patientDeviceId = null,
         CancellationToken cancellationToken = default
@@ -456,8 +459,8 @@ public class StatisticsController : ControllerBase
     [RemoteQuery]
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
     public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -722,7 +725,7 @@ public class StatisticsController : ControllerBase
             var carbTask    = _carbIntakeRepository.GetAsync(from: (DateTime?)startDate, to: (DateTime?)endDate, device: null, source: null, limit: int.MaxValue, descending: false, ct: cancellationToken);
 
             var (filteredBoluses, algorithmBoluses, tempBasals, basalInjections) =
-                await FetchInsulinRecordsAsync(startDate, endDate, int.MaxValue, cancellationToken);
+                await FetchInsulinRecordsAsync(startDate, endDate, int.MaxValue, cancellationToken, glucoseTask, carbTask);
             var filteredEntries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
             var filteredCarbs   = (await carbTask).ToList();
 
@@ -912,8 +915,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<DailyBasalBolusRatioResponse>> GetDailyBasalBolusRatios(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -950,8 +953,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate,
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
@@ -969,7 +972,7 @@ public class StatisticsController : ControllerBase
         var carbTask       = _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, ct: cancellationToken);
 
         var (manualBoluses, algorithmBoluses, tempBasals, basalInjections) =
-            await FetchInsulinRecordsAsync(startDt, endDt, 10_000, cancellationToken);
+            await FetchInsulinRecordsAsync(startDt, endDt, 10_000, cancellationToken, rawGlucoseTask, carbTask);
 
         var rawGlucose  = (await rawGlucoseTask).ToList();
         var glucoseData = (await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken)).ToList();
@@ -1147,8 +1150,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<InsulinDeliveryStatistics>> GetInsulinDeliveryStatistics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -1160,7 +1163,7 @@ public class StatisticsController : ControllerBase
         var carbTask = _carbIntakeRepository.GetAsync(startDt, endDt, null, null, 10000, descending: false);
 
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
-            await FetchInsulinRecordsAsync(startDt, endDt, 10000);
+            await FetchInsulinRecordsAsync(startDt, endDt, 10000, default, carbTask);
         var carbs  = await carbTask;
         var rateAt = await _basalRateResolver.BuildResolverAsync(startMs, endMs);
 
@@ -1192,8 +1195,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<BasalAnalysisResponse>> GetBasalAnalysis(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         // Force UTC kind to avoid DateTimeOffset throwing when the server's local
@@ -1201,8 +1204,7 @@ public class StatisticsController : ControllerBase
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
-        // Uncapped for the reason given on FetchInsulinRecordsAsync's limit; only two of its four
-        // collections are read here, so the fetch is not shared with it.
+        // Uncapped for the reason given on FetchInsulinRecordsAsync's limit.
         var tempBasalTask = _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false);
         var algoTask      = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm);
 
@@ -1240,8 +1242,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<HourlyInsulinDeliveryResponse>> GetHourlyInsulinDelivery(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
@@ -1285,8 +1287,8 @@ public class StatisticsController : ControllerBase
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<AidSystemMetrics>> GetAidSystemMetrics(
-        [FromQuery] DateTime startDate,
-        [FromQuery] DateTime endDate
+        [FromQuery, BindRequired] DateTime startDate,
+        [FromQuery, BindRequired] DateTime endDate
     )
     {
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
