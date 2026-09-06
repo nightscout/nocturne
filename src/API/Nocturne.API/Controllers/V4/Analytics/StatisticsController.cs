@@ -1007,14 +1007,6 @@ public class StatisticsController : ControllerBase
             var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
             var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
 
-            var dur = tir?.Durations;
-            var totalMinutes = (dur?.VeryLow ?? 0) + (dur?.Low ?? 0)
-                + (dur?.Target ?? 0) + (dur?.High ?? 0) + (dur?.VeryHigh ?? 0);
-            var totalReadings = (int)Math.Round(totalMinutes / 5.0);
-            var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
-            var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
-            var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
-
             var rangeStats = tir?.RangeStats;
             var avgGlucose = rangeStats?.Target?.Mean ?? rangeStats?.Low?.Mean ?? 0;
 
@@ -1031,6 +1023,12 @@ public class StatisticsController : ControllerBase
                 .OrderBy(e => e.Mills)
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();
+
+            // The counts are readings, so they come from the readings, not from durations.
+            var totalReadings = entries.Count;
+            var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
+            var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
+            var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
 
             var dayStats = new PunchCardDay
             {
