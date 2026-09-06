@@ -1024,9 +1024,7 @@ public class StatisticsController : ControllerBase
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();
 
-            // The counts are readings, so they come from the readings. A duration is wall-clock
-            // time at whatever cadence the sensor ran at, so dividing one by a fixed interval
-            // undercounts a one-minute sensor and invents readings across a gap.
+            // The counts are readings, so they come from the readings, not from durations.
             var totalReadings = entries.Count;
             var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
             var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
