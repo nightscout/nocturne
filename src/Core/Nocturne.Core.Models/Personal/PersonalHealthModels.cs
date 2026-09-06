@@ -7,7 +7,7 @@ public class GoogleHealthOptions
     [Required, MaxLength(200)] public string ClientId { get; set; } = "";
     [MaxLength(500)] public string? ClientSecret { get; set; }
     [Required, MaxLength(500)] public string CallbackUrl { get; set; } = "";
-    [MinLength(1), MaxLength(32)] public string[] DataTypes { get; set; } = [];
+    [MaxLength(32)] public string[] DataTypes { get; set; } = [];
     [Range(1, 90)] public int HistoryDays { get; set; } = 7;
     public DateTimeOffset? ImportFrom { get; set; }
     public bool PreviewOnly { get; set; }

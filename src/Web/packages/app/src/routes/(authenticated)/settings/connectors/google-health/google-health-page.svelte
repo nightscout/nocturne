@@ -28,7 +28,23 @@
   async function refresh() { operation = "status"; status = await getPersonalGoogleHealth().run(); clientId = status.clientId ?? ""; callbackUrl = status.callbackUrl || `${location.origin}/personal/google/callback`; selected = status.configured ? status.selectedTypes ?? [] : selected; importFrom = day(status.importFrom) || day(new Date(Date.now() - (status.historyDays ?? 7) * 86400000)); if (status.connected) await loadPreview(); }
   async function run(action: () => Promise<unknown>) { busy = true; message = ""; try { await action(); } catch (error) { message = describeGoogleHealthError(error, operation, errors); } finally { busy = false; } }
   async function connect() { operation = "save"; await savePersonalGoogleHealth(options(true)); clientSecret = ""; operation = "signin"; const auth = await startPersonalGoogleHealth(); if (auth.url) location.assign(auth.url); }
-  async function saveAndImport() { operation = "save"; await savePersonalGoogleHealth(options(false)); operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); }
+  async function saveChanges(sync: boolean) {
+    operation = "save";
+    await savePersonalGoogleHealth(options(false));
+    try {
+      if (sync && selected.length > 0) {
+        operation = "sync";
+        await syncPersonalGoogleHealth();
+      }
+    } catch (error) {
+      const failedOperation = operation;
+      // Keep the original sync failure if reloading the saved settings also fails.
+      try { await refresh(); } catch {}
+      operation = failedOperation;
+      throw error;
+    }
+    await refresh();
+  }
   async function disconnect() { operation = "disconnect"; await disconnectPersonalGoogleHealth(); preview = null; await refresh(); }
   function itemStatus(item: NonNullable<GoogleHealthPreview["items"]>[number]) {
     if (item.errorCode) return `Read failed (${item.errorCode})`;
@@ -64,16 +80,21 @@
     {:else}
       <p>{status.previewRequired
         ? "Google Health is connected. Review the available data below, then save your selection to start importing."
+        : !status.selectedTypes?.length ? "Google Health is connected. Imports are paused because no data types are selected."
         : "Google Health is connected. Automatic sync runs approximately every 15 minutes."}</p>
-      <p class="text-sm text-muted-foreground">History start: {importFrom}. Disconnect first to change the date or OAuth settings.</p>
-      <div class="flex gap-2"><Button variant="outline" disabled={busy || status.previewRequired} onclick={() => void run(async () => { operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); })}><RefreshCw class="mr-2 h-4 w-4" />Sync now</Button><Button variant="outline" disabled={busy} onclick={() => void run(disconnect)}><Unplug class="mr-2 h-4 w-4" />Disconnect</Button></div>
+      <p class="text-sm text-muted-foreground">Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings.</p>
+      <div class="flex gap-2"><Button variant="outline" disabled={busy || status.previewRequired || !status.selectedTypes?.length} onclick={() => void run(async () => { operation = "sync"; await syncPersonalGoogleHealth(); await refresh(); })}><RefreshCw class="mr-2 h-4 w-4" />Sync now</Button><Button variant="outline" disabled={busy} onclick={() => void run(disconnect)}><Unplug class="mr-2 h-4 w-4" />Disconnect</Button></div>
     {/if}
   </CardContent></Card>
 
   {#if status?.connected}<Card><CardHeader><CardTitle>Google Health data</CardTitle><CardDescription>Detected data types and how Nocturne can use them</CardDescription></CardHeader><CardContent class="space-y-4">
-    {#if preview}<div class="overflow-auto"><table class="w-full text-left text-sm"><thead><tr class="border-b"><th class="p-3">Import</th><th class="p-3">Data type</th><th class="p-3">Found</th><th class="p-3">Nocturne destination</th><th class="p-3">Status</th></tr></thead><tbody>{#each preview.items ?? [] as item (item.dataType)}{@const capability = status.capabilities?.find((entry) => entry.dataType === item.dataType)}<tr class="border-b"><td class="p-3"><input aria-label={`Import ${labels[item.dataType ?? ""] ?? item.dataType}`} type="checkbox" bind:group={selected} value={item.dataType} disabled={!item.supported || !item.granted || item.count === 0 || !!item.errorCode} /></td><td class="p-3 font-medium">{labels[item.dataType ?? ""] ?? item.dataType}</td><td class="p-3">{item.errorCode || !item.granted ? "Unknown" : item.count > 0 ? `Yes (${item.count})` : "No"}</td><td class="p-3">{capability?.destination ? destinations[capability.destination] ?? capability.destination : "No destination yet"}</td><td class="p-3">{itemStatus(item)}</td></tr>{/each}</tbody></table></div>
-      <div class="flex gap-2"><Button disabled={busy || selected.length === 0} onclick={() => void run(saveAndImport)}>Save selection and import</Button><Button variant="outline" disabled={busy} onclick={() => void run(loadPreview)}><RefreshCw class="mr-2 h-4 w-4" />Refresh inventory</Button></div>
+    <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); const sync = (event.submitter as HTMLButtonElement | null)?.value === "sync"; void run(() => saveChanges(sync)); }}>
+      <label class="block text-sm font-medium">Import data from<input class="mt-1 block rounded border bg-background p-2" type="date" min="2000-01-01" max={day(new Date())} required disabled={busy} bind:value={importFrom} /></label>
+      <p class="text-sm text-muted-foreground">Choose an earlier date to import older data shared with Google Health. Empty results are not errors. Clear all selections and save to pause imports; previously imported data is kept.</p>
+    {#if preview}<div class="overflow-auto"><table class="w-full text-left text-sm"><thead><tr class="border-b"><th class="p-3">Import</th><th class="p-3">Data type</th><th class="p-3">Found</th><th class="p-3">Nocturne destination</th><th class="p-3">Status</th></tr></thead><tbody>{#each preview.items ?? [] as item (item.dataType)}{@const capability = status.capabilities?.find((entry) => entry.dataType === item.dataType)}<tr class="border-b"><td class="p-3"><input aria-label={`Import ${labels[item.dataType ?? ""] ?? item.dataType}`} type="checkbox" bind:group={selected} value={item.dataType} disabled={busy || (!selected.includes(item.dataType ?? "") && (!item.supported || !item.granted || !!item.errorCode))} /></td><td class="p-3 font-medium">{labels[item.dataType ?? ""] ?? item.dataType}</td><td class="p-3">{item.errorCode || !item.granted ? "Unknown" : item.count > 0 ? `Yes (${item.count})` : "No"}</td><td class="p-3">{capability?.destination ? destinations[capability.destination] ?? capability.destination : "No destination yet"}</td><td class="p-3">{itemStatus(item)}</td></tr>{/each}</tbody></table></div>
     {:else}<p>Checking available data…</p>{/if}
+      <div class="flex flex-wrap gap-2"><Button type="submit" disabled={busy}>Save import settings</Button><Button type="submit" value="sync" disabled={busy || selected.length === 0}>Save selection and import</Button><Button type="button" variant="outline" disabled={busy} onclick={() => void run(loadPreview)}><RefreshCw class="mr-2 h-4 w-4" />Refresh inventory</Button></div>
+    </form>
   </CardContent></Card>{/if}
 
   <details class="rounded-lg border p-4"><summary class="cursor-pointer font-medium">Google Cloud setup</summary><ol class="mt-3 list-inside list-decimal space-y-2 text-sm"><li>Enable the Google Health API and create an OAuth Web application client.</li><li>Add your account as a test user while the consent screen is in testing.</li><li>Register the callback URL above as an Authorized redirect URI.</li><li>Keep the client secret private.</li></ol><a class="mt-3 inline-block underline" href="https://developers.google.com/health/setup" target="_blank" rel="noreferrer">Google setup documentation</a></details>
