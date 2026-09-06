@@ -37,6 +37,12 @@ current `mod.wh.cpp` each time it changes and recompile.
 
 The mod exposes these settings in Windhawk (open the mod → **Settings**):
 
+The unit, range and colour defaults are held in
+[`settings-defaults.json`](settings-defaults.json), which is where they are
+edited. The settings block Windhawk reads and the `==SettingsDefaults==` block
+`mod.wh.cpp` falls back on both have to match that file, and `GlucoseMirrorTests`
+fails if they drift from it or if it drifts from the server's own constants.
+
 ### Data
 
 - **Summary JSON path** — set this to force a single source. Blank (default) auto-
@@ -51,7 +57,6 @@ The mod exposes these settings in Windhawk (open the mod → **Settings**):
   1 dp, mg/dL to a whole number).
 - **Target range low / high** — the target-range band and in-range colouring,
   expressed in the display unit (the summary has no range of its own).
-  Defaults `3.9` / `10.0`.
 
 ### Style
 
