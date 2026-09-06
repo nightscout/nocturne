@@ -179,8 +179,8 @@ public static class DemoLifestyleSeeds
             },
             {
               "elements": [
-                { "type": "delta", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "regular", "opacity": 0.9 } },
-                { "type": "ago", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "regular", "opacity": 0.9 } }
+                { "type": "delta", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "medium", "opacity": 0.9 } },
+                { "type": "age", "size": 14, "style": { "color": "muted", "font": "system", "fontWeight": "medium", "opacity": 0.9 } }
               ]
             }
           ]

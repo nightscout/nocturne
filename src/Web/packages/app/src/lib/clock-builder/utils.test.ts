@@ -17,6 +17,32 @@ describe("getElementColor", () => {
     expect(getElementColor(fixed, null)).toBe("#ff0000");
     expect(getElementColor(fixed, 55)).toBe("#ff0000");
   });
+
+  it("resolves the muted token to the theme's muted foreground", () => {
+    const muted: ClockElement = { type: "delta", style: { color: "muted" } };
+    expect(getElementColor(muted, null)).toBe("var(--muted-foreground)");
+    expect(getElementColor(muted, 55)).toBe("var(--muted-foreground)");
+  });
+
+  it("takes the default rather than emitting an unknown token as CSS", () => {
+    const unknown: ClockElement = { type: "sg", style: { color: "subtle" } };
+    expect(getElementColor(unknown, null)).toBe("#ffffff");
+    expect(getElementColor({ type: "sg", style: {} }, null)).toBe("#ffffff");
+  });
+
+  it("does not resolve a token off the token map's prototype", () => {
+    for (const inherited of ["constructor", "toString", "__proto__"]) {
+      const element: ClockElement = { type: "sg", style: { color: inherited } };
+      expect(getElementColor(element, null)).toBe("#ffffff");
+    }
+  });
+
+  it("takes the default for a CSS colour that is not a hex literal", () => {
+    for (const css of ["red", "rgb(255 0 0)", "hsl(0 100% 50%)"]) {
+      const element: ClockElement = { type: "sg", style: { color: css } };
+      expect(getElementColor(element, null)).toBe("#ffffff");
+    }
+  });
 });
 
 describe("clockBackgroundStyle", () => {

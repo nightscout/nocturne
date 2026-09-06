@@ -81,6 +81,17 @@ describe("ClockFaceRenderer", () => {
     expect(glucoseColor("55")).not.toBe(WHITE);
   });
 
+  it("paints a muted element in the theme's muted foreground", () => {
+    const muted: ClockFaceConfig = {
+      rows: [{ elements: [{ type: "age", size: 14, style: { color: "muted" } }] }],
+      settings: config.settings,
+    };
+
+    expect(face(reading, muted).glucoseColor("7m ago")).toBe(
+      cssColor("--muted-foreground")
+    );
+  });
+
   it("does not paint the whole face with a colour nothing reported", () => {
     const glucoseColored = { ...config, settings: { bgColor: true } };
     const veryLow = cssColor("--glucose-very-low");
