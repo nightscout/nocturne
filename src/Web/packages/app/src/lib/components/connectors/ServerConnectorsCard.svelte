@@ -33,6 +33,7 @@
     HeartPulse,
   } from "lucide-svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
+  import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { mapConnectorStatus } from "$lib/utils/connector-display";
   import type { SyncProgressEvent } from "$lib/websocket/types";
@@ -107,7 +108,7 @@
         </CardDescription>
       </div>
       <div class="flex gap-2">
-        {#if connectorStatuses.length > 0}
+        {#if connectorStatuses.length > 0 || googleHealth?.configured || googleHealth?.connected}
           <Button
             variant="outline"
             size="sm"
@@ -143,6 +144,9 @@
   </CardHeader>
   <CardContent>
     <div class="grid gap-3 @xl:grid-cols-2">
+      {#if googleHealth?.connected || googleHealth?.configured}
+        <GoogleHealthSourceRow connection={googleHealth} />
+      {:else}
       <a
         href={resolve("/settings/connectors/google-health")}
         class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
@@ -163,6 +167,7 @@
         </div>
         <ChevronRight class="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
       </a>
+      {/if}
       {#each availableConnectors as connector}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id
