@@ -239,8 +239,9 @@ export async function requireLinkForAction<T>(
  * Selects a single DirectoryCandidate from a non-empty list, preferring a bound
  * `tenantKey`, then an explicit `labelArg`, then the sole default link. Returns
  * "tenant-not-linked" if `tenantKey` names a tenant the user has no link to,
- * "ambiguous" if no disambiguation is possible, or "not-found" if the label arg
- * doesn't match any candidate.
+ * "ambiguous" if no disambiguation is possible — including a `tenantKey` two of
+ * the candidates answer to — or "not-found" if the label arg doesn't match any
+ * candidate.
  *
  * Pure function — no side effects, easy to reason about.
  */
@@ -250,12 +251,14 @@ function pickCandidate(
   tenantKey: string | null,
 ): DirectoryCandidate | "ambiguous" | "not-found" | "tenant-not-linked" {
   // A bound tenant is authoritative: acting on a different one would silently
-  // hit the wrong patient's data.
+  // hit the wrong patient's data. The key names a tenant rather than being one,
+  // so two candidates can answer to it; that is a refusal, not a coin toss.
   if (tenantKey) {
-    return (
-      candidates.find((c) => encodeTenantKey(c.tenantId) === tenantKey) ??
-      "tenant-not-linked"
+    const matched = candidates.filter(
+      (c) => encodeTenantKey(c.tenantId) === tenantKey,
     );
+    if (matched.length === 1) return matched[0]!;
+    return matched.length === 0 ? "tenant-not-linked" : "ambiguous";
   }
 
   // Single candidate: always return it, ignoring any label arg the user typed.

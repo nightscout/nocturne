@@ -5,9 +5,16 @@ import {
   encodeTenantKey,
 } from "./action-value.js";
 
-const TENANT = "11111111-1111-1111-1111-111111111111";
-const OTHER_TENANT = "22222222-2222-2222-2222-222222222222";
+const TENANT = "018f2a1b-3c4d-7000-8000-a1b2c3d4e5f6";
 const EXCURSION = "33333333-3333-3333-3333-333333333333";
+
+/**
+ * UUIDv7 ids minted in the same millisecond: identical for their leading 48
+ * timestamp bits, and — the pair below — for their trailing three bytes too.
+ * Only rand_b in between tells them apart.
+ */
+const SAME_MS_A = "018f2a1b-3c4d-7000-8000-aaaa00000001";
+const SAME_MS_B = "018f2a1b-3c4d-7000-8000-bbbb00000001";
 
 describe("card button values", () => {
   it("round-trips a tenant and an excursion", () => {
@@ -19,6 +26,7 @@ describe("card button values", () => {
     expect(decodeActionValue(value)).toEqual({
       tenantKey: encodeTenantKey(TENANT),
       excursionId: EXCURSION,
+      unreadableExcursion: false,
     });
   });
 
@@ -32,27 +40,29 @@ describe("card button values", () => {
     expect(decodeActionValue(value).excursionId).toBe(excursionId);
   });
 
-  it("names different tenants differently", () => {
-    expect(encodeTenantKey(TENANT)).not.toBe(encodeTenantKey(OTHER_TENANT));
+  it("names two tenants minted in the same millisecond differently", () => {
+    expect(encodeTenantKey(SAME_MS_A)).not.toBe(encodeTenantKey(SAME_MS_B));
   });
 
   it("names a tenant the same however the value spelled it", () => {
-    const legacy = decodeActionValue(`${TENANT.toUpperCase()}:${EXCURSION}`);
+    const value = `${TENANT.toUpperCase()}:${EXCURSION}`;
 
-    expect(legacy.tenantKey).toBe(encodeTenantKey(TENANT));
+    expect(decodeActionValue(value).tenantKey).toBe(encodeTenantKey(TENANT));
   });
 
   it("reads a single segment as a tenant with no excursion", () => {
     expect(decodeActionValue(TENANT)).toEqual({
       tenantKey: encodeTenantKey(TENANT),
       excursionId: null,
+      unreadableExcursion: false,
     });
   });
 
-  it("reads the pre-budget compound value", () => {
+  it("reads a value carrying two full UUIDs", () => {
     expect(decodeActionValue(`${TENANT}:${EXCURSION}`)).toEqual({
       tenantKey: encodeTenantKey(TENANT),
       excursionId: EXCURSION,
+      unreadableExcursion: false,
     });
   });
 
@@ -60,6 +70,7 @@ describe("card button values", () => {
     expect(decodeActionValue(value)).toEqual({
       tenantKey: null,
       excursionId: null,
+      unreadableExcursion: false,
     });
   });
 
@@ -67,13 +78,23 @@ describe("card button values", () => {
     expect(decodeActionValue(`:${EXCURSION}`)).toEqual({
       tenantKey: null,
       excursionId: null,
+      unreadableExcursion: false,
     });
   });
 
-  it("drops a second segment that is no excursion id", () => {
+  it("marks a second segment that is no excursion id unreadable", () => {
     expect(decodeActionValue(`${encodeTenantKey(TENANT)}:nonsense`)).toEqual({
       tenantKey: encodeTenantKey(TENANT),
       excursionId: null,
+      unreadableExcursion: true,
+    });
+  });
+
+  it("reads a trailing separator as naming no excursion", () => {
+    expect(decodeActionValue(`${encodeTenantKey(TENANT)}:`)).toEqual({
+      tenantKey: encodeTenantKey(TENANT),
+      excursionId: null,
+      unreadableExcursion: false,
     });
   });
 

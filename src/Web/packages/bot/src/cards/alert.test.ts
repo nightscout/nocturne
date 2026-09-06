@@ -4,7 +4,7 @@ import { cardButtons } from "./card-buttons.test-utils.js";
 import { decodeActionValue, encodeTenantKey } from "../lib/action-value.js";
 import type { AlertPayload } from "../types.js";
 
-const TENANT = "11111111-1111-1111-1111-111111111111";
+const TENANT = "018f2a1b-3c4d-7000-8000-a1b2c3d4e5f6";
 const EXCURSION = "33333333-3333-3333-3333-333333333333";
 
 /**
@@ -45,6 +45,7 @@ describe("AlertCard button values", () => {
       expect(decodeActionValue(value)).toEqual({
         tenantKey: encodeTenantKey(TENANT),
         excursionId: EXCURSION,
+        unreadableExcursion: false,
       });
     }
   });

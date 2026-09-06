@@ -12,10 +12,14 @@
  * failed, so the budget binds every adapter, not just Telegram.
  *
  * The excursion therefore travels as the base64url of its 16 raw bytes (22
- * chars, lossless — the handler acknowledges it by id), and the tenant as a
- * prefix of the same encoding, long enough only to pick one of the tapping
- * user's own linked tenants out of a handful of server-generated UUIDs.
- * 8 + 1 + 22 = 31 bytes, 60 with the `ack_alert` envelope.
+ * chars, lossless — the handler acknowledges it by id), and the tenant as the
+ * *last* 8 characters of the same encoding. The slice has to come off the tail:
+ * a tenant id is a UUIDv7 whose leading 48 bits are its creation millisecond,
+ * so tenants provisioned concurrently share their head outright, while the
+ * trailing bytes are rand_b and are random. Those 8 characters name one of the
+ * tapping user's own linked tenants; a key matching two of them is refused by
+ * {@link pickCandidate} rather than guessed. 8 + 1 + 22 = 31 bytes, 60 with the
+ * `ack_alert` envelope.
  */
 const SEPARATOR = ":";
 const TENANT_KEY_CHARS = 8;
@@ -37,9 +41,8 @@ const unpackUuid = (packed: string) => {
   ].join("-");
 };
 
-/** Reads either encoding, so buttons on cards posted before the budget fix still work. */
-const readUuid = (segment: string | undefined): string | null => {
-  if (!segment) return null;
+/** Reads an excursion segment written either as a full UUID or as its packed form. */
+const readUuid = (segment: string): string | null => {
   if (UUID.test(segment)) return segment;
   return PACKED_UUID.test(segment) ? unpackUuid(segment) : null;
 };
@@ -51,13 +54,19 @@ export interface ActionTarget {
    * than treating it as an id.
    */
   tenantKey: string | null;
-  /** Excursion the button acts on, or null if the value addresses only a tenant. */
+  /** Excursion the button acts on, or null if the value names none or names one that cannot be read. */
   excursionId: string | null;
+  /**
+   * The value names an excursion that does not decode. The action has to fail:
+   * widening to every alert of the tenant would silence more than the card is
+   * about.
+   */
+  unreadableExcursion: boolean;
 }
 
 /** The key a tenant id is named by inside a card button value. */
 export function encodeTenantKey(tenantId: string): string {
-  return packUuid(tenantId).slice(0, TENANT_KEY_CHARS);
+  return packUuid(tenantId).slice(-TENANT_KEY_CHARS);
 }
 
 export function encodeActionValue(target: {
@@ -74,9 +83,11 @@ export function encodeActionValue(target: {
  */
 export function decodeActionValue(value: string | null | undefined): ActionTarget {
   const [tenant, excursion] = (value ?? "").split(SEPARATOR);
-  if (!tenant) return { tenantKey: null, excursionId: null };
+  if (!tenant) return { tenantKey: null, excursionId: null, unreadableExcursion: false };
+  const excursionId = excursion ? readUuid(excursion) : null;
   return {
     tenantKey: UUID.test(tenant) ? encodeTenantKey(tenant) : tenant,
-    excursionId: readUuid(excursion),
+    excursionId,
+    unreadableExcursion: Boolean(excursion) && excursionId === null,
   };
 }
