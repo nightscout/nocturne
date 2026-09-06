@@ -31,6 +31,13 @@ public class GoogleHealthStatus
     public string? ErrorCode { get; set; }
     public string[] ErrorDataTypes { get; set; } = [];
     public bool PreviewRequired { get; set; }
+    public bool IsSyncing { get; set; }
+    public string? SyncPhase { get; set; }
+    public string? SyncDataType { get; set; }
+    public int SyncCompletedDataTypes { get; set; }
+    public int SyncTotalDataTypes { get; set; }
+    public int SyncPagesRead { get; set; }
+    public int? SyncProgressPercent { get; set; }
 }
 
 public class GoogleHealthPreview
