@@ -3,6 +3,7 @@ import type { ActionEvent, Chat } from "chat";
 import { registerAlertCommands } from "./alerts.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
 import type { BotApiClient, DirectoryCandidate } from "../types.js";
+import { encodeActionValue } from "../lib/action-value.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -22,7 +23,7 @@ const WORK = candidate(WORK_TENANT, "work-clinic", "work");
 
 /** The value the alert card puts on its buttons: the tenant and the excursion. */
 const cardValue = (tenantId: string, excursionId: string) =>
-  `${tenantId}:${excursionId}`;
+  encodeActionValue({ tenantId, excursionId });
 
 function candidate(
   tenantId: string,
@@ -141,6 +142,18 @@ describe("ack_alert action", () => {
     });
     expect(alerts.acknowledgeExcursion).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+  });
+
+  it("acknowledges the excursion named by a card posted before the budget fix", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event } = createActionEvent(`${WORK_TENANT}:${EXCURSION}`);
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
+    ).toHaveBeenCalledExactlyOnceWith(EXCURSION, { acknowledgedBy: "Sam Tester" });
   });
 
   it("acknowledges through the client scoped to the alert's tenant", async () => {

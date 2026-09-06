@@ -1,6 +1,6 @@
 import type { ActionEvent, SlashCommandEvent } from "chat";
 import { getUnscopedApi, runWithResolvedLink, type ResolvedLink } from "./request-context.js";
-import { decodeActionValue } from "./action-value.js";
+import { decodeActionValue, encodeTenantKey } from "./action-value.js";
 import type { DirectoryCandidate } from "../types.js";
 
 interface LinkResolutionInput {
@@ -9,7 +9,7 @@ interface LinkResolutionInput {
   /** Label typed as a command argument. Actions carry no text, so null. */
   labelArg: string | null;
   /** Tenant the invocation is already bound to (from a card button's value). Wins over labelArg. */
-  tenantId: string | null;
+  tenantKey: string | null;
   /** Appended to the ambiguity message to tell the user how to pick. */
   disambiguationHint: string;
 }
@@ -112,7 +112,7 @@ async function withResolvedLink<T>(
     return null;
   }
 
-  const picked = pickCandidate(candidates, input.labelArg, input.tenantId);
+  const picked = pickCandidate(candidates, input.labelArg, input.tenantKey);
   const availableLabels = candidates.map((c) => `\`${c.label}\``).join(", ");
 
   if (picked === "ambiguous") {
@@ -188,7 +188,7 @@ export async function requireLink<T>(
       platform: event.adapter.name,
       platformUserId: event.user.userId,
       labelArg: event.text?.trim().toLowerCase() || null,
-      tenantId: null,
+      tenantKey: null,
       disambiguationHint: `Use \`${event.command} <label>\` to pick one, or set a default in Settings → Integrations → Discord.`,
     },
     (message) =>
@@ -224,7 +224,7 @@ export async function requireLinkForAction<T>(
       platform: event.adapter.name,
       platformUserId: event.user.userId,
       labelArg: null,
-      tenantId: decodeActionValue(event.value).tenantId,
+      tenantKey: decodeActionValue(event.value).tenantKey,
       disambiguationHint:
         "Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
     },
@@ -237,8 +237,8 @@ export async function requireLinkForAction<T>(
 
 /**
  * Selects a single DirectoryCandidate from a non-empty list, preferring a bound
- * `tenantId`, then an explicit `labelArg`, then the sole default link. Returns
- * "tenant-not-linked" if `tenantId` names a tenant the user has no link to,
+ * `tenantKey`, then an explicit `labelArg`, then the sole default link. Returns
+ * "tenant-not-linked" if `tenantKey` names a tenant the user has no link to,
  * "ambiguous" if no disambiguation is possible, or "not-found" if the label arg
  * doesn't match any candidate.
  *
@@ -247,14 +247,13 @@ export async function requireLinkForAction<T>(
 function pickCandidate(
   candidates: DirectoryCandidate[],
   labelArg: string | null,
-  tenantId: string | null,
+  tenantKey: string | null,
 ): DirectoryCandidate | "ambiguous" | "not-found" | "tenant-not-linked" {
   // A bound tenant is authoritative: acting on a different one would silently
   // hit the wrong patient's data.
-  if (tenantId) {
-    const wanted = tenantId.toLowerCase();
+  if (tenantKey) {
     return (
-      candidates.find((c) => c.tenantId.toLowerCase() === wanted) ??
+      candidates.find((c) => encodeTenantKey(c.tenantId) === tenantKey) ??
       "tenant-not-linked"
     );
   }
