@@ -128,6 +128,41 @@ public record CollectionProgress
     public long DocumentsMigrated { get; init; }
     public long DocumentsFailed { get; init; }
     public bool IsComplete { get; init; }
+
+    /// <summary>
+    /// Why this collection stopped short, in the words shown to whoever ran the import;
+    /// <see langword="null"/> when it finished. A collection can end complete and failed at the
+    /// same time — <see cref="IsComplete"/> only means nothing more will be attempted for it.
+    /// </summary>
+    public string? FailureReason { get; init; }
+}
+
+/// <summary>
+/// What went wrong when reading from the source, at the granularity the person running the import
+/// can act on. The cause decides whether one collection failed or the whole run cannot proceed:
+/// a rejected secret or an unreachable host will repeat for every remaining collection, whereas
+/// one collection answering an error status says nothing about the next.
+/// </summary>
+internal enum MigrationFailureCause
+{
+    /// <summary>The source answered 401 or 403.</summary>
+    ApiSecretRejected,
+
+    /// <summary>The request never got an answer: name lookup, connection or timeout failure.</summary>
+    Unreachable,
+
+    /// <summary>The source answered, with a status that is not success.</summary>
+    Status,
+}
+
+/// <summary>
+/// A read from the migration source failed. The message is the text shown to the user, so it is
+/// written for someone who does not run servers for a living.
+/// </summary>
+internal sealed class MigrationSourceException(string message, MigrationFailureCause cause, Exception? inner = null)
+    : Exception(message, inner)
+{
+    public MigrationFailureCause Cause { get; } = cause;
 }
 
 /// <summary>

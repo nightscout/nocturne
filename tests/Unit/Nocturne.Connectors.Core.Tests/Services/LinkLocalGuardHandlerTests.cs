@@ -37,6 +37,23 @@ public class LinkLocalGuardHandlerTests
     }
 
     [Fact]
+    public async Task Reports_AnUnresolvableHostAsNotFound()
+    {
+        // A typo in someone's own Nightscout address fails the same check a forbidden address
+        // does. Told the address is link-local, they read it as their site being refused on
+        // security grounds and go looking for the wrong problem.
+        var client = BuildClient(Unresolvable, out var reachedTransport);
+
+        var act = async () => await client.GetAsync("https://mynightscout.exampl/api/v1/status");
+
+        await act.Should().ThrowAsync<HttpRequestException>()
+            .WithMessage("*Could not find 'mynightscout.exampl'*");
+        (await act.Should().ThrowAsync<HttpRequestException>()).Which
+            .Message.Should().NotContain("link-local");
+        reachedTransport().Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Refuses_AHostnameResolvingToTheMetadataEndpoint()
     {
         var client = BuildClient(ResolvesTo("169.254.169.254"), out var reachedTransport);
