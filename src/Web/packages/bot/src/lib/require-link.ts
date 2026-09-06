@@ -1,5 +1,6 @@
 import type { ActionEvent, SlashCommandEvent } from "chat";
 import { getUnscopedApi, runWithResolvedLink, type ResolvedLink } from "./request-context.js";
+import { decodeActionValue } from "./action-value.js";
 import type { DirectoryCandidate } from "../types.js";
 
 interface LinkResolutionInput {
@@ -7,7 +8,7 @@ interface LinkResolutionInput {
   platformUserId: string;
   /** Label typed as a command argument. Actions carry no text, so null. */
   labelArg: string | null;
-  /** Tenant the invocation is already bound to (a card button's value). Wins over labelArg. */
+  /** Tenant the invocation is already bound to (from a card button's value). Wins over labelArg. */
   tenantId: string | null;
   /** Appended to the ambiguity message to tell the user how to pick. */
   disambiguationHint: string;
@@ -199,13 +200,18 @@ export async function requireLink<T>(
 /**
  * Card-action entry point to {@link withResolvedLink}. An `ActionEvent` carries
  * no channel, text or command, so the tenant comes from the button's value
- * (cards that address a tenant must set it) and failures are explained as an
- * ephemeral in the thread the card was posted to.
+ * (cards that address a tenant must set it, encoded by `encodeActionValue`)
+ * and failures are explained as an ephemeral in the thread the card was posted
+ * to.
  *
  * @example
  * bot.onAction("ack_alert", async (event) => {
  *   await requireLinkForAction(event, async () => {
- *     await getApi().alerts.acknowledge({ acknowledgedBy: event.user.fullName });
+ *     const { excursionId } = decodeActionValue(event.value);
+ *     if (!excursionId) return;
+ *     await getApi().alerts.acknowledgeExcursion(excursionId, {
+ *       acknowledgedBy: event.user.fullName,
+ *     });
  *   });
  * });
  */
@@ -218,7 +224,7 @@ export async function requireLinkForAction<T>(
       platform: event.adapter.name,
       platformUserId: event.user.userId,
       labelArg: null,
-      tenantId: event.value || null,
+      tenantId: decodeActionValue(event.value).tenantId,
       disambiguationHint:
         "Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
     },

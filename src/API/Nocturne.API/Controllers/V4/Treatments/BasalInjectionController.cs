@@ -51,6 +51,9 @@ public class BasalInjectionController(
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Basal injection", "injection", "injections");
+
+    /// <inheritdoc/>
     public override async Task<ActionResult<BasalInjection>> Create(
         [FromBody] CreateBasalInjectionRequest request, CancellationToken ct = default)
     {
@@ -144,46 +147,25 @@ public class BasalInjectionController(
         CreatedAt = existing.CreatedAt,
     };
 
-    /// <summary>
-    /// Create or update basal injections in bulk (max 1000).
-    /// </summary>
-    /// <remarks>
-    /// Array semantics are per-item upsert, not all-or-nothing: each injection carrying both
-    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
-    /// insert. Every item is validated with the same rules as the single create; validation
-    /// failures reject the whole request with `400 Bad Request` before anything is persisted.
-    /// </remarks>
-    [HttpPost("bulk")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(typeof(BasalInjection[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<BasalInjection[]>> CreateBasalInjectionsBulk(
-        [FromBody] CreateBasalInjectionRequest[] requests,
-        CancellationToken ct = default)
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<BasalInjection> models, IReadOnlyList<CreateBasalInjectionRequest> requests, CancellationToken ct)
     {
-        if (await this.ValidateBulkAsync(requests, "Basal injection", "injection", "injections", ct) is { } invalid)
-            return invalid;
-
-        var models = new List<BasalInjection>(requests.Length);
-        foreach (var request in requests)
+        for (var i = 0; i < models.Count; i++)
         {
-            if (ValidateUnitsAndTimestamp(request.Units, request.Timestamp) is { } unitsOrTsProblem)
+            if (ValidateUnitsAndTimestamp(requests[i].Units, requests[i].Timestamp) is { } unitsOrTsProblem)
                 return unitsOrTsProblem;
 
             // Resolved per item: the active-at-injection-time window check depends on each
             // item's timestamp, so a per-insulin cache would skip it.
-            var (insulin, insulinProblem) = await ResolveInsulinAsync(request.PatientInsulinId, request.Timestamp, ct);
+            var (insulin, insulinProblem) = await ResolveInsulinAsync(requests[i].PatientInsulinId, requests[i].Timestamp, ct);
             if (insulinProblem is not null)
                 return insulinProblem;
 
-            var model = MapCreateToModel(request);
-            model.InsulinContext = insulin is null ? null : BuildContext(insulin);
-            models.Add(model);
+            models[i].InsulinContext = insulin is null ? null : BuildContext(insulin);
         }
 
-        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
-        return StatusCode(201, persisted.ToArray());
+        return null;
     }
 
     /// <summary>

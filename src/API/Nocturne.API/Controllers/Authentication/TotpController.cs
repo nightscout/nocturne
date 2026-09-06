@@ -283,6 +283,9 @@ public class TotpController : ControllerBase
                 UserAgent: Request.Headers.UserAgent.ToString()));
 
         Response.SetSessionCookies(session, _oidcOptions);
+        // The passkey was the method chosen at the login form; this step is its second factor.
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 

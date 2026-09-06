@@ -44,6 +44,9 @@ public class BolusController(
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
     /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Bolus", "bolus", "boluses");
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Never cached, per <see cref="Profiles.ProfileController.GetProfileSummary"/>: a just-entered
     /// bolus must not be invisible until a cached list body expires.
@@ -58,51 +61,22 @@ public class BolusController(
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Create([FromBody] CreateBolusRequest request, CancellationToken ct = default)
+    /// <remarks>
+    /// V4 REST writes bypass the connector/decomposer ingest paths, so attribution happens here —
+    /// otherwise direct API records stay unstamped and only ever surface as pseudo-devices.
+    /// </remarks>
+    protected override async Task<ObjectResult?> OnBeforeCreateAsync(Bolus model, CreateBolusRequest request, CancellationToken ct)
     {
-        var model = MapCreateToModel(request);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        // V4 REST writes bypass the connector/decomposer ingest paths, so attribute here — otherwise
-        // direct API records stay unstamped and only ever surface as pseudo-devices.
-        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct) is { } error)
-            return error;
-
-        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
-        created = await OnAfterCreateAsync(created, ct);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing: null, ct);
     }
 
     /// <inheritdoc/>
-    public override async Task<ActionResult<Bolus>> Update(Guid id, [FromBody] UpdateBolusRequest request, CancellationToken ct = default)
+    protected override async Task<ObjectResult?> OnBeforeUpdateAsync(
+        Bolus model, UpdateBolusRequest request, Bolus existing, CancellationToken ct)
     {
-        var existing = await Repository.GetByIdAsync(id, ct);
-        if (existing is null)
-            return NotFound();
-
-        var model = MapUpdateToModel(id, request, existing);
-
-        if (model.Timestamp == default)
-            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-
-        if (await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct) is { } error)
-            return error;
-
-        try
-        {
-            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
-            return Ok(updated);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        return await ApplyAttributionAsync(model, request.PatientDeviceId, existing.PatientDeviceId, ct);
     }
 
     /// <summary>Maps a <see cref="CreateBolusRequest"/> to a new <see cref="Bolus"/> domain model.</summary>
@@ -163,45 +137,18 @@ public class BolusController(
         AdditionalProperties = existing.AdditionalProperties,
     };
 
-    /// <summary>
-    /// Create or update boluses in bulk (max 1000).
-    /// </summary>
-    /// <remarks>
-    /// Array semantics are per-item upsert, not all-or-nothing: each bolus carrying both
-    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
-    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
-    /// is persisted.
-    /// </remarks>
-    [HttpPost("bulk")]
-    [RequireDeclaredWriteScope]
-    [ProducesResponseType(typeof(Bolus[]), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<Bolus[]>> CreateBolusesBulk(
-        [FromBody] CreateBolusRequest[] requests,
-        CancellationToken ct = default)
+    /// <inheritdoc/>
+    protected override async Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<Bolus> models, IReadOnlyList<CreateBolusRequest> requests, CancellationToken ct)
     {
-        if (await this.ValidateBulkAsync(requests, "Bolus", "bolus", "boluses", ct) is { } invalid)
-            return invalid;
+        for (var i = 0; i < models.Count; i++)
+            await EnrichInsulinContextAsync(models[i], requests[i].PatientInsulinId, ct);
 
-        var models = new List<Bolus>(requests.Length);
-        foreach (var request in requests)
-        {
-            var model = MapCreateToModel(request);
-            await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
-            models.Add(model);
-        }
-
-        // Attribute the batch before persisting (see Create). Per-record DataSource drives matching,
-        // so no batch-level source is needed for a mixed-source bulk upload.
-        var attributionError = await PatientDeviceAttribution.ApplyManyAsync(
+        var error = await PatientDeviceAttribution.ApplyManyAsync(
             [.. models.Select((m, i) => ((IDeviceAttributed)m, requests[i].PatientDeviceId))],
             patientDevices, deviceStamper, DeviceAttributionCategories.Bolus, batchSource: null, ct);
-        if (attributionError is not null)
-            return Problem(detail: attributionError, statusCode: 400, title: "Bad Request");
 
-        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
-        return StatusCode(201, persisted.ToArray());
+        return error is null ? null : Problem(detail: error, statusCode: 400, title: "Bad Request");
     }
 
     /// <summary>
