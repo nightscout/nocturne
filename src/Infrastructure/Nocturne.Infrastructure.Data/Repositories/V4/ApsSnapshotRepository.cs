@@ -12,11 +12,11 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing APS snapshots in the database. Inherits the shared CRUD, soft-delete and
-/// LegacyId-deduplicated bulk-insert surface from <see cref="V4RepositoryBase{TModel,TEntity}"/> and
-/// keeps only the APS-specific queries and the (DataSource, SyncIdentifier) upsert below.
+/// Repository for managing APS snapshots in the database. Takes the sync-key upsert and keyed delete
+/// of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the APS-specific
+/// queries.
 /// </summary>
-public class ApsSnapshotRepository : V4RepositoryBase<ApsSnapshot, ApsSnapshotEntity>, IApsSnapshotRepository
+public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSnapshotEntity>, IApsSnapshotRepository
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="ApsSnapshotRepository"/> class.
@@ -145,77 +145,5 @@ public class ApsSnapshotRepository : V4RepositoryBase<ApsSnapshot, ApsSnapshotEn
             .Select(e => e.SensitivityRatio)
             .FirstOrDefaultAsync(ct);
         return value is double v && double.IsFinite(v) ? (decimal)v : null;
-    }
-
-    /// <inheritdoc />
-    public Task<IEnumerable<ApsSnapshot>> BulkUpsertAsync(
-        IEnumerable<ApsSnapshot> records,
-        WriteOrigin origin, CancellationToken ct = default)
-        => BulkWriteAsync(records, SplitBySyncKeyAsync, origin, ct);
-
-    /// <summary>
-    /// SyncId-upsert split: intra-batch keep-last per (DataSource, SyncIdentifier), then match existing
-    /// rows in the DB by that key and update them in place. Soft-deleted rows are excluded: the partial
-    /// unique index ignores them, so a re-upload after a delete inserts a fresh row instead of writing
-    /// into the deleted one.
-    /// </summary>
-    private static async Task<UpsertSplit> SplitBySyncKeyAsync(
-        NocturneDbContext ctx, List<ApsSnapshotEntity> entities, CancellationToken ct)
-    {
-        // Records without both keys keep a unique grouping key so they're not collapsed.
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
-                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
-                : $"id|{e.Id}")
-            .Select(g => g.Last())
-            .ToList();
-
-        var syncKeyed = entities
-            .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
-            .ToList();
-
-        var updatedEntities = new List<ApsSnapshotEntity>();
-        var materiallyChanged = new List<ApsSnapshotEntity>();
-        if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
-
-        var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
-        var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
-
-        var existingRows = await ctx.ApsSnapshots.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
-            .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
-            .ToListAsync(ct);
-
-        var existingByKey = existingRows
-            .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var toInsert = new List<ApsSnapshotEntity>();
-        foreach (var entity in entities)
-        {
-            var hasKey = !string.IsNullOrEmpty(entity.DataSource)
-                && !string.IsNullOrEmpty(entity.SyncIdentifier);
-            if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
-            {
-                ApsSnapshotMapper.UpdateEntity(existing, ApsSnapshotMapper.ToDomainModel(entity));
-                updatedEntities.Add(existing);
-                // Capture material changes now, before SaveChanges clears the modified flags.
-                if (V4MaterialChange.HasMaterialChange(ctx.Entry(existing)))
-                    materiallyChanged.Add(existing);
-            }
-            else
-            {
-                toInsert.Add(entity);
-            }
-        }
-
-        if (updatedEntities.Count > 0)
-        {
-            // Persist updates before the insert-chunking loop clears the tracker.
-            await ctx.SaveChangesAsync(ct);
-        }
-
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 }

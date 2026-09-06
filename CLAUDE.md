@@ -15,15 +15,17 @@ aspire start
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance)
-dotnet test --filter "Category!=Integration&Category!=Performance"
+# Run unit tests (excludes integration/performance/E2E)
+dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
 
 # Run a single test class
 dotnet test --filter "FullyQualifiedName~EntryServiceTests"
 
-# Run integration tests (requires Docker)
-cd tests/Infrastructure/Docker && docker-compose -f docker-compose.test.yml up -d
+# Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
+
+# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
+dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
@@ -73,7 +75,7 @@ The `--skip-worktree` bits may be cleared by git during branch switches that tou
 
 ### Worktrees
 
-Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
+Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin at `http://localhost:1611`), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
 
 **Always use `--isolated` when running Aspire from a worktree** to avoid dashboard port collisions with the main instance:
 
@@ -130,6 +132,59 @@ Domain models use **mills-first** timestamps. `Entry.Mills` (Unix milliseconds) 
 - Tables use snake_case (`entries`, `treatments`)
 - UUID v7 for new records; `OriginalId` preserved for MongoDB migration compatibility
 - Row Level Security for multitenancy
+
+### Unique indexes over existing data
+
+Migrations run on API startup, so a `CREATE UNIQUE INDEX` (or `unique: true`
+`CreateIndex`, or an added unique constraint) that trips over rows the database
+already holds fails the whole chain and crash-loops the API — with no
+self-service way out for a self-hosted instance. The instances most likely to
+carry pre-index duplicates are the ones upgrading across several versions.
+
+**Every unique index over a table the migration did not create in that same
+migration ships with a loser-cleanup step earlier in the same `Up`.** Soft-delete
+(or delete) all but the winner of each duplicate key first;
+`20260818102940_AddTenantScopedLegacyIdIndexesToSnapshots` is the worked example,
+including the per-tenant `set_config` loop that FORCE ROW LEVEL SECURITY requires.
+A table created in the same migration is exempt — it holds no rows yet, and a
+cleanup there would be dead code.
+
+`UniqueIndexDeduplicationGuardTests` is a backstop for this rule, not the rule.
+Know what it actually checks before trusting it:
+
+- **Presence and ordering per migration, not per index.** It wants one live
+  duplicate-ranking statement somewhere in `Up` ahead of the *first* unique index
+  over a table the migration did not create. A single cleanup — even one for an
+  unrelated table — clears every index in that migration. It runs no SQL and
+  proves nothing about correctness.
+- **Only the house idiom is recognised**: `row_number() OVER (PARTITION BY …)`
+  plus a soft delete or a delete. A correct cleanup written another way is a false
+  red. Widen the migration to the idiom, not the guard to the migration.
+- **Shapes it cannot see**, which review has to catch: `CREATE TABLE IF NOT
+  EXISTS` naming a table that already exists, which spoofs the new-table
+  exemption; an unnamed `CREATE UNIQUE INDEX ON …`; a primary key added by raw SQL
+  `ADD CONSTRAINT … PRIMARY KEY`, since only the `AddPrimaryKey` builder call is
+  matched — the rule above is deliberately broader than the guard; and a cleanup
+  that cannot run, e.g. wrapped in `IF false`.
+- **Three of its detection paths redden nothing if they break.** Raw-SQL
+  `CREATE UNIQUE INDEX` does fire on a shipped migration —
+  `20260424051736_AddReadAccessAudit` — but that migration is *exempt*, because it
+  creates the table in the same `Up`, so breaking the regex still leaves the suite
+  green. That migration's exact spacing is load-bearing for a regex nothing tests.
+  `AddUniqueConstraint`/`AddPrimaryKey` and `ALTER TABLE … ADD CONSTRAINT … UNIQUE`
+  have no live example at all. Treat all three as unexercised.
+
+An index whose table it cannot read off the call — an interpolated `{table}` hole,
+or a loop variable — is reported rather than skipped, so the multi-table loop the
+worked example is written in stays visible. Clearing that report means unrolling
+the loop so both the `CREATE TABLE` and the index name the table literally; naming
+only the index still reports, because the exemption cannot match a create it also
+cannot read. A schema qualifier is not a cause — `public.x` resolves to `x` on
+both sides, so a schema-qualified new table is exempted like any other.
+
+Older migrations that predate the rule are listed in the guard by name; an
+instance whose chain fails on one never reaches a later migration, so nothing can
+repair them and nothing may be added to that list.
 
 ### Row Level Security
 
@@ -212,10 +267,16 @@ Design notes:
   table from that map — so a new entity gets a policy on the next boot, and a table
   with no governing scope is **hidden from shares** (fail-safe). A guard test asserts
   every `ITenantScoped` table is classified.
-- **Response-cache invariant.** `ChartDataController` is `[ResponseCache]`d; RLS
-  gates the DB read, not a cache hit. Safe only because a share is its own subdomain
-  (per-tenant Host cache key, `UseForwardedHeaders` before `UseResponseCaching`).
-  A public-scope toggle has up to a 60s staleness window.
+- **Response-cache invariant.** RLS gates the DB read, not a cache hit, so any
+  `[ResponseCache]`d share-reachable read is safe only because a share is its own
+  subdomain (per-tenant Host cache key, `UseForwardedHeaders` before
+  `UseResponseCaching`), and a public-scope toggle has up to a 60s staleness window.
+  A response whose body is additionally narrowed per *caller scope* cannot use the
+  shared cache at all — its key is only host + query + `Cookie`, so a credential
+  presenting neither a cookie nor an `Authorization` header (the legacy `api-secret`
+  header) would be served another credential's unredacted body. Those endpoints
+  (`ChartDataController`'s dashboard, `ActogramController`) declare
+  `ResponseCacheLocation.Client`.
 
 ## Testing
 
@@ -223,6 +284,8 @@ Design notes:
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - `[Trait("Category", "Integration")]` for integration tests
 - Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+- `tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack and is opt-in via
+  `-p:RunE2E=true`; see the "End-to-end tests" section of `AGENTS.md`
 
 ## Web Frontend
 
@@ -240,3 +303,6 @@ Design notes:
 - **Always use remote functions**, never raw fetch/requests on the frontend. Use the remote functions attribute to automatically generate type-safe API calls with Zod validation.
 - **Strings/messages live on the frontend** (translation layer).
 - **No emoji.** Use Lucide icons for UI elements.
+- **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
+  no step-by-step banners. Rationale lives at one site and is referenced elsewhere with
+  `<see cref="..."/>`. See the Comments section in `AGENTS.md`.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Area, Axis, Text, ChartClipPath, Highlight, getChartContext } from "layerchart";
+  import { Area, Axis, ChartClipPath, Highlight, getChartContext } from "layerchart";
   import { curveMonotoneX } from "d3";
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
@@ -66,9 +66,9 @@
   {@const iobZero = iobCobLayout.zero}
   {@const iobTrackTop = iobCobLayout.top}
   {@const iobAxisScale = iobCobLayout.axisScale}
-  <!-- Treatment markers share one baseline so a bolus (dome above) and a carb
-       entry (bowl below) at the same time meet at their flat edge and form a
-       single circle. Magnitude is conveyed by the marker labels, not height. -->
+  <!-- Treatment markers share one baseline so a carb entry (rising above it) and
+       a bolus (hanging below it) at the same time compose into one diamond.
+       Magnitude is conveyed by the marker labels, not height. -->
   {@const markerBaselineY = (iobCobLayout.top + iobCobLayout.bottom) / 2}
 
   <!-- IOB axis on right -->
@@ -80,13 +80,14 @@
   />
 
   <!-- IOB/COB track label -->
-  <Text
+  <text
     x={4}
     y={iobTrackTop + 12}
+    dy="-0.355em"
     class="text-[8px] fill-muted-foreground font-medium"
   >
     IOB/COB
-  </Text>
+  </text>
 
   <ChartClipPath>
     <!-- COB area (scaled by carb ratio to show on IOB-equivalent scale) -->

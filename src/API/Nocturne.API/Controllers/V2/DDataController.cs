@@ -52,7 +52,7 @@ public class DDataController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDData(
         CancellationToken cancellationToken = default
     )
@@ -87,7 +87,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDDataAt(
         string timestamp,
         CancellationToken cancellationToken = default
@@ -162,7 +162,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public async Task<ActionResult<DData>> GetRawDData(
         [FromQuery] string? timestamp = null,
         CancellationToken cancellationToken = default

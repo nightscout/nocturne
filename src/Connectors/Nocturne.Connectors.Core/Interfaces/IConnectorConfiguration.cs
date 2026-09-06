@@ -24,7 +24,8 @@ public interface IConnectorConfiguration
     bool Enabled { get; set; }
 
     /// <summary>
-    ///     Maximum retry attempts for failed operations
+    ///     Total attempts a connector operation gets, not retries on top of a first try; 0 and 1
+    ///     both mean a single attempt.
     /// </summary>
     int MaxRetryAttempts { get; set; }
 
@@ -33,6 +34,9 @@ public interface IConnectorConfiguration
     /// </summary>
     int BatchSize { get; set; }
 
+    /// <summary>
+    ///     Minimum minutes between syncs for one tenant; 0 or less leaves the connector unscheduled.
+    /// </summary>
     int SyncIntervalMinutes { get; set; }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,17 +17,7 @@ public static class PumpSnapshotMapper
     {
         return new PumpSnapshotEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            DataSource = model.DataSource,
-            App = model.App,
             SyncIdentifier = model.SyncIdentifier,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             Manufacturer = model.Manufacturer,
             Model = model.Model,
             Reservoir = model.Reservoir,
@@ -44,10 +33,7 @@ public static class PumpSnapshotMapper
             PatientDeviceId = model.PatientDeviceId,
             Iob = model.Iob,
             BolusIob = model.BolusIob,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -59,17 +45,7 @@ public static class PumpSnapshotMapper
     {
         return new PumpSnapshot
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            DataSource = entity.DataSource,
-            App = entity.App,
             SyncIdentifier = entity.SyncIdentifier,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             Manufacturer = entity.Manufacturer,
             Model = entity.Model,
             Reservoir = entity.Reservoir,
@@ -85,10 +61,7 @@ public static class PumpSnapshotMapper
             PatientDeviceId = entity.PatientDeviceId,
             Iob = entity.Iob,
             BolusIob = entity.BolusIob,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -98,13 +71,7 @@ public static class PumpSnapshotMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(PumpSnapshotEntity entity, PumpSnapshot model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
-        entity.DataSource = model.DataSource;
-        entity.App = model.App;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.SyncIdentifier = model.SyncIdentifier;
         entity.Manufacturer = model.Manufacturer;
         entity.Model = model.Model;
@@ -121,8 +88,5 @@ public static class PumpSnapshotMapper
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.Iob = model.Iob;
         entity.BolusIob = model.BolusIob;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

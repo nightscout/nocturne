@@ -56,15 +56,15 @@ public class DataHubAuthorizeTests
     }
 
     private static HubAuthorization Authorized(params string[] scopes) =>
-        new(Tenant, OAuthScopes.Normalize(scopes), HubCredentialKind.Subject, Subject);
+        new(Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Subject);
 
     [Fact]
     public async Task Authorize_with_token_accepted_by_authorizer_joins_tenant_authorized_group()
     {
         var (hub, groups, authorizer) = CreateHub();
         authorizer
-            .Setup(a => a.AuthorizeTokenAsync("oauth-jwt", Tenant, OAuthScopes.GlucoseRead))
-            .ReturnsAsync(Authorized(OAuthScopes.GlucoseRead));
+            .Setup(a => a.AuthorizeTokenAsync("oauth-jwt", Tenant, Scope.GlucoseRead))
+            .ReturnsAsync(Authorized(Scope.GlucoseRead));
 
         var result = await hub.Authorize(new AuthorizeRequest { Token = "oauth-jwt" });
 
@@ -104,7 +104,7 @@ public class DataHubAuthorizeTests
         // The tenant handed to the authorizer is the connection's resolved tenant — a token
         // from another tenant can never be checked against anything else.
         authorizer.Verify(
-            a => a.AuthorizeTokenAsync("tok", Tenant, OAuthScopes.GlucoseRead),
+            a => a.AuthorizeTokenAsync("tok", Tenant, Scope.GlucoseRead),
             Times.Once);
     }
 
@@ -114,7 +114,7 @@ public class DataHubAuthorizeTests
         var (hub, _, authorizer) = CreateHub();
         authorizer
             .Setup(a => a.AuthorizeTokenAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<string>()))
-            .ReturnsAsync(Authorized(OAuthScopes.GlucoseRead));
+            .ReturnsAsync(Authorized(Scope.GlucoseRead));
 
         var result = await hub.Authorize(new AuthorizeRequest { Token = "tok" });
 
@@ -129,7 +129,7 @@ public class DataHubAuthorizeTests
         var (hub, groups, authorizer) = CreateHub();
         authorizer
             .Setup(a => a.AuthorizeTokenAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<string>()))
-            .ReturnsAsync(Authorized(OAuthScopes.GlucoseRead));
+            .ReturnsAsync(Authorized(Scope.GlucoseRead));
         await hub.Authorize(new AuthorizeRequest { Token = "tok" });
 
         var result = await hub.Subscribe(new StorageSubscribeRequest
@@ -160,7 +160,7 @@ public class DataHubAuthorizeTests
         var (hub, groups, authorizer) = CreateHub();
         authorizer
             .Setup(a => a.AuthorizeTokenAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<string>()))
-            .ReturnsAsync(Authorized(OAuthScopes.FullAccess));
+            .ReturnsAsync(Authorized(Scope.FullAccess));
         await hub.Authorize(new AuthorizeRequest { Token = "tok" });
 
         await hub.Subscribe(new StorageSubscribeRequest { Collections = ["subjects"] });

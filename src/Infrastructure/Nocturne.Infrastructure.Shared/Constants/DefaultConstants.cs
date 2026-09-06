@@ -22,51 +22,6 @@ public static class DefaultConstants
     }
 
     /// <summary>
-    /// Connector defaults
-    /// </summary>
-    public static class Connectors
-    {
-        /// <summary>
-        /// Glooko defaults
-        /// </summary>
-        public static class Glooko
-        {
-            public const string Server = "eu.api.glooko.com";
-            public const int TimezoneOffset = 0;
-        }
-
-        /// <summary>
-        /// CareLink defaults
-        /// </summary>
-        public static class CareLink
-        {
-            public const string Region = "us";
-        }
-
-        /// <summary>
-        /// Dexcom defaults
-        /// </summary>
-        public static class Dexcom
-        {
-            public const string Region = "us";
-        }
-
-        /// <summary>
-        /// LibreLinkUp defaults
-        /// </summary>
-        public static class LibreLinkUp
-        {
-            public const string Region = "EU";
-        }
-
-        public static class MyLife
-        {
-            public const int AppPlatform = 2;
-            public const int AppVersion = 20403;
-        }
-    }
-
-    /// <summary>
     /// Loop defaults
     /// </summary>
     public static class Loop

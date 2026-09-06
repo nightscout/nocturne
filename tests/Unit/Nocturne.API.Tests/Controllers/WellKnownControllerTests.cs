@@ -68,10 +68,7 @@ public sealed class WellKnownControllerTests : IClassFixture<AuthenticationTestF
     {
         using var discovery = await GetDiscoveryDocumentAsync(discoveryPath);
 
-        var memberNames = discovery
-            .RootElement.EnumerateObject()
-            .Select(property => property.Name)
-            .ToArray();
+        var memberNames = MemberNamesOf(discovery);
 
         memberNames.Should().Contain(SpecifiedMemberNames);
         memberNames
@@ -80,6 +77,128 @@ public sealed class WellKnownControllerTests : IClassFixture<AuthenticationTestF
                 name => name == name.ToLowerInvariant(),
                 "discovery members are lower snake_case, so no camelCase name is recognisable"
             );
+    }
+
+    [Theory]
+    [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/.well-known/oauth-authorization-server")]
+    public async Task Discovery_document_omits_the_metadata_it_does_not_advertise(
+        string discoveryPath
+    )
+    {
+        using var discovery = await GetDiscoveryDocumentAsync(discoveryPath);
+
+        discovery
+            .RootElement.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.Null)
+            .Select(property => property.Name)
+            .Should()
+            .BeEmpty("absent discovery metadata is omitted, never advertised as null");
+    }
+
+    [Fact]
+    public async Task Openid_configuration_omits_the_endpoints_the_local_provider_lacks()
+    {
+        using var discovery = await GetDiscoveryDocumentAsync(
+            "/.well-known/openid-configuration"
+        );
+
+        var memberNames = MemberNamesOf(discovery);
+
+        memberNames.Should().NotContain("registration_endpoint");
+        memberNames.Should().NotContain("end_session_endpoint");
+    }
+
+    [Fact]
+    public async Task Oauth_metadata_omits_the_unadvertised_introspection_endpoint()
+    {
+        using var discovery = await GetDiscoveryDocumentAsync(
+            "/.well-known/oauth-authorization-server"
+        );
+
+        MemberNamesOf(discovery).Should().NotContain("introspection_endpoint");
+    }
+
+    [Fact]
+    public async Task Oauth_metadata_still_advertises_the_endpoints_it_does_serve()
+    {
+        using var discovery = await GetDiscoveryDocumentAsync(
+            "/.well-known/oauth-authorization-server"
+        );
+
+        MemberNamesOf(discovery)
+            .Should()
+            .Contain(
+                ["device_authorization_endpoint", "revocation_endpoint", "registration_endpoint"]
+            );
+    }
+
+    [Fact]
+    public async Task Openid_configuration_still_advertises_its_userinfo_endpoint()
+    {
+        using var discovery = await GetDiscoveryDocumentAsync(
+            "/.well-known/openid-configuration"
+        );
+
+        MemberNamesOf(discovery).Should().Contain("userinfo_endpoint");
+    }
+
+    [Fact]
+    public void Populated_optional_metadata_survives_serialisation()
+    {
+        var openIdMembers = MemberNamesOf(
+            new OpenIdConfiguration
+            {
+                UserinfoEndpoint = "https://example.test/auth/userinfo",
+                RegistrationEndpoint = "https://example.test/api/oauth/register",
+                EndSessionEndpoint = "https://example.test/api/oauth/logout",
+                ServiceDocumentation = "https://example.test/docs",
+            }
+        );
+
+        openIdMembers
+            .Should()
+            .Contain(
+                [
+                    "userinfo_endpoint",
+                    "registration_endpoint",
+                    "end_session_endpoint",
+                    "service_documentation",
+                ]
+            );
+
+        var oauthMembers = MemberNamesOf(
+            new OAuthAuthorizationServerMetadata
+            {
+                DeviceAuthorizationEndpoint = "https://example.test/api/oauth/device",
+                RevocationEndpoint = "https://example.test/api/oauth/revoke",
+                IntrospectionEndpoint = "https://example.test/api/oauth/introspect",
+                RegistrationEndpoint = "https://example.test/api/oauth/register",
+                ServiceDocumentation = "https://example.test/docs",
+            }
+        );
+
+        oauthMembers
+            .Should()
+            .Contain(
+                [
+                    "device_authorization_endpoint",
+                    "revocation_endpoint",
+                    "introspection_endpoint",
+                    "registration_endpoint",
+                    "service_documentation",
+                ]
+            );
+    }
+
+    private static string[] MemberNamesOf(JsonDocument document) =>
+        document.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
+
+    private static string[] MemberNamesOf<T>(T model)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(model));
+
+        return MemberNamesOf(document);
     }
 
     private async Task<JsonDocument> GetDiscoveryDocumentAsync(string discoveryPath)

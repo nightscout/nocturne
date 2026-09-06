@@ -13,67 +13,78 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// Controller for step count data from diabetes apps and wearables.
 /// </summary>
 /// <remarks>
-/// Step count readings are stored as time-series observations.
-/// All operations delegate to <see cref="IStepCountService"/>. Callers must hold the
-/// appropriate scope (<c>read:health</c> or <c>write:health</c>).
+/// Step count readings are stored as time-series observations. All operations delegate to
+/// <see cref="IStepCountService"/>. Callers must hold the <c>read:health</c>
+/// or <c>write:health</c> scope as appropriate.
 /// </remarks>
 /// <seealso cref="IStepCountService"/>
 [ApiController]
 [Tags("Health")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
-public class StepCountController : ControllerBase
+public class StepCountController(IStepCountService stepCountService)
+    : HealthSeriesControllerBase<StepCount, UpsertStepCountRequest>
 {
-    private readonly IStepCountService _stepCountService;
-    private readonly ILogger<StepCountController> _logger;
+    protected override string RecordTypeName => "Step count";
 
-    public StepCountController(IStepCountService stepCountService, ILogger<StepCountController> logger)
+    protected override Task<IEnumerable<StepCount>> ReadPageAsync(int count, int skip, CancellationToken ct) =>
+        stepCountService.GetStepCountsAsync(count, skip, ct);
+
+    protected override Task<IEnumerable<StepCount>> ReadRangeAsync(
+        DateTime from, DateTime to, int count, int skip, CancellationToken ct) =>
+        stepCountService.GetStepCountsByDateRangeAsync(from, to, count, skip, ct);
+
+    protected override Task<StepCount?> ReadAsync(string id, CancellationToken ct) =>
+        stepCountService.GetStepCountByIdAsync(id, ct);
+
+    protected override Task<IEnumerable<StepCount>> WriteManyAsync(IReadOnlyList<StepCount> models, CancellationToken ct) =>
+        stepCountService.CreateStepCountsAsync(models, ct);
+
+    protected override Task<StepCount?> WriteAsync(string id, StepCount model, CancellationToken ct) =>
+        stepCountService.UpdateStepCountAsync(id, model, ct);
+
+    protected override Task<bool> EraseAsync(string id, CancellationToken ct) =>
+        stepCountService.DeleteStepCountAsync(id, ct);
+
+    protected override StepCount ToModel(UpsertStepCountRequest request) => new()
     {
-        _stepCountService = stepCountService;
-        _logger = logger;
-    }
+        Timestamp = request.Timestamp.UtcDateTime,
+        UtcOffset = request.UtcOffset,
+        Metric = request.Metric,
+        Source = request.Source,
+        Device = request.Device,
+        EnteredBy = request.App,
+        DataSource = request.DataSource,
+        SyncIdentifier = request.SyncIdentifier,
+    };
 
     /// <summary>
     /// Get step count records with optional pagination and date filtering
     /// </summary>
-    /// <param name="count">Maximum number of records to return (default: 10, ignored when from/to are specified)</param>
-    /// <param name="skip">Number of records to skip for pagination (default: 0, ignored when from/to are specified)</param>
-    /// <param name="from">Start of date range (inclusive). When specified with 'to', returns all records in range.</param>
-    /// <param name="to">End of date range (exclusive). When specified with 'from', returns all records in range.</param>
+    /// <param name="count">Maximum number of records to return (default: 10, or up to the ceiling when from/to are specified)</param>
+    /// <param name="skip">Number of records to skip for pagination (default: 0)</param>
+    /// <param name="from">Start of date range (inclusive).</param>
+    /// <param name="to">End of date range (exclusive).</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of step count records</returns>
+    /// <remarks>
+    /// A date range without a <paramref name="count"/> reads up to
+    /// <see cref="V4ReadLimits.MaxPageSize"/> records rather than the whole range, so a wide range
+    /// cannot load the table into memory. Page through the rest with <paramref name="skip"/>.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.StepCountRead)]
+    [RequireScope(Scope.StepCountRead)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
-        [FromQuery] int count = 10,
+    [ErrorEnvelope]
+    public Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
+        [FromQuery] int? count = null,
         [FromQuery] int skip = 0,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        count = V4ReadLimits.ClampLimit(count);
-        skip = V4ReadLimits.ClampOffset(skip);
-
-        try
-        {
-            IEnumerable<StepCount> records;
-            if (from.HasValue && to.HasValue)
-                records = await _stepCountService.GetStepCountsByDateRangeAsync(from.Value, to.Value, cancellationToken);
-            else
-                records = await _stepCountService.GetStepCountsAsync(count, skip, cancellationToken);
-
-            return Ok(records);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving step count records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => ListResponseAsync(count, skip, from, to, cancellationToken);
 
     /// <summary>
     /// Get a specific step count record by ID
@@ -82,136 +93,56 @@ public class StepCountController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("{id}")]
     [RemoteQuery]
-    [RequireScope(OAuthScopes.StepCountRead)]
+    [RequireScope(Scope.StepCountRead)]
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<StepCount>> GetStepCount(
+    [ErrorEnvelope]
+    public Task<ActionResult<StepCount>> GetStepCount(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var record = await _stepCountService.GetStepCountByIdAsync(id, cancellationToken);
-            if (record == null)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(record);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => GetResponseAsync(id, cancellationToken);
 
     /// <summary>
     /// Create one or more step count records
     /// </summary>
     [HttpPost]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<StepCount>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<IEnumerable<StepCount>>> CreateStepCounts(
+    [ErrorEnvelope]
+    public Task<ActionResult<IEnumerable<StepCount>>> CreateStepCounts(
         [FromBody] UpsertStepCountRequest[] requests,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            if (requests.Length == 0)
-                return Problem(detail: "At least one step count record is required", statusCode: 400, title: "Bad Request");
-
-            var stepCountList = requests.Select(request => new StepCount
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Metric = request.Metric,
-                Source = request.Source,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            }).ToList();
-
-            var result = await _stepCountService.CreateStepCountsAsync(stepCountList, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating step count records");
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => CreateResponseAsync(requests, cancellationToken);
 
     /// <summary>
     /// Update an existing step count record
     /// </summary>
     [HttpPut("{id}")]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(typeof(StepCount), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<StepCount>> UpdateStepCount(
+    [ErrorEnvelope]
+    public Task<ActionResult<StepCount>> UpdateStepCount(
         string id,
         [FromBody] UpsertStepCountRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var stepCount = new StepCount
-            {
-                Timestamp = request.Timestamp.UtcDateTime,
-                UtcOffset = request.UtcOffset,
-                Metric = request.Metric,
-                Source = request.Source,
-                Device = request.Device,
-                EnteredBy = request.App,
-                DataSource = request.DataSource,
-                SyncIdentifier = request.SyncIdentifier,
-            };
-
-            var updated = await _stepCountService.UpdateStepCountAsync(id, stepCount, cancellationToken);
-            if (updated == null)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(updated);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => UpdateResponseAsync(id, ToModel(request), cancellationToken);
 
     /// <summary>
     /// Delete a step count record by ID
     /// </summary>
     [HttpDelete("{id}")]
-    [RequireScope(OAuthScopes.StepCountReadWrite)]
+    [RequireScope(Scope.StepCountReadWrite)]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult> DeleteStepCount(
+    [ErrorEnvelope]
+    public Task<ActionResult> DeleteStepCount(
         string id,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            var deleted = await _stepCountService.DeleteStepCountAsync(id, cancellationToken);
-            if (!deleted)
-                return Problem(detail: $"Step count record with ID {id} not found", statusCode: 404, title: "Not Found");
-
-            return Ok(new { message = "Step count record deleted successfully" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting step count record with ID {Id}", id);
-            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
-        }
-    }
+    ) => DeleteResponseAsync(id, cancellationToken);
 }

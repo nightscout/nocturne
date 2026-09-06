@@ -364,7 +364,7 @@ public class LegacyReadCountCapTests
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
         controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)
-            new HashSet<string> { OAuthScopes.TreatmentsRead };
+            new HashSet<string> { Scope.TreatmentsRead };
         return controller;
     }
 }

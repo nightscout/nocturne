@@ -130,6 +130,39 @@ public class TreatmentDecomposerTests : IDisposable
         bolus.CorrelationId.Should().Be(carbIntake.CorrelationId);
     }
 
+    /// <summary>
+    /// The legacy <c>foodType</c> is preserved as the carb intake's <see cref="TreatmentFood"/>
+    /// line. Create-only: those rows are also the user-editable food breakdown.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_MealWithFoodType_WritesTreatmentFoodLine()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "meal-food-1",
+            EventType = "Meal Bolus",
+            Mills = 1700000000000,
+            Insulin = 5.0,
+            Carbs = 45,
+            FoodType = "Sandwich",
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        // Assert
+        var carbIntake = result.CreatedRecords.OfType<V4Models.CarbIntake>().Single();
+        carbIntake.Id.Should().NotBeEmpty();
+
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(
+                It.Is<TreatmentFood>(f =>
+                    f.CarbIntakeId == carbIntake.Id && f.Note == "Sandwich" && f.Carbs == 45m),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Fact]
     public async Task DecomposeAsync_SnackBolus_CreatesBolusAndCarbIntake()
     {
@@ -2542,6 +2575,24 @@ public class TreatmentDecomposerTests : IDisposable
         // Assert
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
         bolus.PatientDeviceId.Should().Be(expectedPatientDeviceId);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReDecomposedBolus_TakesAFreshResolutionOverTheStoredOne()
+    {
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
+        _deviceServiceMock
+            .SetupSequence(s => s.ResolvePatientDeviceAsync(
+                It.IsAny<Guid?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first)
+            .ReturnsAsync(second);
+        var treatment = new Treatment { Id = "bolus-reattribution", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 3.0 };
+
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.UpdatedRecords.OfType<V4Models.Bolus>().Single().PatientDeviceId.Should().Be(second);
     }
 
     #endregion

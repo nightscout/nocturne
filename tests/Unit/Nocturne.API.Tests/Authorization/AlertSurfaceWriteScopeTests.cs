@@ -16,7 +16,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// Guards the alert surface — the controllers under
 /// <c>Nocturne.API.Controllers.V4.Monitoring</c> — against a write reachable with read-only
 /// credentials. Every action there that changes alert state requires
-/// <see cref="OAuthScopes.AlertsReadWrite"/>, because a rule decides whether a low-glucose alert
+/// <see cref="Scope.AlertsReadWrite"/>, because a rule decides whether a low-glucose alert
 /// reaches anyone, a DND window suppresses delivery, and an acknowledgement closes a firing
 /// excursion. The exceptions are enumerated: <see cref="Ungated"/> for actions that change no alert
 /// state, and <see cref="DeviceCapabilityActions"/> for the acknowledgement paths that additionally
@@ -27,7 +27,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// exemption map; this class pins the alert surface specifically, so a future Monitoring controller
 /// cannot be waved through by adding it to that map, and asserts the scope resolution that decides
 /// who keeps access — a seed role through <see cref="MemberScopeResolver"/>, a guest grant through
-/// <see cref="OAuthScopes.ValidateGrantScopes"/>, and a client device's capability grant.
+/// <see cref="Scope.ValidateGrantScopes"/>, and a client device's capability grant.
 /// </remarks>
 public class AlertSurfaceWriteScopeTests
 {
@@ -42,8 +42,8 @@ public class AlertSurfaceWriteScopeTests
     /// </summary>
     private static readonly string[] CompanionGrantScopes =
     [
-        OAuthScopes.GlucoseRead, OAuthScopes.TherapyRead, OAuthScopes.DevicesRead,
-        OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate,
+        Scope.GlucoseRead, Scope.TherapyRead, Scope.DevicesRead,
+        Scope.DeviceNotify, Scope.DeviceActuate,
     ];
 
     /// <summary>
@@ -116,7 +116,7 @@ public class AlertSurfaceWriteScopeTests
                     continue;
                 }
 
-                if (!required.Contains(OAuthScopes.AlertsReadWrite, StringComparer.Ordinal))
+                if (!required.Contains(Scope.AlertsReadWrite, StringComparer.Ordinal))
                     wrongScope.Add($"{key} requires {string.Join("/", required)}");
             }
         }
@@ -156,11 +156,11 @@ public class AlertSurfaceWriteScopeTests
         // A browser session is AuthType.SessionCookie, which carries no scopes of its own, so
         // membership is the whole authority and the owner's "*" is published raw.
         var ownerScopes = MemberScopeResolver.Resolve(
-            new HashSet<string>(TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]),
+            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Owner]),
             AuthType.SessionCookie,
             new HashSet<string>());
 
-        ownerScopes.Should().Contain(TenantPermissions.Superuser);
+        ownerScopes.Should().Contain(Scope.FullAccess);
 
         foreach (var (controller, action) in GatedWriteActions())
         {
@@ -170,12 +170,12 @@ public class AlertSurfaceWriteScopeTests
     }
 
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Admin)]
-    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
+    [InlineData(RoleSeeds.Admin)]
+    [InlineData(RoleSeeds.Caretaker)]
     public void SeedRoleHoldingAlertsReadWrite_KeepsEveryAlertSurfaceWrite(string role)
     {
         var scopes = MemberScopeResolver.Resolve(
-            new HashSet<string>(TenantPermissions.SeedRolePermissions[role]),
+            new HashSet<string>(RoleSeeds.Permissions[role]),
             AuthType.SessionCookie,
             new HashSet<string>());
 
@@ -190,9 +190,9 @@ public class AlertSurfaceWriteScopeTests
     /// The read-only seed roles keep both excursion-acknowledgement paths and no other
     /// alert-surface write. Neither holds <c>alerts.readwrite</c> — Clinician holds
     /// <c>alerts.read</c>, Viewer no alert scope at all — so that gate denies them everywhere. But
-    /// both list <see cref="OAuthScopes.DeviceNotify"/> outright in
-    /// <see cref="TenantPermissions.SeedRolePermissions"/> (and <see cref="MemberScopeResolver"/>
-    /// would grant it anyway, as it gives <see cref="TenantPermissions.MemberPersonalScopes"/> to
+    /// both list <see cref="Scope.DeviceNotify"/> outright in
+    /// <see cref="RoleSeeds.Permissions"/> (and <see cref="MemberScopeResolver"/>
+    /// would grant it anyway, as it gives <see cref="Scope.MemberPersonalScopes"/> to
     /// any member holding at least one permission), so the <c>device.notify</c> arm of each
     /// <see cref="DeviceCapabilityActions"/> gate admits them. This pins that matrix: a change that
     /// leaves a Clinician or a Viewer unable to stop an alert they are being shown, or that widens
@@ -204,18 +204,18 @@ public class AlertSurfaceWriteScopeTests
     /// <see cref="Ungated"/>, so these roles reach them too.
     /// </remarks>
     [Theory]
-    [InlineData(TenantPermissions.SeedRoles.Clinician)]
-    [InlineData(TenantPermissions.SeedRoles.Viewer)]
+    [InlineData(RoleSeeds.Clinician)]
+    [InlineData(RoleSeeds.Viewer)]
     public void ReadOnlySeedRole_KeepsBothExcursionAckPathsAndNoOtherAlertSurfaceWrite(string role)
     {
-        var permissions = new HashSet<string>(TenantPermissions.SeedRolePermissions[role]);
+        var permissions = new HashSet<string>(RoleSeeds.Permissions[role]);
         var scopes = MemberScopeResolver.Resolve(permissions, AuthType.SessionCookie, new HashSet<string>());
 
-        scopes.Should().NotContain(OAuthScopes.AlertsReadWrite);
-        scopes.Should().NotContain(OAuthScopes.FullAccess);
-        permissions.Should().Contain(OAuthScopes.DeviceNotify,
+        scopes.Should().NotContain(Scope.AlertsReadWrite);
+        scopes.Should().NotContain(Scope.FullAccess);
+        permissions.Should().Contain(Scope.DeviceNotify,
             $"the {role} seed role lists device.notify in its own permission set");
-        scopes.Should().Contain(OAuthScopes.DeviceNotify);
+        scopes.Should().Contain(Scope.DeviceNotify);
 
         foreach (var (controller, action) in GatedWriteActions())
         {
@@ -241,13 +241,13 @@ public class AlertSurfaceWriteScopeTests
         // The widest grant a guest link can hold: ValidateGrantScopes caps a guest at
         // AllowedGuestScopes, which is read-only and includes alerts.read. MemberScopeMiddleware
         // publishes Normalize() of exactly that list for AuthType.Guest — no membership widening.
-        var stored = OAuthScopes.ValidateGrantScopes(
-            OAuthScopes.AllowedGuestScopes, OAuthScopes.GrantTypeGuest);
-        var guestScopes = OAuthScopes.Normalize(stored);
+        var stored = Scope.ValidateGrantScopes(
+            Scope.AllowedGuestScopes, OAuthGrantTypes.Guest);
+        var guestScopes = Scope.Normalize(stored);
 
-        guestScopes.Should().Contain(OAuthScopes.AlertsRead);
-        guestScopes.Should().NotContain(OAuthScopes.AlertsReadWrite);
-        guestScopes.Should().NotContain(OAuthScopes.DeviceNotify);
+        guestScopes.Should().Contain(Scope.AlertsRead);
+        guestScopes.Should().NotContain(Scope.AlertsReadWrite);
+        guestScopes.Should().NotContain(Scope.DeviceNotify);
 
         foreach (var (controller, action) in GatedWriteActions())
         {
@@ -262,7 +262,7 @@ public class AlertSurfaceWriteScopeTests
     {
         foreach (var (controller, action) in GatedWriteActions())
         {
-            Evaluate(controller, action, authenticated: false, new HashSet<string> { OAuthScopes.AlertsReadWrite })
+            Evaluate(controller, action, authenticated: false, new HashSet<string> { Scope.AlertsReadWrite })
                 .Should().BeOfType<UnauthorizedResult>(
                     $"{controller.Name}.{action.Name} must reject an unauthenticated caller");
         }
@@ -273,9 +273,9 @@ public class AlertSurfaceWriteScopeTests
     {
         // A legacy api-secret and an instance-key service credential both normalise to "*", and
         // production direct grants carry it too.
-        var wildcard = new HashSet<string> { OAuthScopes.FullAccess };
+        var wildcard = new HashSet<string> { Scope.FullAccess };
 
-        OAuthScopes.SatisfiesScope(wildcard, OAuthScopes.AlertsReadWrite).Should().BeTrue();
+        Scope.Satisfies(wildcard, Scope.AlertsReadWrite).Should().BeTrue();
 
         foreach (var (controller, action) in GatedWriteActions())
         {
@@ -291,13 +291,13 @@ public class AlertSurfaceWriteScopeTests
         // token is a scoped credential, so membership is intersected with the grant rather than
         // replacing it, and the grant never asked for an alert scope.
         var companionScopes = MemberScopeResolver.Resolve(
-            new HashSet<string>(TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]),
+            new HashSet<string>(RoleSeeds.Permissions[RoleSeeds.Owner]),
             AuthType.OAuthAccessToken,
-            OAuthScopes.Normalize(CompanionGrantScopes).ToHashSet());
+            Scope.Normalize(CompanionGrantScopes).ToHashSet());
 
-        companionScopes.Should().Contain(OAuthScopes.DeviceNotify);
-        companionScopes.Should().NotContain(OAuthScopes.AlertsReadWrite);
-        companionScopes.Should().NotContain(OAuthScopes.FullAccess);
+        companionScopes.Should().Contain(Scope.DeviceNotify);
+        companionScopes.Should().NotContain(Scope.AlertsReadWrite);
+        companionScopes.Should().NotContain(Scope.FullAccess);
 
         foreach (var (controller, action) in GatedWriteActions())
         {
@@ -322,7 +322,7 @@ public class AlertSurfaceWriteScopeTests
     {
         var accepting = GatedWriteActions()
             .Where(x => RequiredScopes(x.Controller, x.Action)
-                .Any(TenantPermissions.MemberPersonalScopes.Contains))
+                .Any(Scope.MemberPersonalScopes.Contains))
             .Select(x => $"{x.Controller.Name}.{x.Action.Name}")
             .ToList();
 

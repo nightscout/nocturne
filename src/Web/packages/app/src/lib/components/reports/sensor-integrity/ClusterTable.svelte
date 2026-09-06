@@ -3,7 +3,8 @@
   import * as Table from "$lib/components/ui/table";
   import type { GlucoseCluster } from "$lib/api";
   import { bgRange, formatDateTimeCompact } from "$lib/utils/formatting";
-  import { confidenceLabel, confidenceChipClass, describeCluster, formatDuration } from "./format";
+  import { confidenceLabel, confidenceChipClass, describeCluster } from "./format";
+  import { formatMinutesDuration } from "$lib/utils/duration";
 
   interface Props {
     clusters: GlucoseCluster[];
@@ -41,7 +42,9 @@
         >
           <Table.Cell class="font-medium">{formatDateTimeCompact(cluster.start)}</Table.Cell>
           <Table.Cell class="text-right tabular-nums">
-            {formatDuration(cluster.durationMinutes)}
+            {cluster.durationMinutes == null
+              ? "—"
+              : formatMinutesDuration(cluster.durationMinutes)}
           </Table.Cell>
           <Table.Cell class="text-right tabular-nums">
             {cluster.minMgdl != null && cluster.maxMgdl != null

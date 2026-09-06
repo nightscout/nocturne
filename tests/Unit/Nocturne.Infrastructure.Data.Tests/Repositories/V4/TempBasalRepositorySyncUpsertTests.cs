@@ -64,6 +64,72 @@ public class TempBasalRepositorySyncUpsertTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateAsync_WithMatchingSyncKey_KeepsStoredPatientDeviceIdWhenRetryCarriesNone()
+    {
+        var patientDeviceId = Guid.CreateVersion7();
+        var stamped = CreateRecord("sync-1");
+        stamped.PatientDeviceId = patientDeviceId;
+        await _repository.CreateAsync(stamped, WriteOrigin.Live);
+
+        var result = await _repository.CreateAsync(CreateRecord("sync-1", rate: 2.5), WriteOrigin.Live);
+
+        _context.TempBasals.Single().PatientDeviceId.Should().Be(patientDeviceId);
+        result.PatientDeviceId.Should().Be(patientDeviceId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithMatchingSyncKey_TakesRequestedPatientDeviceIdOverStoredOne()
+    {
+        var stamped = CreateRecord("sync-1");
+        stamped.PatientDeviceId = Guid.CreateVersion7();
+        await _repository.CreateAsync(stamped, WriteOrigin.Live);
+
+        var restamped = CreateRecord("sync-1");
+        restamped.PatientDeviceId = Guid.CreateVersion7();
+        var result = await _repository.CreateAsync(restamped, WriteOrigin.Live);
+
+        _context.TempBasals.Single().PatientDeviceId.Should().Be(restamped.PatientDeviceId);
+        result.PatientDeviceId.Should().Be(restamped.PatientDeviceId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithMatchingSyncKey_KeepsStoredLinksAndImportedIdentityWhenRetryCarriesNone()
+    {
+        var seed = CreateRecord("sync-1");
+        seed.DeviceId = Guid.CreateVersion7();
+        seed.LegacyId = "legacy-1";
+        seed.InsulinContext = new TreatmentInsulinContext { InsulinName = "Fiasp", Dia = 6, Peak = 55 };
+        seed.AdditionalProperties = new Dictionary<string, object?> { ["pumpMode"] = "closedLoop" };
+        await _repository.CreateAsync(seed, WriteOrigin.Live);
+
+        var result = await _repository.CreateAsync(CreateRecord("sync-1", rate: 2.5), WriteOrigin.Live);
+
+        var stored = _context.TempBasals.Single();
+        stored.DeviceId.Should().Be(seed.DeviceId);
+        stored.LegacyId.Should().Be("legacy-1");
+        stored.AdditionalPropertiesJson.Should().Contain("closedLoop");
+        result.InsulinContext!.InsulinName.Should().Be("Fiasp");
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithMatchingSyncKey_ClearsFieldsTheRequestCanCarry()
+    {
+        var seed = CreateRecord("sync-1", end: new DateTime(2026, 5, 1, 12, 30, 0, DateTimeKind.Utc));
+        seed.ScheduledRate = 0.8;
+        seed.PumpRecordId = "pump-1";
+        seed.CorrelationId = Guid.CreateVersion7();
+        await _repository.CreateAsync(seed, WriteOrigin.Live);
+
+        await _repository.CreateAsync(CreateRecord("sync-1", rate: 2.5), WriteOrigin.Live);
+
+        var stored = _context.TempBasals.Single();
+        stored.EndTimestamp.Should().BeNull();
+        stored.ScheduledRate.Should().BeNull();
+        stored.PumpRecordId.Should().BeNull();
+        stored.CorrelationId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task CreateAsync_WithDifferentSyncKey_Inserts()
     {
         await _repository.CreateAsync(CreateRecord("sync-1"), WriteOrigin.Live);

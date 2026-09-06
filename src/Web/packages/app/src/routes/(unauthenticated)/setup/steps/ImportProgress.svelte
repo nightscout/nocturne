@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber } from "$lib/utils/formatting";
   import {
     Database,
     Upload,
@@ -11,6 +12,7 @@
   } from "lucide-svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   let {
     jobId,
@@ -26,6 +28,13 @@
   let realProgress = $state(0); // actual backend progress
   let error = $state<string | null>(null);
   let failed = $state(false);
+  // A run can complete having imported only part of what was asked for; the server says which
+  // collections did not arrive. Without this the wizard shows that run as an unqualified success.
+  let caveat = $state<string | null>(null);
+  // Whether that summary reports a fault. A collection can also be skipped — a read-only API
+  // secret cannot list sign-ins, which is how most sites are set up — and colouring that as a
+  // warning would put one on every healthy import.
+  let caveatIsFault = $state(false);
   let loading = $state(true);
   let done = $state(false); // backend says completed
   let wasAlreadyDone = $state(false); // migration was already complete when we mounted
@@ -76,7 +85,7 @@
   }
 
   function formatCount(n: number): string {
-    return n.toLocaleString();
+    return formatNumber(n);
   }
 
   $effect(() => {
@@ -106,8 +115,8 @@
               resolvedJobId = completed.id;
             }
           }
-        } catch {
-          error = "Failed to find active migration";
+        } catch (err) {
+          error = remoteErrorMessage(err, "Failed to find active migration");
           loading = false;
           return;
         }
@@ -167,6 +176,8 @@
             // Already done on the very first poll — user navigated back to review
             if (firstPoll) wasAlreadyDone = true;
             done = true;
+            caveat = status.errorMessage ?? null;
+            caveatIsFault = Object.values(cp).some((col) => col.failureReason);
             realProgress = 100;
             break;
           }
@@ -189,6 +200,8 @@
 
           await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch {
+          // A single failed poll says nothing worth showing; the retry below is
+          // the response, and a run of them gets its own wording.
           if (!active) break;
           consecutiveFailures++;
           // Only give up — and tell the user — once polling has failed repeatedly. The import
@@ -316,6 +329,8 @@
         <p class="text-sm text-white/40">
           {#if failed}
             <span class="text-amber-400">{error}</span>
+          {:else if caveat}
+            <span class={caveatIsFault ? "text-amber-400" : ""}>{caveat}</span>
           {:else if etaText}
             About <span class="font-semibold text-white/60">{etaText}</span>
             remaining &middot; {formatCount(totalMigrated)} records

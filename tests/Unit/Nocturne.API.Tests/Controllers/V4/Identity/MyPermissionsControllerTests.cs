@@ -52,14 +52,14 @@ public class MyPermissionsControllerTests
     public void GetMyPermissions_ReturnsTheSharesGrantedCategories()
     {
         var controller = ControllerWithScopes(
-            TenantPermissions.GlucoseRead,
-            TenantPermissions.ReportsRead);
+            Scope.GlucoseRead,
+            Scope.ReportsRead);
 
         var result = controller.GetMyPermissions().Result as OkObjectResult;
 
         result.Should().NotBeNull();
         result!.Value.Should().BeEquivalentTo(
-            new[] { TenantPermissions.GlucoseRead, TenantPermissions.ReportsRead });
+            new[] { Scope.GlucoseRead, Scope.ReportsRead });
     }
 
     [Fact]

@@ -8,6 +8,7 @@
     getCompatibilityAnalyses,
   } from "./data.remote";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatElapsedMs } from "$lib/utils/duration";
   import type { AnalysisListItemDto } from "$lib/api";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
 
@@ -160,12 +161,6 @@
       : activeAnalyses.filter((a) => !isCompatible(a.overallMatch))
   );
 
-
-  // Format duration
-  function formatDuration(ms: number) {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  }
 </script>
 
 <div class="@container container mx-auto p-6 space-y-6">
@@ -233,7 +228,7 @@
         Avg Response Time
       </h3>
       <p class="text-3xl font-bold">
-        {formatDuration(activeMetrics.averageNocturneResponseTime || 0)}
+        {formatElapsedMs(activeMetrics.averageNocturneResponseTime || 0)}
       </p>
     </div>
   </div>
@@ -418,10 +413,10 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
                 <div class="flex gap-2">
                   <span title="Nightscout">
-                    NS: {formatDuration(analysis.nightscoutResponseTimeMs || 0)}
+                    NS: {formatElapsedMs(analysis.nightscoutResponseTimeMs || 0)}
                   </span>
                   <span title="Nocturne">
-                    NC: {formatDuration(analysis.nocturneResponseTimeMs || 0)}
+                    NC: {formatElapsedMs(analysis.nocturneResponseTimeMs || 0)}
                   </span>
                 </div>
               </td>

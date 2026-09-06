@@ -13,11 +13,11 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// Gated by the default-deny fallback policy — a non-empty permission trie — rather than by
 /// <c>[Authorize]</c>. A public share link ({token}.share.{baseDomain}) is deliberately
 /// unauthenticated, yet AuthenticationMiddleware resolves its Public subject to
-/// <see cref="Nocturne.Core.Models.Authorization.TenantPermissions.PublicShareScopes"/> and
-/// publishes both the scopes and a trie on the request; the share view needs its granted
-/// categories to offer only the reports it can load, and <c>[Authorize]</c> 401s it. The answer
-/// is the caller's own resolved grant, so it discloses nothing a request of theirs would not.
-/// A caller with no grant has no trie and is refused by the fallback.
+/// <see cref="Nocturne.Core.Models.Authorization.Scope.PublicShareScopes"/> and publishes both
+/// the scopes and a trie on the request; the share view needs its granted categories to offer
+/// only the surfaces it can load, and <c>[Authorize]</c> 401s it. The answer is the caller's own
+/// resolved grant, so it discloses nothing a request of theirs would not. A caller with no grant
+/// has no trie and is refused by the fallback.
 /// </remarks>
 [ApiController]
 [Tags("Identity")]

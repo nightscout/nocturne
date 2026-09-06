@@ -3,8 +3,10 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
@@ -33,11 +35,19 @@ public interface IShareLinkService
 
     /// <summary>
     /// Replace the data categories anonymous viewers can see. <paramref name="scopes"/> must be a
-    /// subset of <see cref="TenantPermissions.PublicShareScopes"/>; an empty list leaves the link
+    /// subset of <see cref="Scope.PublicShareScopes"/>; an empty list leaves the link
     /// live but shares nothing. Any role grant on the Public subject is dropped so these scopes are
     /// authoritative.
     /// </summary>
     Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default);
+
+    /// <summary>
+    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
+    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
+    /// on the frontend's own defaults.
+    /// </summary>
+    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -94,12 +104,12 @@ public sealed class ShareLinkService : IShareLinkService
         var newToken = await GenerateUniqueTokenAsync(ct);
         var now = DateTime.UtcNow;
 
-        // On first enable, seed the default public scopes (glucose + statistics) as direct
+        // On first enable, seed the default public scopes (glucose reads alone) as direct
         // permissions on the Public subject, and default to a 24-hour window. Re-rotation only
         // swaps the token — the owner's chosen scopes and window are preserved.
         if (!wasEnabled)
         {
-            member.DirectPermissions = [.. TenantPermissions.DefaultPublicShareScopes];
+            member.DirectPermissions = [.. Scope.DefaultPublicShareScopes];
             member.LimitTo24Hours = true;
         }
 
@@ -163,7 +173,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     public async Task<ShareLinkDto> SetScopesAsync(Guid tenantId, IReadOnlyList<string> scopes, CancellationToken ct = default)
     {
-        var invalid = scopes.Where(s => !TenantPermissions.PublicShareScopes.Contains(s)).ToList();
+        var invalid = scopes.Where(s => !Scope.PublicShareScopes.Contains(s)).ToList();
         if (invalid.Count > 0)
             throw new ArgumentException($"Invalid public share scopes: {string.Join(", ", invalid)}", nameof(scopes));
 
@@ -187,6 +197,17 @@ public sealed class ShareLinkService : IShareLinkService
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member);
+    }
+
+    /// <inheritdoc />
+    public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var ownerPreferences = await _dbContext.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Select(m => m.Subject!.Preferences)
+            .FirstOrDefaultAsync(ct);
+
+        return UserDisplayPreferences.Deserialize(ownerPreferences).ToPresentationOnly();
     }
 
     private Task<TenantMemberEntity?> GetPublicMemberAsync(Guid tenantId, CancellationToken ct) =>
@@ -231,7 +252,7 @@ public sealed class ShareLinkService : IShareLinkService
 
     /// <summary>
     /// The public-shareable read scopes the Public subject currently resolves to — the union of any
-    /// role-granted permissions and direct permissions, narrowed to <see cref="TenantPermissions.PublicShareScopes"/>.
+    /// role-granted permissions and direct permissions, narrowed to <see cref="Scope.PublicShareScopes"/>.
     /// Requires <see cref="TenantMemberEntity.MemberRoles"/> (with their roles) to be loaded.
     /// </summary>
     private static List<string> ComputeScopes(TenantMemberEntity? member)
@@ -245,7 +266,7 @@ public sealed class ShareLinkService : IShareLinkService
 
         return rolePermissions
             .Concat(directPermissions)
-            .Where(TenantPermissions.PublicShareScopes.Contains)
+            .Where(Scope.PublicShareScopes.Contains)
             .Distinct()
             .ToList();
     }

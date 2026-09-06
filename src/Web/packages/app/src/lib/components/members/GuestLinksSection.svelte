@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -29,6 +30,8 @@
     type GuestLinkInfo,
     GuestLinkStatus,
   } from "$api/generated/nocturne-api-client";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { describeSubmitError } from "$lib/forms";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? []
@@ -46,6 +49,7 @@
   const guestLinksQuery = $derived(
     canCreateGuestLinks ? getGuestLinks({ includeDismissed: true }) : null
   );
+  retainQuery(() => guestLinksQuery);
   const allLinks = $derived(guestLinksQuery?.current ?? []);
   const guestLinks = $derived(
     showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)
@@ -104,12 +108,7 @@
   function formatDate(date: Date | undefined | null): string {
     if (!date) return "";
     const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDayTime(d);
   }
 
   function formatRelativeExpiry(date: Date | undefined | null): string {
@@ -170,8 +169,11 @@
       createdCode = result.code ?? null;
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       await guestLinksQuery?.refresh();
-    } catch {
-      createError = "Failed to create guest link. Please try again.";
+    } catch (err) {
+      createError = describeSubmitError(
+        err,
+        "Failed to create guest link. Please try again."
+      );
     } finally {
       isCreating = false;
     }
@@ -234,9 +236,10 @@
       showCreateForm = true;
       await guestLinksQuery?.refresh();
     } catch (err) {
-      createError =
-        (err as any)?.body?.message ??
-        "Failed to create a new code. Active links are limited to 5 at a time.";
+      createError = describeSubmitError(
+        err,
+        "Failed to create a new code. Active links are limited to 5 at a time."
+      );
       showCreateForm = true;
     } finally {
       reissuingId = null;
@@ -259,7 +262,7 @@
 </script>
 
 {#if canCreateGuestLinks}
-  <div class="space-y-4">
+  <div class="space-y-4" data-testid="guest-links">
     <div class="flex items-center justify-between gap-4">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">

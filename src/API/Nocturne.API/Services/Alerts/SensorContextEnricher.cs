@@ -3,6 +3,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -368,10 +369,16 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct) ?? "Default";
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
 
-        // No schedule at all — fall back to fully default (low=70, high=180) and clinical bucket defaults.
+        // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
         if (schedule is null || schedule.Entries.Count == 0)
         {
-            return GlucoseBucketResolver.Compute(glucoseMgdl, 70m, 180m, null, null, null);
+            return GlucoseBucketResolver.Compute(
+                glucoseMgdl,
+                (decimal)GlucoseConstants.TargetBottomMgdl,
+                (decimal)GlucoseConstants.TargetTopMgdl,
+                null,
+                null,
+                null);
         }
 
         // Pick the entry active at the tenant's local time-of-day. `at` is always UTC; the

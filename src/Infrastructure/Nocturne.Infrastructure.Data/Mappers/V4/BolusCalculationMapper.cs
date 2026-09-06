@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,16 +17,6 @@ public static class BolusCalculationMapper
     {
         return new BolusCalculationEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             BloodGlucoseInput = model.BloodGlucoseInput,
             BloodGlucoseInputSource = model.BloodGlucoseInputSource,
             CarbInput = model.CarbInput,
@@ -41,10 +30,7 @@ public static class BolusCalculationMapper
             SplitNow = model.SplitNow,
             SplitExt = model.SplitExt,
             PreBolus = model.PreBolus,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -56,16 +42,6 @@ public static class BolusCalculationMapper
     {
         return new BolusCalculation
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             BloodGlucoseInput = entity.BloodGlucoseInput,
             BloodGlucoseInputSource = entity.BloodGlucoseInputSource,
             CarbInput = entity.CarbInput,
@@ -79,10 +55,7 @@ public static class BolusCalculationMapper
             SplitNow = entity.SplitNow,
             SplitExt = entity.SplitExt,
             PreBolus = entity.PreBolus,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -92,13 +65,7 @@ public static class BolusCalculationMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(BolusCalculationEntity entity, BolusCalculation model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.BloodGlucoseInput = model.BloodGlucoseInput;
         entity.BloodGlucoseInputSource = model.BloodGlucoseInputSource;
         entity.CarbInput = model.CarbInput;
@@ -112,8 +79,5 @@ public static class BolusCalculationMapper
         entity.SplitNow = model.SplitNow;
         entity.SplitExt = model.SplitExt;
         entity.PreBolus = model.PreBolus;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

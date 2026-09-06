@@ -42,10 +42,10 @@ public class ActivityReadScopeGuardTests
 
     private static Dictionary<string, string> OneOfEachCategory() => new()
     {
-        ["hr"] = OAuthScopes.HeartRateRead,
-        ["sc"] = OAuthScopes.StepCountRead,
-        ["sleep"] = OAuthScopes.SleepRead,
-        ["regular"] = OAuthScopes.TreatmentsRead,
+        ["hr"] = Scope.HeartRateRead,
+        ["sc"] = Scope.StepCountRead,
+        ["sleep"] = Scope.SleepRead,
+        ["regular"] = Scope.TreatmentsRead,
     };
 
     private static Activity[] OneRecordPerCategory() =>
@@ -55,7 +55,7 @@ public class ActivityReadScopeGuardTests
     public void Filter_TreatmentsOnlyGrant_KeepsOnlyRegularActivities()
     {
         var kept = ActivityReadScopeGuard.Filter(
-            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.TreatmentsRead));
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(Scope.TreatmentsRead));
 
         kept.Select(a => a.Id).Should().Equal("regular");
     }
@@ -64,7 +64,7 @@ public class ActivityReadScopeGuardTests
     public void Filter_HeartRateOnlyGrant_KeepsOnlyHeartRate()
     {
         var kept = ActivityReadScopeGuard.Filter(
-            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.HeartRateRead));
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(Scope.HeartRateRead));
 
         kept.Select(a => a.Id).Should().Equal("hr");
     }
@@ -82,7 +82,7 @@ public class ActivityReadScopeGuardTests
     public void Filter_FullAccess_KeepsEveryCategory()
     {
         var kept = ActivityReadScopeGuard.Filter(
-            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.FullAccess));
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(Scope.FullAccess));
 
         kept.Should().HaveCount(4);
     }
@@ -95,7 +95,7 @@ public class ActivityReadScopeGuardTests
     public void Filter_ReadWriteGrant_SatisfiesTheReadCategory()
     {
         var kept = ActivityReadScopeGuard.Filter(
-            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.SleepReadWrite));
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(Scope.SleepReadWrite));
 
         kept.Select(a => a.Id).Should().Equal("sleep");
     }
@@ -104,7 +104,7 @@ public class ActivityReadScopeGuardTests
     public void CanRead_UnheldCategory_IsFalse()
     {
         ActivityReadScopeGuard.CanRead(
-            Activity("hr"), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.StepCountRead))
+            Activity("hr"), Decomposer(OneOfEachCategory()), Granted(Scope.StepCountRead))
             .Should().BeFalse();
     }
 
@@ -117,10 +117,10 @@ public class ActivityReadScopeGuardTests
     {
         ActivityReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo(new[]
         {
-            OAuthScopes.TreatmentsRead,
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
+            Scope.TreatmentsRead,
+            Scope.HeartRateRead,
+            Scope.StepCountRead,
+            Scope.SleepRead,
         });
     }
 
@@ -164,7 +164,7 @@ public class ActivityReadScopeGuardTests
             .ReturnsAsync(3L);
 
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(granted);
+        httpContext.Items["GrantedScopes"] = Scope.Normalize(granted);
 
         var controller = new CountController(
             Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), Mock.Of<IApsSnapshotRepository>(),

@@ -9,3 +9,13 @@
 export function isShareHost(host: string | null | undefined): boolean {
   return host != null && /^[^.]+\.share\./i.test(host);
 }
+
+/**
+ * Where a share host goes when its link serves nothing — rotated, disabled, or never valid.
+ *
+ * A share host holds no session and answers for one link only, so every other dead end the app
+ * has (sign-in, the first-run wizard, the marketing site) either cannot be satisfied there or
+ * reads as "this deployment is broken". Its page says only that the link is not working, which
+ * is all a visitor can act on and all a stranger may learn.
+ */
+export const SHARE_UNAVAILABLE_PATH = "/share/unavailable";

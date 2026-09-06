@@ -18,7 +18,7 @@
     DailySummaryDay,
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
-  import { getUnitLabel } from "$lib/utils/formatting";
+  import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
   import {
     GLUCOSE_HEATMAP_LEGEND_STOPS,
     getGlucoseHeatmapFill,
@@ -69,11 +69,13 @@
   const ALL_DATA_TYPES = [
     "Glucose",
     "ManualBG",
+    "BGChecks",
     "Boluses",
     "CarbIntake",
     "BolusCalculations",
     "Notes",
     "DeviceEvents",
+    "TempBasals",
     "StateSpans",
     "Activity",
     "DeviceStatus",
@@ -408,12 +410,7 @@
   }
 
   function navigateToDayInReview(dateStr: string) {
-    if (reportsParams) {
-      reportsParams.setCustomRange(dateStr, dateStr);
-    }
-    goto(
-      `/reports/day-in-review?from=${dateStr}&to=${dateStr}&isDefault=false`
-    );
+    goto(`/reports/day-in-review?date=${dateStr}`);
   }
 
   // =========================================================================
@@ -467,12 +464,7 @@
   function formatSelectedDate(dateStr: string): string {
     const [y, m, d] = dateStr.split("-").map(Number);
     const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return formatLongDate(date);
   }
 
   function formatUnits(value: number | null): string {

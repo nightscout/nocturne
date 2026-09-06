@@ -363,6 +363,28 @@ public class DeviceStatusProjectionServiceTests
         result.ExtensionData.Should().NotContainKey("srvCreated");
     }
 
+    [Fact]
+    public void ProjectAsync_WithClientIdentifierInExtras_DoesNotReEmitIt()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
+
+        var extras = new DeviceStatusExtras
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = aps.CorrelationId!.Value,
+            Timestamp = ReferenceTime,
+            Extras = new Dictionary<string, object?>
+            {
+                ["identifier"] = JsonSerializer.SerializeToElement("CLIENT-SUPPLIED", JsonOptions),
+            },
+        };
+
+        var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, extras);
+
+        result.ExtensionData.Should().NotContainKey("identifier");
+    }
+
     #endregion
 
     #region Correlation

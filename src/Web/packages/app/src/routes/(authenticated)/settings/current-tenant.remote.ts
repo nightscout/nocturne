@@ -4,13 +4,18 @@
  */
 import { getRequestEvent, query } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
+import { classifyRequestHost } from "$lib/server/tenantless-host";
+import { activeTenants } from "$lib/utils/tenant-host";
 
 /**
- * Get the current tenant ID for the authenticated user.
- * Returns the first tenant the user is a member of.
+ * Get the tenant the request's host serves, of those the authenticated user can reach.
+ *
+ * A host that names no tenant — the apex of a single-tenant install, where the API resolves the
+ * sole tenant itself — falls back to the first tenant the visitor owns, or to their oldest
+ * membership where they own none.
  */
 export const getCurrentTenantId = query(async () => {
-  const { locals, url } = getRequestEvent();
+  const { locals, url, request } = getRequestEvent();
 
   if (!locals.isAuthenticated) {
     throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
@@ -18,8 +23,10 @@ export const getCurrentTenantId = query(async () => {
 
   const apiClient = locals.apiClient;
   try {
-    const tenants = await apiClient.myTenants.getMyTenants();
-    return tenants[0]?.id ?? null;
+    const tenants = activeTenants(await apiClient.myTenants.getMyTenants());
+    const { slug } = classifyRequestHost(request);
+
+    return (tenants.find((t) => t.slug === slug) ?? tenants[0])?.id ?? null;
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) {

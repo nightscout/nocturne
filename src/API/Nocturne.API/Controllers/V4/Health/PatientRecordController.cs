@@ -82,7 +82,7 @@ public class PatientRecordController : ControllerBase
     /// Update the patient record
     /// </summary>
     [HttpPut]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [RemoteForm(Invalidates = ["GetPatientRecord"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
@@ -127,7 +127,7 @@ public class PatientRecordController : ControllerBase
     /// Create a new patient device
     /// </summary>
     [HttpPost("devices")]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [RemoteForm(Invalidates = ["GetDevices", "GetDiscoveredSources"])]
     [ProducesResponseType(typeof(PatientDevice), StatusCodes.Status201Created)]
     public async Task<ActionResult<PatientDevice>> CreateDevice(
@@ -145,7 +145,7 @@ public class PatientRecordController : ControllerBase
     /// Update a patient device
     /// </summary>
     [HttpPut("devices/{id:guid}")]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [RemoteForm(Invalidates = ["GetDevices"])]
     [ProducesResponseType(typeof(PatientDevice), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientDevice>> UpdateDevice(
@@ -162,7 +162,7 @@ public class PatientRecordController : ControllerBase
     /// Delete a patient device
     /// </summary>
     [HttpDelete("devices/{id:guid}")]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [RemoteCommand(Invalidates = ["GetDevices"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteDevice(Guid id, CancellationToken cancellationToken = default)
@@ -177,7 +177,7 @@ public class PatientRecordController : ControllerBase
     /// of one PUT per device. An imperative command (no HTML form), mirroring the delete/restore surface.
     /// </summary>
     [HttpPost("devices/reorder")]
-    [RequireScope(OAuthScopes.DevicesReadWrite)]
+    [RequireScope(Scope.DevicesReadWrite)]
     [RemoteCommand(Invalidates = ["GetDevices"])]
     [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientDevice>>> ReorderDevices(
@@ -222,7 +222,7 @@ public class PatientRecordController : ControllerBase
     /// Create a new patient insulin
     /// </summary>
     [HttpPost("insulins")]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [RemoteForm(Invalidates = ["GetInsulins"])]
     [ProducesResponseType(typeof(PatientInsulin), StatusCodes.Status201Created)]
     public async Task<ActionResult<PatientInsulin>> CreateInsulin(
@@ -239,7 +239,7 @@ public class PatientRecordController : ControllerBase
     /// Update a patient insulin
     /// </summary>
     [HttpPut("insulins/{id:guid}")]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [RemoteForm(Invalidates = ["GetInsulins"])]
     [ProducesResponseType(typeof(PatientInsulin), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientInsulin>> UpdateInsulin(
@@ -257,7 +257,7 @@ public class PatientRecordController : ControllerBase
     /// Delete a patient insulin
     /// </summary>
     [HttpDelete("insulins/{id:guid}")]
-    [RequireScope(OAuthScopes.TherapyReadWrite)]
+    [RequireScope(Scope.TherapyReadWrite)]
     [RemoteCommand(Invalidates = ["GetInsulins"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteInsulin(Guid id, CancellationToken cancellationToken = default)

@@ -8,7 +8,7 @@ namespace Nocturne.Core.Models.Authorization;
 /// not listed here is hidden from shares (fail-safe default).
 /// </summary>
 /// <remarks>
-/// The category vocabulary is the OAuth read scopes in <see cref="OAuthScopes"/>,
+/// The category vocabulary is the OAuth read scopes in <see cref="Scope"/>,
 /// not a parallel taxonomy. The reconciler that applies the RLS policies and the
 /// guard test that asserts full <c>ITenantScoped</c> coverage both read from this
 /// type, so the C# map and the live database policies cannot drift.
@@ -24,14 +24,14 @@ public static class ShareDataCategories
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> GovernedTables =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
-            [OAuthScopes.GlucoseRead] = new[]
+            [Scope.GlucoseRead] = new[]
             {
                 "sensor_glucose",
                 "bg_checks",
                 "meter_glucose",
                 "calibrations",
             },
-            [OAuthScopes.TreatmentsRead] = new[]
+            [Scope.TreatmentsRead] = new[]
             {
                 "boluses",
                 "carb_intakes",
@@ -39,7 +39,7 @@ public static class ShareDataCategories
                 "basal_injections",
                 "bolus_calculations",
             },
-            [OAuthScopes.DevicesRead] = new[]
+            [Scope.DevicesRead] = new[]
             {
                 // The `devices` master registry is deliberately omitted (hidden) for v1:
                 // no share-reachable endpoint reads it. Revisit if a share view needs it.
@@ -49,9 +49,9 @@ public static class ShareDataCategories
                 "uploader_snapshots",
                 "aps_snapshots",
             },
-            [OAuthScopes.HeartRateRead] = new[] { "heart_rates" },
-            [OAuthScopes.StepCountRead] = new[] { "step_counts" },
-            [OAuthScopes.FoodRead] = new[]
+            [Scope.HeartRateRead] = new[] { "heart_rates" },
+            [Scope.StepCountRead] = new[] { "step_counts" },
+            [Scope.FoodRead] = new[]
             {
                 // `treatment_foods` and `user_food_favorites` are deliberately hidden for
                 // v1: the former ties food to treatments, the latter is a personal pick
@@ -122,7 +122,7 @@ public static class ShareDataCategories
         var granted = grantedScopes as ISet<string> ?? new HashSet<string>(grantedScopes, StringComparer.Ordinal);
 
         var visible = GovernedTables.Keys
-            .Where(scope => OAuthScopes.SatisfiesScope(granted, scope))
+            .Where(scope => Scope.Satisfies(granted, scope))
             .OrderBy(scope => scope, StringComparer.Ordinal);
 
         return string.Join(",", visible);

@@ -20,6 +20,7 @@ public enum ConnectorPropertyKey
     SyncGlucose,
     SyncManualBG,
     SyncBoluses,
+    SyncBasalInjections,
     SyncCarbIntake,
     SyncBolusCalculations,
     SyncNotes,

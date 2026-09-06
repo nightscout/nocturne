@@ -170,14 +170,34 @@ public class OAuthClientService : IOAuthClientService
         string? createdFromIp,
         CancellationToken ct = default)
     {
-        // Idempotent on (tenant, software_id) when software_id is supplied:
-        // if a row already exists return it unchanged.
+        // Idempotent on (tenant, software_id) when software_id is supplied — but only for
+        // clients that completed a real registration. Known-directory seeds ship with an
+        // empty RedirectUris list (the real value is only knowable once the client
+        // registers), so returning such a seed unchanged would silently discard the
+        // submitted redirect_uris and permanently break /authorize for that client.
+        // A seed therefore adopts the incoming registration data instead.
         if (!string.IsNullOrEmpty(softwareId))
         {
             var existing = await _dbContext.OAuthClients
                 .FirstOrDefaultAsync(c => c.SoftwareId == softwareId, ct);
             if (existing != null)
             {
+                if (existing.IsKnown && DeserializeRedirectUris(existing.RedirectUris).Count == 0)
+                {
+                    existing.RedirectUris = JsonSerializer.Serialize(redirectUris);
+                    existing.ClientName = clientName ?? existing.ClientName;
+                    existing.ClientUri = clientUri ?? existing.ClientUri;
+                    existing.LogoUri = logoUri ?? existing.LogoUri;
+                    existing.DisplayName = clientName ?? existing.DisplayName;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await _dbContext.SaveChangesAsync(ct);
+
+                    _logger.LogInformation(
+                        "DCR: known-directory seed {SoftwareId} adopted registration redirect_uris ({Count} URIs)",
+                        SanitizeForLog(softwareId), redirectUris.Count);
+                    return MapToInfo(existing);
+                }
+
                 _logger.LogDebug(
                     "DCR: returning existing client for software_id {SoftwareId} (tenant {TenantId})",
                     SanitizeForLog(softwareId), existing.TenantId);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber, formatShortDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -7,53 +8,24 @@
   } from "$lib/components/ui/card";
   import { Footprints, TrendingUp, Calendar } from "lucide-svelte";
   import {
-    ACTOGRAM_PADDING_DAYS,
     Actogram,
-    buildDayRange,
     extentOf,
     pointsInRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_DAY, MS_PER_HOUR } from "$lib/components/actogram/actogram";
-  import { getActogramData } from "$api/actogram.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { computeDayTotals } from './steps.utils';
+  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
+  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
+  import { toDayString } from "$lib/utils/date-range";
 
   const VISIBLE_DAYS = 14;
 
-  const reportsParams = requireDateParamsContext(14);
+  const report = useActogramReport("Error Loading Step Count Report");
+  const { params: reportsParams, resource: actogramResource } = report;
 
-  /** Padded window the actogram loads, so its double-plot rows have context either side. */
-  const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-  });
-
-  const actogramResource = contextResource(
-    () =>
-      getActogramData({
-        from: paddedRangeMillis.from,
-        to: paddedRangeMillis.to,
-      }),
-    { errorTitle: "Error Loading Step Count Report" }
-  );
-
-  // Rows run newest-first, anchored at the selected range end — never the future —
-  // so padding days after `to` are not shown as rows; the padded fetch window above
-  // still feeds each row's next-day double plot. Extends ACTOGRAM_PADDING_DAYS
-  // before the range start for scroll-back context.
-  const days = $derived(
-    buildDayRange(
-      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
-      reportsParams.dateRangeMillis.to
-    ).reverse()
-  );
-
-  const dayTotals = $derived(computeDayTotals(actogramResource.current?.stepCounts ?? [], days));
+  const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
 
   function formatDate(date: Date): string {
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatShortDate(date);
   }
 
   // Step data as ActogramPoints
@@ -91,116 +63,112 @@
   />
 </svelte:head>
 
-{#await actogramResource then actogramData}
-  {#if actogramData}
-  <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-    <!-- Header -->
-    <div>
-      <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
-      <p class="text-muted-foreground">
-        Daily step patterns with glucose overlay
-      </p>
-    </div>
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
+    <p class="text-muted-foreground">
+      Daily step patterns with glucose overlay
+    </p>
+  </div>
 
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Total Steps
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <Footprints class="h-5 w-5 text-primary" />
-            <span class="text-2xl font-bold tabular-nums">
-              {totalSteps.toLocaleString()}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Daily Average
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <TrendingUp class="h-5 w-5 text-primary" />
-            <span class="text-2xl font-bold tabular-nums">
-              {dailyAverage.toLocaleString()}
-            </span>
-            <span class="text-sm text-muted-foreground">steps/day</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader class="pb-2">
-          <CardTitle class="text-sm font-medium text-muted-foreground">
-            Period
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="flex items-center gap-2">
-            <Calendar class="h-5 w-5 text-muted-foreground" />
-            <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
-            <span class="text-sm text-muted-foreground">days</span>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- Actogram -->
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
     <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Footprints class="h-5 w-5 text-muted-foreground" />
-          Step Count Actogram
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Total Steps
         </CardTitle>
       </CardHeader>
-      <CardContent class="w-full overflow-x-auto print:overflow-visible">
-        <Actogram
-          data={stepPoints}
-          bgData={bgPoints}
-          {days}
-          thresholds={actogramResource.current?.thresholds}
-          rowHeight={64}
-          visibleCount={VISIBLE_DAYS}
-        >
-          {#snippet rowLabel({ day })}
-            <div class="text-right pr-2">
-              <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
-              <div class="text-xs font-medium tabular-nums">
-                {(dayTotals.get(day.getTime()) ?? 0).toLocaleString()} <span class="text-muted-foreground font-normal">steps</span>
-              </div>
-            </div>
-          {/snippet}
-          {#snippet tooltipValue({ point })}
-            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
-            <span class="text-muted-foreground">Steps</span>
-            <span class="ml-auto font-mono font-medium tabular-nums">{steps.toLocaleString()}</span>
-          {/snippet}
-          {#snippet row(ctx: ActogramRowContext)}
-            {#each ctx.data as { point, hoursFromStart, isExtended }}
-              {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
-              {@const barHeight = (steps / barScale) * ctx.height}
-              {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
-              <rect
-                {x}
-                y={ctx.height - barHeight}
-                width={3}
-                height={barHeight}
-                fill="var(--primary)"
-                opacity={isExtended ? 0.35 : 0.8}
-              />
-            {/each}
-          {/snippet}
-        </Actogram>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <Footprints class="h-5 w-5 text-primary" />
+          <span class="text-2xl font-bold tabular-nums">
+            {formatNumber(totalSteps)}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Daily Average
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <TrendingUp class="h-5 w-5 text-primary" />
+          <span class="text-2xl font-bold tabular-nums">
+            {formatNumber(dailyAverage)}
+          </span>
+          <span class="text-sm text-muted-foreground">steps/day</span>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="pb-2">
+        <CardTitle class="text-sm font-medium text-muted-foreground">
+          Period
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="flex items-center gap-2">
+          <Calendar class="h-5 w-5 text-muted-foreground" />
+          <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
+          <span class="text-sm text-muted-foreground">days</span>
+        </div>
       </CardContent>
     </Card>
   </div>
-  {/if}
-{/await}
+
+  <!-- Actogram -->
+  <Card>
+    <CardHeader>
+      <CardTitle class="flex items-center gap-2">
+        <Footprints class="h-5 w-5 text-muted-foreground" />
+        Step Count Actogram
+      </CardTitle>
+    </CardHeader>
+    <CardContent class="w-full overflow-x-auto print:overflow-visible">
+      <Actogram
+        data={stepPoints}
+        bgData={bgPoints}
+        days={report.days}
+        thresholds={actogramResource.current?.thresholds}
+        rowHeight={64}
+        visibleCount={VISIBLE_DAYS}
+      >
+        {#snippet rowLabel({ day })}
+          <div class="text-right pr-2">
+            <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
+            <div class="text-xs font-medium tabular-nums">
+              {formatNumber(dayTotals[toDayString(day)])} <span class="text-muted-foreground font-normal">steps</span>
+            </div>
+          </div>
+        {/snippet}
+        {#snippet tooltipValue({ point })}
+          {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+          <span class="text-muted-foreground">Steps</span>
+          <span class="ml-auto font-mono font-medium tabular-nums">{formatNumber(steps)}</span>
+        {/snippet}
+        {#snippet row(ctx: ActogramRowContext)}
+          {#each ctx.data as { point, hoursFromStart, isExtended }}
+            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+            {@const barHeight = (steps / barScale) * ctx.height}
+            {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+            <rect
+              {x}
+              y={ctx.height - barHeight}
+              width={3}
+              height={barHeight}
+              fill="var(--primary)"
+              opacity={isExtended ? 0.35 : 0.8}
+            />
+          {/each}
+        {/snippet}
+      </Actogram>
+    </CardContent>
+  </Card>
+</div>

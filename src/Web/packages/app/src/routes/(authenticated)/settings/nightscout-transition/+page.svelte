@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDate, formatNumber } from "$lib/utils/formatting";
 	import {
 		Card,
 		CardContent,
@@ -38,7 +39,7 @@
 	function formatTimestamp(ts: Date | string | null | undefined): string {
 		if (!ts) return 'Never';
 		try {
-			return new Date(ts).toLocaleString();
+			return formatDate(new Date(ts));
 		} catch {
 			return 'Unknown';
 		}
@@ -148,7 +149,7 @@
 						{#each Object.entries(status.migration?.recordCounts ?? {}) as [dataType, count] (dataType)}
 							<div class="rounded-lg border p-3">
 								<p class="text-sm text-muted-foreground capitalize">{dataType}</p>
-								<p class="text-xl font-semibold tabular-nums">{count.toLocaleString()}</p>
+								<p class="text-xl font-semibold tabular-nums">{formatNumber(count)}</p>
 							</div>
 						{/each}
 					</div>
@@ -192,19 +193,19 @@
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Requests</p>
 						<p class="text-xl font-semibold tabular-nums">
-							{(status.writeBack?.requestsLast24h ?? 0).toLocaleString()}
+							{formatNumber(status.writeBack?.requestsLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Succeeded</p>
 						<p class="text-xl font-semibold tabular-nums text-green-600 dark:text-green-400">
-							{(status.writeBack?.successesLast24h ?? 0).toLocaleString()}
+							{formatNumber(status.writeBack?.successesLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Failed</p>
 						<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
-							{(status.writeBack?.failuresLast24h ?? 0).toLocaleString()}
+							{formatNumber(status.writeBack?.failuresLast24h)}
 						</p>
 					</div>
 				</div>
@@ -257,13 +258,13 @@
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Comparisons</p>
 							<p class="text-xl font-semibold tabular-nums">
-								{(status.compatibility.totalComparisons ?? 0).toLocaleString()}
+								{formatNumber(status.compatibility.totalComparisons)}
 							</p>
 						</div>
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Discrepancies</p>
 							<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
-								{(status.compatibility.discrepancies ?? 0).toLocaleString()}
+								{formatNumber(status.compatibility.discrepancies)}
 							</p>
 						</div>
 					</div>

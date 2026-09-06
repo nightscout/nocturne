@@ -18,6 +18,7 @@
   import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
   import { deviceApprove } from "$api/generated/oAuths.generated.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   interface Props {
     /** Origin URL of the Nocturne instance (trailing slash tolerated). */
@@ -86,8 +87,11 @@
         isKnown: info.isKnownClient ?? false,
         scopes: (info.scopes ?? []).filter(Boolean),
       };
-    } catch {
-      deviceLookupError = "Invalid or expired device code. Please check and try again.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(
+        err,
+        "Invalid or expired device code. Please check and try again."
+      );
     } finally {
       deviceLookupLoading = false;
     }
@@ -99,8 +103,8 @@
     try {
       await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
       deviceApproved = true;
-    } catch {
-      deviceLookupError = "Failed to approve. The code may have expired.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -112,8 +116,8 @@
     try {
       await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
       deviceDenied = true;
-    } catch {
-      deviceLookupError = "Failed to deny the request.";
+    } catch (err) {
+      deviceLookupError = describeSubmitError(err, "Failed to deny the request.");
     } finally {
       deviceApproveLoading = false;
     }

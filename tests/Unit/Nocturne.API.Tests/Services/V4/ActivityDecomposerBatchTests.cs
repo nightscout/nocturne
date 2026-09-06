@@ -162,14 +162,14 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void RequiredWriteScope_HeartRate_ReturnsHeartRateReadWrite()
     {
         _decomposer.RequiredWriteScope(CreateHeartRateActivity("hr", 72))
-            .Should().Be(OAuthScopes.HeartRateReadWrite);
+            .Should().Be(Scope.HeartRateReadWrite);
     }
 
     [Fact]
     public void RequiredWriteScope_StepCount_ReturnsStepCountReadWrite()
     {
         _decomposer.RequiredWriteScope(CreateStepCountActivity("sc", 1500))
-            .Should().Be(OAuthScopes.StepCountReadWrite);
+            .Should().Be(Scope.StepCountReadWrite);
     }
 
     [Theory]
@@ -179,7 +179,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void RequiredWriteScope_SleepType_ReturnsSleepReadWrite(string type)
     {
         _decomposer.RequiredWriteScope(CreateRegularActivity("s", type))
-            .Should().Be(OAuthScopes.SleepReadWrite);
+            .Should().Be(Scope.SleepReadWrite);
     }
 
     [Theory]
@@ -202,14 +202,14 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void RequiredReadScope_HeartRate_ReturnsHeartRateRead()
     {
         _decomposer.RequiredReadScope(CreateHeartRateActivity("hr", 72))
-            .Should().Be(OAuthScopes.HeartRateRead);
+            .Should().Be(Scope.HeartRateRead);
     }
 
     [Fact]
     public void RequiredReadScope_StepCount_ReturnsStepCountRead()
     {
         _decomposer.RequiredReadScope(CreateStepCountActivity("sc", 1500))
-            .Should().Be(OAuthScopes.StepCountRead);
+            .Should().Be(Scope.StepCountRead);
     }
 
     [Theory]
@@ -219,7 +219,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void RequiredReadScope_SleepType_ReturnsSleepRead(string type)
     {
         _decomposer.RequiredReadScope(CreateRegularActivity("s", type))
-            .Should().Be(OAuthScopes.SleepRead);
+            .Should().Be(Scope.SleepRead);
     }
 
     /// <summary>
@@ -236,7 +236,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public void RequiredReadScope_RegularActivity_ReturnsTreatmentsRead(string type)
     {
         _decomposer.RequiredReadScope(CreateRegularActivity("r", type))
-            .Should().Be(OAuthScopes.TreatmentsRead);
+            .Should().Be(Scope.TreatmentsRead);
     }
 
     /// <summary>
@@ -255,7 +255,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         {
             var writeScope = _decomposer.RequiredWriteScope(activity);
             _decomposer.RequiredReadScope(activity)
-                .Should().Be(OAuthScopes.ImpliedReadScope(writeScope!));
+                .Should().Be(Scope.ImpliedReadScope(writeScope!));
         }
     }
 

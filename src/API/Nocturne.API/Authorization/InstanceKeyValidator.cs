@@ -38,6 +38,12 @@ public interface IInstanceKeyValidator
     /// Classifies the request's instance-key credential without mutating the request.
     /// </summary>
     InstanceKeyRequestKind Classify(HttpContext context);
+
+    /// <summary>
+    /// Audit identity of the configured instance key, or null when none is configured.
+    /// </summary>
+    /// <seealso cref="InstanceKeyDigest.ResolveFingerprint"/>
+    string? KeyFingerprint { get; }
 }
 
 /// <inheritdoc />
@@ -48,7 +54,11 @@ public class InstanceKeyValidator : IInstanceKeyValidator
     public InstanceKeyValidator(IConfiguration configuration)
     {
         _instanceKeyHash = InstanceKeyDigest.Resolve(configuration);
+        KeyFingerprint = InstanceKeyDigest.ResolveFingerprint(configuration);
     }
+
+    /// <inheritdoc />
+    public string? KeyFingerprint { get; }
 
     /// <inheritdoc />
     public InstanceKeyRequestKind Classify(HttpContext context)

@@ -48,6 +48,7 @@ import {
 	Wrench,
 	ZoomIn,
 } from "lucide-svelte";
+import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export type CommandPaletteGroup =
 	| "stats"
@@ -550,3 +551,11 @@ export const items: CommandPaletteItem[] = [
 		icon: RefreshCw,
 	},
 ];
+
+/**
+ * The entries a host can actually use. Narrowed on a tenantless host from the same list of hrefs
+ * the sidebar narrows from, rather than a second one. See tenantless-navigation.
+ */
+export function paletteItemsFor(tenantless: boolean): CommandPaletteItem[] {
+	return tenantless ? filterTenantlessNav(items) : items;
+}

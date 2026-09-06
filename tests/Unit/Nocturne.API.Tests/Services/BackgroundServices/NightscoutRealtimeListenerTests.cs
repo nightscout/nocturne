@@ -1,17 +1,20 @@
 using System.Collections.Concurrent;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Mocks;
 using SocketIOClient;
 using Xunit;
 
@@ -166,7 +169,7 @@ public class NightscoutRealtimeListenerTests
             Url = "http://127.0.0.1:9",
         };
 
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
 
@@ -175,15 +178,16 @@ public class NightscoutRealtimeListenerTests
 
         // Assert — the connect failed (nothing is listening on port 9), but it must have failed by
         // actually attempting to connect, not by rejecting our own options.
-        Assert.DoesNotContain(logger.Exceptions, ex => ex is ArgumentOutOfRangeException);
+        Assert.DoesNotContain(logger.Entries, e => e.Exception is ArgumentOutOfRangeException);
     }
 
     /// <summary>
     /// Tenants may store a bare host with no scheme; the polling path normalises this via
-    /// ResolveBaseUrl. The listener path must not blow up on Uri parsing where polling succeeds.
+    /// <see cref="ConnectorUrl.ResolveBase"/>. The listener must reach the connect step against
+    /// the same resolved origin rather than be turned away by its absolute-URI guard.
     /// </summary>
     [Fact]
-    public async Task StartRealtimeListenersAsync_SchemelessUrl_DoesNotThrowUriFormatException()
+    public async Task StartRealtimeListenersAsync_SchemelessUrl_ConnectsToResolvedOrigin()
     {
         // Arrange — a bare host, as three production tenants have stored
         var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
@@ -195,7 +199,7 @@ public class NightscoutRealtimeListenerTests
             Url = "127.0.0.1:9",
         };
 
-        var logger = new CapturingLogger();
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
         var serviceProvider = BuildServiceProvider(connectionString, config);
         var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
 
@@ -203,7 +207,9 @@ public class NightscoutRealtimeListenerTests
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
         // Assert
-        Assert.DoesNotContain(logger.Exceptions, ex => ex is UriFormatException);
+        logger.Entries.Should().Contain(e =>
+            e.Message.Contains("Failed to connect Socket.IO")
+            && e.Message.Contains("https://127.0.0.1:9"));
     }
 
     /// <summary>
@@ -239,6 +245,36 @@ public class NightscoutRealtimeListenerTests
         Assert.DoesNotContain(dead, SocketClients(sut).Values);
     }
 
+    /// <summary>
+    /// A stored URL the resolver refuses is the listener's to report: it cannot connect, and
+    /// letting the rejection reach the per-tenant catch would file it as an unexpected error.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UnresolvableUrl_ReportsItAndSkipsTenant()
+    {
+        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "ftp://x",
+        };
+
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var sut = new NightscoutConnectorBackgroundService(
+            BuildServiceProvider(connectionString, config), logger);
+
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        logger.Entries.Should().Contain(e =>
+            e.Message.Contains("cannot be resolved to an absolute http(s) URL")
+            && e.Message.Contains("test-tenant"));
+        logger.Entries.Should().NotContain(e =>
+            e.Message.Contains("Unexpected error starting real-time listener"));
+        logger.Entries.Should().NotContain(e => e.Message.Contains("Failed to connect Socket.IO"));
+    }
+
     #region Helpers
 
     /// <summary>
@@ -248,37 +284,6 @@ public class NightscoutRealtimeListenerTests
         => (ConcurrentDictionary<Guid, SocketIO>)typeof(NightscoutConnectorBackgroundService)
             .GetField("_socketClients", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(sut)!;
-
-    /// <summary>
-    /// Captures exceptions passed to the logger so tests can assert on how a failure surfaced.
-    /// </summary>
-    private sealed class CapturingLogger : ILogger<NightscoutConnectorBackgroundService>
-    {
-        private readonly List<Exception> _exceptions = [];
-
-        public IReadOnlyList<Exception> Exceptions
-        {
-            get { lock (_exceptions) return _exceptions.ToList(); }
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (exception is null)
-                return;
-
-            lock (_exceptions)
-                _exceptions.Add(exception);
-        }
-    }
 
     /// <summary>
     /// Invokes the protected StartRealtimeListenersAsync via reflection.
@@ -374,9 +379,7 @@ public class NightscoutRealtimeListenerTests
 
         services.AddScoped<ITenantAccessor>(_ =>
         {
-            var mock = new Mock<ITenantAccessor>();
-            mock.Setup(t => t.IsResolved).Returns(true);
-            mock.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+            var mock = MockTenantAccessor.Create(Guid.NewGuid());
             mock.Setup(t => t.SetTenant(It.IsAny<TenantContext>()));
             return mock.Object;
         });

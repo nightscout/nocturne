@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Mocks;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -51,7 +52,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_InsertsNewRecords()
+    public async Task BulkCreateAsync_InsertsNewRecords()
     {
         var snapshots = new[]
         {
@@ -59,19 +60,19 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
             CreateSnapshot("sync-2", timestamp: new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkUpsertAsync(snapshots, WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(2);
         _context.ApsSnapshots.Count().Should().Be(2);
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_UpdatesExistingRecordInPlace()
+    public async Task BulkCreateAsync_UpdatesExistingRecordInPlace()
     {
-        await _repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
+        await _repository.BulkCreateAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
 
         var retry = CreateSnapshot("sync-1", iob: 2.5);
-        var result = (await _repository.BulkUpsertAsync([retry], WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync([retry], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         _context.ApsSnapshots.Count().Should().Be(1);
@@ -79,7 +80,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_KeepsLastOccurrenceWithinBatch()
+    public async Task BulkCreateAsync_KeepsLastOccurrenceWithinBatch()
     {
         var snapshots = new[]
         {
@@ -87,7 +88,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
             CreateSnapshot("sync-dup", iob: 3.0),
         };
 
-        var result = (await _repository.BulkUpsertAsync(snapshots, WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         _context.ApsSnapshots.Count().Should().Be(1);
@@ -95,9 +96,9 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_MixedBatch_UpdatesMatchedAndInsertsRest()
+    public async Task BulkCreateAsync_MixedBatch_UpdatesMatchedAndInsertsRest()
     {
-        await _repository.BulkUpsertAsync([CreateSnapshot("sync-existing", iob: 1.0)], WriteOrigin.Live);
+        await _repository.BulkCreateAsync([CreateSnapshot("sync-existing", iob: 1.0)], WriteOrigin.Live);
 
         var snapshots = new[]
         {
@@ -105,7 +106,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
             CreateSnapshot("sync-new"),
         };
 
-        var result = (await _repository.BulkUpsertAsync(snapshots, WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(2);
         _context.ApsSnapshots.Count().Should().Be(2);
@@ -113,7 +114,7 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_RecordsWithoutSyncKeyAlwaysInsert()
+    public async Task BulkCreateAsync_RecordsWithoutSyncKeyAlwaysInsert()
     {
         var unkeyed = new[]
         {
@@ -121,14 +122,14 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
             CreateSnapshot(syncIdentifier: null, timestamp: new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)),
         };
 
-        await _repository.BulkUpsertAsync(unkeyed, WriteOrigin.Live);
-        await _repository.BulkUpsertAsync(unkeyed, WriteOrigin.Live);
+        await _repository.BulkCreateAsync(unkeyed, WriteOrigin.Live);
+        await _repository.BulkCreateAsync(unkeyed, WriteOrigin.Live);
 
         _context.ApsSnapshots.Count().Should().Be(4);
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_SameSyncIdDifferentSource_DoesNotCollide()
+    public async Task BulkCreateAsync_SameSyncIdDifferentSource_DoesNotCollide()
     {
         var snapshots = new[]
         {
@@ -136,55 +137,37 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
             CreateSnapshot("sync-1", dataSource: "loop"),
         };
 
-        var result = (await _repository.BulkUpsertAsync(snapshots, WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(2);
         _context.ApsSnapshots.Count().Should().Be(2);
     }
 
     [Fact]
-    public async Task BulkUpsertAsync_EmptyInput_ReturnsEmpty()
+    public async Task BulkCreateAsync_EmptyInput_ReturnsEmpty()
     {
-        var result = (await _repository.BulkUpsertAsync([], WriteOrigin.Live)).ToList();
+        var result = (await _repository.BulkCreateAsync([], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         _context.ApsSnapshots.Count().Should().Be(0);
     }
 
-    private sealed class RecordingBroadcaster : Core.Contracts.Events.IV4RecordBroadcaster<ApsSnapshot>
-    {
-        public List<ApsSnapshot> Created { get; } = [];
-        public List<ApsSnapshot> Updated { get; } = [];
-
-        public Task BroadcastCreatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
-        {
-            Created.AddRange(items);
-            return Task.CompletedTask;
-        }
-
-        public Task BroadcastUpdatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
-        {
-            Updated.AddRange(items);
-            return Task.CompletedTask;
-        }
-    }
-
     [Fact]
-    public async Task BulkUpsertAsync_ByteIdenticalRetry_DoesNotBroadcastUpdates()
+    public async Task BulkCreateAsync_ByteIdenticalRetry_DoesNotBroadcastUpdates()
     {
-        var broadcaster = new RecordingBroadcaster();
+        var broadcaster = new RecordingV4RecordBroadcaster<ApsSnapshot>();
         var repository = new ApsSnapshotRepository(
             new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
 
-        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
+        await repository.BulkCreateAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
         broadcaster.Created.Should().HaveCount(1);
 
         // Byte-identical retry: matched in place, but nothing materially changed.
-        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
+        await repository.BulkCreateAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
         broadcaster.Updated.Should().BeEmpty();
 
         // A real change does broadcast as an update.
-        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 2.0)], WriteOrigin.Live);
+        await repository.BulkCreateAsync([CreateSnapshot("sync-1", iob: 2.0)], WriteOrigin.Live);
         broadcaster.Updated.Should().HaveCount(1);
     }
 }

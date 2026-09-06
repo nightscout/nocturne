@@ -8,6 +8,8 @@
 // instruments. Without this the OTLP SDK never starts and the web emits no telemetry.
 import './build/server/instrumentation.server.js';
 
+import { warnOnOriginMismatch } from './server-origin-warning.js';
+
 // Hardcoded WebSocket bridge tuning. These were previously env vars but are
 // internal implementation details, not per-deployment knobs. Keep in sync
 // with src/lib/config/constants.ts.
@@ -47,6 +49,7 @@ async function start() {
   const server = createServer((req, res) => {
     req.headers['x-forwarded-proto'] ??= req.socket.encrypted ? 'https' : 'http';
     req.headers['x-forwarded-host'] ??= req.headers.host;
+    warnOnOriginMismatch(req, res);
     return handler(req, res);
   });
 

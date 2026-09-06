@@ -40,6 +40,7 @@
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
   import { copyToClipboard } from "$lib/utils";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     buildDiagnosticReport,
     readDiagnosticDevice,
@@ -74,8 +75,8 @@
     try {
       await coachCtx.resetAll();
       toast.success("Tutorials reset — they'll appear as you navigate the app");
-    } catch {
-      toast.error("Failed to reset tutorials");
+    } catch (err) {
+      toast.error(describeSubmitError(err, "Failed to reset tutorials"));
     } finally {
       resettingTutorials = false;
     }

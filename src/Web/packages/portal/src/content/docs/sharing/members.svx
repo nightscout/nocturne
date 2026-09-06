@@ -1,0 +1,96 @@
+---
+title: Member accounts and invites
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Member accounts and invites
+
+For someone who needs ongoing access, invite them as a **member**. They get their
+own login and you choose a **role** that decides what they can see and do. Unlike
+a public or guest link, a member is a named person you can see in a list, change,
+and remove.
+
+## Inviting someone
+
+From **Settings > Sharing & Privacy**, create an invite. You pick the role
+first, then Nocturne gives you a link to send them:
+
+<Screenshot id="sharing-invite-card" />
+
+The invite link opens a **join** page where they either sign in with an account
+they already have or create one, and accepting adds them to your list of members.
+From then on they have access until you change their role or remove them.
+
+Two things to know about the link:
+
+- **It expires.** By default an invite is good for 7 days. If it lapses before
+  they use it, create another one — nothing is lost.
+- **Treat it as private.** Until it's accepted, whoever opens the link can claim
+  that role. Send it directly to the person, not to a group chat.
+
+## Roles
+
+Roles are the easiest way to set access. The common ones, from least to most
+access:
+
+| Role | What they can do |
+|------|------------------|
+| Viewer | Read-only: blood glucose and the whole Reports section. For a quick glance. |
+| Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
+| Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
+| Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
+| Owner | You. Full control of the account; can't be removed. |
+
+If a role is close but not quite right, you can adjust an individual member's
+**permissions** on top of it — switching a particular kind of access on or off for
+that one person, without changing what the role means for everyone else.
+
+You can also tick **Only last 24 hours** — when you invite them, or later — to
+limit that member to recent data, the same way the public link's time window
+works.
+
+<Callout type="tip" title="When to use it: a teacher and a school nurse">
+  At school, two people need access for the whole term, and they need different
+  things. Invite the <strong>teacher as a Viewer</strong> — they just need to
+  glance at the current glucose during class. Invite the
+  <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
+  or manage an alert if they step in. Each has their own login, you can see them
+  in your member list, and when the year ends you remove them in one click.
+</Callout>
+
+## Membership requests
+
+Inviting someone is one direction — you reach out and hand them a link.
+**Membership requests** are the other direction: you let people **ask you** for
+access, and nothing is granted until you approve it.
+
+The toggle lives on **Settings > Sharing & Privacy**. While it's on, your sign-in
+page shows a **Request membership** link. Someone who lands on your instance writes
+a short note saying who they are, presses **Continue to Sign Up**, and signs in —
+which is how the request arrives with a name attached. It **never grants access on
+its own**; it waits for you.
+
+You review requests **in place, on Settings > Sharing & Privacy** — the same page
+as the toggle. Each one shows who asked, their note, and when. Tick the roles they
+should have and approve to add them as a member, or deny it. It's the same roles as
+an invite; the only difference is who started the conversation.
+
+For what the person on the other side sees, and how to word the note, see
+[Request membership](/docs/authentication/request-membership).
+
+<Callout type="tip" title="When to use it: a relative who wants to follow along">
+  A grandparent asks to keep an eye on your child's glucose. Rather than
+  collecting their email and sending an invite, switch membership requests on and
+  point them at your instance. They sign in, request access, and you approve them as a
+  <strong>Viewer</strong> when it suits you — or deny it if you change your mind.
+</Callout>
+
+## Removing a member
+
+Change a member's role to a narrower one, or remove them entirely, from the member
+list on **Settings > Sharing & Privacy**. Removal takes effect immediately; their
+own account still exists, it just no longer reaches your data.

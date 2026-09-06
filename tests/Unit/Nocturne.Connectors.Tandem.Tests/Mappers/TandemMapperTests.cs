@@ -102,7 +102,7 @@ public class TandemMapperTests
         var windowEnd = Time.ToUtc(Raw + 600);
 
         var basals = new TandemBasalMapper(NullLogger.Instance, Time)
-            .Map(events, windowEnd, ignoreZeroUnitBasal: false);
+            .Map(events, windowEnd, ignoreZeroUnitBasal: false).Spans;
 
         basals.Should().HaveCount(2);
         basals[0].Rate.Should().Be(1.0);

@@ -52,7 +52,7 @@ public class AlarmHub : TenantAwareHub
                 authorization = await _tokenAuthorizer.AuthorizeTokenAsync(
                     authData.JwtToken,
                     TenantContext?.TenantId,
-                    OAuthScopes.GlucoseRead
+                    Scope.GlucoseRead
                 );
             }
             else if (authorization is null && !string.IsNullOrEmpty(authData.Secret))
@@ -69,7 +69,7 @@ public class AlarmHub : TenantAwareHub
             // an authentication entry point, because the credential arrives in this invocation.
             if (authorization is null
                 || !authorization.CanJoinTenantRelay
-                || !authorization.Satisfies(OAuthScopes.GlucoseRead))
+                || !authorization.Satisfies(Scope.GlucoseRead))
             {
                 _logger.LogWarning(
                     "Client {ConnectionId} alarm subscription failed - unauthorized",
@@ -115,7 +115,7 @@ public class AlarmHub : TenantAwareHub
     /// <param name="level">Alarm level to acknowledge</param>
     /// <param name="group">Alarm group to acknowledge</param>
     /// <param name="silenceTime">Time to silence alarm in milliseconds</param>
-    [HubScope(OAuthScopes.AlertsReadWrite)]
+    [HubScope(Scope.AlertsReadWrite)]
     public async Task Ack(int level, string group, int silenceTime)
     {
         try

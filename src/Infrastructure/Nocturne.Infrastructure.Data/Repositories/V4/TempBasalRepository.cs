@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -95,9 +96,7 @@ public class TempBasalRepository : ITempBasalRepository
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = query.ExcludeNonPrimary(ctx, RecordType.TempBasal);
 
         query = descending
             ? query.OrderByDescending(e => e.StartTimestamp)
@@ -163,7 +162,7 @@ public class TempBasalRepository : ITempBasalRepository
                     ct);
             if (existing != null)
             {
-                TempBasalMapper.UpdateEntity(existing, model);
+                ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = TempBasalMapper.ToDomainModel(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
@@ -178,6 +177,35 @@ public class TempBasalRepository : ITempBasalRepository
         var created = TempBasalMapper.ToDomainModel(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
         return created;
+    }
+
+    /// <summary>
+    /// Applies an upserted record onto the row matched by (DataSource, SyncIdentifier), keeping the
+    /// stored value of every field the write path cannot express.
+    /// </summary>
+    /// <remarks>
+    /// The match is made from the incoming record alone — the caller never read the stored row, so a
+    /// retry carries no value for server-resolved links (device attribution, resolved insulin context)
+    /// or for identity carried in from an import. Taking the incoming null for those would drop state
+    /// the retry never disputed: a re-upload after a device's usage window moved, or after the device
+    /// was removed, would unattribute a row that back-stamping had already resolved. Fields the request
+    /// can carry stay unconditional, so an omitted one still means "clear it".
+    /// </remarks>
+    private static void ApplySyncUpsert(TempBasalEntity entity, TempBasal model)
+    {
+        var deviceId = entity.DeviceId;
+        var patientDeviceId = entity.PatientDeviceId;
+        var legacyId = entity.LegacyId;
+        var insulinContextJson = entity.InsulinContextJson;
+        var additionalPropertiesJson = entity.AdditionalPropertiesJson;
+
+        TempBasalMapper.UpdateEntity(entity, model);
+
+        entity.DeviceId ??= deviceId;
+        entity.PatientDeviceId ??= patientDeviceId;
+        entity.LegacyId ??= legacyId;
+        entity.InsulinContextJson ??= insulinContextJson;
+        entity.AdditionalPropertiesJson ??= additionalPropertiesJson;
     }
 
     /// <summary>
@@ -220,12 +248,7 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<TempBasal> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted TempBasal {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
+        var entity = await ctx.RestoreDeletedAsync<TempBasalEntity>(id, nameof(TempBasal), ct);
         // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
         var restored = TempBasalMapper.ToDomainModel(entity);
         await RaiseBroadcastAsync([restored], [], [], origin, ct);
@@ -236,14 +259,8 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        var restored = entities.Select(TempBasalMapper.ToDomainModel).ToList();
+        var restored = (await ctx.RestoreDeletedAsync<TempBasalEntity>(ids, ct))
+            .Select(TempBasalMapper.ToDomainModel).ToList();
         await RaiseBroadcastAsync(restored, [], [], origin, ct);
         return restored;
     }
@@ -252,22 +269,15 @@ public class TempBasalRepository : ITempBasalRepository
     public async Task<IEnumerable<TempBasal>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel);
+        return (await ctx.GetDeletedAsync<TempBasalEntity>(limit, offset, ct))
+            .Select(TempBasalMapper.ToDomainModel);
     }
 
     /// <inheritdoc />
     public async Task<int> CountDeletedAsync(CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.TempBasals.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
+        return await ctx.CountDeletedAsync<TempBasalEntity>(ct);
     }
 
     /// <summary>
@@ -276,13 +286,18 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
+    /// <remarks>
+    /// Above <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> the ids are not
+    /// materialized and no delete event fires: temp basals ride only the native V4 port, which has no
+    /// coarse collection-level signal to fall back to (unlike the glucose family's entries sink).
+    /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var deletedIds = await ctx.AuditedSoftDeleteWithIdsAsync(
-            ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, ct);
-        await RaiseBroadcastAsync([], [], deletedIds, origin, ct);
-        return deletedIds.Count;
+        var result = await ctx.AuditedSoftDeleteWithIdsAsync(
+            ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, $"legacy_id={legacyId}", ct);
+        await RaiseBroadcastAsync([], [], result.Entities, origin, ct);
+        return result.Count;
     }
 
     /// <summary>
@@ -383,12 +398,7 @@ public class TempBasalRepository : ITempBasalRepository
                     RecordId: e.Id,
                     Mills: new DateTimeOffset(e.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                     DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    Criteria: new MatchCriteria
-                    {
-                        Rate = e.Rate,
-                        RateTolerance = 0.05,
-                        Duration = e.EndTimestamp.HasValue ? e.EndTimestamp.Value - e.StartTimestamp : null
-                    }
+                    Criteria: MatchCriteriaMapper.From(e)
                 )).ToList();
 
                 await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
@@ -421,7 +431,7 @@ public class TempBasalRepository : ITempBasalRepository
             ctx.TempBasals.Where(e => e.DataSource == source
                 && e.StartTimestamp >= from && e.StartTimestamp <= to
                 && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
-            _auditContext, ct);
+            _auditContext, $"data_source={source}", ct);
     }
 
     /// <inheritdoc />
@@ -431,8 +441,7 @@ public class TempBasalRepository : ITempBasalRepository
         var entity = await ctx.TempBasals
             .AsNoTracking()
             .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
-            .Where(t => !ctx.LinkedRecords
-                .Any(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary && lr.RecordId == t.Id))
+            .ExcludeNonPrimary(ctx, RecordType.TempBasal)
             .OrderByDescending(t => t.StartTimestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

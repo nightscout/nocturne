@@ -480,6 +480,50 @@ public class EntriesControllerTests
     }
 
     [Fact]
+    public async Task UpdateEntry_AcceptsIdGeneratedByCreateEndpoint()
+    {
+        var generatedId = Guid.CreateVersion7().ToString("N");
+        var update = new Entry { Sgv = 123, Mills = 1686565800000 };
+
+        _mockEntryService
+            .Setup(x =>
+                x.UpdateEntryAsync(
+                    generatedId,
+                    It.Is<Entry>(entry => entry.Id == generatedId),
+                    It.IsAny<CancellationToken>()
+                )
+            )
+            .ReturnsAsync((string _, Entry entry, CancellationToken _) => entry);
+
+        var result = await _controller.UpdateEntry(generatedId, update);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        _mockEntryService.Verify(
+            x =>
+                x.UpdateEntryAsync(
+                    generatedId,
+                    It.Is<Entry>(entry => entry.Id == generatedId),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task DeleteEntry_AcceptsIdGeneratedByCreateEndpoint()
+    {
+        var generatedId = Guid.CreateVersion7().ToString("N");
+
+        _mockEntryService
+            .Setup(x => x.DeleteEntryAsync(generatedId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await _controller.DeleteEntry(generatedId);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
     public async Task CreateEntries_MixedDuplicateAndNew_EchoesOneResponsePerSubmittedEntry()
     {
         var submitted = new[]

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -50,23 +51,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
     protected override string ConnectorSource => DataSources.CareLinkConnector;
     public override string ServiceName => ServiceNames.CareLinkConnector;
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.DeviceStatus,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake,
-        SyncDataType.TempBasals,
-        SyncDataType.StateSpans,
-    ];
-
-    /// <inheritdoc />
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in PerformSyncInternalAsync
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
 
     private async Task<bool> AuthenticateWithConfigAsync(CareLinkConnectorConfiguration config)
     {
@@ -101,27 +85,18 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         CareLinkConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
         // Authenticate with per-tenant config
         if (!await AuthenticateWithConfigAsync(config))
-        {
-            result.Success = false;
-            result.Errors.Add("Authentication failed");
-            result.EndTime = DateTimeOffset.UtcNow;
-            return result;
-        }
+            return AuthenticationFailedResult();
 
         if (string.IsNullOrEmpty(_accessToken))
         {
             _logger.LogError("[{ConnectorSource}] No access token available — authentication must succeed before sync", ConnectorSource);
-            result.Success = false;
-            result.Errors.Add("Authentication failed");
-            result.EndTime = DateTimeOffset.UtcNow;
-            return result;
+            return AuthenticationFailedResult();
         }
 
         var userInfo = await FetchUserInfoAsync(config, cancellationToken);
@@ -139,13 +114,13 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         // Seed the tenant timezone timeline from the pump's reported zone (idempotent; first sync only).
         await ConfigureCareLinkTimezoneAsync(data, cancellationToken);
 
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
+        var activeTypes = ResolveActiveTypes(request, config);
         var isStale = IsDataStale(data);
 
-        await PublishSensorGlucoseStepAsync(data, config, enabledTypes, isStale, result, cancellationToken);
-        await PublishDeviceStatusStepAsync(data, config, enabledTypes, result, cancellationToken);
-        await PublishAlarmStepAsync(data, config, result, cancellationToken);
-        await PublishTreatmentsStepAsync(data, config, enabledTypes, result, cancellationToken);
+        await PublishSensorGlucoseStepAsync(data, config, activeTypes, isStale, result, cancellationToken);
+        await PublishDeviceStatusStepAsync(data, config, activeTypes, result, cancellationToken);
+        await PublishAlarmStepAsync(data, config, activeTypes, result, cancellationToken);
+        await PublishTreatmentsStepAsync(data, config, activeTypes, result, cancellationToken);
 
         // Persist refresh token if it changed during sync
         await PersistRefreshTokenIfChangedAsync(cancellationToken);
@@ -164,9 +139,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         try
         {
             var host = GetServerHost(config);
-            var response = await GetWithHeadersAsync(
+            var response = await AuthenticatedGetAsync(
                 $"https://{host}{CareLinkConstants.Endpoints.UsersMe}",
-                AuthHeaders(),
                 cancellationToken);
 
             if (response.IsSuccessStatusCode)
@@ -250,40 +224,28 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishSensorGlucoseStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> activeTypes,
         bool isStale,
         SyncResult result,
         CancellationToken cancellationToken)
     {
-        if (!enabledTypes.Contains(SyncDataType.Glucose))
+        if (!activeTypes.Contains(SyncDataType.Glucose))
             return;
 
         if (isStale)
         {
+            // The payload arrived and held nothing recent enough to publish, which is a checked
+            // result rather than an unchecked one, so it still owes the tenant a count.
             _logger.LogDebug("[{ConnectorSource}] Skipping SGVs — data is stale (>{Threshold} min)",
                 ConnectorSource, CareLinkConstants.StaleDataThresholdMinutes);
+            RecordPublishOutcome(result, SyncDataType.Glucose, 0, success: true);
             return;
         }
 
         try
         {
-            var sgRecords = _sgMapper.Map(data);
-            if (sgRecords.Count > 0)
-            {
-                var success = await PublishSensorGlucoseDataAsync(sgRecords, config, cancellationToken);
-                result.ItemsSynced[SyncDataType.Glucose] = sgRecords.Count;
-                if (!success)
-                {
-                    result.Success = false;
-                    result.Errors.Add("SensorGlucose publish failed");
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "[{ConnectorSource}] Synced {Count} SensorGlucose records",
-                        ConnectorSource, sgRecords.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                _sgMapper.Map(data), PublishSensorGlucoseDataAsync, config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -306,27 +268,21 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishDeviceStatusStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> activeTypes,
         SyncResult result,
         CancellationToken cancellationToken)
     {
-        if (!enabledTypes.Contains(SyncDataType.DeviceStatus))
+        // Gated here as well as in the shared path, so a switched-off type is not mapped at all.
+        if (!activeTypes.Contains(SyncDataType.DeviceStatus))
             return;
 
         try
         {
-            var deviceStatus = CareLinkDeviceStatusMapper.Map(data);
-            var success = await PublishDeviceStatusAsync([deviceStatus], config, cancellationToken);
-            result.ItemsSynced[SyncDataType.DeviceStatus] = 1;
-            if (!success)
-            {
-                result.Success = false;
-                result.Errors.Add("DeviceStatus publish failed");
-            }
-            else
-            {
-                _logger.LogInformation("[{ConnectorSource}] Synced DeviceStatus", ConnectorSource);
-            }
+            List<Nocturne.Core.Models.DeviceStatus> deviceStatuses =
+                CareLinkDeviceStatusMapper.Map(data) is { } deviceStatus ? [deviceStatus] : [];
+
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceStatus, activeTypes,
+                deviceStatuses, PublishDeviceStatusAsync, config, cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -344,12 +300,15 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     }
 
     /// <summary>
-    ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. Alarm failures
-    ///     are logged but never fail the sync.
+    ///     Publishes the latest alarm as a SystemEvent, deduped by datetime+code. An alarm that did
+    ///     not reach the tenant leaves the dedup key behind so the next cycle retries it;
+    ///     a transport exception is only logged, matching the pre-existing policy for this step.
+    ///     Gating and counting follow <see cref="PublishSystemEventDataAsync"/>.
     /// </summary>
     private async Task PublishAlarmStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
+        HashSet<SyncDataType> activeTypes,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -364,16 +323,11 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                     data.MedicalDeviceTime ?? "", data.CurrentServerTime);
                 var systemEvent = CareLinkSystemEventMapper.Map(data.LastAlarm, pumpOffsetMs, data.CurrentServerTime);
-                if (systemEvent != null)
-                {
-                    var success = await PublishSystemEventDataAsync([systemEvent], config, cancellationToken);
-                    if (success)
-                    {
-                        _lastAlarmKey = alarmKey;
-                        _logger.LogInformation("[{ConnectorSource}] Published alarm event {Code}",
-                            ConnectorSource, data.LastAlarm.Code);
-                    }
-                }
+                if (systemEvent != null
+                    && await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+                        [systemEvent], PublishSystemEventDataAsync, config, cancellationToken,
+                        context: "from the last alarm"))
+                    _lastAlarmKey = alarmKey;
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -395,7 +349,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private async Task PublishTreatmentsStepAsync(
         CareLinkData data,
         CareLinkConnectorConfiguration config,
-        List<SyncDataType> enabledTypes,
+        HashSet<SyncDataType> activeTypes,
         SyncResult result,
         CancellationToken cancellationToken)
     {
@@ -404,39 +358,22 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var pumpOffsetMs = Utilities.CareLinkTimestampParser.CalculatePumpOffsetMs(
                 data.MedicalDeviceTime ?? "", data.CurrentServerTime);
 
-            if (enabledTypes.Contains(SyncDataType.Boluses))
-            {
-                var boluses = CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs);
-                if (boluses.Count > 0 && await PublishBolusDataAsync(boluses, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.Boluses] = boluses.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} Bolus records", ConnectorSource, boluses.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+                CareLinkTreatmentMapper.MapBoluses(data, pumpOffsetMs), PublishBolusDataAsync,
+                config, cancellationToken);
 
-            if (enabledTypes.Contains(SyncDataType.CarbIntake))
-            {
-                var carbs = CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs);
-                if (carbs.Count > 0 && await PublishCarbIntakeDataAsync(carbs, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.CarbIntake] = carbs.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} CarbIntake records", ConnectorSource, carbs.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                CareLinkTreatmentMapper.MapCarbIntakes(data, pumpOffsetMs), PublishCarbIntakeDataAsync,
+                config, cancellationToken);
 
-            if (enabledTypes.Contains(SyncDataType.TempBasals))
-            {
-                var tempBasals = CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs);
-                if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Synced {Count} TempBasal records", ConnectorSource, tempBasals.Count);
-                }
-            }
+            await PublishRecordTypeAsync(result, SyncDataType.TempBasals, activeTypes,
+                CareLinkTreatmentMapper.MapTempBasals(data, pumpOffsetMs), PublishTempBasalDataAsync,
+                config, cancellationToken);
 
-            var notifications = CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs);
-            if (notifications.Count > 0 && await PublishSystemEventDataAsync(notifications, config, cancellationToken))
-                _logger.LogInformation("[{ConnectorSource}] Synced {Count} notification events", ConnectorSource, notifications.Count);
+            await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
+                CareLinkSystemEventMapper.MapNotifications(data.NotificationHistory, pumpOffsetMs),
+                PublishSystemEventDataAsync, config, cancellationToken,
+                context: "from notification history");
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
@@ -557,9 +494,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var monitorResponse = await GetWithHeadersAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}",
-                AuthHeaders(), ct);
+            var monitorResponse = await AuthenticatedGetAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}", ct);
             if (monitorResponse.IsSuccessStatusCode)
                 return await DeserializeResponseAsync<CareLinkData>(monitorResponse, ct);
         }
@@ -596,10 +532,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var settingsResponse = await GetWithHeadersAsync(
+            var settingsResponse = await AuthenticatedGetAsync(
                 $"https://{host}{CareLinkConstants.Endpoints.CountrySettings}" +
-                $"?countryCode={config.CountryCode}&language={config.LanguageCode}",
-                AuthHeaders(), ct);
+                $"?countryCode={config.CountryCode}&language={config.LanguageCode}", ct);
 
             if (!settingsResponse.IsSuccessStatusCode)
             {
@@ -620,7 +555,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
                 body["patientId"] = patientId;
 
             using var jsonContent = JsonContent.Create(body);
-            var response = await PostWithHeadersAsync(endpoint, jsonContent, AuthHeaders(), ct);
+            var response = await AuthenticatedPostAsync(endpoint, jsonContent, ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -655,7 +590,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var url = $"https://{host}{CareLinkConstants.Endpoints.ConnectData}" +
                       $"?cpSerialNumber=NONE&msgType=last24hours&requestTime={timestamp}";
 
-            var response = await GetWithHeadersAsync(url, AuthHeaders(), ct);
+            var response = await AuthenticatedGetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -702,7 +637,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             {
                 var url = $"https://{host}/connect/carepartner{version}display/data";
                 using var jsonContent = JsonContent.Create(body);
-                var response = await PostWithHeadersAsync(url, jsonContent, AuthHeaders(), ct);
+                var response = await AuthenticatedPostAsync(url, jsonContent, ct);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -740,9 +675,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var response = await GetWithHeadersAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}",
-                AuthHeaders(), ct);
+            var response = await AuthenticatedGetAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}", ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -833,6 +767,32 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// </summary>
     private Dictionary<string, string> AuthHeaders() =>
         new() { ["Authorization"] = $"Bearer {_accessToken}" };
+
+    private async Task<HttpResponseMessage> AuthenticatedGetAsync(string url, CancellationToken ct)
+    {
+        var response = await GetWithHeadersAsync(url, AuthHeaders(), ct);
+        DropTokenIfRejected(response);
+        return response;
+    }
+
+    private async Task<HttpResponseMessage> AuthenticatedPostAsync(
+        string url, HttpContent content, CancellationToken ct)
+    {
+        var response = await PostWithHeadersAsync(url, content, AuthHeaders(), ct);
+        DropTokenIfRejected(response);
+        return response;
+    }
+
+    /// <summary>
+    ///     Drops the cached token when CareLink rejects it, so the next sync re-authenticates.
+    ///     Without this a token revoked or invalidated server-side stays cached until its nominal
+    ///     expiry and every request until then fails.
+    /// </summary>
+    private void DropTokenIfRejected(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            _tokenProvider.InvalidateToken();
+    }
 
     /// <summary>
     ///     Returns true if the last medical device update is older than the staleness threshold.

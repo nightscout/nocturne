@@ -1,6 +1,6 @@
 # Java SDK template overrides
 
-Both files are the stock templates from openapi-generator **v7.21.0**
+All three files are the stock templates from openapi-generator **v7.21.0**
 (`modules/openapi-generator/src/main/resources/Java/libraries/okhttp-gson/`)
 with minimal, documented changes. Together with `../.openapi-generator-ignore`
 they replace all post-generation shell edits — the generated project under
@@ -27,6 +27,22 @@ openapi-generator option — it was silently ignored (versions ≤ 0.2.3
 shipped requiring OkHttp 4.12.0 despite it). The template override plus the
 CI gate is what actually provides 3.x compatibility.
 
+## `libraries/okhttp-gson/auth/OAuthOkHttpClient.mustache`
+
+The single `RequestBody.create(content, mediaType)` call site is swapped to the
+`RequestBody.create(mediaType, content)` order, for the reason above.
+
+This file is only generated when the spec carries an OAuth2 security scheme,
+which `openapi-v4.json` gained after v0.2.4 — so the `RequestBody` guarantee
+was reached by a source file that no override covered, and the floor gate
+caught it.
+
+The same scheme also generates `auth/RetryingOAuth.java` and OAuth branches in
+`ApiClient.java`. Those need no override, but all three import Apache Oltu, so
+the floor gate's classpath carries `org.apache.oltu.oauth2.client` (declared by
+the generated `build.gradle`) and its `org.apache.oltu.oauth2.common`
+transitive.
+
 ## `libraries/okhttp-gson/build.gradle.mustache`
 
 Two changes:
@@ -50,3 +66,8 @@ When bumping the pinned `openapitools/openapi-generator-cli` version:
    see exactly what was changed).
 3. The floor-compatibility CI step catches a missed `RequestBody.create`
    swap; a missed build.gradle change surfaces as a gradle build failure.
+4. Diff the new stock `build.gradle.mustache`'s dependency block against the
+   floor step's classpath in `sdk-publish.yml`. A generator bump can change a
+   dependency version or add one; the two lists are maintained by hand and
+   nothing checks that they agree. A stale entry fails loudly (missing
+   package), never silently.

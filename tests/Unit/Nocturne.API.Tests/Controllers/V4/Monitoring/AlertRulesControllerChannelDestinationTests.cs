@@ -8,6 +8,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -44,6 +45,7 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ILogger<AlertRulesController>>());
 
         var http = new DefaultHttpContext();
@@ -223,6 +225,46 @@ public class AlertRulesControllerChannelDestinationTests
 
         var result = await controller.CreateRule(
             RuleWith(channelType, destination),
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Theory]
+    [InlineData("+15551234567")]
+    [InlineData("+61412345678")]
+    [InlineData("+441632960001")]
+    [InlineData("+1234567")]         // 7 digits — the E.164 minimum
+    [InlineData("+123456789012345")] // 15 digits — the E.164 maximum
+    public async Task CreateRule_accepts_a_whatsapp_destination_in_e164(string destination)
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.WhatsAppDm, destination),
+            CancellationToken.None);
+
+        var created = result.Result.Should().BeOfType<CreatedAtActionResult>()
+            .Subject.Value.Should().BeOfType<AlertRuleResponse>().Subject;
+        created.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(destination);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    [InlineData("15551234567")]        // a webhook wa_id — no leading +
+    [InlineData("+1 (555) 123-4567")]  // separators the Cloud API tolerates, we do not store
+    [InlineData("+0155512345")]        // no country calling code starts with 0
+    [InlineData("+123456")]            // 6 digits — one short
+    [InlineData("+1234567890123456")]  // 16 digits — one past the E.164 maximum
+    [InlineData("whatsapp:+15551234567")]
+    public async Task CreateRule_rejects_a_whatsapp_destination_outside_e164(string? destination)
+    {
+        var (controller, _) = CreateController();
+
+        var result = await controller.CreateRule(
+            RuleWith(ChannelType.WhatsAppDm, destination),
             CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();

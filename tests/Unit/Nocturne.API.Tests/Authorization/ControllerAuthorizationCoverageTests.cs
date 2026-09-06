@@ -51,16 +51,17 @@ public class ControllerAuthorizationCoverageTests
     private static readonly IReadOnlyDictionary<string, string> FallbackGatedControllers =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // ── V4 public-share read analytics ──────────────────────────────────────────────
-            // Read-only (GET) aggregates over glucose/treatment data that the public-share
-            // dashboard renders for an anonymous share visitor. The fallback admits the share
-            // subject; the per-category share RLS policy (ShareDataCategories) then restricts the
-            // underlying rows to the categories the share was granted. Adding [Authorize] here
-            // would 401 the anonymous share dashboard. All actions are GET, so there is no write
-            // surface to expose.
-            ["Nocturne.API.Controllers.V4.Analytics.ChartDataController"] = "public-share read analytics (fallback + share RLS)",
-            ["Nocturne.API.Controllers.V4.Analytics.RetrospectiveController"] = "public-share read analytics (fallback + share RLS)",
-            ["Nocturne.API.Controllers.V4.Analytics.PredictionController"] = "public-share read analytics (fallback + share RLS)",
+            // ── V4 caller-scoped identity read ──────────────────────────────────────────────
+            // Answers with the caller's own resolved grant, which discloses nothing a request of
+            // theirs would not. The share view needs it to offer only the surfaces it can load, and
+            // the share subject is unauthenticated, so [Authorize] would 401 every public share.
+            ["Nocturne.API.Controllers.V4.Identity.MyPermissionsController"] = "returns the caller's own grant; fallback rejects an empty trie",
+
+            // The appearance the share renders with, for the anonymous share subject [Authorize]
+            // would 401. It answers only when the request arrived over a share token, and only
+            // with presentation fields — no identity, and nothing the viewer's own page does not
+            // already display.
+            ["Nocturne.API.Controllers.V4.Identity.ShareAppearanceController"] = "presentation-only, share-host-only; fallback rejects an empty trie",
 
             // ── V4 caller-scoped identity read ──────────────────────────────────────────────
             // Answers with the caller's own resolved grant, which discloses nothing a request of

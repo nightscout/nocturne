@@ -8,7 +8,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -75,18 +75,17 @@
       stdDev: basicStats?.standardDeviation ?? 0,
       // The A1c estimate is computed by the backend; there is no frontend fallback.
       a1cDCCT: analysis?.gmi?.value ?? glycemicVariability?.estimatedA1c ?? null,
-      gvi: glycemicVariability?.glycemicVariabilityIndex ?? 0,
-      pgs: glycemicVariability?.patientGlycemicStatus ?? 0,
-      meanTotalDailyChange: glycemicVariability?.meanTotalDailyChange ?? 0,
-      timeInFluctuation: glycemicVariability?.timeInFluctuation ?? 0,
+      gvi: glycemicVariability?.glycemicVariabilityIndex ?? null,
+      pgs: glycemicVariability?.patientGlycemicStatus ?? null,
+      meanTotalDailyChange: glycemicVariability?.meanTotalDailyChange ?? null,
+      timeInFluctuation: glycemicVariability?.timeInFluctuation ?? null,
     };
   });
 
   const dateRangeDisplay = $derived.by(() => {
     const dateRange = reportsResource.current?.dateRange;
     if (!dateRange) return "";
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-    return `${new Date(dateRange.from).toLocaleDateString(undefined, options)} – ${new Date(dateRange.to).toLocaleDateString(undefined, options)}`;
+    return `${formatShortDate(dateRange.from, true)} – ${formatShortDate(dateRange.to, true)}`;
   });
 </script>
 
@@ -253,13 +252,17 @@
               <div class="flex justify-between">
                 <span class="text-muted-foreground">GVI</span>
                 <span class="text-2xl font-bold">
-                  {overallStats.gvi.toFixed(2)}
+                  {overallStats.gvi != null
+                    ? overallStats.gvi.toFixed(2)
+                    : "No estimate"}
                 </span>
               </div>
               <div class="flex justify-between">
                 <span class="text-muted-foreground">PGS</span>
                 <span class="text-2xl font-bold">
-                  {overallStats.pgs.toFixed(1)}
+                  {overallStats.pgs != null
+                    ? overallStats.pgs.toFixed(1)
+                    : "No estimate"}
                 </span>
               </div>
             </div>
@@ -276,13 +279,17 @@
               <div class="flex justify-between">
                 <span class="text-muted-foreground">Mean Total Daily Change</span>
                 <span class="text-2xl font-bold">
-                  {bg(overallStats.meanTotalDailyChange)} {bgLabel()}
+                  {overallStats.meanTotalDailyChange != null
+                    ? `${bg(overallStats.meanTotalDailyChange)} ${bgLabel()}`
+                    : "No estimate"}
                 </span>
               </div>
               <div class="flex justify-between">
                 <span class="text-muted-foreground">Time in Fluctuation</span>
                 <span class="text-2xl font-bold">
-                  {overallStats.timeInFluctuation.toFixed(1)}%
+                  {overallStats.timeInFluctuation != null
+                    ? `${overallStats.timeInFluctuation.toFixed(1)}%`
+                    : "No estimate"}
                 </span>
               </div>
             </div>

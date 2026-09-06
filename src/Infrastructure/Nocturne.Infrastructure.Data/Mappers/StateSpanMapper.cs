@@ -16,9 +16,7 @@ public static class StateSpanMapper
     {
         return new StateSpanEntity
         {
-            Id = string.IsNullOrEmpty(stateSpan.Id)
-                ? Guid.CreateVersion7()
-                : MapperHelpers.ParseIdToGuid(stateSpan.Id),
+            Id = MapperHelpers.ParseIdToGuid(stateSpan.Id),
             Category = stateSpan.Category.ToString(),
             State = stateSpan.State ?? string.Empty,
             StartTimestamp = stateSpan.StartTimestamp,

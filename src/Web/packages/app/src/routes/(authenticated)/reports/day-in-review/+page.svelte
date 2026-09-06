@@ -23,7 +23,7 @@
   } from "lucide-svelte";
   import { getDayInReviewData } from "./data.remote";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatLongDate, getUnitLabel, time } from "$lib/utils/formatting";
   import {
     getRowTypeStyle,
     mergeTreatmentRows,
@@ -79,22 +79,20 @@
     target.setDate(target.getDate() + days);
     goto(`/reports/day-in-review?date=${toDayString(target)}`, {
       invalidateAll: true,
+      replaceState: true,
     });
   }
 
-  function goBackToMonthView() {
-    goto("/calendar");
+  function goBackToPreviousView() {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      goto("/calendar");
+    }
   }
 
   // Format date for display
-  const dateDisplay = $derived.by(() => {
-    return currentDate.toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  });
+  const dateDisplay = $derived(formatLongDate(currentDate));
 
   // Get units preference
   const units = $derived(glucoseUnits.current);
@@ -280,10 +278,10 @@
           variant="ghost"
           size="sm"
           class="self-start @2xl:self-auto"
-          onclick={goBackToMonthView}
+          onclick={goBackToPreviousView}
         >
           <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Month View
+          Back to Previous View
         </Button>
 
         <div class="flex items-center justify-center gap-2">
@@ -350,7 +348,8 @@
           <div>
             <div class="text-muted-foreground">CV</div>
             <div class="font-medium tabular-nums">
-              {(analysis?.glycemicVariability?.coefficientOfVariation ?? 0).toFixed(1)}%
+              {analysis?.glycemicVariability?.coefficientOfVariation?.toFixed(1) ??
+                "–"}%
             </div>
           </div>
           <div>
@@ -503,12 +502,7 @@
                 onclick={() => handleTreatmentClick(row)}
               >
                 <Table.Cell class="font-medium">
-                  {row.mills
-                    ? new Date(row.mills).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "—"}
+                  {row.mills ? time(row.mills) : "—"}
                 </Table.Cell>
                 <Table.Cell>
                   <Badge

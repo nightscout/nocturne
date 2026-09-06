@@ -946,7 +946,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         {
             data["statAvg"] = GlucoseFormatHelper.FormatValue(analytics!.BasicStats.Mean, settings.Unit);
             data["statGmi"] = day!.Gmi is { } gmi ? $"{gmi.Value:0.0}%" : "--";
-            data["statCv"] = $"{analytics.GlycemicVariability.CoefficientOfVariation:0}%";
+            data["statCv"] = analytics.GlycemicVariability is { } gv ? $"{gv.CoefficientOfVariation:0}%" : "--";
         }
 
         return (GetTemplate("StatsTemplate.json"), data);

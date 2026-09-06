@@ -47,12 +47,3 @@ export function describeCluster(cluster: GlucoseCluster): string {
   }
   return parts.join(", ");
 }
-
-export function formatDuration(minutes: number | undefined): string {
-  if (minutes == null) return "—";
-  const m = Math.round(minutes);
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem === 0 ? `${h} h` : `${h} h ${rem} min`;
-}

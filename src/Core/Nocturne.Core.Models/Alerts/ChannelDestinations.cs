@@ -72,6 +72,8 @@ public static partial class ChannelDestinations
         [ChannelType.TelegramDm] = new(TelegramUserId(), "a Telegram user ID (digits)"),
         [ChannelType.TelegramGroup] = new(
             TelegramGroupId(), "a Telegram group chat ID (-100…) or an @username"),
+        [ChannelType.WhatsAppDm] = new(
+            WhatsAppPhoneNumber(), "an E.164 phone number with a leading + (+15551234567)"),
     };
 
     /// <summary>The channel types the rule editor offers, each classified by destination mode.</summary>
@@ -129,4 +131,10 @@ public static partial class ChannelDestinations
 
     [GeneratedRegex(@"^(-\d+|@[A-Za-z][A-Za-z0-9_]{4,31})$")]
     private static partial Regex TelegramGroupId();
+
+    // The Cloud API prepends the business phone number's own country calling code to any `to`
+    // value that omits the leading +, so a destination stored without one is delivered to a
+    // different number entirely.
+    [GeneratedRegex(@"^\+[1-9]\d{6,14}$")]
+    private static partial Regex WhatsAppPhoneNumber();
 }

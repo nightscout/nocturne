@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDate } from "$lib/utils/formatting";
     import {page} from "$app/state";
     import { Button } from "$lib/components/ui/button";
     import {ReportsFilterSidebar} from "$lib/components/layout";
@@ -86,7 +87,7 @@
         <div class="hidden print:block border-b border-border pb-3 mb-4 px-3">
             <h1 class="text-xl font-bold text-foreground">{reportName}</h1>
             <p class="text-sm text-muted-foreground">
-                {#if showFilters}{dateRangeDisplay} · {/if}Generated {new Date().toLocaleString()}
+                {#if showFilters}{dateRangeDisplay} · {/if}Generated {formatDate(new Date())}
             </p>
         </div>
 

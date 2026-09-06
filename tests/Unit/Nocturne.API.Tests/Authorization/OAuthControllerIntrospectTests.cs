@@ -41,7 +41,7 @@ public class OAuthControllerIntrospectTests
                 TenantId = _tenantId,
                 ClientId = "test-client-id",
                 JwtId = "test-jwt-id",
-                Scopes = [OAuthScopes.GlucoseRead],
+                Scopes = [Scope.GlucoseRead],
                 IssuedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             }));
@@ -170,7 +170,7 @@ public class OAuthControllerIntrospectTests
         var response = ResponseOf(result);
         response.Active.Should().BeTrue();
         response.Sub.Should().Be(_callerSubjectId.ToString());
-        response.Scope.Should().Be(OAuthScopes.GlucoseRead);
+        response.Scope.Should().Be(Scope.GlucoseRead);
         response.TokenType.Should().Be("access_token");
     }
 
@@ -206,7 +206,7 @@ public class OAuthControllerIntrospectTests
                 TenantId = otherTenantId,
                 ClientId = "test-client-id",
                 JwtId = "test-jwt-id",
-                Scopes = [OAuthScopes.GlucoseRead],
+                Scopes = [Scope.GlucoseRead],
                 IssuedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             }));

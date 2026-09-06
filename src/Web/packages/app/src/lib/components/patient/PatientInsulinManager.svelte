@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import {
     Syringe,
     Plus,
@@ -39,11 +40,7 @@
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "";
     const d = new Date(date);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatMediumDate(d);
   }
 
   /** Get formulations matching the selected category */
@@ -298,7 +295,7 @@
             <input type="hidden" name="formulationId" value={inlineFormulationId} />
           {/if}
 
-          {#each insulinList.createForm.fields.allIssues() as issue}
+          {#each insulinList.createForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -458,7 +455,7 @@
             <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
           {/if}
 
-          {#each activeForm.fields.allIssues() as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>
@@ -485,29 +482,19 @@
   </Dialog.Root>
 
   <!-- Insulin Delete Confirmation -->
-  <AlertDialog.Root
+  <ConfirmDialog
     open={deleteId !== null}
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
+    title="Delete Insulin"
+    confirmLabel="Delete"
+    destructive
+    onConfirm={handleDelete}
   >
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete Insulin</AlertDialog.Title>
-        <AlertDialog.Description>
-          Are you sure you want to delete this insulin? This action cannot be
-          undone.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action
-          class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          onclick={handleDelete}
-        >
-          Delete
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Root>
+    {#snippet description()}
+      Are you sure you want to delete this insulin? This action cannot be
+      undone.
+    {/snippet}
+  </ConfirmDialog>
 {/if}

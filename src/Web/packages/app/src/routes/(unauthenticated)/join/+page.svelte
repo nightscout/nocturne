@@ -33,12 +33,14 @@
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
   import { FormError, describeSubmitError } from "$lib/forms";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
 
   // ── Remote data ───────────────────────────────────────────────────
   const inviteInfoQuery = $derived(token ? getInviteInfo(token) : undefined);
+  retainQuery(() => inviteInfoQuery);
   const oidcQuery = getOidcProviders();
 
   const inviteInfo = $derived(inviteInfoQuery?.current);

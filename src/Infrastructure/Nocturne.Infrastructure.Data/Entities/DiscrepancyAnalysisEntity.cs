@@ -13,9 +13,6 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     /// <summary>
     /// Identifier of the tenant this discrepancy analysis belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
@@ -27,12 +24,12 @@ public class DiscrepancyAnalysisEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Request correlation ID for tracking
+    /// Request trace identifier for tracking
     /// </summary>
     [Column("correlation_id")]
     [MaxLength(128)]
     [Required]
-    public string CorrelationId { get; set; } = string.Empty;
+    public string TraceId { get; set; } = string.Empty;
 
     /// <summary>
     /// Timestamp when the analysis was performed

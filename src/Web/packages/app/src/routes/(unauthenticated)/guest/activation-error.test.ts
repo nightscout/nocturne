@@ -2,18 +2,17 @@ import { describe, it, expect } from "vitest";
 import { classifyActivationError } from "./activation-error";
 
 describe("classifyActivationError", () => {
-  it("treats the API's typed rejection body as a refused code", () => {
-    // The generated client throws the parsed 400 body itself, which carries no
-    // status — reading only `status` reported every wrong code as an outage.
+  it("treats the API's refusal as a refused code", () => {
+    // ProblemDetails carries the status in its own body, so the parsed throw the
+    // generated client hands back has one.
     expect(
-      classifyActivationError({ expiresAt: null, error: "Invalid or expired code" })
+      classifyActivationError({
+        type: "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        title: "Bad Request",
+        status: 400,
+        detail: "Invalid or expired code",
+      })
     ).toBe("rejected");
-  });
-
-  it("treats a rejection body with a null error as a refused code", () => {
-    expect(classifyActivationError({ expiresAt: null, error: null })).toBe(
-      "rejected"
-    );
   });
 
   it("treats an explicit 400 as a refused code", () => {
@@ -25,15 +24,6 @@ describe("classifyActivationError", () => {
   it("recognises the rate limiter", () => {
     expect(
       classifyActivationError({ status: 429, message: "Too Many Requests" })
-    ).toBe("rate-limited");
-  });
-
-  it("does not read the rate limiter's body as a refused code", () => {
-    expect(
-      classifyActivationError({
-        status: 429,
-        error: "rate_limit_exceeded",
-      })
     ).toBe("rate-limited");
   });
 
@@ -49,5 +39,10 @@ describe("classifyActivationError", () => {
     );
     expect(classifyActivationError(null)).toBe("unavailable");
     expect(classifyActivationError("boom")).toBe("unavailable");
+  });
+
+  it("does not read a status-less body as a refused code", () => {
+    // A body with no status is an outage we cannot classify, not a bad code.
+    expect(classifyActivationError({ expiresAt: null })).toBe("unavailable");
   });
 });

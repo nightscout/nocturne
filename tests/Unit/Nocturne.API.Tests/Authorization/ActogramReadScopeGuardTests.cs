@@ -23,6 +23,7 @@ public class ActogramReadScopeGuardTests
         Thresholds = new ChartThresholdsDto { Low = 70, High = 180 },
         HeartRates = [new HeartRatePointDto { Time = 1700000000000, Bpm = 64 }],
         StepCounts = [new StepBubbleDto { Time = 1700000000000, Steps = 900 }],
+        StepDayTotals = new() { ["2023-11-14"] = 900 },
         SleepSpans = [new ActogramSleepSpan { StartMills = 1, EndMills = 2, State = "deep" }],
     };
 
@@ -32,21 +33,23 @@ public class ActogramReadScopeGuardTests
     [Fact]
     public void Redact_GlucoseOnlyGrant_KeepsGlucoseAndItsThresholds()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.GlucoseRead));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.GlucoseRead));
 
         data.Glucose.Should().HaveCount(1);
         data.Thresholds.Low.Should().Be(70);
         data.HeartRates.Should().BeEmpty();
         data.StepCounts.Should().BeEmpty();
+        data.StepDayTotals.Should().BeEmpty();
         data.SleepSpans.Should().BeEmpty();
     }
 
     [Fact]
     public void Redact_StepCountOnlyGrant_KeepsOnlyStepCounts()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.StepCountRead));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.StepCountRead));
 
         data.StepCounts.Should().HaveCount(1);
+        data.StepDayTotals.Should().ContainKey("2023-11-14");
         data.Glucose.Should().BeEmpty();
         data.HeartRates.Should().BeEmpty();
         data.SleepSpans.Should().BeEmpty();
@@ -55,7 +58,7 @@ public class ActogramReadScopeGuardTests
     [Fact]
     public void Redact_HeartRateOnlyGrant_KeepsOnlyHeartRates()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.HeartRateRead));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.HeartRateRead));
 
         data.HeartRates.Should().HaveCount(1);
         data.Glucose.Should().BeEmpty();
@@ -70,7 +73,7 @@ public class ActogramReadScopeGuardTests
     [Fact]
     public void Redact_WithoutGlucose_ClearsTheThresholds()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.SleepRead));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.SleepRead));
 
         data.Thresholds.Should().BeEquivalentTo(new ChartThresholdsDto());
     }
@@ -90,7 +93,7 @@ public class ActogramReadScopeGuardTests
     [Fact]
     public void Redact_FullAccess_KeepsEveryCategory()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.FullAccess));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.FullAccess));
 
         data.Glucose.Should().HaveCount(1);
         data.HeartRates.Should().HaveCount(1);
@@ -106,7 +109,7 @@ public class ActogramReadScopeGuardTests
     [Fact]
     public void Redact_ReadWriteGrant_SatisfiesTheReadCategory()
     {
-        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(OAuthScopes.SleepReadWrite));
+        var data = ActogramReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.SleepReadWrite));
 
         data.SleepSpans.Should().HaveCount(1);
         data.Glucose.Should().BeEmpty();
@@ -121,18 +124,18 @@ public class ActogramReadScopeGuardTests
     {
         ActogramReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo(new[]
         {
-            OAuthScopes.GlucoseRead,
-            OAuthScopes.HeartRateRead,
-            OAuthScopes.StepCountRead,
-            OAuthScopes.SleepRead,
+            Scope.GlucoseRead,
+            Scope.HeartRateRead,
+            Scope.StepCountRead,
+            Scope.SleepRead,
         });
     }
 
     /// <summary>
     /// The action attribute is what the pipeline actually enforces, and the guard only runs on a
     /// request the attribute admitted. Requiring all four instead would 403 every public share,
-    /// because <see cref="OAuthScopes.SleepRead"/> is outside
-    /// <see cref="TenantPermissions.PublicShareScopes"/>.
+    /// because <see cref="Scope.SleepRead"/> is outside
+    /// <see cref="Scope.PublicShareScopes"/>.
     /// </summary>
     [Fact]
     public void GetActogram_AdmitsAnyMergedCategory()
@@ -159,7 +162,7 @@ public class ActogramReadScopeGuardTests
             .ReturnsAsync(OneRecordPerCategory());
 
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["GrantedScopes"] = Granted(OAuthScopes.StepCountRead);
+        httpContext.Items["GrantedScopes"] = Granted(Scope.StepCountRead);
 
         var controller = new ActogramController(
             service.Object, NullLogger<ActogramController>.Instance)

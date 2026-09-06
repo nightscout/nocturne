@@ -9,7 +9,7 @@ namespace Nocturne.Core.Models.Tests.ClientDevices;
 public class DeviceCapabilitiesTests
 {
     private static readonly IReadOnlySet<string> NotifyAndActuate =
-        new HashSet<string> { OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate };
+        new HashSet<string> { Scope.DeviceNotify, Scope.DeviceActuate };
 
     [Fact]
     public void Accept_keeps_known_kind_allowed_and_scoped_capabilities()
@@ -48,7 +48,7 @@ public class DeviceCapabilitiesTests
     [Fact]
     public void Accept_drops_hardware_capabilities_without_actuate_scope()
     {
-        var notifyOnly = new HashSet<string> { OAuthScopes.DeviceNotify };
+        var notifyOnly = new HashSet<string> { Scope.DeviceNotify };
 
         var result = DeviceCapabilities.Accept(
             DeviceKinds.Prelude,
@@ -61,7 +61,7 @@ public class DeviceCapabilitiesTests
     [Fact]
     public void Accept_full_access_scope_satisfies_all()
     {
-        var star = new HashSet<string> { OAuthScopes.FullAccess };
+        var star = new HashSet<string> { Scope.FullAccess };
 
         var result = DeviceCapabilities.Accept(
             DeviceKinds.Prelude,

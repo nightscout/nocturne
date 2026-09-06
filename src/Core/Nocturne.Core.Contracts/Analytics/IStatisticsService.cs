@@ -105,9 +105,11 @@ public interface IStatisticsService
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps for time-dependent metrics.</param>
-    /// <returns>A <see cref="GlycemicVariability"/> containing all variability metrics.</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 data points.</exception>
-    GlycemicVariability CalculateGlycemicVariability(
+    /// <returns>
+    /// A <see cref="GlycemicVariability"/> containing all variability metrics, or null for fewer
+    /// than two values.
+    /// </returns>
+    GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
         IEnumerable<SensorGlucose> entries
     );
@@ -127,27 +129,11 @@ public interface IStatisticsService
     double CalculateMAGE(IEnumerable<double> values);
 
     /// <summary>
-    /// Calculate Continuous Overall Net Glycemic Action (CONGA).
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL at regular intervals.</param>
-    /// <param name="hours">CONGA window in hours (default 2).</param>
-    /// <returns>CONGA value.</returns>
-    double CalculateCONGA(IEnumerable<double> values, int hours = 2);
-
-    /// <summary>
     /// Calculate Average Daily Risk Range (ADRR).
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <returns>ADRR value.</returns>
     double CalculateADRR(IEnumerable<double> values);
-
-    /// <summary>
-    /// Calculate the Lability Index from timestamped glucose entries.
-    /// </summary>
-    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <returns>Lability Index value.</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 entries.</exception>
-    double CalculateLabilityIndex(IEnumerable<SensorGlucose> entries);
 
     /// <summary>
     /// Calculate the J-Index (combines mean and variability).
@@ -172,15 +158,6 @@ public interface IStatisticsService
     /// <returns>LBGI value.</returns>
     /// <exception cref="ArgumentException">Thrown when the values collection is empty.</exception>
     double CalculateLBGI(IEnumerable<double> values);
-
-    /// <summary>
-    /// Calculate Glycemic Variability Index (GVI).
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL.</param>
-    /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps.</param>
-    /// <returns>GVI value (1.0 = perfectly stable).</returns>
-    /// <exception cref="ArgumentException">Thrown when there are fewer than 2 values or entries.</exception>
-    double CalculateGVI(IEnumerable<double> values, IEnumerable<SensorGlucose> entries);
 
     /// <summary>
     /// Calculate Patient Glycemic Status (PGS) composite score.
@@ -233,29 +210,24 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// Calculate glucose distribution across bins from raw glucose values.
-    /// </summary>
-    /// <param name="glucoseValues">Glucose values in mg/dL.</param>
-    /// <param name="bins">Optional custom distribution bins. Uses default bins if <c>null</c>.</param>
-    /// <returns>Distribution data points for histogram rendering.</returns>
-    IEnumerable<DistributionDataPoint> CalculateGlucoseDistributionFromValues(
-        IEnumerable<double> glucoseValues,
-        IEnumerable<DistributionBin>? bins = null
-    );
-
-    /// <summary>
-    /// Calculate estimated HbA1c as a formatted string from glucose values.
-    /// </summary>
-    /// <param name="values">Glucose values in mg/dL.</param>
-    /// <returns>Formatted estimated HbA1c string (e.g., "6.5%").</returns>
-    string CalculateEstimatedHbA1C(IEnumerable<double> values);
-
-    /// <summary>
     /// Calculate averaged statistics bucketed by time of day from <see cref="SensorGlucose"/> entries.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
     /// <returns>Time-of-day averaged statistics for AGP-style charts.</returns>
     IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries);
+
+    /// <summary>
+    /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's
+    /// local clock, for the week-to-week report. Readings without a timestamp or glucose value
+    /// are skipped; slots no reading falls in are absent.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <returns>The populated slots in time-of-day order.</returns>
+    IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    );
 
     // Treatment Statistics
 
@@ -290,15 +262,8 @@ public interface IStatisticsService
     double GetBolusPercentage(TreatmentSummary treatmentSummary);
 
     /// <summary>
-    /// Get basal insulin as a percentage of total daily insulin.
-    /// </summary>
-    /// <param name="treatmentSummary">Treatment summary to read from.</param>
-    /// <returns>Basal percentage (0-100).</returns>
-    double GetBasalPercentage(TreatmentSummary treatmentSummary);
-
-    /// <summary>
     /// Calculate comprehensive insulin delivery statistics.
-    /// Basal data comes from TempBasals and algorithmBoluses; pass empty collections if none are available.
+    /// Basal data comes from TempBasals, algorithmBoluses, and basalInjections (MDI); pass empty collections if none are available.
     /// </summary>
     InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
         IEnumerable<Bolus> boluses,
@@ -306,31 +271,9 @@ public interface IStatisticsService
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
-        DateTime endDate
+        DateTime endDate,
+        IEnumerable<BasalInjection>? basalInjections = null
     );
-
-    // Formatting Utilities
-
-    /// <summary>Format an insulin value for display (e.g., "1.25U").</summary>
-    /// <param name="value">Insulin value in units.</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatInsulinDisplay(double value);
-
-    /// <summary>Format a carb value for display (e.g., "45g").</summary>
-    /// <param name="value">Carb value in grams.</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatCarbDisplay(double value);
-
-    /// <summary>Format a percentage value for display.</summary>
-    /// <param name="value">Percentage value (0-100).</param>
-    /// <returns>Formatted display string.</returns>
-    string FormatPercentageDisplay(double value);
-
-    /// <summary>Round an insulin value to pump delivery precision.</summary>
-    /// <param name="value">Insulin value in units.</param>
-    /// <param name="step">Pump step size in units (default 0.05).</param>
-    /// <returns>Rounded insulin value.</returns>
-    double RoundInsulinToPumpPrecision(double value, double step = 0.05);
 
     // Validation
 
@@ -356,11 +299,6 @@ public interface IStatisticsService
     /// <returns>Glucose value in mg/dL.</returns>
     double MmolToMGDL(double mmol);
 
-    /// <summary>Convert a glucose value from mg/dL to a formatted mmol/L string.</summary>
-    /// <param name="mgdl">Glucose value in mg/dL.</param>
-    /// <returns>Formatted mmol/L string.</returns>
-    string MgdlToMMOLString(double mgdl);
-
     // Comprehensive Analytics
     GlucoseAnalytics AnalyzeGlucoseData(
         IEnumerable<SensorGlucose> entries,
@@ -368,8 +306,7 @@ public interface IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null,
-        int updateIntervalMinutes = 5
+        DateTime? endDate = null
     );
 
     // Site Change Analysis
@@ -393,13 +330,14 @@ public interface IStatisticsService
 
     /// <summary>
     /// Calculate daily basal/bolus ratio breakdown.
-    /// Basal data comes from TempBasals and algorithm boluses; pass empty collections if none are available.
+    /// Basal data comes from TempBasals, algorithm boluses, and basalInjections (MDI); pass empty collections if none are available.
     /// </summary>
     DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
-        TimeZoneInfo? userTimeZone = null);
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null);
 
     /// <summary>
     /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
@@ -420,6 +358,8 @@ public interface IStatisticsService
     /// divide by the number of distinct local days that have delivery data, so a
     /// period that extends beyond the available data does not distort the pattern.
     /// Defaults to UTC hour-of-day when <paramref name="userTimeZone"/> is null.
+    /// Long-acting basal injections (MDI) are spread evenly across the 24 hours
+    /// following each injection and counted as scheduled basal.
     /// </summary>
     HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
         IEnumerable<TempBasal> tempBasals,
@@ -427,5 +367,6 @@ public interface IStatisticsService
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
-        TimeZoneInfo? userTimeZone = null);
+        TimeZoneInfo? userTimeZone = null,
+        IEnumerable<BasalInjection>? basalInjections = null);
 }

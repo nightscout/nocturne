@@ -2,14 +2,13 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Notifications;
@@ -17,6 +16,8 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -33,8 +34,7 @@ public class PasskeyControllerTests : IDisposable
         public NocturneDbContext CreateDbContext() => new(options);
     }
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IPasskeyService> _passkeyService;
     private readonly Mock<ITotpService> _totpService;
@@ -51,16 +51,9 @@ public class PasskeyControllerTests : IDisposable
 
     public PasskeyControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
 
         _passkeyService = new Mock<IPasskeyService>();
         _totpService = new Mock<ITotpService>();
@@ -68,9 +61,7 @@ public class PasskeyControllerTests : IDisposable
         _jwtService = new Mock<IJwtService>();
         _sessionService = new Mock<ISessionService>();
         _subjectService = new Mock<ISubjectService>();
-        _tenantAccessor = new Mock<ITenantAccessor>();
-        _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
-        _tenantAccessor.Setup(t => t.IsResolved).Returns(true);
+        _tenantAccessor = MockTenantAccessor.Create(_tenantId);
 
         var oidcOptions = Options.Create(new OidcOptions
         {
@@ -101,9 +92,9 @@ public class PasskeyControllerTests : IDisposable
             // The real service, not a mock: the enrolment probe's cross-tenant reach and its
             // revoked-membership filtering are the properties under test, and a mock would
             // assert the mock.
-            new TenantMemberService(new SharedSqliteFactory(_dbOptions)),
+            new TenantMemberService(new SharedSqliteFactory(_db.Options)),
             _dbContext,
-            new SharedSqliteFactory(_dbOptions),
+            new SharedSqliteFactory(_db.Options),
             oidcOptions,
             logger.Object);
 
@@ -118,7 +109,7 @@ public class PasskeyControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -190,7 +181,14 @@ public class PasskeyControllerTests : IDisposable
         };
 
     /// <summary>Presents a recovery-session cookie that the JWT service accepts for this subject.</summary>
-    private void GiveRecoverySession(Guid subjectId, params string[] permissions)
+    private void GiveRecoverySession(Guid subjectId, params string[] permissions) =>
+        GiveRecoveryCookie(subjectId, ["auth:recovery:enrol"], permissions);
+
+    /// <summary>
+    /// Presents a cookie carrying whatever claim shape the caller names, so a token that is not a
+    /// recovery session can be put where one is expected.
+    /// </summary>
+    private void GiveRecoveryCookie(Guid subjectId, string[] scopes, string[] permissions)
     {
         const string token = "recovery-token";
         _controller.ControllerContext.HttpContext.Request.Headers.Cookie =
@@ -200,13 +198,14 @@ public class PasskeyControllerTests : IDisposable
             .Returns(JwtValidationResult.Success(new JwtClaims
             {
                 SubjectId = subjectId,
+                Scopes = [.. scopes],
                 Permissions = [.. permissions],
             }));
     }
 
     private void StubRegistrationOptions(Guid subjectId, string username) =>
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username, _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
     #region Passkey enrolment is bound to the caller
@@ -219,7 +218,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(401);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never,
             "an anonymous caller must not be able to start an enrolment ceremony");
     }
@@ -247,7 +246,7 @@ public class PasskeyControllerTests : IDisposable
     {
         Authenticate();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
@@ -257,7 +256,7 @@ public class PasskeyControllerTests : IDisposable
         response.Options.Should().Contain("challenge");
         response.ChallengeToken.Should().Be("token-data");
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId),
+            s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser"),
             Times.Once);
     }
 
@@ -315,9 +314,9 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(callerId, "victim", _tenantId), Times.Once);
+            s => s.GenerateRegistrationOptionsAsync(callerId, "victim"), Times.Once);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(victimId, It.IsAny<string>(), It.IsAny<Guid>()), Times.Never);
+            s => s.GenerateRegistrationOptionsAsync(victimId, It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -334,7 +333,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner", _tenantId), Times.Once);
+            s => s.GenerateRegistrationOptionsAsync(subjectId, "owner"), Times.Once);
     }
 
     [Fact]
@@ -348,7 +347,24 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterOptions_WithAPasskeyManageTokenThatIsNotARecoverySession_IsRefused()
+    {
+        // Spending a recovery code is what buys an enrolment. A token that merely carries the same
+        // permission — anything a future mint site emits — is not that proof.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoveryCookie(subjectId, scopes: [], permissions: ["passkey:manage"]);
+
+        var result = await _controller.RegisterOptions(
+            new PasskeyRegisterOptionsRequest { Username = "owner" });
+
+        Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -373,6 +389,29 @@ public class PasskeyControllerTests : IDisposable
             s => s.CompleteRegistrationAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterComplete_WithARecoverySession_SpendsTheCookie()
+    {
+        // One recovery code buys one enrolment: the credential exists now, so the cookie that
+        // authorized it must not authorize a second.
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
+
+        await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
+
+        var setCookie = _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
+            .Single(header => header!.StartsWith(".Nocturne.RecoverySession=", StringComparison.Ordinal));
+        setCookie.Should().Contain("expires=Thu, 01 Jan 1970");
     }
 
     [Fact]
@@ -407,7 +446,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(400);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -426,7 +465,7 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(400);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never,
             "an account that can still sign in must not be enrollable without a session");
     }
@@ -440,14 +479,14 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.CountPrimaryAuthFactorsAsync(orphanId))
             .ReturnsAsync(0);
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "orphan" });
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId),
+            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan"),
             Times.Once,
             "the subject comes from the server's lookup, not from the request");
     }
@@ -466,7 +505,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>()),
             Times.Never);
     }
 
@@ -606,6 +645,34 @@ public class PasskeyControllerTests : IDisposable
             Times.Once);
     }
 
+    [Fact]
+    public async Task AccessRequestComplete_NotifiesTheStandingOwnersOnly()
+    {
+        await AllowAccessRequestsAsync();
+        var owner = await SeedOwnerAsync("owner");
+        await SeedOwnerAsync("revoked", revokedAt: DateTime.UtcNow);
+        await SeedOwnerAsync("deactivated", isActive: false);
+        await SeedOwnerAsync("public", isSystemSubject: true);
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+
+        var notifications = new Mock<IInAppNotificationService>();
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-sam",
+            },
+            notifications.Object);
+
+        Assert.IsType<OkResult>(result);
+        notifications.Invocations
+            .Where(i => i.Method.Name == nameof(IInAppNotificationService.CreateNotificationAsync))
+            .Select(i => (string)i.Arguments[0]!)
+            .Should().Equal(owner.ToString());
+    }
+
     /// <summary>
     /// Subjects are global; membership is what scopes them. A credential-less member of another
     /// tenant is that tenant's locked-out account, not an abandoned enrolment here, so an invite
@@ -617,7 +684,7 @@ public class PasskeyControllerTests : IDisposable
         var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
         var inviteService = StubValidInvite();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "elsewhere", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "elsewhere"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         var result = await _controller.InviteOptions(
@@ -628,7 +695,7 @@ public class PasskeyControllerTests : IDisposable
         var victim = await _dbContext.Subjects.AsNoTracking().FirstAsync(s => s.Id == elsewhereId);
         victim.Name.Should().Be("elsewhere", "another tenant's member must not be renamed by an invite here");
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>()),
             Times.Never,
             "the ceremony must not be bound to another tenant's member");
         var subjects = await _dbContext.Subjects.AsNoTracking()
@@ -774,9 +841,10 @@ public class PasskeyControllerTests : IDisposable
     [Fact]
     public async Task InviteComplete_WithDuplicateEnrollingSubjects_ResolvesTheNewest()
     {
-        var older = await SeedEnrollingSubjectAsync("invitee");
-        var newest = await SeedEnrollingSubjectAsync("invitee");
-        newest.CompareTo(older).Should().BePositive("UUID v7 ids sort in creation order");
+        var (olderId, newestId) = OrderedIdPair();
+        var older = await SeedEnrollingSubjectAsync("invitee", olderId);
+        var newest = await SeedEnrollingSubjectAsync("invitee", newestId);
+        newest.CompareTo(older).Should().BePositive("the pair must order the same way the query sorts");
         var inviteService = StubValidInvite();
         StubRegistrationChallengeMintedFor(newest);
         _recoveryCodeService.Setup(s => s.GenerateCodesAsync(newest)).ReturnsAsync(["code-1"]);
@@ -809,7 +877,7 @@ public class PasskeyControllerTests : IDisposable
     {
         var inviteService = StubValidInvite();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "invitee", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "invitee"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         Assert.IsType<OkObjectResult>((await _controller.InviteOptions(
@@ -855,7 +923,7 @@ public class PasskeyControllerTests : IDisposable
     {
         await AllowAccessRequestsAsync();
         _passkeyService
-            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "sam-smith", _tenantId))
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "sam-smith"))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
         Assert.IsType<OkObjectResult>((await _controller.AccessRequestOptions(
@@ -906,7 +974,7 @@ public class PasskeyControllerTests : IDisposable
 
         Assert.IsType<ConflictObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -972,9 +1040,33 @@ public class PasskeyControllerTests : IDisposable
         return subjectId;
     }
 
-    private async Task<Guid> SeedEnrollingSubjectAsync(string username)
+    /// <summary>
+    /// Two ids that sort the same way under every representation the enrolling-subject query might
+    /// order on: <see cref="Guid.CompareTo(Guid)"/>, the SQLite column these tests sort in, and the
+    /// PostgreSQL <c>uuid</c> column production sorts in.
+    /// </summary>
+    /// <remarks>
+    /// A pair of back-to-back <see cref="Guid.CreateVersion7"/> ids does not qualify.
+    /// <c>Guid.CompareTo</c> compares the struct's fields, and the first two are read in
+    /// little-endian order, so it byte-swaps the very timestamp bytes that make v7 sortable — two
+    /// ids minted in the same millisecond then fall back to comparing random bits and order
+    /// arbitrarily. Holding the whole v7 prefix fixed and varying only the trailing byte sidesteps
+    /// that: the tail is the last field in the struct layout and the last byte of the serialized
+    /// form, so every ordering agrees on it. That is exactly the tiebreak
+    /// <c>OrderByDescending(s =&gt; s.Id)</c> resolves.
+    /// </remarks>
+    private static (Guid Older, Guid Newer) OrderedIdPair()
     {
-        var subjectId = Guid.CreateVersion7();
+        var bytes = Guid.CreateVersion7().ToByteArray();
+        bytes[^1] = 0x01;
+        var older = new Guid(bytes);
+        bytes[^1] = 0x02;
+        return (older, new Guid(bytes));
+    }
+
+    private async Task<Guid> SeedEnrollingSubjectAsync(string username, Guid? id = null)
+    {
+        var subjectId = id ?? Guid.CreateVersion7();
         _dbContext.Subjects.Add(new SubjectEntity
         {
             Id = subjectId,
@@ -1004,6 +1096,18 @@ public class PasskeyControllerTests : IDisposable
         });
         await _dbContext.SaveChangesAsync();
         return subjectId;
+    }
+
+    private async Task<Guid> SeedOwnerAsync(
+        string username,
+        DateTime? revokedAt = null,
+        bool isActive = true,
+        bool isSystemSubject = false)
+    {
+        await EnsureTenantAsync(_tenantId);
+        return await TestDatabaseSeeder.SeedMemberAsync(
+            _dbContext, _tenantId, name: username,
+            isActive: isActive, isSystemSubject: isSystemSubject, revokedAt: revokedAt);
     }
 
     private async Task AllowAccessRequestsAsync()
@@ -1159,6 +1263,48 @@ public class PasskeyControllerTests : IDisposable
         Assert.Equal(400, objectResult.StatusCode);
     }
 
+    #region Relying-party host
+
+    [Fact]
+    public async Task LoginOptions_WhenTheHostCannotUseTheRpId_RefusesWithTheReason()
+    {
+        const string detail = "Passkeys on this server are set up for 'localhost' ... BASE_DOMAIN";
+        _controller.HttpContext.Request.Host = new HostString("cgm.example.com");
+        _passkeyService.Setup(s => s.DescribeRpIdMismatch("cgm.example.com")).Returns(detail);
+
+        var result = await _controller.LoginOptions(new PasskeyLoginOptionsRequest { Username = "someone" });
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(400);
+        // Only `detail` reaches the browser, so that is where the operator's instruction has to be.
+        Assert.IsType<ProblemDetails>(objectResult.Value).Detail.Should().Be(detail);
+        _passkeyService.Verify(
+            s => s.GenerateAssertionOptionsAsync(It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never,
+            "issuing options the browser will reject is what produced the opaque error");
+    }
+
+    [Fact]
+    public async Task LoginOptions_WhenTheHostCanUseTheRpId_IssuesOptions()
+    {
+        _controller.HttpContext.Request.Host = new HostString("rhys.cgm.example.com");
+        // Explicit, not Moq's loose default: the point of the test is that the guard consulted
+        // the service about this host and was answered, not that a null fell out of nowhere.
+        _passkeyService
+            .Setup(s => s.DescribeRpIdMismatch("rhys.cgm.example.com"))
+            .Returns((string?)null);
+        _passkeyService
+            .Setup(s => s.GenerateAssertionOptionsAsync("someone", _tenantId))
+            .ReturnsAsync(new PasskeyAssertionOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        var result = await _controller.LoginOptions(new PasskeyLoginOptionsRequest { Username = "someone" });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _passkeyService.Verify(s => s.DescribeRpIdMismatch("rhys.cgm.example.com"), Times.Once);
+    }
+
+    #endregion
+
     #region Auth Status Endpoints
 
     [Fact]
@@ -1181,6 +1327,27 @@ public class PasskeyControllerTests : IDisposable
         var response = Assert.IsType<AuthStatusResponse>(okResult.Value);
         response.SetupRequired.Should().BeTrue();
         response.RecoveryMode.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region ListCredentials reports whether the account has a backup way in
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ListCredentials_CarriesTheSingleSignInMethodVerdict(bool single)
+    {
+        Authenticate();
+        _passkeyService.Setup(s => s.GetCredentialsAsync(_subjectId)).ReturnsAsync([]);
+        _subjectService.Setup(s => s.CountPrimaryAuthFactorsAsync(_subjectId)).ReturnsAsync(1);
+        _subjectService.Setup(s => s.HasSingleSignInMethodAsync(_subjectId)).ReturnsAsync(single);
+
+        var result = await _controller.ListCredentials();
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<PasskeyCredentialListResponse>(okResult.Value);
+        response.HasSingleSignInMethod.Should().Be(single);
     }
 
     #endregion

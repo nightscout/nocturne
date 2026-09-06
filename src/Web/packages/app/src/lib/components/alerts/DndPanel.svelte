@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatLocale } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -7,6 +8,8 @@
     update as updateDnd,
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
+  import { describeSubmitError } from "$lib/forms";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
@@ -36,8 +39,9 @@
   async function load(): Promise<void> {
     try {
       settings = await getDnd().run();
-    } catch {
+    } catch (err) {
       settings = null;
+      errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
     } finally {
       loading = false;
     }
@@ -60,8 +64,11 @@
       });
       settings = r;
       expanded = false;
-    } catch {
-      errorMessage = "Couldn't change Do Not Disturb. Please try again.";
+    } catch (e) {
+      errorMessage = describeSubmitError(
+        e,
+        "Couldn't change Do Not Disturb. Please try again.",
+      );
     } finally {
       saving = false;
     }
@@ -78,7 +85,7 @@
   let label = $derived(
     settings?.dndManualActive
       ? settings.dndManualUntil
-        ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+        ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString(formatLocale(), { hour: "numeric", minute: "2-digit" })}`
         : "On"
       : isDndScheduleConfigured(settings)
         ? "Scheduled"

@@ -23,6 +23,48 @@ export function localDayEnd(dateStr: string): Date {
 }
 
 /**
+ * Offset of `timeZone` at an instant, in ms (positive east of UTC), derived via
+ * formatToParts so no locale-dependent string parsing is involved.
+ */
+function tzOffsetMs(timeZone: string, at: Date): number {
+	const parts = new Intl.DateTimeFormat('en-US', {
+		timeZone,
+		hourCycle: 'h23',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit'
+	}).formatToParts(at);
+	const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+	return (
+		Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')) -
+		at.getTime()
+	);
+}
+
+/** Local calendar date (`YYYY-MM-DD`) of an instant in `timeZone`. */
+function tzDateStr(timeZone: string, at: Date): string {
+	return new Intl.DateTimeFormat('en-CA', { timeZone }).format(at);
+}
+
+/**
+ * First instant of the local calendar day `dateStr` in `timeZone`, as a UTC
+ * instant. Around a DST transition at midnight the naive guess
+ * `utcMidnight - offsetAt(utcMidnight)` carries whichever offset the guess
+ * itself lands on, so compute the two candidates and keep the earliest one
+ * whose local calendar date actually equals `dateStr`.
+ */
+function localMidnightUtc(dateStr: string, timeZone: string): number {
+	const utcMidnight = Date.parse(dateStr + 'T00:00:00Z');
+	const c1 = utcMidnight - tzOffsetMs(timeZone, new Date(utcMidnight));
+	const candidates = [c1, utcMidnight - tzOffsetMs(timeZone, new Date(c1))];
+	const valid = candidates.filter((ms) => tzDateStr(timeZone, new Date(ms)) === dateStr);
+	return valid.length > 0 ? Math.min(...valid) : c1;
+}
+
+/**
  * Compute UTC start/end of a local day for a given IANA timezone.
  * Falls back to UTC if timezone is not provided.
  */
@@ -36,14 +78,13 @@ export function getLocalDayBoundariesUtc(
 		return { start, end };
 	}
 
-	// Use Intl to determine the UTC offset at local midnight for the given timezone
-	const utcMidnight = new Date(dateStr + 'T00:00:00Z');
-	const utcStr = utcMidnight.toLocaleString('en-US', { timeZone: 'UTC' });
-	const localStr = utcMidnight.toLocaleString('en-US', { timeZone });
-	const offsetMs = new Date(localStr).getTime() - new Date(utcStr).getTime();
+	const startMs = localMidnightUtc(dateStr, timeZone);
 
-	// Local midnight = UTC midnight minus the timezone offset
-	const start = new Date(utcMidnight.getTime() - offsetMs);
-	const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
-	return { start, end };
+	// End = last millisecond before the following local midnight, so 23- and
+	// 25-hour days come out the right length instead of a fixed 24 hours.
+	const [y, m, d] = dateStr.split('-').map(Number);
+	const nextDateStr = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+	const end = new Date(localMidnightUtc(nextDateStr, timeZone) - 1);
+
+	return { start: new Date(startMs), end };
 }

@@ -28,7 +28,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly MyFitnessPalAuthTokenProvider _tokenProvider;
     private readonly IConnectorConfigurationService _configService;
-    private readonly IConnectorPublisher? _connectorPublisher;
     private readonly MyFitnessPalFoodEntryMapper _mapper;
 
     private string? _accessToken;
@@ -49,27 +48,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
-        _connectorPublisher = publisher;
         _mapper = new MyFitnessPalFoodEntryMapper(logger);
     }
 
     protected override string ConnectorSource => DataSources.MyFitnessPalConnector;
     public override string ServiceName => "MyFitnessPal";
-    public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Food];
-
-    /// <inheritdoc />
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Legacy method; actual auth happens per-tenant in PerformSyncInternalAsync
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
-
-    public override Task<IEnumerable<Entry>> FetchGlucoseDataAsync(DateTime? since = null)
-    {
-        // MFP doesn't provide glucose data
-        return Task.FromResult(Enumerable.Empty<Entry>());
-    }
 
     /// <summary>
     /// Entry point for the scheduled sync.
@@ -96,15 +79,14 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         MyFitnessPalConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null
-    )
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
         // This override replaces the base's data-type dispatch, so the toggle it would have
         // honoured has to be checked here.
-        if (!config.GetEnabledDataTypes(SupportedDataTypes).Contains(SyncDataType.Food))
+        var activeTypes = ResolveActiveTypes(request, config);
+        if (!activeTypes.Contains(SyncDataType.Food))
         {
             _logger.LogInformation(
                 "[{ConnectorSource}] Food sync is disabled; nothing to do", ConnectorSource);
@@ -113,12 +95,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         }
 
         if (!await AuthenticateWithConfigAsync(config, cancellationToken))
-        {
-            result.Success = false;
-            result.Errors.Add("Authentication failed for MyFitnessPal");
-            result.EndTime = DateTimeOffset.UtcNow;
-            return result;
-        }
+            return AuthenticationFailedResult();
 
         // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? DateTime.UtcNow.AddDays(-config.LookbackDays));
@@ -144,34 +121,14 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var mealNames = await ResolveMealNamesAsync(read.Entries, from, to, cancellationToken);
 
         var foodEntryImports = _mapper.Map(read.Entries, config, from, to, mealNames);
-        var count = foodEntryImports.Count;
 
-        if (count > 0)
-        {
-            if (_connectorPublisher is not { IsAvailable: true })
-            {
-                _logger.LogWarning("Publisher not available for connector food entry submission");
-                result.Success = false;
-                result.Errors.Add("Publisher not available");
-            }
-            else
-            {
-                var imported = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-                    foodEntryImports,
-                    ConnectorSource, WriteOrigin.Live,
-                    cancellationToken
-                ); // Food is a dormant broadcast category — origin irrelevant until wired.
-                if (imported == null)
-                {
-                    result.Success = false;
-                    result.Errors.Add("Failed to publish food entries");
-                }
-            }
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes, foodEntryImports,
+            PublishFoodEntriesAsync, config, cancellationToken,
+            context: $"since {from:yyyy-MM-dd}");
 
         // Outside the publish branch: a window the user has emptied maps to no imports at all, and
         // that case still has to withdraw every entry stored for it.
-        if (result.Success && _connectorPublisher is { IsAvailable: true })
+        if (result.Success && Publisher is { IsAvailable: true })
         {
             await WithdrawDeletedEntriesAsync(read, from, to, cancellationToken);
 
@@ -184,16 +141,33 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             }
         }
 
-        result.ItemsSynced[SyncDataType.Food] = count;
-        _logger.LogInformation(
-            "[{ConnectorSource}] Synced {Count} food entries from MyFitnessPal since {From:yyyy-MM-dd}",
-            ConnectorSource,
-            count,
-            from
-        );
-
         result.EndTime = DateTimeOffset.UtcNow;
         return result;
+    }
+
+    /// <summary>
+    /// Adapts the food-catalog publish to the shared publish path: the publisher reports a rejected
+    /// import with a null result rather than a flag, and returns an empty list when it reached the
+    /// catalog but nothing was accepted.
+    /// </summary>
+    private async Task<bool> PublishFoodEntriesAsync(
+        List<ConnectorFoodEntryImport> entries,
+        MyFitnessPalConnectorConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        if (Publisher is not { IsAvailable: true } publisher)
+        {
+            _logger.LogWarning("Publisher not available for connector food entry submission");
+            return false;
+        }
+
+        var imported = await publisher.Metadata.PublishConnectorFoodEntriesAsync(
+            entries,
+            ConnectorSource, WriteOrigin.Live,
+            cancellationToken
+        ); // Food is a dormant broadcast category — origin irrelevant until wired.
+
+        return imported != null;
     }
 
     private static DateTimeOffset AsUtc(DateTime value) =>
@@ -402,7 +376,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         // filtered on a consumed time this connector fabricates from the meal name, so an entry
         // whose meal name changed between cycles can move hours and fall outside the window while
         // still existing upstream. Comparing against that set would read the move as a deletion.
-        await _connectorPublisher!.Metadata.ReconcileConnectorFoodEntriesAsync(
+        await Publisher!.Metadata.ReconcileConnectorFoodEntriesAsync(
             read.Entries.Select(e => e.Id),
             from,
             to,
@@ -499,6 +473,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             var response = await _httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                // Same reasoning as the GraphQL path: only a 401 drops the token, since a 403 here
+                // is more likely a WAF block.
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    _tokenProvider.InvalidateToken();
+
                 _logger.LogWarning(
                     "MyFitnessPal diary for {Date} returned HTTP {StatusCode}",
                     date,

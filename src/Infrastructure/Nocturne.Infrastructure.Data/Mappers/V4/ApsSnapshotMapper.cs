@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,19 +17,9 @@ public static class ApsSnapshotMapper
     {
         return new ApsSnapshotEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
             DeviceId = model.DeviceId,
             PatientDeviceId = model.PatientDeviceId,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
-            DataSource = model.DataSource,
-            App = model.App,
             SyncIdentifier = model.SyncIdentifier,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             AidAlgorithm = model.AidAlgorithm.ToString(),
             Iob = model.Iob,
             BasalIob = model.BasalIob,
@@ -55,10 +44,7 @@ public static class ApsSnapshotMapper
             PredictedStartTimestamp = model.PredictedStartTimestamp,
             LoopJson = model.LoopJson,
             AidVersion = model.AidVersion,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -70,19 +56,9 @@ public static class ApsSnapshotMapper
     {
         return new ApsSnapshot
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
-            DataSource = entity.DataSource,
-            App = entity.App,
             SyncIdentifier = entity.SyncIdentifier,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             AidAlgorithm = Enum.TryParse<AidAlgorithm>(entity.AidAlgorithm, out var sys) ? sys : AidAlgorithm.Unknown,
             Iob = entity.Iob,
             BasalIob = entity.BasalIob,
@@ -107,10 +83,7 @@ public static class ApsSnapshotMapper
             PredictedStartTimestamp = entity.PredictedStartTimestamp,
             LoopJson = entity.LoopJson,
             AidVersion = entity.AidVersion,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -120,15 +93,9 @@ public static class ApsSnapshotMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(ApsSnapshotEntity entity, ApsSnapshot model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
-        entity.DataSource = model.DataSource;
-        entity.App = model.App;
         entity.SyncIdentifier = model.SyncIdentifier;
         entity.AidAlgorithm = model.AidAlgorithm.ToString();
         entity.Iob = model.Iob;
@@ -154,8 +121,5 @@ public static class ApsSnapshotMapper
         entity.PredictedStartTimestamp = model.PredictedStartTimestamp;
         entity.LoopJson = model.LoopJson;
         entity.AidVersion = model.AidVersion;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

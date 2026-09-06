@@ -198,18 +198,6 @@ public record DeduplicationResult
     public TimeSpan Duration { get; init; }
 
     /// <summary>
-    /// Number of entries processed
-    /// </summary>
-    [JsonPropertyName("entriesProcessed")]
-    public int EntriesProcessed { get; init; }
-
-    /// <summary>
-    /// Number of treatments processed
-    /// </summary>
-    [JsonPropertyName("treatmentsProcessed")]
-    public int TreatmentsProcessed { get; init; }
-
-    /// <summary>
     /// Number of state spans processed
     /// </summary>
     [JsonPropertyName("stateSpansProcessed")]

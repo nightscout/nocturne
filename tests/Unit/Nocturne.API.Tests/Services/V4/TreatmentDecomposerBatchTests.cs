@@ -336,6 +336,143 @@ public class TreatmentDecomposerBatchTests : IDisposable
         result.CreatedRecords.Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// A bulk-uploaded meal treatment's <c>foodType</c> is preserved as its carb intake's
+    /// <see cref="TreatmentFood"/> line, as on the single-record path — the carb intake's id is
+    /// only known once the bulk write has persisted it, so the line is written afterwards.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_MealWithFoodType_WritesTreatmentFoodLine()
+    {
+        // Arrange — the persisted carb intakes carry repository-assigned ids
+        var mealCarbIntakeId = Guid.CreateVersion7();
+        _carbRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin _, CancellationToken _) =>
+            {
+                var persisted = records.ToList();
+                foreach (var record in persisted)
+                    record.Id = record.LegacyId == "meal-1" ? mealCarbIntakeId : Guid.CreateVersion7();
+                return persisted;
+            });
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "meal-1", EventType = "Meal Bolus", Mills = 1700000000000, Insulin = 5.0, Carbs = 45, FoodType = "Sandwich" },
+            new() { Id = "carb-1", EventType = "Carb Correction", Mills = 1700000001000, Carbs = 15 },
+        };
+
+        // Act
+        await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        // Assert — one line, on the meal's carb intake, carrying the legacy food type
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(
+                It.Is<TreatmentFood>(f =>
+                    f.CarbIntakeId == mealCarbIntakeId && f.Note == "Sandwich" && f.Carbs == 45m),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // The carb correction names no food, so it gets no line
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// A connector replaying its catch-up overlap window re-sends a carb intake the bulk write
+    /// upserts in place on its sync key — which still comes back in the created set — so the food
+    /// line must not be written a second time. Those rows are the user-editable food breakdown and
+    /// feed the legacy projection, so a duplicate per replay compounds.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_SyncUpsertedCarbIntakeAlreadyHasFoodLine_WritesNoSecondLine()
+    {
+        // Arrange — the bulk write returns the stored row it upserted in place, which already
+        // carries the line written on first ingest
+        var storedCarbIntakeId = Guid.CreateVersion7();
+        _carbRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin _, CancellationToken _) =>
+            {
+                var upserted = records.ToList();
+                foreach (var record in upserted)
+                    record.Id = storedCarbIntakeId;
+                return upserted;
+            });
+
+        _treatmentFoodServiceMock
+            .Setup(x => x.GetByCarbIntakeIdsAsync(
+                It.Is<IEnumerable<Guid>>(ids => ids.Contains(storedCarbIntakeId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TreatmentFood>
+            {
+                new() { CarbIntakeId = storedCarbIntakeId, Note = "Sandwich", Carbs = 45m },
+            });
+
+        var treatments = new List<Treatment>
+        {
+            new()
+            {
+                Id = "meal-1",
+                EventType = "Meal Bolus",
+                Mills = 1700000000000,
+                Insulin = 5.0,
+                Carbs = 45,
+                FoodType = "Sandwich",
+                SyncIdentifier = "sync-1",
+                DataSource = "dexcom-connector",
+            },
+        };
+
+        // Act
+        await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        // Assert
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// The bulk write dedups its insert set by legacy id keeping the first, so the food line must
+    /// describe that same first treatment rather than a later duplicate's food type.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_DuplicateLegacyId_FoodLineFollowsTheInsertedTreatment()
+    {
+        // Arrange — emulate the bulk write's keep-first dedup by legacy id
+        var carbIntakeId = Guid.CreateVersion7();
+        _carbRepoMock
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin _, CancellationToken _) =>
+            {
+                var inserted = records.GroupBy(r => r.LegacyId!).Select(g => g.First()).ToList();
+                foreach (var record in inserted)
+                    record.Id = carbIntakeId;
+                return inserted;
+            });
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "dupe-1", EventType = "Carb Correction", Mills = 1700000000000, Carbs = 45, FoodType = "Sandwich" },
+            new() { Id = "dupe-1", EventType = "Carb Correction", Mills = 1700000000000, Carbs = 45, FoodType = "Pizza" },
+        };
+
+        // Act
+        await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        // Assert
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(
+                It.Is<TreatmentFood>(f => f.CarbIntakeId == carbIntakeId && f.Note == "Sandwich"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _treatmentFoodServiceMock.Verify(
+            x => x.AddAsync(It.IsAny<TreatmentFood>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Fact]
     public async Task DecomposeBatchAsync_ProfileSwitch_DelegatesToStateSpanService()
     {

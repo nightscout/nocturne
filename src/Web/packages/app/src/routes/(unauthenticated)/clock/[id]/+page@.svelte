@@ -90,7 +90,7 @@
     )
   );
   const timeSince = $derived(
-    readingAgeLabel(lastUpdated, currentTime.getTime())
+    lastUpdated === null ? "" : readingAgeLabel(lastUpdated, currentTime.getTime())
   );
 
   // The fallback readout is not a configured element, so it follows the viewer's

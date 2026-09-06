@@ -32,14 +32,14 @@ public class LinkedRecordEntity : ITenantScoped, ISystemCreated
     public Guid CanonicalId { get; set; }
 
     /// <summary>
-    /// Type of record being linked: "entry", "treatment", or "statespan"
+    /// Type of record being linked, as a <see cref="Core.Models.RecordTypeKeys"/> key
     /// </summary>
     [Column("record_type")]
     [MaxLength(20)]
     public string RecordType { get; set; } = string.Empty;
 
     /// <summary>
-    /// ID of the linked record (entries.id, treatments.id, or state_spans.id)
+    /// ID of the linked record in the table named by <see cref="RecordType"/>
     /// </summary>
     [Column("record_id")]
     public Guid RecordId { get; set; }

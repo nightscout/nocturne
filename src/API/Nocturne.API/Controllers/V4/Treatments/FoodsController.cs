@@ -41,7 +41,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <c>GetFavorites</c> deliberately departs from the <see cref="AuthContext.EffectiveSubjectId"/>
 /// convention, which would serve a guest the data owner's favorites. That choice is unresolved:
 /// a default guest link holds <c>health.read</c>, which
-/// <see cref="OAuthScopes.Normalize"/> expands to include <c>food.read</c>, so the scope gate does
+/// <see cref="Scope.Normalize"/> expands to include <c>food.read</c>, so the scope gate does
 /// not settle it either way.
 ///
 /// <b>Attribution count</b> (<c>/{foodId}/attribution-count</c>) — reports how many carb intake
@@ -68,7 +68,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// <c>food.readwrite</c>; the per-subject favorites list is the same category. The per-action
     /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
     /// </summary>
-    public string WriteScope => OAuthScopes.FoodReadWrite;
+    public string WriteScope => Scope.FoodReadWrite;
 
     private readonly NocturneDbContext _context;
     private readonly IUserFoodFavoriteService _favoriteService;
@@ -93,6 +93,11 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// List foods with optional filtering and pagination.
     /// This is a V4 endpoint (not Nightscout-legacy) used by the meal attribution UI.
     /// </summary>
+    /// <remarks>
+    /// The picker and the food page ask for no <c>count</c> and render the whole catalog, so an
+    /// absent <c>count</c> reads up to <see cref="V4ReadLimits.MaxPageSize"/> records rather than
+    /// every row. <c>find</c> matches name, category, and subcategory.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [Authorize]
@@ -103,7 +108,11 @@ public class FoodsController : ControllerBase, IWriteScopedController
         [FromQuery] int? skip = null,
         CancellationToken ct = default)
     {
-        var foods = await _foodService.GetFoodAsync(find, count, skip, ct);
+        var foods = await _foodService.GetFoodAsync(
+            find,
+            V4ReadLimits.ClampLimit(count ?? V4ReadLimits.MaxPageSize),
+            V4ReadLimits.ClampOffset(skip ?? 0),
+            ct);
         return Ok(foods.ToArray());
     }
 

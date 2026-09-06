@@ -67,26 +67,10 @@ public partial class ConnectorHttpClientConstructionTests
 
     private static List<string> ConnectorSources()
     {
-        var connectors = Path.Combine(RepositoryRoot(), "src", "Connectors");
+        var connectors = Path.Combine(RepositoryTree.Root(), "src", "Connectors");
 
         return [.. Directory.EnumerateFiles(connectors, "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                            && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))];
-    }
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "src", "Connectors")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException(
-            $"No src/Connectors directory above {AppContext.BaseDirectory}.");
     }
 }

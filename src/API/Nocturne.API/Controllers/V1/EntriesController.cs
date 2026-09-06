@@ -64,12 +64,19 @@ public class EntriesController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The most recent glucose entry, or empty array if no entries exist</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: the current
+    /// reading is the most staleness-sensitive value the API serves. The <c>Last-Modified</c> /
+    /// <c>If-Modified-Since</c> handling below still answers a conditional poll with a 304, so
+    /// revalidating callers pay no body.
+    /// </remarks>
     [HttpGet("current")]
     [NightscoutEndpoint("/api/v1/entries/current")]
-    [ResponseCache(Duration = 60, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry[]>> GetCurrentEntry(
         CancellationToken cancellationToken = default
     )
@@ -79,21 +86,135 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
+
+        // Set Last-Modified header for caching
+        DateTimeOffset lastModified;
+        if (currentEntry == null)
         {
-            var currentEntry = await _entryService.GetCurrentEntryAsync(cancellationToken);
+            _logger.LogDebug("No current entry found, returning empty array");
+            // Set Last-Modified to current time when no entries exist
+            lastModified = DateTimeOffset.UtcNow;
+            Response.Headers["Last-Modified"] = lastModified.ToString("R");
+            return Ok(Array.Empty<Entry>());
+        }
+        lastModified = DateTimeOffset.FromUnixTimeMilliseconds(currentEntry.Mills);
+        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+
+        // Check If-Modified-Since header
+        if (Request.Headers.IfModifiedSince.Count > 0)
+        {
+            if (
+                DateTimeOffset.TryParse(
+                    Request.Headers.IfModifiedSince.First(),
+                    out var ifModifiedSince
+                )
+            )
+            {
+                if (lastModified <= ifModifiedSince)
+                {
+                    _logger.LogDebug(
+                        "Current entry not modified since {IfModifiedSince}, returning 304",
+                        ifModifiedSince
+                    );
+                    return StatusCode(
+                        304,
+                        new
+                        {
+                            status = 304,
+                            message = "Not modified",
+                            type = "internal",
+                        }
+                    );
+                }
+            }
+        }
+
+        _logger.LogDebug(
+            "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
+            currentEntry.Id,
+            currentEntry.Mills,
+            currentEntry.Sgv ?? currentEntry.Mgdl
+        );
+
+        // Return as array to match legacy API format with V1 response structure
+        return Ok(new[] { currentEntry }.ToV1Responses());
+    }
+
+    /// <summary>
+    /// Get a specific entry by ID or get entries by type
+    /// </summary>
+    /// <param name="spec">Either an entry ID (24-character hex string) or entry type (e.g., "sgv", "mbg", "cal")</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Entry or entries matching the specification</returns>
+    [HttpGet("{spec}")]
+    [NightscoutEndpoint("/api/v1/entries/{spec}")]
+    [ProducesResponseType(typeof(Entry[]), 200)]
+    [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
+    public async Task<ActionResult<Entry[]>> GetEntry(
+        string spec,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "Entry spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
+            spec,
+            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
+        );
+
+        // Accept legacy MongoDB ObjectIds and system-assigned UUID v7 ids.
+        bool isId = System.Text.RegularExpressions.Regex.IsMatch(
+                spec,
+                "^([a-f\\d]{24}|[a-f\\d]{32})$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+
+        if (isId)
+        {
+            // Fetch specific entry by ID
+            var entry = await _entryService.GetEntryByIdAsync(spec, cancellationToken);
+            if (entry == null)
+            {
+                _logger.LogDebug("Entry with ID {Id} not found", spec);
+                // Set Last-Modified to current time when entry not found
+                var notFoundLastModified = DateTimeOffset.UtcNow;
+                Response.Headers["Last-Modified"] = notFoundLastModified.ToString("R");
+                return Ok(Array.Empty<Entry>());
+            }
+
+            _logger.LogDebug("Found entry with ID: {Id}", spec);
+            // Set Last-Modified header
+            var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
+            Response.Headers["Last-Modified"] = lastModified.ToString("R");
+
+            return Ok(new[] { entry }.ToV1Responses());
+        }
+        else
+        {
+            // Treat spec as entry type (e.g., "sgv", "mbg", "cal")
+            _logger.LogDebug("Fetching entries of type: {Type}", spec);
+            var entries = await _entryService.GetEntriesAsync(
+                type: spec,
+                count: 10,
+                skip: 0,
+                cancellationToken
+            );
+            var entriesArray = entries.ToArray();
 
             // Set Last-Modified header for caching
             DateTimeOffset lastModified;
-            if (currentEntry == null)
+            if (entriesArray.Length > 0)
             {
-                _logger.LogDebug("No current entry found, returning empty array");
+                // Set Last-Modified header based on most recent entry
+                lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entriesArray[0].Mills);
+            }
+            else
+            {
                 // Set Last-Modified to current time when no entries exist
                 lastModified = DateTimeOffset.UtcNow;
-                Response.Headers["Last-Modified"] = lastModified.ToString("R");
-                return Ok(Array.Empty<Entry>());
             }
-            lastModified = DateTimeOffset.FromUnixTimeMilliseconds(currentEntry.Mills);
             Response.Headers["Last-Modified"] = lastModified.ToString("R");
 
             // Check If-Modified-Since header
@@ -109,7 +230,7 @@ public class EntriesController : ControllerBase
                     if (lastModified <= ifModifiedSince)
                     {
                         _logger.LogDebug(
-                            "Current entry not modified since {IfModifiedSince}, returning 304",
+                            "Entries not modified since {IfModifiedSince}, returning 304",
                             ifModifiedSince
                         );
                         return StatusCode(
@@ -126,163 +247,11 @@ public class EntriesController : ControllerBase
             }
 
             _logger.LogDebug(
-                "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
-                currentEntry.Id,
-                currentEntry.Mills,
-                currentEntry.Sgv ?? currentEntry.Mgdl
+                "Found {Count} entries of type: {Type}",
+                entriesArray.Length,
+                spec
             );
-
-            // Return as array to match legacy API format with V1 response structure
-            return Ok(new[] { currentEntry }.ToV1Responses());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving current entry");
-
-            // Return error response in legacy format
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
-    }
-
-    /// <summary>
-    /// Get a specific entry by ID or get entries by type
-    /// </summary>
-    /// <param name="spec">Either an entry ID (24-character hex string) or entry type (e.g., "sgv", "mbg", "cal")</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Entry or entries matching the specification</returns>
-    [HttpGet("{spec}")]
-    [NightscoutEndpoint("/api/v1/entries/{spec}")]
-    [ProducesResponseType(typeof(Entry[]), 200)]
-    [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
-    public async Task<ActionResult<Entry[]>> GetEntry(
-        string spec,
-        CancellationToken cancellationToken = default
-    )
-    {
-        _logger.LogDebug(
-            "Entry spec endpoint requested with spec: {Spec} from {RemoteIpAddress}",
-            spec,
-            HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
-        );
-
-        try
-        {
-            // Check if spec is a 24-character hex string (MongoDB ObjectId)
-            bool isId =
-                spec.Length == 24
-                && System.Text.RegularExpressions.Regex.IsMatch(
-                    spec,
-                    "^[a-f\\d]{24}$",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                );
-
-            if (isId)
-            {
-                // Fetch specific entry by ID
-                var entry = await _entryService.GetEntryByIdAsync(spec, cancellationToken);
-                if (entry == null)
-                {
-                    _logger.LogDebug("Entry with ID {Id} not found", spec);
-                    // Set Last-Modified to current time when entry not found
-                    var notFoundLastModified = DateTimeOffset.UtcNow;
-                    Response.Headers["Last-Modified"] = notFoundLastModified.ToString("R");
-                    return Ok(Array.Empty<Entry>());
-                }
-
-                _logger.LogDebug("Found entry with ID: {Id}", spec);
-                // Set Last-Modified header
-                var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
-                Response.Headers["Last-Modified"] = lastModified.ToString("R");
-
-                return Ok(new[] { entry }.ToV1Responses());
-            }
-            else
-            {
-                // Treat spec as entry type (e.g., "sgv", "mbg", "cal")
-                _logger.LogDebug("Fetching entries of type: {Type}", spec);
-                var entries = await _entryService.GetEntriesAsync(
-                    type: spec,
-                    count: 10,
-                    skip: 0,
-                    cancellationToken
-                );
-                var entriesArray = entries.ToArray();
-
-                // Set Last-Modified header for caching
-                DateTimeOffset lastModified;
-                if (entriesArray.Length > 0)
-                {
-                    // Set Last-Modified header based on most recent entry
-                    lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entriesArray[0].Mills);
-                }
-                else
-                {
-                    // Set Last-Modified to current time when no entries exist
-                    lastModified = DateTimeOffset.UtcNow;
-                }
-                Response.Headers["Last-Modified"] = lastModified.ToString("R");
-
-                // Check If-Modified-Since header
-                if (Request.Headers.IfModifiedSince.Count > 0)
-                {
-                    if (
-                        DateTimeOffset.TryParse(
-                            Request.Headers.IfModifiedSince.First(),
-                            out var ifModifiedSince
-                        )
-                    )
-                    {
-                        if (lastModified <= ifModifiedSince)
-                        {
-                            _logger.LogDebug(
-                                "Entries not modified since {IfModifiedSince}, returning 304",
-                                ifModifiedSince
-                            );
-                            return StatusCode(
-                                304,
-                                new
-                                {
-                                    status = 304,
-                                    message = "Not modified",
-                                    type = "internal",
-                                }
-                            );
-                        }
-                    }
-                }
-
-                _logger.LogDebug(
-                    "Found {Count} entries of type: {Type}",
-                    entriesArray.Length,
-                    spec
-                );
-                return Ok(entriesArray.ToV1Responses());
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving entry with spec: {Spec}", spec);
-
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
+            return Ok(entriesArray.ToV1Responses());
         }
     }
 
@@ -297,12 +266,19 @@ public class EntriesController : ControllerBase
     /// <param name="dateString">ISO date string for date filtering</param>
     /// <param name="format">Output format (json, csv, tsv, txt)</param>
     /// <returns>Array of entries matching the criteria</returns>
+    /// <remarks>
+    /// Never cached, per <see cref="V4.Profiles.ProfileController.GetProfileSummary"/>: a reading or
+    /// correction that has just landed must not be missing from the next poll. The
+    /// <c>Last-Modified</c> / <c>If-Modified-Since</c> handling below still answers a conditional
+    /// poll with a 304, so revalidating callers pay no body.
+    /// </remarks>
     [HttpGet]
     [NightscoutEndpoint("/api/v1/entries")]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" }, VaryByHeader = "If-Modified-Since")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
+    [ErrorEnvelope]
     public async Task<ActionResult> GetEntries(
         [FromQuery] string? find = null,
         [FromQuery] int? count = null,
@@ -349,174 +325,156 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        // In Nightscout v1, the ?type= parameter does NOT filter by entry type
+        // It may be related to output format. To filter by type, use find[type]=xxx
+        // Only apply type filtering when it comes from find query, not from ?type= parameter
+        string? entryType = null;
+
+        // Check if find query contains type filter
+        if (
+            !string.IsNullOrEmpty(findQuery)
+            && (findQuery.Contains("find[type]") || findQuery.Contains("find%5Btype%5D"))
+        )
         {
-            // In Nightscout v1, the ?type= parameter does NOT filter by entry type
-            // It may be related to output format. To filter by type, use find[type]=xxx
-            // Only apply type filtering when it comes from find query, not from ?type= parameter
-            string? entryType = null;
+            // Type filtering will be handled by the find query parser
+            entryType = null;
+        }
 
-            // Check if find query contains type filter
+        // Handle count parameter for Nightscout compatibility:
+        // - null/not specified: default to 10 (Nightscout default)
+        // - 0 or negative: return empty array (Nightscout behavior)
+        // - positive: return that many entries
+        if (count.HasValue && count.Value <= 0)
+        {
+            // Nightscout returns empty array for count=0 or negative values
+            return Ok(Array.Empty<Entry>());
+        }
+        // Nightscout defaults to 10 when count is not specified; the upper bound is ours.
+        var limitedCount = LegacyReadLimits.ClampCount(count ?? 10);
+
+        // Use advanced filtering if any advanced parameters are provided
+        // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
+        // "rr" query parameter, so a nonzero "rr" value must never flip the sort order.
+        var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
+            type: entryType,
+            count: limitedCount,
+            skip: 0,
+            findQuery: findQuery,
+            dateString: dateString,
+            reverseResults: false,
+            cancellationToken: cancellationToken
+        );
+        var entriesArray = entries.ToArray();
+
+        // Set Last-Modified header for caching
+        DateTimeOffset lastModified;
+        if (entriesArray.Length > 0)
+        {
+            // Set Last-Modified header based on most recent entry
+            lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entriesArray[0].Mills);
+        }
+        else
+        {
+            // Set Last-Modified to current time when no entries exist
+            lastModified = DateTimeOffset.UtcNow;
+        }
+        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+
+        // Check If-Modified-Since header
+        if (Request.Headers.IfModifiedSince.Count > 0)
+        {
             if (
-                !string.IsNullOrEmpty(findQuery)
-                && (findQuery.Contains("find[type]") || findQuery.Contains("find%5Btype%5D"))
-            )
-            {
-                // Type filtering will be handled by the find query parser
-                entryType = null;
-            }
-
-            // Handle count parameter for Nightscout compatibility:
-            // - null/not specified: default to 10 (Nightscout default)
-            // - 0 or negative: return empty array (Nightscout behavior)
-            // - positive: return that many entries
-            if (count.HasValue && count.Value <= 0)
-            {
-                // Nightscout returns empty array for count=0 or negative values
-                return Ok(Array.Empty<Entry>());
-            }
-            // Nightscout defaults to 10 when count is not specified; the upper bound is ours.
-            var limitedCount = LegacyReadLimits.ClampCount(count ?? 10);
-
-            // Use advanced filtering if any advanced parameters are provided
-            // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
-            // "rr" query parameter, so a nonzero "rr" value must never flip the sort order.
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: entryType,
-                count: limitedCount,
-                skip: 0,
-                findQuery: findQuery,
-                dateString: dateString,
-                reverseResults: false,
-                cancellationToken: cancellationToken
-            );
-            var entriesArray = entries.ToArray();
-
-            // Set Last-Modified header for caching
-            DateTimeOffset lastModified;
-            if (entriesArray.Length > 0)
-            {
-                // Set Last-Modified header based on most recent entry
-                lastModified = DateTimeOffset.FromUnixTimeMilliseconds(entriesArray[0].Mills);
-            }
-            else
-            {
-                // Set Last-Modified to current time when no entries exist
-                lastModified = DateTimeOffset.UtcNow;
-            }
-            Response.Headers["Last-Modified"] = lastModified.ToString("R");
-
-            // Check If-Modified-Since header
-            if (Request.Headers.IfModifiedSince.Count > 0)
-            {
-                if (
-                    DateTimeOffset.TryParse(
-                        Request.Headers.IfModifiedSince.First(),
-                        out var ifModifiedSince
-                    )
+                DateTimeOffset.TryParse(
+                    Request.Headers.IfModifiedSince.First(),
+                    out var ifModifiedSince
                 )
-                {
-                    if (lastModified <= ifModifiedSince)
-                    {
-                        _logger.LogDebug(
-                            "Entries not modified since {IfModifiedSince}, returning 304",
-                            ifModifiedSince
-                        );
-                        return StatusCode(
-                            304,
-                            new
-                            {
-                                status = 304,
-                                message = "Not modified",
-                                type = "internal",
-                            }
-                        );
-                    }
-                }
-            }
-            _logger.LogDebug(
-                "Found {Count} entries of type: {Type}",
-                entriesArray.Length,
-                entryType
-            );
-
-            // Determine format from format parameter or Accept header (content negotiation)
-            var effectiveFormat = format;
-            if (
-                string.IsNullOrEmpty(effectiveFormat)
-                || effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
             )
             {
-                // Check Accept header for content negotiation (Nightscout compatibility)
-                var acceptHeader = Request.Headers.Accept.ToString().ToLowerInvariant();
-                if (acceptHeader.Contains("text/tab-separated-values"))
+                if (lastModified <= ifModifiedSince)
                 {
-                    effectiveFormat = "tsv";
-                }
-                else if (acceptHeader.Contains("text/csv"))
-                {
-                    effectiveFormat = "csv";
-                }
-                else if (
-                    acceptHeader.Contains("text/plain")
-                    && !acceptHeader.Contains("application/json")
-                )
-                {
-                    // text/plain returns TSV for Nightscout compatibility
-                    effectiveFormat = "tsv";
-                }
-            }
-
-            // Handle different output formats
-            if (
-                !string.IsNullOrEmpty(effectiveFormat)
-                && !effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(
-                        entriesArray,
-                        effectiveFormat
+                    _logger.LogDebug(
+                        "Entries not modified since {IfModifiedSince}, returning 304",
+                        ifModifiedSince
                     );
-                    var contentType = DataFormatService.GetContentType(effectiveFormat);
-                    return Content(formattedData, contentType);
-                }
-                catch (ArgumentException ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Unsupported format requested: {Format}",
-                        effectiveFormat
-                    );
-                    return BadRequest(
+                    return StatusCode(
+                        304,
                         new
                         {
-                            status = 400,
-                            message = $"Unsupported format: {effectiveFormat}. Supported formats: json, csv, tsv, txt",
-                            type = "client",
+                            status = 304,
+                            message = "Not modified",
+                            type = "internal",
                         }
                     );
                 }
             }
-
-            return Ok(entriesArray.ToV1Responses());
         }
-        catch (Exception ex)
+        _logger.LogDebug(
+            "Found {Count} entries of type: {Type}",
+            entriesArray.Length,
+            entryType
+        );
+
+        // Determine format from format parameter or Accept header (content negotiation)
+        var effectiveFormat = format;
+        if (
+            string.IsNullOrEmpty(effectiveFormat)
+            || effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
+        )
         {
-            _logger.LogError(ex, "Error retrieving entries");
-
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
+            // Check Accept header for content negotiation (Nightscout compatibility)
+            var acceptHeader = Request.Headers.Accept.ToString().ToLowerInvariant();
+            if (acceptHeader.Contains("text/tab-separated-values"))
+            {
+                effectiveFormat = "tsv";
+            }
+            else if (acceptHeader.Contains("text/csv"))
+            {
+                effectiveFormat = "csv";
+            }
+            else if (
+                acceptHeader.Contains("text/plain")
+                && !acceptHeader.Contains("application/json")
+            )
+            {
+                // text/plain returns TSV for Nightscout compatibility
+                effectiveFormat = "tsv";
+            }
         }
+
+        // Handle different output formats
+        if (
+            !string.IsNullOrEmpty(effectiveFormat)
+            && !effectiveFormat.Equals("json", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            try
+            {
+                var formattedData = DataFormatService.FormatEntries(
+                    entriesArray,
+                    effectiveFormat
+                );
+                var contentType = DataFormatService.GetContentType(effectiveFormat);
+                return Content(formattedData, contentType);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Unsupported format requested: {Format}",
+                    effectiveFormat
+                );
+                return BadRequest(
+                    new
+                    {
+                        status = 400,
+                        message = $"Unsupported format: {effectiveFormat}. Supported formats: json, csv, tsv, txt",
+                        type = "client",
+                    }
+                );
+            }
+        }
+
+        return Ok(entriesArray.ToV1Responses());
     }
 
     /// <summary>
@@ -528,11 +486,12 @@ public class EntriesController : ControllerBase
     /// <returns>Created entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry[]>> CreateEntries(
         [FromBody] object entryData,
         CancellationToken cancellationToken = default
@@ -658,20 +617,6 @@ public class EntriesController : ControllerBase
                     status = 400,
                     message = "Invalid JSON format",
                     type = "client",
-                    error = ex.Message,
-                }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating entries");
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
                     error = ex.Message,
                 }
             );
@@ -816,12 +761,13 @@ public class EntriesController : ControllerBase
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 404)]
     [ProducesResponseType(typeof(object), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult<Entry>> UpdateEntry(
         string id,
         [FromBody] Entry entryData,
@@ -834,67 +780,51 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
-        {
-            // Validate ID format
-            if (
-                string.IsNullOrEmpty(id)
-                || !System.Text.RegularExpressions.Regex.IsMatch(
-                    id,
-                    "^[a-f\\d]{24}$",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                )
-            )
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "Invalid entry ID format",
-                        type = "client",
-                    }
-                );
-            }
-
-            // Ensure the ID in the data matches the URL parameter
-            entryData.Id = id;
-
-            var updatedEntry = await _entryService.UpdateEntryAsync(
+        // Validate ID format: legacy MongoDB ObjectIds (24 hex) and system-assigned
+        // UUID v7 ids from POST /api/v1/entries (32 hex, see NormalizeEntry) are both valid.
+        if (
+            string.IsNullOrEmpty(id)
+            || !System.Text.RegularExpressions.Regex.IsMatch(
                 id,
-                entryData,
-                cancellationToken
-            );
-
-            if (updatedEntry == null)
-            {
-                _logger.LogDebug("Entry with ID {Id} not found for update", id);
-                return NotFound(
-                    new
-                    {
-                        status = 404,
-                        message = "Entry not found",
-                        type = "client",
-                    }
-                );
-            }
-
-            _logger.LogDebug("Successfully updated entry with ID: {Id}", id);
-            return Ok(updatedEntry.ToV1Response());
-        }
-        catch (Exception ex)
+                "^([a-f\\d]{24}|[a-f\\d]{32})$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            )
+        )
         {
-            _logger.LogError(ex, "Error updating entry with ID: {Id}", id);
-            return StatusCode(
-                500,
+            return BadRequest(
                 new
                 {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
+                    status = 400,
+                    message = "Invalid entry ID format",
+                    type = "client",
                 }
             );
         }
+
+        // Ensure the ID in the data matches the URL parameter
+        entryData.Id = id;
+
+        var updatedEntry = await _entryService.UpdateEntryAsync(
+            id,
+            entryData,
+            cancellationToken
+        );
+
+        if (updatedEntry == null)
+        {
+            _logger.LogDebug("Entry with ID {Id} not found for update", id);
+            return NotFound(
+                new
+                {
+                    status = 404,
+                    message = "Entry not found",
+                    type = "client",
+                }
+            );
+        }
+
+        _logger.LogDebug("Successfully updated entry with ID: {Id}", id);
+        return Ok(updatedEntry.ToV1Response());
     }
 
     /// <summary>
@@ -905,12 +835,13 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of deletion</returns>
     [HttpDelete("{id}")]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 404)]
     [ProducesResponseType(typeof(object), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> DeleteEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -922,68 +853,52 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
-        {
-            // Validate ID format
-            if (
-                string.IsNullOrEmpty(id)
-                || !System.Text.RegularExpressions.Regex.IsMatch(
-                    id,
-                    "^[a-f\\d]{24}$",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                )
+        // Validate ID format: legacy MongoDB ObjectIds (24 hex) and system-assigned
+        // UUID v7 ids from POST /api/v1/entries (32 hex, see NormalizeEntry) are both valid.
+        if (
+            string.IsNullOrEmpty(id)
+            || !System.Text.RegularExpressions.Regex.IsMatch(
+                id,
+                "^([a-f\\d]{24}|[a-f\\d]{32})$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
             )
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "Invalid entry ID format",
-                        type = "client",
-                    }
-                );
-            }
-
-            var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
-
-            if (!deleted)
-            {
-                _logger.LogDebug("Entry with ID {Id} not found for deletion", id);
-                return NotFound(
-                    new
-                    {
-                        status = 404,
-                        message = "Entry not found",
-                        type = "client",
-                    }
-                );
-            }
-
-            _logger.LogDebug("Successfully deleted entry with ID: {Id}", id);
-            return Ok(
-                new
-                {
-                    status = 200,
-                    message = "Entry deleted successfully",
-                    type = "success",
-                    id = id,
-                }
-            );
-        }
-        catch (Exception ex)
+        )
         {
-            _logger.LogError(ex, "Error deleting entry with ID: {Id}", id);
-            return StatusCode(
-                500,
+            return BadRequest(
                 new
                 {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
+                    status = 400,
+                    message = "Invalid entry ID format",
+                    type = "client",
                 }
             );
         }
+
+        var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
+
+        if (!deleted)
+        {
+            _logger.LogDebug("Entry with ID {Id} not found for deletion", id);
+            return NotFound(
+                new
+                {
+                    status = 404,
+                    message = "Entry not found",
+                    type = "client",
+                }
+            );
+        }
+
+        _logger.LogDebug("Successfully deleted entry with ID: {Id}", id);
+        return Ok(
+            new
+            {
+                status = 200,
+                message = "Entry deleted successfully",
+                type = "success",
+                id = id,
+            }
+        );
     }
 
     /// <summary>
@@ -994,11 +909,12 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of bulk deletion</returns>
     [HttpDelete]
     [Authorize]
-    [RequireScope(OAuthScopes.FullAccess)]
+    [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 500)]
+    [ErrorEnvelope]
     public async Task<ActionResult> BulkDeleteEntries(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -1009,61 +925,44 @@ public class EntriesController : ControllerBase
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        try
+        string? findQuery = find;
+
+        // If no simple find parameter provided, check for complex query parameters
+        if (string.IsNullOrEmpty(findQuery))
         {
-            string? findQuery = find;
+            var queryString = HttpContext?.Request?.QueryString.ToString() ?? "";
 
-            // If no simple find parameter provided, check for complex query parameters
-            if (string.IsNullOrEmpty(findQuery))
+            if (!string.IsNullOrEmpty(queryString) && queryString != "?")
             {
-                var queryString = HttpContext?.Request?.QueryString.ToString() ?? "";
-
-                if (!string.IsNullOrEmpty(queryString) && queryString != "?")
-                {
-                    // Remove the leading '?' from query string and use it as the find query
-                    findQuery = queryString.TrimStart('?');
-                }
+                // Remove the leading '?' from query string and use it as the find query
+                findQuery = queryString.TrimStart('?');
             }
+        }
 
-            if (string.IsNullOrEmpty(findQuery))
-            {
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = "Find query parameter is required for bulk delete",
-                        type = "client",
-                    }
-                );
-            }
-
-            var deletedCount = await _entryService.DeleteEntriesAsync(findQuery, cancellationToken);
-
-            _logger.LogDebug("Successfully deleted {Count} entries with query", deletedCount);
-            return Ok(
+        if (string.IsNullOrEmpty(findQuery))
+        {
+            return BadRequest(
                 new
                 {
-                    status = 200,
-                    message = $"Deleted {deletedCount} entries",
-                    type = "success",
-                    deletedCount = deletedCount,
+                    status = 400,
+                    message = "Find query parameter is required for bulk delete",
+                    type = "client",
                 }
             );
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in bulk delete entries");
-            return StatusCode(
-                500,
-                new
-                {
-                    status = 500,
-                    message = "Internal server error",
-                    type = "internal",
-                    error = ex.Message,
-                }
-            );
-        }
+
+        var deletedCount = await _entryService.DeleteEntriesAsync(findQuery, cancellationToken);
+
+        _logger.LogDebug("Successfully deleted {Count} entries with query", deletedCount);
+        return Ok(
+            new
+            {
+                status = 200,
+                message = $"Deleted {deletedCount} entries",
+                type = "success",
+                deletedCount = deletedCount,
+            }
+        );
     }
 
     /// <summary>
@@ -1075,7 +974,7 @@ public class EntriesController : ControllerBase
     /// <returns>Async processing response with correlation ID and status URL</returns>
     [HttpPost("async")]
     [Authorize]
-    [RequireScope(OAuthScopes.GlucoseReadWrite)]
+    [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/async")]
     [ProducesResponseType(typeof(AsyncProcessingResponse), 202)]
     [ProducesResponseType(typeof(object), 400)]

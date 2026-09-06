@@ -5,14 +5,16 @@
 	"description": "Nocturne Portal - Configuration wizard and documentation",
 	"scripts": {
 		"sdk:manifest": "node scripts/generate-sdk-manifest.mjs",
-		"dev": "node scripts/generate-sdk-manifest.mjs && vite dev",
-		"build": "node scripts/generate-sdk-manifest.mjs && vite build",
+		"screenshots:sync": "node scripts/sync-screenshots.mjs",
+		"dev": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite dev",
+		"build": "node scripts/generate-sdk-manifest.mjs && node scripts/sync-screenshots.mjs && vite build",
 		"preview": "vite preview",
 		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.555.0",
 		"@nocturne/cms": "workspace:*",
+		"@nocturne/screenshots": "workspace:*",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",

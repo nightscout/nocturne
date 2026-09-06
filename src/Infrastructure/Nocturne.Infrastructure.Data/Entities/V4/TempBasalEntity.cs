@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, IDeviceAttributedEntity, ISystemTimestamped
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISourcedEntity, IDeviceAttributedEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

@@ -1,24 +1,26 @@
+using Nocturne.Connectors.Core.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
 
 public class DirectGrantControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly DirectGrantController _controller;
     private readonly Guid _testTenantId = Guid.CreateVersion7();
@@ -26,16 +28,9 @@ public class DirectGrantControllerTests : IDisposable
 
     public DirectGrantControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(_testTenantId);
 
         // Seed required entities for FK constraints
         _dbContext.Tenants.Add(new TenantEntity
@@ -53,11 +48,6 @@ public class DirectGrantControllerTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        var logger = new Mock<ILogger<DirectGrantController>>();
-        var auditService = new Mock<IAuthAuditService>();
-
-        _controller = new DirectGrantController(_dbContext, auditService.Object, logger.Object);
-
         // Set up authenticated HttpContext
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
@@ -68,6 +58,16 @@ public class DirectGrantControllerTests : IDisposable
             SubjectId = _subjectId,
             Permissions = ["*"],
         };
+
+        var auditService = new AuthAuditService(
+            _dbContext,
+            new HttpContextAccessor { HttpContext = httpContext },
+            new AuditContext(),
+            new Mock<ILogger<AuthAuditService>>().Object);
+        var directGrantService = new DirectGrantService(
+            auditService, new Mock<ILogger<DirectGrantService>>().Object);
+
+        _controller = new DirectGrantController(_dbContext, directGrantService);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = httpContext,
@@ -77,7 +77,30 @@ public class DirectGrantControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
+    }
+
+    /// <summary>
+    /// The self-service path has no actor distinct from the subject, so the row must attribute the
+    /// action to that one subject on both axes.
+    /// </summary>
+    [Fact]
+    public async Task Create_AttributesTheAuditRowToTheSubjectAsBothActorAndSubject()
+    {
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Self Service",
+            Scopes = ["glucose.read"],
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var row = await _dbContext.AuthAuditLog.AsNoTracking().SingleAsync();
+        Assert.Equal(AuthAuditEventType.TokenIssued, row.EventType);
+        Assert.Equal(_subjectId, row.SubjectId);
+        Assert.Equal(_subjectId, row.ActorSubjectId);
+        Assert.Null(row.ActorCredential);
+        Assert.Equal(_testTenantId, row.TenantId);
     }
 
     [Fact]
@@ -115,10 +138,55 @@ public class DirectGrantControllerTests : IDisposable
         // Verify the stored hash matches what we'd compute
         var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
         Assert.NotNull(grant);
-        var expectedHash = DirectGrantTokenHandler.ComputeSha256Hex(response.Token);
+        var expectedHash = HashUtils.Sha256Hex(response.Token);
         Assert.Equal(expectedHash, grant!.TokenHash);
         Assert.Equal(OAuthGrantTypes.Direct, grant.GrantType);
         Assert.Null(grant.ClientEntityId);
+    }
+
+    [Fact]
+    public async Task Create_RequestedExpiry_IsPersistedAndReturned()
+    {
+        var expiresAt = new DateTime(2027, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var request = new CreateDirectGrantRequest
+        {
+            Label = "Short-lived Token",
+            Scopes = ["glucose.read"],
+            ExpiresAt = expiresAt,
+        };
+
+        var result = await _controller.Create(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
+        Assert.Equal(expiresAt, response.ExpiresAt);
+
+        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        Assert.Equal(expiresAt, grant!.ExpiresAt);
+
+        var listResult = await _controller.List();
+        var listed = Assert.IsType<List<DirectGrantDto>>(
+            Assert.IsType<OkObjectResult>(listResult.Result).Value);
+        Assert.Equal(expiresAt, Assert.Single(listed, g => g.Id == response.Id).ExpiresAt);
+    }
+
+    [Fact]
+    public async Task Create_NoExpiry_StoresOpenEndedGrant()
+    {
+        var request = new CreateDirectGrantRequest
+        {
+            Label = "Open-ended Token",
+            Scopes = ["glucose.read"],
+        };
+
+        var result = await _controller.Create(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
+        Assert.Null(response.ExpiresAt);
+
+        var grant = await _dbContext.OAuthGrants.FirstOrDefaultAsync(g => g.Id == response.Id);
+        Assert.Null(grant!.ExpiresAt);
     }
 
     [Fact]

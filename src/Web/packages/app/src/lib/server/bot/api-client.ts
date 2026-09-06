@@ -33,6 +33,8 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
     },
     alerts: {
       acknowledge: (request, signal) => api.alerts.acknowledge(request, signal),
+      acknowledgeExcursion: (excursionId, request, signal) =>
+        api.alerts.acknowledgeExcursion(excursionId, request, signal),
       markDelivered: (deliveryId, request, signal) =>
         api.alerts.markDelivered(deliveryId, request, signal),
       markFailed: (deliveryId, request, signal) =>
@@ -168,6 +170,7 @@ function mapCandidate(c: {
   nocturneUserId?: string;
   label?: string;
   displayName?: string;
+  isDefault?: boolean;
 }): DirectoryCandidate {
   return {
     id: c.id ?? "",
@@ -176,5 +179,6 @@ function mapCandidate(c: {
     nocturneUserId: c.nocturneUserId ?? "",
     label: c.label ?? "",
     displayName: c.displayName ?? "",
+    isDefault: c.isDefault ?? false,
   };
 }

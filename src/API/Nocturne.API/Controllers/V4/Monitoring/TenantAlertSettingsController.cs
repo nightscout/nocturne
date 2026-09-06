@@ -44,7 +44,7 @@ public class TenantAlertSettingsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// The get-or-create is a write, but of server-defined defaults and idempotently, so it carries
-    /// no <see cref="OAuthScopes.AlertsReadWrite"/> gate: a read-only caller cannot choose what it
+    /// no <see cref="Scope.AlertsReadWrite"/> gate: a read-only caller cannot choose what it
     /// stores and a repeat call stores nothing further.
     /// </remarks>
     [HttpGet]
@@ -71,13 +71,13 @@ public class TenantAlertSettingsController : ControllerBase
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
     /// </summary>
     /// <remarks>
-    /// Requires <see cref="OAuthScopes.AlertsReadWrite"/>: this toggles tenant-wide Do Not Disturb,
+    /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do Not Disturb,
     /// which suppresses delivery of every non-critical alert. The class-level <c>[Authorize]</c>
     /// alone is satisfied by read-only credentials such as a guest-link session, which holds
     /// <c>alerts.read</c>.
     /// </remarks>
     [HttpPut]
-    [RequireScope(OAuthScopes.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["Get"])]
     [ProducesResponseType(typeof(TenantAlertSettingsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

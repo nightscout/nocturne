@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -131,7 +132,7 @@
       >
         <Calendar class="h-4 w-4" />
         <span>
-          {dateInfo.from.toLocaleDateString()} – {dateInfo.to.toLocaleDateString()}
+          {formatNumericDate(dateInfo.from)} – {formatNumericDate(dateInfo.to)}
         </span>
         <span class="text-muted-foreground/50">•</span>
         <span>{dateInfo.dayCount} days</span>
@@ -392,8 +393,8 @@
     <!-- Footer -->
     <div class="space-y-1 text-center text-xs text-muted-foreground">
       <p>
-        Report generated from {basalStats.count.toLocaleString()} basal events between
-        {dateInfo.from.toLocaleDateString()} and {dateInfo.to.toLocaleDateString()}
+        Report generated from {formatNumber(basalStats.count)} basal events between
+        {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
       </p>
       <p class="text-muted-foreground/60">
         This report is for informational purposes only. Always consult your

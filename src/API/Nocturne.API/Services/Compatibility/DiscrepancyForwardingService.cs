@@ -35,7 +35,7 @@ public interface IDiscrepancyForwardingService
 /// </summary>
 /// <remarks>
 /// <para>
-/// File names embed a UTC timestamp and a sanitised correlation ID so that they sort
+/// File names embed a UTC timestamp and a sanitised trace identifier so that they sort
 /// chronologically and can be correlated back to the originating request. Relative
 /// <c>DataDirectory</c> paths are resolved relative to <c>AppContext.BaseDirectory</c>.
 /// </para>
@@ -104,7 +104,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
         {
             _logger.LogDebug(
                 "Discrepancy for {CorrelationId} below minimum severity threshold, skipping",
-                analysis.CorrelationId
+                analysis.TraceId
             );
             return true;
         }
@@ -150,10 +150,9 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
             Directory.CreateDirectory(directory);
 
-            // Create filename with timestamp and correlation ID
             var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
-            var correlationId = payload.Analysis.CorrelationId.Replace(":", "-").Replace("/", "-");
-            var filename = $"discrepancy_{timestamp}_{correlationId}.json";
+            var traceId = payload.Analysis.TraceId.Replace(":", "-").Replace("/", "-");
+            var filename = $"discrepancy_{timestamp}_{traceId}.json";
             var filePath = Path.Combine(directory, filename);
 
             // Serialize and save
@@ -162,7 +161,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
             _logger.LogDebug(
                 "Saved discrepancy {CorrelationId} to file {FilePath}",
-                payload.Analysis.CorrelationId,
+                payload.Analysis.TraceId,
                 filePath
             );
 
@@ -173,7 +172,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
             _logger.LogWarning(
                 ex,
                 "Failed to save discrepancy {CorrelationId} to file",
-                payload.Analysis.CorrelationId
+                payload.Analysis.TraceId
             );
             return false;
         }
@@ -231,7 +230,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
             Analysis = new DiscrepancyAnalysisDto
             {
                 Id = Guid.NewGuid(),
-                CorrelationId = analysis.CorrelationId,
+                TraceId = analysis.TraceId,
                 AnalysisTimestamp = analysis.ComparisonTimestamp,
                 RequestMethod = requestMethod,
                 RequestPath = requestPath,
@@ -290,7 +289,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
                 // Add source identification header
                 request.Headers.Add("X-Nocturne-Source", payload.SourceId);
-                request.Headers.Add("X-Correlation-ID", payload.Analysis.CorrelationId);
+                request.Headers.Add("X-Correlation-ID", payload.Analysis.TraceId);
 
                 var response = await httpClient.SendAsync(request, cancellationToken);
 
@@ -298,7 +297,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
                 {
                     _logger.LogDebug(
                         "Successfully forwarded discrepancy {CorrelationId} to {Endpoint}",
-                        payload.Analysis.CorrelationId,
+                        payload.Analysis.TraceId,
                         settings.EndpointUrl
                     );
                     return true;
@@ -306,7 +305,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
                 _logger.LogWarning(
                     "Failed to forward discrepancy {CorrelationId} to {Endpoint}: {StatusCode}",
-                    payload.Analysis.CorrelationId,
+                    payload.Analysis.TraceId,
                     settings.EndpointUrl,
                     response.StatusCode
                 );
@@ -327,7 +326,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
                 _logger.LogWarning(
                     ex,
                     "Error forwarding discrepancy {CorrelationId} to {Endpoint} (attempt {Attempt}/{MaxAttempts})",
-                    payload.Analysis.CorrelationId,
+                    payload.Analysis.TraceId,
                     settings.EndpointUrl,
                     retryCount + 1,
                     maxRetries + 1
@@ -346,7 +345,7 @@ public class DiscrepancyForwardingService : IDiscrepancyForwardingService
 
         _logger.LogError(
             "Failed to forward discrepancy {CorrelationId} after {MaxAttempts} attempts",
-            payload.Analysis.CorrelationId,
+            payload.Analysis.TraceId,
             maxRetries + 1
         );
 

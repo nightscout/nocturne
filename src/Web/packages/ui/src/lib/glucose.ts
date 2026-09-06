@@ -1,20 +1,23 @@
 /**
- * Shared glucose presentation helpers — unit conversion/formatting, the trend-chevron
- * angle, and the delta colour scale. Pure and store-independent so both the web app and the
- * desktop companion render glucose identically. The web app re-exports these from its own
- * `utils/formatting` to keep a single source of truth.
+ * Shared glucose presentation helpers — unit conversion/formatting, trend-direction glyphs
+ * and rotations, the trend-chevron angle, and the delta colour scale. Pure and
+ * store-independent so both the web app and the desktop companion render glucose identically.
+ * The web app re-exports these from its own `utils/formatting` to keep a single source of truth.
  */
 
 /** Display unit preference. */
 export type GlucoseUnits = "mg/dl" | "mmol";
 
-/** Conversion factor from mg/dL to mmol/L. */
-const MGDL_TO_MMOL = 18.01559;
+/**
+ * Milligrams per decilitre in one millimole per litre of glucose. Must equal
+ * `GlucoseConstants.MgdlPerMmol`; `GlucoseMirrorTests` fails if it does not.
+ */
+export const MGDL_PER_MMOL = 18.0182;
 
 /** Convert a glucose value from mg/dL to the given display units. */
 export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number {
   if (units === "mmol") {
-    return Math.round((mgdl / MGDL_TO_MMOL) * 10) / 10;
+    return Math.round((mgdl / MGDL_PER_MMOL) * 10) / 10;
   }
   return Math.round(mgdl);
 }
@@ -22,7 +25,7 @@ export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number
 /** Convert a glucose value from display units back to mg/dL. */
 export function convertFromDisplayUnits(value: number, units: GlucoseUnits): number {
   if (units === "mmol") {
-    return Math.round(value * MGDL_TO_MMOL);
+    return Math.round(value * MGDL_PER_MMOL);
   }
   return Math.round(value);
 }
@@ -56,6 +59,107 @@ export function getUnitLabel(units: GlucoseUnits): string {
 }
 
 /**
+ * Glyph shown when a direction cannot be drawn as an arrow. A CGM that reports no trend
+ * must never read as a stable one, so the unknown case gets its own mark rather than the
+ * Flat arrow or blank space a missing lookup would otherwise leave behind.
+ */
+export const UNKNOWN_DIRECTION_GLYPH = "?";
+
+/**
+ * Unicode glyph per drawable direction. `None`, `NotComputable` and `CgmError` are absent
+ * by design — no arrow expresses them.
+ */
+const DIRECTION_GLYPHS: Record<string, string> = {
+  TripleUp: "⤊",
+  DoubleUp: "⇈",
+  SingleUp: "↑",
+  FortyFiveUp: "↗",
+  Flat: "→",
+  FortyFiveDown: "↘",
+  SingleDown: "↓",
+  DoubleDown: "⇊",
+  TripleDown: "⤋",
+  RateOutOfRange: "⇕",
+};
+
+/** Degrees to rotate an upward arrow icon by, per direction that an arrow can express. */
+const DIRECTION_ROTATIONS: Record<string, number> = {
+  TripleUp: 0,
+  DoubleUp: 0,
+  SingleUp: 0,
+  FortyFiveUp: 45,
+  Flat: 90,
+  FortyFiveDown: 135,
+  SingleDown: 180,
+  DoubleDown: 180,
+  TripleDown: 180,
+};
+
+/**
+ * How many arrows a direction is drawn with, so the doubled and tripled directions stay
+ * distinguishable from the single ones they share a rotation with. `0` when no arrow can
+ * express the direction.
+ */
+const DIRECTION_ARROW_COUNTS: Record<string, number> = {
+  TripleUp: 3,
+  DoubleUp: 2,
+  TripleDown: 3,
+  DoubleDown: 2,
+};
+
+const CANONICAL_DIRECTIONS = new Map(
+  [
+    "None",
+    "TripleUp",
+    "DoubleUp",
+    "SingleUp",
+    "FortyFiveUp",
+    "Flat",
+    "FortyFiveDown",
+    "SingleDown",
+    "DoubleDown",
+    "TripleDown",
+    "NotComputable",
+    "RateOutOfRange",
+    "CgmError",
+  ].map((name) => [name.toUpperCase(), name] as const),
+);
+
+/**
+ * Canonical `GlucoseDirection` name for any casing/separator variant a caller may hold
+ * ("NONE", "NOT COMPUTABLE", "FORTY_FIVE_UP"), or `""` when nothing recognisable arrived.
+ */
+export function canonicalDirection(direction: string | null | undefined): string {
+  if (!direction) return "";
+  return CANONICAL_DIRECTIONS.get(direction.toUpperCase().replace(/[^A-Z]/g, "")) ?? "";
+}
+
+/** Glyph for a direction, or {@link UNKNOWN_DIRECTION_GLYPH} when it has none. */
+export function directionGlyph(direction: string | null | undefined): string {
+  return DIRECTION_GLYPHS[canonicalDirection(direction)] ?? UNKNOWN_DIRECTION_GLYPH;
+}
+
+/**
+ * Rotation for an upward arrow icon, or `null` when no arrow can express the direction.
+ * Callers must then render {@link directionGlyph} unrotated — a rotated glyph would read
+ * as a trend the CGM never reported.
+ */
+export function directionRotation(direction: string | null | undefined): number | null {
+  return DIRECTION_ROTATIONS[canonicalDirection(direction)] ?? null;
+}
+
+/**
+ * How many copies of the rotated arrow icon express the direction: one for the plain
+ * directions, two for the doubled ones, three for the tripled ones, and `0` when
+ * {@link directionRotation} refuses a rotation.
+ */
+export function directionArrowCount(direction: string | null | undefined): number {
+  const name = canonicalDirection(direction);
+  if (!(name in DIRECTION_ROTATIONS)) return 0;
+  return DIRECTION_ARROW_COUNTS[name] ?? 1;
+}
+
+/**
  * Convert a 5-minute glucose delta to a Dexcom-style trend chevron angle.
  * 0° = steady (chevron points right), negative = up, positive = down,
  * clamped at ±12 mg/dL/5min so very-fast trends don't go past the ring.
@@ -67,13 +171,18 @@ export function trendAngle(deltaPer5: number): number {
 }
 
 /**
- * Text-colour class for a trend direction, scaled by trend severity.
+ * Text-colour class for a trend direction, scaled by trend severity. Folds the spelling
+ * through {@link canonicalDirection} first, so a caller holding a wire spelling
+ * ("NOT COMPUTABLE") or a store value of unknown casing is classified rather than
+ * dropped to the muted default.
  *
  * Uses the theme's status tokens rather than fixed Tailwind palette colours, so
  * the arrow matches the chart in every theme instead of only the default one.
  */
-export function deltaColorClass(direction: string): string {
-  switch (direction) {
+export function deltaColorClass(direction: string | null | undefined): string {
+  switch (canonicalDirection(direction)) {
+    case "TripleUp":
+    case "TripleDown":
     case "DoubleUp":
     case "DoubleDown":
       return "text-status-critical";

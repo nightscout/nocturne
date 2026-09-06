@@ -35,6 +35,7 @@
   import UploaderSetupView from "$lib/components/connectors/UploaderSetupView.svelte";
   import ImportProgress from "./steps/ImportProgress.svelte";
   import Finish from "./steps/Finish.svelte";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // Auth check is handled server-side in +page.server.ts:
   // - setupRequired=true → show two-step setup (tenant identity → account creation)
@@ -114,6 +115,9 @@
   const uploaderSetupQuery = $derived(
     selectedUploader?.id ? getUploaderSetup(selectedUploader.id) : null
   );
+  retainQuery(() => servicesQuery);
+  retainQuery(() => dataSourcesQuery);
+  retainQuery(() => uploaderSetupQuery);
 
   const servicesData = $derived(servicesQuery?.current ?? null);
   const activeDataSources = $derived<DataSourceInfo[]>(
@@ -572,7 +576,7 @@
                   </div>
                   <ConnectorSetup
                     connectorId={selectedConnectorId}
-                    primaryAction="save-and-sync"
+                    primaryAction="save-and-finish"
                     showToggle={false}
                     showDangerZone={false}
                     showCapabilities={true}
@@ -659,14 +663,16 @@
                   Save and continue
                   <ArrowRight class="h-4 w-4" />
                 </Button>
-              {:else if currentStep?.id !== "path" && currentStep?.id !== "sync"}
+              {:else if currentStep?.id !== "path"}
                 <Button variant="ghost" onclick={handleSkip}>
                   Skip for now
                 </Button>
-                <Button onclick={handleNext}>
-                  Continue
-                  <ArrowRight class="h-4 w-4" />
-                </Button>
+                {#if currentStep?.id !== "sync" && currentStep?.id !== "connect"}
+                  <Button onclick={handleNext}>
+                    Continue
+                    <ArrowRight class="h-4 w-4" />
+                  </Button>
+                {/if}
               {/if}
             </div>
           </div>

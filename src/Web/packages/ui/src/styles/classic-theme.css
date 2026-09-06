@@ -62,7 +62,7 @@
   /* IOB */
   --iob-basal: rgba(0, 153, 255, 0.5);
   --iob-bolus: rgba(0, 153, 255, 1.0);
-  --iob-temporary: rgba(0, 153, 255, 0.6);
+  --iob-temporary: rgba(0, 190, 170, 0.75);
 
   /* Pump Mode States */
   --pump-mode-automatic: oklch(0.8 0.35 142);
@@ -160,7 +160,7 @@
 
   /* IOB - Dark Mode */
   --iob-basal: rgba(0, 153, 255, 0.6);
-  --iob-temporary: rgba(0, 153, 255, 0.7);
+  --iob-temporary: rgba(0, 210, 190, 0.8);
 
   /* Data Exclusion - Dark Mode */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.2);

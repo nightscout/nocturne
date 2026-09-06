@@ -20,7 +20,7 @@ public class ShareLinkDto
 
     /// <summary>
     /// The data categories anonymous viewers can see, as read-permission atoms (e.g. glucose.read).
-    /// A subset of <see cref="Nocturne.Core.Models.Authorization.TenantPermissions.PublicShareScopes"/>.
+    /// A subset of <see cref="Nocturne.Core.Models.Authorization.Scope.PublicShareScopes"/>.
     /// Empty means the link is live but nothing is shared yet.
     /// </summary>
     public List<string> Scopes { get; set; } = [];

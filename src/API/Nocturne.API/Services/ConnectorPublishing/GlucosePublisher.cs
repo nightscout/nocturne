@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -20,15 +19,13 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// triggering alert evaluation via <see cref="IAlertOrchestrator"/> after each successful write.
 /// </summary>
 /// <seealso cref="IGlucosePublisher"/>
-internal sealed class GlucosePublisher : IGlucosePublisher
+internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublisher
 {
     private readonly IEntryService _entryService;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly ICanonicalAlertEvaluator _alertEvaluator;
-    private readonly IAuditContext _auditContext;
-    private readonly ILogger<GlucosePublisher> _logger;
 
     public GlucosePublisher(
         IEntryService entryService,
@@ -38,14 +35,13 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         ICanonicalAlertEvaluator alertEvaluator,
         IAuditContext auditContext,
         ILogger<GlucosePublisher> logger)
+        : base(auditContext, logger)
     {
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
         _meterGlucoseRepository = meterGlucoseRepository ?? throw new ArgumentNullException(nameof(meterGlucoseRepository));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
         _alertEvaluator = alertEvaluator ?? throw new ArgumentNullException(nameof(alertEvaluator));
-        _auditContext = auditContext;
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<bool> PublishEntriesAsync(
@@ -63,56 +59,36 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish entries for {Source}", source);
+            Logger.LogError(ex, "Failed to publish entries for {Source}", source);
             return false;
         }
     }
 
-    public async Task<bool> PublishSensorGlucoseAsync(
+    /// <remarks>
+    /// Alert evaluation after the write is this publisher's one addition to the shared shape: a CGM
+    /// reading is the trigger every glucose alert condition is written against.
+    /// </remarks>
+    public Task<bool> PublishSensorGlucoseAsync(
         IEnumerable<SensorGlucose> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
+        => PublishAsync(
+            records, _sensorGlucoseRepository, source, origin, cancellationToken,
+            beforeWrite: recordList => _patientDeviceStamper.StampAsync(
+                recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken),
+            afterWrite: () => _alertEvaluator.EvaluateAsync(cancellationToken));
 
-            await _patientDeviceStamper.StampAsync(recordList, DeviceAttributionCategories.SensorGlucose, source, cancellationToken);
-            using (SystemAuditScope.Push(_auditContext))
-                await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            await _alertEvaluator.EvaluateAsync(cancellationToken);
-
-            _logger.LogDebug("Published {Count} SensorGlucose records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish SensorGlucose records for {Source}", source);
-            return false;
-        }
-    }
-
-    public async Task<DateTime?> GetLatestEntryTimestampAsync(
+    /// <inheritdoc cref="ConnectorPublisherBase.LatestTimestampAsync" />
+    /// <remarks>
+    /// The v1 <c>entries</c> collection spans CGM readings (sensor glucose) and manual BG checks
+    /// (meter glucose).
+    /// </remarks>
+    public Task<DateTime?> GetLatestEntryTimestampAsync(
         string source,
         CancellationToken cancellationToken = default)
-    {
-        // The v1 entries collection spans CGM readings (sensor glucose) and manual BG
-        // checks (meter glucose), so the resume watermark is the latest of either —
-        // scoped to THIS source. Never fall back across sources: when another uploader
-        // is already writing glucose (e.g. Trio pushing directly while a Nightscout
-        // migration runs), a cross-source "current entry" mis-classifies the
-        // connector's first-ever sync as incremental and skips its full-history
-        // backfill.
-        var sgTimestamp = await _sensorGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken);
-        var mgTimestamp = await _meterGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken);
-
-        if (sgTimestamp.HasValue && mgTimestamp.HasValue)
-            return sgTimestamp.Value > mgTimestamp.Value ? sgTimestamp.Value : mgTimestamp.Value;
-
-        return sgTimestamp ?? mgTimestamp;
-    }
+        => LatestTimestampAsync(
+            () => _sensorGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken),
+            () => _meterGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken));
 
     public async Task<DateTime?> GetLatestSensorGlucoseTimestampAsync(
         string source,

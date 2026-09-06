@@ -17,7 +17,13 @@ export interface BotApiClient {
     ): Promise<PaginatedSensorGlucose>;
   };
   alerts: {
+    /** Acknowledges every active excursion for the tenant. */
     acknowledge(request: AcknowledgeRequest, signal?: AbortSignal): Promise<void>;
+    acknowledgeExcursion(
+      excursionId: string,
+      request: AcknowledgeRequest,
+      signal?: AbortSignal,
+    ): Promise<void>;
     markDelivered(deliveryId: string, request: MarkDeliveredRequest, signal?: AbortSignal): Promise<void>;
     markFailed(deliveryId: string, request: MarkFailedRequest, signal?: AbortSignal): Promise<void>;
     getPendingDeliveries(channelType?: string[], signal?: AbortSignal): Promise<PendingDeliveryResponse[]>;
@@ -98,6 +104,11 @@ export interface DirectoryCandidate {
   nocturneUserId: string;
   label: string;
   displayName: string;
+  /**
+   * The link a bare, label-less invocation resolves to. At most one of a
+   * platform user's links carries it (`ux_directory_user_one_default`).
+   */
+  isDefault: boolean;
 }
 
 export interface HeartbeatRequest {

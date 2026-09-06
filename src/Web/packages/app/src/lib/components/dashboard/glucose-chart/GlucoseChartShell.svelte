@@ -7,6 +7,8 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
+  import { hourLabel } from "$lib/utils/formatting";
+  import { hourTicks } from "./engine/axis-ticks";
 
   interface Props {
     engine: ChartDataEngine;
@@ -113,7 +115,8 @@
         {#if showTimeAxis}
           <Axis
             placement="bottom"
-            format="hour"
+            ticks={hourTicks}
+            format={(v) => (v instanceof Date ? hourLabel(v) : String(v))}
             tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
           />
         {/if}

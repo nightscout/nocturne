@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -54,6 +55,26 @@ namespace Nocturne.API.Controllers.Authentication;
 public class PasskeyController : ControllerBase
 {
     private const string RecoveryCookieName = ".Nocturne.RecoverySession";
+
+    /// <summary>
+    /// How long a spent recovery code stays redeemable for one passkey enrolment. Bounds both the
+    /// token and the cookie carrying it, so neither outlives the other.
+    /// </summary>
+    private static readonly TimeSpan RecoverySessionLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// What makes a token a recovery session, as opposed to any credential that merely carries
+    /// <see cref="RecoverySessionPermission"/>. It sits outside
+    /// <see cref="Core.Models.Authorization.Scope.ValidRequestScopes"/>, so no client can
+    /// register it and no scope gate resolves anything from it, leaving
+    /// <see cref="RecoveryVerify"/> its only source.
+    /// </summary>
+    private const string RecoverySessionScope = "auth:recovery:enrol";
+
+    /// <summary>
+    /// The authority a recovery session confers: enrol a replacement passkey, nothing else.
+    /// </summary>
+    private const string RecoverySessionPermission = "passkey:manage";
 
     /// <summary>
     /// Shown for every recovery-mode refusal so the response never distinguishes an unknown
@@ -120,13 +141,18 @@ public class PasskeyController : ControllerBase
     /// subject id would let anyone enrol their own authenticator onto another account.
     /// </remarks>
     [HttpPost("register/options")]
+    [DenyDemoSubject]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PasskeyOptionsResponse>> RegisterOptions([FromBody] PasskeyRegisterOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var subjectId = ResolveRegistrationSubject();
         if (subjectId == null)
         {
@@ -138,9 +164,8 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Username is required", statusCode: 400, title: "Bad Request");
         }
 
-        var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, request.Username, tenantId);
+            subjectId.Value, request.Username);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -189,10 +214,26 @@ public class PasskeyController : ControllerBase
         if (!validation.IsValid || validation.Claims is null)
             return null;
 
-        return validation.Claims.Permissions.Contains("passkey:manage")
+        return validation.Claims.Scopes.Contains(RecoverySessionScope)
+            && validation.Claims.Permissions.Contains(RecoverySessionPermission)
             ? validation.Claims.SubjectId
             : null;
     }
+
+    /// <summary>
+    /// The attributes the recovery-session cookie is written with. A cookie is keyed by name,
+    /// domain and path, so the write and the expiry that spends it must present the same ones.
+    /// Host-only: the recovery session is redeemed on the host it was issued from, so unlike a
+    /// session cookie it is never widened to sibling tenants.
+    /// </summary>
+    private CookieOptions RecoveryCookieOptions() => new()
+    {
+        HttpOnly = true,
+        Secure = _oidcOptions.Cookie.Secure,
+        SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
+        Path = "/",
+        IsEssential = true,
+    };
 
     /// <summary>
     /// Complete passkey registration with attestation response
@@ -200,10 +241,19 @@ public class PasskeyController : ControllerBase
     /// <remarks>
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
+    /// <para>
+    /// Declares no invalidation, like the other enrolment a recovery session reaches
+    /// (<see cref="RecoveryModeComplete"/>): the generated command would refresh
+    /// <see cref="ListCredentials"/>, which needs a session, and its 401 would surface as a
+    /// failure on an enrolment that in fact succeeded. Callers holding a session refresh their
+    /// own list.
+    /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
+    [DenyDemoSubject]
     [AllowAnonymous]
-    [RemoteCommand(Invalidates = ["ListCredentials"])]
+    [EnableRateLimiting("passkey-register")]
+    [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -228,6 +278,10 @@ public class PasskeyController : ControllerBase
             var result = await _passkeyService.CompleteRegistrationAsync(
                 request.AttestationResponseJson, request.ChallengeToken, tenantId,
                 expectedSubjectId: subjectId.Value, request.Label);
+
+            // One spent recovery code buys one enrolment: the credential it authorized now exists,
+            // so the session that authorized it is over even though its token has time left.
+            Response.Cookies.Delete(RecoveryCookieName, RecoveryCookieOptions());
 
             return Ok(new PasskeyRegisterCompleteResponse
             {
@@ -254,12 +308,16 @@ public class PasskeyController : ControllerBase
     /// </remarks>
     [HttpPost("recovery-mode/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PasskeyOptionsResponse>> RecoveryModeOptions(
         [FromBody] PasskeyLoginOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var subject = await ResolveRecoveryModeSubjectAsync(request.Username);
         if (subject == null)
         {
@@ -267,7 +325,7 @@ public class PasskeyController : ControllerBase
         }
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subject.Id, subject.Username ?? subject.Name, _tenantAccessor.TenantId);
+            subject.Id, subject.Username ?? subject.Name);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -282,6 +340,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("recovery-mode/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -438,10 +497,15 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/discoverable/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PasskeyOptionsResponse>> DiscoverableLoginOptions()
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateDiscoverableAssertionOptionsAsync(tenantId);
 
@@ -457,11 +521,15 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PasskeyOptionsResponse>> LoginOptions([FromBody] PasskeyLoginOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         if (string.IsNullOrEmpty(request.Username))
         {
             return Problem(detail: "Username is required", statusCode: 400, title: "Bad Request");
@@ -482,6 +550,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("login/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-login")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyLoginCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -528,6 +597,8 @@ public class PasskeyController : ControllerBase
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
             Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetLastSignInCookie(
+                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
 
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -560,6 +631,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("recovery/verify")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-recovery")]
     [RemoteCommand]
     [ProducesResponseType(typeof(RecoveryVerifyResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -611,19 +683,14 @@ public class PasskeyController : ControllerBase
 
         var recoveryToken = _jwtService.GenerateAccessToken(
             subjectInfo,
-            permissions: ["passkey:manage"],
+            permissions: [RecoverySessionPermission],
             roles: [],
-            lifetime: TimeSpan.FromMinutes(10));
+            scopes: [RecoverySessionScope],
+            lifetime: RecoverySessionLifetime);
 
-        Response.Cookies.Append(RecoveryCookieName, recoveryToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            MaxAge = TimeSpan.FromMinutes(10),
-            Path = "/",
-            IsEssential = true,
-        });
+        var cookieOptions = RecoveryCookieOptions();
+        cookieOptions.MaxAge = RecoverySessionLifetime;
+        Response.Cookies.Append(RecoveryCookieName, recoveryToken, cookieOptions);
 
         return Ok(new RecoveryVerifyResponse
         {
@@ -636,6 +703,7 @@ public class PasskeyController : ControllerBase
     /// List all passkey credentials for the authenticated user
     /// </summary>
     [HttpGet("credentials")]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(PasskeyCredentialListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -647,9 +715,9 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
-        var tenantId = _tenantAccessor.TenantId;
-        var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value, tenantId);
+        var credentials = await _passkeyService.GetCredentialsAsync(auth.SubjectId.Value);
         var primaryFactorCount = await _subjectService.CountPrimaryAuthFactorsAsync(auth.SubjectId.Value);
+        var hasSingleSignInMethod = await _subjectService.HasSingleSignInMethodAsync(auth.SubjectId.Value);
 
         return Ok(new PasskeyCredentialListResponse
         {
@@ -661,6 +729,7 @@ public class PasskeyController : ControllerBase
                 LastUsedAt = c.LastUsedAt,
             }).ToList(),
             PrimaryAuthFactorCount = primaryFactorCount,
+            HasSingleSignInMethod = hasSingleSignInMethod,
         });
     }
 
@@ -668,6 +737,7 @@ public class PasskeyController : ControllerBase
     /// Remove a passkey credential. Cannot remove the last credential if user has no OIDC link.
     /// </summary>
     [HttpDelete("credentials/{id:guid}")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -702,7 +772,8 @@ public class PasskeyController : ControllerBase
     /// Regenerate recovery codes for the authenticated user. Invalidates all existing codes.
     /// </summary>
     [HttpPost("recovery/regenerate")]
-    [RemoteCommand(Invalidates = ["GetRecoveryStatus"])]
+    [DenyDemoSubject]
+    [RemoteCommand(Invalidates = ["GetRecoveryStatus", "ListCredentials"])]
     [ProducesResponseType(typeof(RecoveryRegenerateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<RecoveryRegenerateResponse>> RegenerateRecoveryCodes()
@@ -725,6 +796,7 @@ public class PasskeyController : ControllerBase
     /// Get the count of remaining recovery codes for the authenticated user
     /// </summary>
     [HttpGet("recovery/status")]
+    [DenyDemoSubject]
     [RemoteQuery]
     [ProducesResponseType(typeof(RecoveryStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -852,6 +924,7 @@ public class PasskeyController : ControllerBase
     /// <returns>A <see cref="PasskeyOptionsResponse"/> with the WebAuthn options and challenge token, or <c>404</c> if access requests are disabled.</returns>
     [HttpPost("access-request/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-access-request")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -860,6 +933,9 @@ public class PasskeyController : ControllerBase
     public async Task<ActionResult<PasskeyOptionsResponse>> AccessRequestOptions(
         [FromBody] AccessRequestOptionsRequest request)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var tenantId = _tenantAccessor.TenantId;
         var tenant = await _dbContext.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId);
@@ -914,7 +990,7 @@ public class PasskeyController : ControllerBase
         await _dbContext.SaveChangesAsync();
 
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username, tenant.Id);
+            subjectId.Value, username);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -937,6 +1013,7 @@ public class PasskeyController : ControllerBase
     /// <returns><c>200 OK</c> on success, or <c>400</c> / <c>404</c> on error.</returns>
     [HttpPost("access-request/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-access-request")]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -978,8 +1055,7 @@ public class PasskeyController : ControllerBase
             await using var ownerCtx = await _dbContextFactory.CreateTenantPinnedContextAsync(
                 tenant.Id, HttpContext.RequestAborted);
             var ownerIds = await ownerCtx.TenantMembers
-                .Where(tm => tm.TenantId == tenant.Id
-                    && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == Core.Models.Authorization.TenantPermissions.SeedRoles.Owner))
+                .OwnersOf(tenant.Id)
                 .Select(tm => tm.SubjectId)
                 .ToListAsync();
 
@@ -1021,6 +1097,7 @@ public class PasskeyController : ControllerBase
     /// </summary>
     [HttpPost("invite/options")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1029,6 +1106,9 @@ public class PasskeyController : ControllerBase
         [FromBody] InviteOptionsRequest request,
         [FromServices] IMemberInviteService memberInviteService)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         if (string.IsNullOrWhiteSpace(request.Token) ||
             string.IsNullOrWhiteSpace(request.Username) ||
             string.IsNullOrWhiteSpace(request.DisplayName))
@@ -1081,7 +1161,7 @@ public class PasskeyController : ControllerBase
 
         // Generate passkey registration options
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId.Value, username, tenantId);
+            subjectId.Value, username);
 
         return Ok(new PasskeyOptionsResponse
         {
@@ -1101,6 +1181,7 @@ public class PasskeyController : ControllerBase
     /// </remarks>
     [HttpPost("invite/complete")]
     [AllowAnonymous]
+    [EnableRateLimiting("passkey-register")]
     [RemoteCommand]
     [ProducesResponseType(typeof(PasskeyRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1282,6 +1363,12 @@ public class PasskeyCredentialListResponse
 {
     public List<PasskeyCredentialDto> Credentials { get; set; } = new();
     public int PrimaryAuthFactorCount { get; set; }
+
+    /// <summary>
+    /// True when this account can be signed into exactly one way, with no unused recovery codes
+    /// behind it.
+    /// </summary>
+    public bool HasSingleSignInMethod { get; set; }
 }
 
 /// <summary>

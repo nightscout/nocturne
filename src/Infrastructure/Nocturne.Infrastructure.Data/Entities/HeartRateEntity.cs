@@ -8,7 +8,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.HeartRate
 /// </summary>
 [Table("heart_rates")]
-public class HeartRateEntity : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped
+public class HeartRateEntity
+    : ITenantScoped, ISoftDeletable, ISyncDedupable, ISystemTimestamped, IOriginalIdentified, IObservationTimestamped
 {
     /// <summary>
     /// Identifier of the tenant this heart rate record belongs to

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Models.Attributes;
@@ -44,9 +43,8 @@ public class Profile
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
-    /// Falls back to Mills, then StartDate (profiles are often uploaded without mills):
-    /// NS v3 socket clients (AAPS) read it unconditionally from realtime storage events
-    /// and drop docs without it.
+    /// Falls back to <see cref="FallbackTimestampMills"/> — profiles are often uploaded
+    /// without mills.
     /// </summary>
     private long? _srvModified;
 
@@ -71,19 +69,8 @@ public class Profile
         set => _srvCreated = value;
     }
 
-    private long? FallbackTimestampMills()
-    {
-        if (Mills > 0)
-            return Mills;
-        return DateTimeOffset.TryParse(
-            StartDate,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out var startDate
-        )
-            ? startDate.ToUnixTimeMilliseconds()
-            : null;
-    }
+    private long? FallbackTimestampMills() =>
+        V3Timestamps.Resolve(Mills, StartDate, CreatedAt);
 
     /// <summary>
     /// Gets or sets when this profile was created

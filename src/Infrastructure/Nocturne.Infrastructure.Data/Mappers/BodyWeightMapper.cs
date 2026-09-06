@@ -16,9 +16,7 @@ public static class BodyWeightMapper
     {
         return new BodyWeightEntity
         {
-            Id = string.IsNullOrEmpty(bodyWeight.Id)
-                ? Guid.CreateVersion7()
-                : MapperHelpers.ParseIdToGuid(bodyWeight.Id),
+            Id = MapperHelpers.ParseIdToGuid(bodyWeight.Id),
             OriginalId = MongoIdUtils.IsValidMongoId(bodyWeight.Id) ? bodyWeight.Id : null,
             Mills = bodyWeight.Mills,
             WeightKg = bodyWeight.WeightKg,

@@ -18,7 +18,8 @@
  * `setPreferencesContext`), so SSR emits the same units/formats hydration will.
  *
  * Language keeps its own dedicated cookie + backend path (used by SSR locale
- * resolution).
+ * resolution), so it travels in the request context's own slot rather than as a
+ * field of the preferences blob.
  */
 
 import { browser } from "$app/environment";
@@ -26,9 +27,11 @@ import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId } from "../api/generated/nocturne-api-client";
+import type { WidgetId } from "../api/generated/nocturne-api-client";
+import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/widget-registry";
 import type { UserDisplayPreferences } from "$lib/api";
 import { weekStartName } from "../components/calendar/calendar-date";
+import { resolveCookieDomain } from "../utils/tenant-host";
 
 // ==========================================
 // Type Definitions
@@ -81,25 +84,35 @@ const syncedRegistry = new Map<string, SyncedPref<unknown>>();
 const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
 
 /**
- * Publish this request's preference payloads, highest precedence first, for the
- * duration of one server render. The store's `$state` is module-scoped and so
- * shared by every concurrent SSR request; reading preferences from component
- * context instead is what keeps one user's units out of another's HTML.
- * Layers mirror the browser's own resolution order (backend blob over cookie),
- * each contributing only the fields it defines.
+ * One request's preference sources: the display-preference payloads, highest
+ * precedence first and each contributing only the fields it defines, plus the
+ * display language, which is stored apart from the blob and so gets its own slot.
  */
-export function setPreferencesContext(layers: () => UserDisplayPreferences[]): void {
-  setContext(PREFERENCES_CONTEXT_KEY, layers);
+export interface RequestPreferences {
+  layers: UserDisplayPreferences[];
+  language?: SupportedLocale;
 }
 
-function requestPreferences(): UserDisplayPreferences[] {
+/**
+ * Publish this request's preference sources for the duration of one server render.
+ * The store's `$state` is module-scoped and so shared by every concurrent SSR
+ * request; reading preferences from component context instead is what keeps one
+ * user's units out of another's HTML. Every source mirrors the browser's own
+ * resolution order, so SSR output equals the first client render.
+ */
+export function setPreferencesContext(preferences: () => RequestPreferences): void {
+  setContext(PREFERENCES_CONTEXT_KEY, preferences);
+}
+
+function requestPreferences(): RequestPreferences | null {
   try {
-    return getContext<(() => UserDisplayPreferences[]) | undefined>(
-      PREFERENCES_CONTEXT_KEY
-    )?.() ?? [];
+    return (
+      getContext<(() => RequestPreferences) | undefined>(PREFERENCES_CONTEXT_KEY)?.() ??
+      null
+    );
   } catch {
     // getContext throws outside a component — server loads and module scope have no request.
-    return [];
+    return null;
   }
 }
 
@@ -114,6 +127,27 @@ export function registerPreferencesWriteThrough(
   fn: (prefs: UserDisplayPreferences) => unknown
 ): void {
   writeThrough = fn;
+}
+
+/** Injected rather than derived: BASE_DOMAIN reaches the browser only through layout data. */
+let preferenceCookieDomain: string | null = null;
+
+/**
+ * Scope preference cookies to the base domain, and rewrite the ones this document already wrote
+ * host-scoped: cookies are written at module load, before the layout can supply the domain.
+ */
+export function registerPreferenceCookieDomain(
+  baseDomain: string | null | undefined
+): void {
+  if (!browser) return;
+
+  const domain = resolveCookieDomain(baseDomain);
+  if (domain === preferenceCookieDomain) return;
+  preferenceCookieDomain = domain;
+
+  const prefs = readPrefsCookie();
+  if (prefs) writePrefsCookie(prefs);
+  syncLanguageCookie(preferredLanguage.current);
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -176,7 +210,7 @@ class SyncedPref<T> {
 
   get current(): T {
     if (!browser) {
-      for (const prefs of requestPreferences()) {
+      for (const prefs of requestPreferences()?.layers ?? []) {
         const value = this._read(prefs);
         if (value !== undefined && value !== null) return value;
       }
@@ -268,7 +302,7 @@ export const nightModeSchedule = new SyncedPref<boolean>(
  */
 export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   "nocturne-dashboard-top-widgets",
-  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd],
+  DEFAULT_TOP_WIDGETS,
   (p) => p.dashboardTopWidgets
 );
 
@@ -635,10 +669,40 @@ function hasAnyLocalPreference(): boolean {
 // Preference cookie helpers
 // ==========================================
 
-function writePrefsCookie(prefs: UserDisplayPreferences): void {
+/**
+ * The `document.cookie` assignments storing one preference cookie, in the order they must be made.
+ * Pure so the scoping rules are testable without a DOM.
+ *
+ * A browser that stored the cookie before it was widened presents both variants under one `Cookie`
+ * header with no way to tell them apart, so a widened write expires the host-scoped one first.
+ * Unwidened there is only one cookie, and that expiry would delete the value being written.
+ */
+export function preferenceCookieWrites(
+  name: string,
+  value: string,
+  maxAge: number,
+  domain: string | null
+): string[] {
+  const write = `${name}=${value};path=/;max-age=${maxAge};SameSite=Lax`;
+  if (!domain) return [write];
+
+  return [`${name}=;path=/;max-age=0;SameSite=Lax`, `${write};domain=${domain}`];
+}
+
+/** The one writer for every preference cookie, so a scope can never drift between them. */
+function writePreferenceCookie(name: string, value: string, maxAge: number): void {
   if (!browser) return;
-  const value = encodeURIComponent(JSON.stringify(prefs));
-  document.cookie = `${PREFS_COOKIE_NAME}=${value};path=/;max-age=${PREFS_COOKIE_MAX_AGE};SameSite=Lax`;
+  for (const assignment of preferenceCookieWrites(name, value, maxAge, preferenceCookieDomain)) {
+    document.cookie = assignment;
+  }
+}
+
+function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  writePreferenceCookie(
+    PREFS_COOKIE_NAME,
+    encodeURIComponent(JSON.stringify(prefs)),
+    PREFS_COOKIE_MAX_AGE
+  );
 }
 
 /** Decode a raw `nocturne-prefs` cookie value; also used server-side by the root layout load. */
@@ -654,13 +718,27 @@ export function parsePrefsCookie(
   }
 }
 
-function readPrefsCookie(): UserDisplayPreferences | null {
-  if (!browser) return null;
-  const match = document.cookie
+/**
+ * The value of a named cookie in a `document.cookie` header, taking the LAST of same-name rows.
+ *
+ * Through the widening transition a browser can hold both a host-scoped and a base-domain variant,
+ * indistinguishable in the header. RFC 6265 orders equal-path cookies oldest first, so the last is
+ * the newer of the two — taking the first would let a stale value win and then be written back as
+ * the widened one.
+ */
+export function readCookieFrom(header: string, name: string): string | null {
+  const match = header
     .split("; ")
-    .find((row) => row.startsWith(`${PREFS_COOKIE_NAME}=`));
-  if (!match) return null;
-  return parsePrefsCookie(match.slice(PREFS_COOKIE_NAME.length + 1));
+    .findLast((row) => row.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
+
+function readCookie(name: string): string | null {
+  return browser ? readCookieFrom(document.cookie, name) : null;
+}
+
+function readPrefsCookie(): UserDisplayPreferences | null {
+  return parsePrefsCookie(readCookie(PREFS_COOKIE_NAME));
 }
 
 // Hydrate synchronously from the cookie on load (before first paint) so a known
@@ -690,18 +768,50 @@ if (browser) {
 /** Re-export supported locales for external use */
 export { supportedLocales };
 
+const DEFAULT_LANGUAGE: SupportedLocale = "en";
+
 /**
  * Language preference - stored in localStorage and synced to cookie for SSR.
- * Kept as a dedicated PersistedState (not part of the display-preferences blob)
- * because server-side locale resolution reads its own cookie + subject column.
+ * Kept out of the display-preferences blob because server-side locale resolution
+ * reads its own cookie + subject column; server-side reads therefore take the
+ * request context's language slot rather than a `UserDisplayPreferences` field.
  */
-export const preferredLanguage = new PersistedState<SupportedLocale>(
-  "nocturne-language",
-  "en"
-);
+class LanguagePref {
+  private _persisted = new PersistedState<SupportedLocale>(
+    "nocturne-language",
+    DEFAULT_LANGUAGE
+  );
+
+  get current(): SupportedLocale {
+    if (!browser) return requestPreferences()?.language ?? DEFAULT_LANGUAGE;
+    return this._persisted.current;
+  }
+
+  set current(locale: SupportedLocale) {
+    this._persisted.current = locale;
+  }
+}
+
+export const preferredLanguage = new LanguagePref();
 
 /** Cookie name for language preference - used by SSR */
 export const LANGUAGE_COOKIE_NAME = "nocturne-language";
+
+const LANGUAGE_COOKIE_MAX_AGE = 31536000; // 1 year
+
+/**
+ * The language the browser will settle on, from the same sources in the same order:
+ * a saved subject preference outranks the cookie that mirrors localStorage. SSR
+ * output only matches hydration while this order matches the client's.
+ */
+export function resolveLanguage(
+  ...candidates: (string | null | undefined)[]
+): SupportedLocale {
+  for (const candidate of candidates) {
+    if (candidate && isSupportedLocale(candidate)) return candidate;
+  }
+  return DEFAULT_LANGUAGE;
+}
 
 /**
  * Check if user has explicitly set a language preference
@@ -716,8 +826,23 @@ export function hasLanguagePreference(): boolean {
  * Sync language preference to cookie for server-side access
  */
 function syncLanguageCookie(locale: SupportedLocale): void {
-  if (!browser) return;
-  document.cookie = `${LANGUAGE_COOKIE_NAME}=${locale};path=/;max-age=31536000;SameSite=Lax`;
+  writePreferenceCookie(LANGUAGE_COOKIE_NAME, locale, LANGUAGE_COOKIE_MAX_AGE);
+}
+
+/**
+ * The language to start from, given what this origin stored and what the shared cookie carries.
+ *
+ * localStorage is per-origin while the cookie spans the base domain, so a first visit to a sibling
+ * subdomain has no stored value and must adopt the cookie's. Writing the default back instead
+ * would destroy the choice on every host, not merely fail to honour it on this one. A stored value
+ * is this device's own answer and wins; an unrecognised cookie is ignored.
+ */
+export function resolveInitialLanguage(
+  stored: string | null,
+  cookie: string | null
+): SupportedLocale | null {
+  if (stored !== null) return null;
+  return cookie && isSupportedLocale(cookie) ? cookie : null;
 }
 
 /**
@@ -819,7 +944,12 @@ export function getLanguage(): SupportedLocale {
   return preferredLanguage.current;
 }
 
-// Sync cookie on initial load in browser
 if (browser) {
+  const adopted = resolveInitialLanguage(
+    localStorage.getItem(LANGUAGE_COOKIE_NAME),
+    readCookie(LANGUAGE_COOKIE_NAME)
+  );
+  if (adopted) preferredLanguage.current = adopted;
+
   syncLanguageCookie(preferredLanguage.current);
 }

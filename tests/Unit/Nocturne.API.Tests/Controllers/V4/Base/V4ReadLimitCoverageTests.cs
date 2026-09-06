@@ -24,11 +24,12 @@ public class V4ReadLimitCoverageTests
     private const string V4Namespace = "Nocturne.API.Controllers.V4";
 
     /// <summary>
-    /// Parameter names that carry a caller-supplied page size on this surface. <c>offset</c> and
-    /// <c>skip</c> are not listed: they are meaningless without a page size, so an action that
-    /// declares one declares the other, and the page-size name is what selects the action.
+    /// Parameter names that carry a caller-supplied page size on this surface. <c>offset</c>,
+    /// <c>skip</c> and <c>page</c> are not listed: they are meaningless without a page size, so an
+    /// action that declares one declares the other, and the page-size name is what selects the
+    /// action.
     /// </summary>
-    private static readonly string[] PageSizeParameterNames = ["limit", "count"];
+    private static readonly string[] PageSizeParameterNames = ["limit", "count", "pageSize"];
 
     /// <summary>
     /// Actions exempt from the rule, keyed <c>Controller.Action</c>, with what bounds them instead.
@@ -41,11 +42,6 @@ public class V4ReadLimitCoverageTests
             // A monolithic legacy-shaped profile carries every schedule array inline, so the page
             // is far heavier per record than the rest of this surface.
             ["ProfileController.GetProfileRecords"] = "clamps to its own tighter ceiling",
-
-            // count and skip are inert: FoodService.GetFoodAsync ignores them and returns the whole
-            // catalog, so clamping them would bound nothing. Bounding this read means teaching the
-            // food repository to page, not clamping a parameter it never sees.
-            ["FoodsController.GetFoods"] = "parameter never reaches the query",
         };
 
     [Fact]

@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
     /// rows. Seed roles are persisted per-tenant and SeedRolesForTenantAsync skips slugs
     /// that already exist, so tenants created before the atoms were added never receive
     /// them without a data migration (same backfill as heartrate/stepcount/food in
-    /// RenamePermissionAtoms). Mirrors TenantPermissions.SeedRolePermissions: admin gets
+    /// RenamePermissionAtoms). Mirrors RoleSeeds.Permissions: admin gets
     /// readwrite, caretaker and clinician get read.
     /// </summary>
     public partial class AddSleepPermissionAtomsToSeedRoles : Migration

@@ -203,6 +203,12 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        // A refusal answers with ProblemDetails, so the reason travels with a
+        // status the caller can route on rather than in a body it has to sniff.
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        body.GetProperty("status").GetInt32().Should().Be(400);
+        body.GetProperty("detail").GetString().Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Security;
@@ -12,19 +9,14 @@ public class ShareRlsPolicyTests
 {
     private static IModel Model()
     {
-        // The EF model builds offline (no connection); UseNpgsql gives the relational mapping
-        // so GetTableName() resolves real table names, mirroring the reconciler at startup.
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql("Host=localhost;Database=nocturne;Username=test;Password=test")
-            .Options;
-        using var ctx = new NocturneDbContext(options);
+        using var ctx = OfflineDbContext.Create();
         return ctx.Model;
     }
 
     [Fact]
     public void BuildPolicySql_GovernedTable_GatesOnIsShareAndCategory()
     {
-        var sql = ShareRlsPolicy.BuildPolicySql("boluses", OAuthScopes.TreatmentsRead);
+        var sql = ShareRlsPolicy.BuildPolicySql("boluses", Scope.TreatmentsRead);
 
         sql.Should().Contain("CREATE POLICY share_category_read ON boluses AS RESTRICTIVE FOR SELECT");
         sql.Should().Contain("current_setting('app.is_share', true) IS DISTINCT FROM 'true'");
@@ -66,7 +58,7 @@ public class ShareRlsPolicyTests
     [Fact]
     public void BuildPolicySql_RecencyColumn_AddsThe24HourClampBehindFullHistory()
     {
-        var sql = ShareRlsPolicy.BuildPolicySql("boluses", OAuthScopes.TreatmentsRead, "timestamp");
+        var sql = ShareRlsPolicy.BuildPolicySql("boluses", Scope.TreatmentsRead, "timestamp");
 
         sql.Should().Contain("current_setting('app.share_full_history', true) = 'true'");
         sql.Should().Contain("\"timestamp\" >= now() - interval '24 hours'");
@@ -77,7 +69,7 @@ public class ShareRlsPolicyTests
     [Fact]
     public void BuildPolicySql_NoRecencyColumn_HasNoClamp()
     {
-        var sql = ShareRlsPolicy.BuildPolicySql("foods", OAuthScopes.FoodRead);
+        var sql = ShareRlsPolicy.BuildPolicySql("foods", Scope.FoodRead);
 
         sql.Should().NotContain("share_full_history");
         sql.Should().NotContain("interval");
@@ -86,7 +78,7 @@ public class ShareRlsPolicyTests
     [Fact]
     public void BuildPolicySql_UnsafeRecencyColumn_Throws()
     {
-        var act = () => ShareRlsPolicy.BuildPolicySql("boluses", OAuthScopes.TreatmentsRead, "timestamp\"; DROP TABLE x");
+        var act = () => ShareRlsPolicy.BuildPolicySql("boluses", Scope.TreatmentsRead, "timestamp\"; DROP TABLE x");
         act.Should().Throw<ArgumentException>();
     }
 
@@ -104,21 +96,21 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
-    public void TenantScopedTableNames_MatchesTableAttributeReflection()
+    public void TenantScopedTableNames_CoversEveryTenantScopedEntity()
     {
-        // The reconciler resolves names from the EF model; the coverage guard resolves them from
-        // [Table] attributes. They must agree, or a table could be policied under one source and
-        // classified under the other. This fails the build if an entity ever maps its table via
-        // ToTable() without a matching [Table] attribute.
-        var fromModel = ShareRlsPolicy.TenantScopedTableNames(Model());
+        // Every caller takes its table set from here, so an entity this misses is unpoliced and
+        // unguarded everywhere at once.
+        var model = Model();
+        var tables = ShareRlsPolicy.TenantScopedTableNames(model).ToHashSet(StringComparer.Ordinal);
 
-        var fromAttributes = typeof(ITenantScoped).Assembly.GetTypes()
+        var uncovered = typeof(ITenantScoped).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITenantScoped).IsAssignableFrom(t))
-            .Select(t => t.GetCustomAttribute<TableAttribute>()?.Name)
-            .Where(n => n is not null)
-            .Select(n => n!)
-            .Distinct(StringComparer.Ordinal);
+            .Where(t => model.FindEntityType(t)?.GetTableName() is not { } table || !tables.Contains(table))
+            .Select(t => t.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
 
-        fromModel.Should().BeEquivalentTo(fromAttributes);
+        uncovered.Should().BeEmpty();
+        tables.Should().NotBeEmpty();
     }
 }

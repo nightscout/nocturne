@@ -63,6 +63,15 @@ public class SessionCookieHandler : IAuthHandler
 
             if (validationResult.IsValid && validationResult.Claims != null)
             {
+                if (IsGrantShaped(validationResult.Claims))
+                {
+                    _logger.LogWarning(
+                        "Rejected a grant-shaped JWT presented in the session cookie for subject {SubjectId}",
+                        validationResult.Claims.SubjectId
+                    );
+                    return AuthResult.Failure("Session expired or revoked");
+                }
+
                 return AuthResult.Success(
                     BuildAuthContextFromClaims(validationResult.Claims, accessToken)
                 );
@@ -175,6 +184,32 @@ public class SessionCookieHandler : IAuthHandler
     }
 
     /// <summary>
+    /// Whether these claims belong to a grant-derived token (OAuth access token, platform-access
+    /// grant) rather than a first-party session token.
+    /// </summary>
+    /// <remarks>
+    /// Session JWTs and grant JWTs are signed with the same key, issuer, and audience, so
+    /// <see cref="IJwtService.ValidateAccessToken"/> accepts either. Only the claim shape tells
+    /// them apart: a grant carries the pins and ceilings that bound its authority — a tenant pin,
+    /// a consent scope list, the client it was issued to, the grant it came from, the
+    /// 24-hour data ceiling, or the platform-access marker. The session path ignores all of
+    /// those, and
+    /// <see cref="AuthType.SessionCookie"/> is treated as an unscoped credential, so accepting a
+    /// grant here would let a holder move it into the session cookie and shed both its tenant pin
+    /// and its scope ceiling. Session tokens are minted only via the overload that cannot emit any
+    /// of these claims, so their absence is the session shape.
+    /// The refresh-token cookie needs no equivalent check: it holds an opaque random string that
+    /// is looked up server-side, and the access token it yields is re-minted here.
+    /// </remarks>
+    private static bool IsGrantShaped(JwtClaims claims) =>
+        claims.TenantId.HasValue
+        || claims.Scopes is { Count: > 0 }
+        || !string.IsNullOrEmpty(claims.ClientId)
+        || claims.GrantId.HasValue
+        || claims.PlatformAccess
+        || claims.LimitTo24Hours;
+
+    /// <summary>
     /// Build an AuthContext from JWT claims
     /// </summary>
     private static AuthContext BuildAuthContextFromClaims(JwtClaims claims, string token)
@@ -194,68 +229,14 @@ public class SessionCookieHandler : IAuthHandler
         };
     }
 
-    /// <summary>
-    /// Set session cookies in the response
-    /// </summary>
-    private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens)
-    {
-        // Access token cookie (short-lived)
-        context.Response.Cookies.Append(
-            _options.Cookie.AccessTokenName,
-            tokens.AccessToken,
-            new CookieOptions
-            {
-                HttpOnly = _options.Cookie.HttpOnly,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = tokens.ExpiresAt,
-            }
-        );
-
-        // Refresh token cookie (longer-lived)
-        context.Response.Cookies.Append(
-            _options.Cookie.RefreshTokenName,
-            tokens.RefreshToken,
-            new CookieOptions
-            {
-                HttpOnly = true, // Always HttpOnly for refresh tokens
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = _options.Cookie.Path,
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-
-        // Also update the non-HttpOnly IsAuthenticated cookie for frontend state tracking
-        context.Response.Cookies.Append(
-            "IsAuthenticated",
-            "true",
-            new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = _options.Cookie.Secure,
-                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
-                Path = "/",
-                Domain = _options.Cookie.Domain,
-                Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
-            }
-        );
-    }
+    private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
+        context.Response.SetSessionCookies(
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     /// <summary>
     /// Get client IP address
     /// </summary>
-    private static string? GetClientIpAddress(HttpContext context)
-    {
-        var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
-        {
-            return forwarded.Split(',').First().Trim();
-        }
-        return context.Connection.RemoteIpAddress?.ToString();
-    }
+    private static string? GetClientIpAddress(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString();
 
 }

@@ -22,7 +22,7 @@ public class GuestLinkService : IGuestLinkService
     private const int CodeLength = 7;
 
     private static readonly List<string> DefaultScopes =
-        [OAuthScopes.HealthRead, OAuthScopes.TherapyRead, OAuthScopes.ReportsRead];
+        [Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead];
 
     private readonly NocturneDbContext _dbContext;
     private readonly GuestSessionCacheService _sessionCache;
@@ -47,7 +47,7 @@ public class GuestLinkService : IGuestLinkService
         IEnumerable<string>? scopes = null,
         CancellationToken ct = default)
     {
-        var scopeList = OAuthScopes.ValidateGrantScopes(
+        var scopeList = Scope.ValidateGrantScopes(
             scopes ?? DefaultScopes, OAuthGrantTypes.Guest);
 
         var activeCount = await GetActiveCountAsync(dataOwnerSubjectId, ct);

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -19,7 +20,8 @@ internal sealed class AlertAcknowledgementService(
     IDbContextFactory<NocturneDbContext> contextFactory,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
-    ILogger<AlertAcknowledgementService> logger)
+    ILogger<AlertAcknowledgementService> logger,
+    IAuditContext? auditContext = null)
     : IAlertAcknowledgementService
 {
     /// <summary>
@@ -27,6 +29,9 @@ internal sealed class AlertAcknowledgementService(
     /// set from the supplied tenant or the ambient <see cref="ITenantAccessor"/>. Necessary because
     /// <see cref="IDbContextFactory{TContext}.CreateDbContextAsync"/> hands back a raw context
     /// (TenantId == Guid.Empty) which the global tenant query filter then uses to exclude every row.
+    /// The scope's audit context is carried too, as <c>ITenantDbContextFactory</c> does: the pooled
+    /// context is leased with the property cleared, and an auto-acknowledgement made during a
+    /// connector sync would otherwise fall back to the enclosing HTTP request's actor.
     /// </summary>
     private async Task<NocturneDbContext> CreateContextForAsync(Guid tenantId, CancellationToken ct)
     {
@@ -34,6 +39,7 @@ internal sealed class AlertAcknowledgementService(
         db.TenantId = tenantId == Guid.Empty
             ? (tenantAccessor.IsResolved ? tenantAccessor.TenantId : Guid.Empty)
             : tenantId;
+        db.AuditContext = auditContext;
         return db;
     }
 

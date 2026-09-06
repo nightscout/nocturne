@@ -17,12 +17,12 @@ namespace Nocturne.API.Attributes;
 /// declare one.
 /// </remarks>
 /// <seealso cref="RequireDeclaredWriteScopeAttribute"/>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 public interface IWriteScopedController
 {
     /// <summary>
     /// The OAuth scope required to execute this controller's write actions, from
-    /// <see cref="OAuthScopes"/>.
+    /// <see cref="Scope"/>.
     /// </summary>
     string WriteScope { get; }
 }
@@ -66,7 +66,7 @@ public sealed class RequireDeclaredWriteScopeAttribute : Attribute, IActionFilte
             return;
         }
 
-        if (!OAuthScopes.SatisfiesScope(context.HttpContext.GetGrantedScopes(), writeScope))
+        if (!Scope.Satisfies(context.HttpContext.GetGrantedScopes(), writeScope))
             context.Result = new ForbidResult();
     }
 

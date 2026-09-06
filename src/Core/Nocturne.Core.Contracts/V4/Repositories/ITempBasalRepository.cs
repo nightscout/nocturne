@@ -17,7 +17,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="TempBasal"/>
 /// <seealso cref="Treatments.IIobCalculator"/>
 /// <seealso cref="IStateSpanService"/>
-public interface ITempBasalRepository : IDeviceAttributedRepository<TempBasal>
+public interface ITempBasalRepository : IDeviceAttributedRepository<TempBasal>, IBulkCreateRepository<TempBasal>
 {
     /// <summary>Retrieve a page of <see cref="TempBasal"/> records filtered by time range, device, and source.</summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
@@ -95,15 +95,6 @@ public interface ITempBasalRepository : IDeviceAttributedRepository<TempBasal>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
-
-    /// <summary>Insert multiple <see cref="TempBasal"/> records in a single batch operation.</summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<TempBasal>> BulkCreateAsync(
-        IEnumerable<TempBasal> records,
-        WriteOrigin origin, CancellationToken ct = default
-    );
 
     /// <summary>
     /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the

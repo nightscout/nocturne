@@ -1,16 +1,17 @@
 <script lang="ts">
   /**
-   * Bolus hemisphere icon - dome shape curving above baseline. Used for bolus
-   * treatment markers on charts and in legends. When isOverride is true,
-   * displays a triangle instead to indicate manual override.
+   * Bolus marker icon — the lower half of the chart's meal diamond, sized to
+   * its own icon box rather than to the chart's baseline. Used for bolus
+   * treatment markers in legends and stat cards; the chart draws the same shape
+   * from <see>marker-shapes</see>. When isOverride is true it is taller,
+   * echoing the chart's manual-override marker — scaled to the icon box rather
+   * than sharing the chart's pixel height.
    */
   import type { IconProps } from "./types";
+  import { trianglePoints } from "./marker-shapes";
 
   interface BolusIconProps extends IconProps {
-    /**
-     * Whether this bolus was a manual override (shows triangle instead of
-     * hemisphere)
-     */
+    /** Whether this bolus was a manual override (taller triangle) */
     isOverride?: boolean;
   }
 
@@ -25,6 +26,7 @@
   // Scale factor based on default 12px reference size
   const scale = $derived(size / 12);
   const radius = $derived(6 * scale);
+  const height = $derived(isOverride ? size / 2 + 2 : size / 2);
 </script>
 
 <svg
@@ -34,19 +36,8 @@
   class={className}
   {...rest}
 >
-  {#if isOverride}
-    <!-- Triangle for manual override -->
-    <polygon
-      points="{size / 2},{size / 2} {size / 2 - radius},{0} {size / 2 +
-        radius},{0}"
-      fill={color}
-    />
-  {:else}
-    <!-- Hemisphere (dome shape - curves above baseline) -->
-    <path
-      d="M {size / 2 - radius},{size / 2} A {radius},{radius} 0 0,1 {size / 2 +
-        radius},{size / 2} Z"
-      fill={color}
-    />
-  {/if}
+  <polygon
+    points={trianglePoints("down", radius, height, size / 2, size / 2 + 2)}
+    fill={color}
+  />
 </svg>

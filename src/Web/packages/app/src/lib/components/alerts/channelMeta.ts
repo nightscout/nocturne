@@ -133,6 +133,11 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     platform: "whatsapp",
     destinationLabel: "Phone (E.164)",
     destinationPlaceholder: "+15551234567",
+    destinationHelper:
+      "Include the + and country code. Without the +, WhatsApp prepends the sending business number's country code.",
+    destinationPattern: /^\+[1-9]\d{6,14}$/,
+    destinationPatternMessage:
+      "A phone number starts with + and a country code, digits only.",
   },
   {
     type: ChannelType.ResendEmail,

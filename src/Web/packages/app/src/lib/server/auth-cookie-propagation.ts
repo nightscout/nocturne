@@ -31,6 +31,15 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
   // Its deletions matter too: the API clears it once the grant is revoked or
   // expired, which stops the browser resending a dead cookie.
   AUTH_COOKIE_NAMES.guestSession,
+  // Recovery-code sign-in is a server-side form, so the API's Set-Cookie has to be forwarded
+  // or the recovery session never reaches the browser and the passkey the visitor came to
+  // register cannot be enrolled. Its deletion matters too: the API spends the cookie once the
+  // credential exists.
+  AUTH_COOKIE_NAMES.recoverySession,
+  // The passkey and authenticator sign-ins complete inside a remote function, so the API's
+  // Set-Cookie for the last-used-method hint has to be forwarded or only the OIDC flow — which
+  // is a browser redirect — would ever record one.
+  AUTH_COOKIE_NAMES.lastSignIn,
 ]);
 
 /**
@@ -45,15 +54,36 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
  *
  * Only auth cookies are propagated; unrelated Set-Cookie headers from the
  * backend are ignored.
+ *
+ * The API deliberately emits some cookies twice under one name: a host-scoped
+ * expiry alongside the domain-wide value or expiry, so a browser holding a
+ * cookie from before the domain was widened converges on the wide one, and so
+ * sign-out clears both. SvelteKit's cookie jar is keyed by name alone and would
+ * keep only the last of such a pair — silently defeating both. `emitRaw`
+ * receives the host-scoped half verbatim, for a caller to append to the
+ * response as its own Set-Cookie header. Without it, only the domain-wide half
+ * survives, which is the older behaviour and no worse than it was.
  */
 export function propagateAuthCookies(
   setCookieHeaders: readonly string[],
-  cookies: CookieSetter
+  cookies: CookieSetter,
+  emitRaw?: (header: string) => void
 ): void {
   for (const header of setCookieHeaders) {
     const parsed = parseSetCookieHeader(header);
     if (!parsed) continue;
     if (!AUTH_COOKIE_SET.has(parsed.name)) continue;
+
+    // The pair is distinguished by the Domain attribute, so the host-scoped header is the half
+    // routed to `emitRaw`.
+    if (
+      emitRaw &&
+      parsed.domain === undefined &&
+      hasDomainWideSibling(setCookieHeaders, parsed.name)
+    ) {
+      emitRaw(header);
+      continue;
+    }
 
     if (parsed.isDeletion) {
       cookies.delete(parsed.name, {
@@ -75,6 +105,17 @@ export function propagateAuthCookies(
 
     cookies.set(parsed.name, parsed.value, opts);
   }
+}
+
+/** Whether another header of the same name carries a Domain attribute. */
+function hasDomainWideSibling(
+  setCookieHeaders: readonly string[],
+  name: string
+): boolean {
+  return setCookieHeaders.some((header) => {
+    const parsed = parseSetCookieHeader(header);
+    return parsed?.name === name && parsed.domain !== undefined;
+  });
 }
 
 interface ParsedSetCookie {

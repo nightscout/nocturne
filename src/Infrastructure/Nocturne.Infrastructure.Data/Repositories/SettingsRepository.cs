@@ -134,27 +134,35 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = settings.Select(SettingsMapper.ToEntity).ToList();
         var resultEntities = new List<SettingsEntity>();
 
-        foreach (var entity in entities)
+        foreach (var setting in settings)
         {
-            // Check if a setting with this ID already exists
-            var existingEntity = await _context.Settings.FirstOrDefaultAsync(
-                s => s.Id == entity.Id,
-                cancellationToken
-            );
+            var entity = SettingsMapper.ToEntity(setting);
+            var entityId = entity.Id;
+            var originalId = entity.OriginalId;
+            var key = entity.Key;
+
+            // A setting's identity is its key — that is what ix_settings_tenant_id_key enforces —
+            // so the key claims its row before either id does. Failing that, a legacy Mongo _id
+            // addresses its row through OriginalId, not the derived key.
+            var existingEntity = (string.IsNullOrEmpty(key)
+                ? null
+                : await _context.Settings.FirstOrDefaultAsync(s => s.Key == key, cancellationToken))
+                ?? await _context.Settings.FirstOrDefaultAsync(
+                    s => s.Id == entityId || (originalId != null && s.OriginalId == originalId),
+                    cancellationToken
+                );
 
             if (existingEntity != null)
             {
-                var tenantId = existingEntity.TenantId;
-                _context.Entry(existingEntity).CurrentValues.SetValues(entity);
-                existingEntity.TenantId = tenantId;
+                // Through the mapper rather than CurrentValues.SetValues: the stored row keeps its
+                // own primary key, which the derived one need not match.
+                SettingsMapper.UpdateEntity(existingEntity, setting);
                 resultEntities.Add(existingEntity);
             }
             else
             {
-                // Add new entity
                 _context.Settings.Add(entity);
                 resultEntities.Add(entity);
             }

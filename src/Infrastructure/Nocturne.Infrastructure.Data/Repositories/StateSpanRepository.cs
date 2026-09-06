@@ -148,9 +148,7 @@ public class StateSpanRepository : IStateSpanRepository
                 query = query.Where(s => s.EndTimestamp != null);
         }
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(s => !_context.LinkedRecords
-            .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id));
+        query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
 
         return query;
     }
@@ -203,6 +201,13 @@ public class StateSpanRepository : IStateSpanRepository
                 s => s.OriginalId == stateSpan.OriginalId,
                 cancellationToken
             );
+
+            if (entity == null)
+            {
+                var blocked = await FindBlockingSpanAsync(stateSpan.OriginalId, cancellationToken);
+                if (blocked != null)
+                    return StateSpanMapper.ToDomainModel(blocked);
+            }
         }
 
         if (entity != null)
@@ -263,11 +268,7 @@ public class StateSpanRepository : IStateSpanRepository
                         RecordId: entity.Id,
                         Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                         DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
-                        Criteria: new MatchCriteria
-                        {
-                            Category = Enum.Parse<StateSpanCategory>(entity.Category, true),
-                            State = entity.State
-                        }
+                        Criteria: MatchCriteriaMapper.From(entity)
                     )
                 };
 
@@ -282,6 +283,21 @@ public class StateSpanRepository : IStateSpanRepository
 
         return StateSpanMapper.ToDomainModel(entity);
     }
+
+    /// <summary>
+    /// The soft-deleted row, if any, that forbids re-creating <paramref name="originalId"/>.
+    /// State spans are keyed by <c>OriginalId</c> where the V4 tables are keyed by
+    /// <c>LegacyId</c>, so the lookup is local while the rule stays shared.
+    /// </summary>
+    /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
+    private Task<StateSpanEntity?> FindBlockingSpanAsync(
+        string originalId,
+        CancellationToken cancellationToken) =>
+        _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
+            .Where(s => s.TenantId == _context.TenantId && s.OriginalId == originalId)
+            .WhereBlocksRecreation()
+            .OrderByDescending(s => s.DeletedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// Bulk upsert state spans (for connector imports)
@@ -364,7 +380,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return false;
 
-        _context.StateSpans.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         var result = await _context.SaveChangesAsync(cancellationToken);
         return result > 0;
     }
@@ -380,8 +396,9 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var deletedCount = await _context.AuditedExecuteDeleteAsync(
-            _context.StateSpans.Where(s => s.Source == source), _auditContext, cancellationToken);
+        var deletedCount = await _context.AuditedSoftDeleteAsync(
+            _context.StateSpans.Where(s => s.Source == source), _auditContext,
+            $"data_source={source}", cancellationToken);
         return deletedCount;
     }
 
@@ -392,8 +409,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         var latest = await _context.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
-            .Where(s => !_context.LinkedRecords
-                .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id))
+            .ExcludeNonPrimary(_context, RecordType.StateSpan)
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)
@@ -660,7 +676,7 @@ public class StateSpanRepository : IStateSpanRepository
         if (entity == null)
             return false;
 
-        _context.StateSpans.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         var result = await _context.SaveChangesAsync(cancellationToken);
         return result > 0;
     }

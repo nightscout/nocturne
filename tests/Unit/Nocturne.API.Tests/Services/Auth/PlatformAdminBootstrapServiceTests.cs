@@ -1,14 +1,14 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
@@ -23,28 +23,20 @@ namespace Nocturne.API.Tests.Services.Auth;
 /// </remarks>
 public class PlatformAdminBootstrapServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _sqlite;
     private readonly NocturneDbContext _db;
 
     public PlatformAdminBootstrapServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _sqlite = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _db = new NocturneDbContext(_dbOptions);
-        _db.Database.EnsureCreated();
+        _db = _sqlite.CreateContext();
     }
 
     public void Dispose()
     {
         _db.Dispose();
-        _connection.Dispose();
+        _sqlite.Dispose();
     }
 
     [Fact]
@@ -106,18 +98,51 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
         (await _db.Subjects.AsNoTracking().AnyAsync(s => s.IsPlatformAdmin)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ATenantWhoseOnlyOwnerIsDeactivatedIsSkippedForTheNextOldest()
+    {
+        var deactivated = await AddTenantAsync(
+            "deactivated-oldest", new DateTime(2019, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+        var owner = await AddTenantWithOwnerAsync("owned", new DateTime(2020, 1, 1));
+
+        await BootstrapAsync();
+
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TheFirstOwnerOfTheSoleTenantIsGrantedOnSetupCompletion()
+    {
+        var owner = await AddTenantWithOwnerAsync("only", new DateTime(2020, 1, 1));
+
+        (await EnsureFirstOwnerAsync(owner)).Should().BeTrue();
+        (await IsPlatformAdminAsync(owner)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ADeactivatedOwnerOfTheSoleTenantIsNotGrantedOnSetupCompletion()
+    {
+        var deactivated = await AddTenantAsync(
+            "only", new DateTime(2020, 1, 1), RoleSeeds.Owner, subjectIsActive: false);
+
+        (await EnsureFirstOwnerAsync(deactivated)).Should().BeFalse();
+        (await IsPlatformAdminAsync(deactivated)).Should().BeFalse();
+    }
+
+    private Task<bool> EnsureFirstOwnerAsync(Guid subjectId) =>
+        new PlatformAdminBootstrapService(
+            _sqlite.ContextFactory,
+            Options.Create(new PlatformOptions { AdminSubjectIds = [] }),
+            NullLogger<PlatformAdminBootstrapService>.Instance)
+            .EnsureFirstOwnerIsPlatformAdminAsync(subjectId, CancellationToken.None);
+
     private Task BootstrapAsync(List<Guid>? adminSubjectIds = null) =>
         new PlatformAdminBootstrapService(
-            new TestDbContextFactory(_dbOptions),
+            _sqlite.ContextFactory,
             Options.Create(new PlatformOptions { AdminSubjectIds = adminSubjectIds ?? [] }),
             NullLogger<PlatformAdminBootstrapService>.Instance)
             .BootstrapAsync(CancellationToken.None);
-
-    private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext() => new(options);
-    }
 
     private async Task<bool> IsPlatformAdminAsync(Guid subjectId) =>
         await _db.Subjects.AsNoTracking()
@@ -143,19 +168,19 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
 
     /// <summary>Seeds a tenant whose sole member holds the owner role, and returns that subject's id.</summary>
     private async Task<Guid> AddTenantWithOwnerAsync(string slug, DateTime createdAt) =>
-        await AddTenantAsync(slug, createdAt, TenantPermissions.SeedRoles.Owner);
+        await AddTenantAsync(slug, createdAt, RoleSeeds.Owner);
 
     /// <summary>Seeds a tenant whose sole member holds a non-owner role, and returns that subject's id.</summary>
     private async Task<Guid> AddTenantWithoutOwnerAsync(string slug, DateTime createdAt) =>
-        await AddTenantAsync(slug, createdAt, TenantPermissions.SeedRoles.Viewer);
+        await AddTenantAsync(slug, createdAt, RoleSeeds.Viewer);
 
-    private async Task<Guid> AddTenantAsync(string slug, DateTime createdAt, string roleSlug)
+    private async Task<Guid> AddTenantAsync(
+        string slug,
+        DateTime createdAt,
+        string roleSlug,
+        bool subjectIsActive = true)
     {
         var tenantId = Guid.CreateVersion7();
-        var subjectId = await AddSubjectAsync($"{slug}-member");
-        var roleId = Guid.CreateVersion7();
-        var memberId = Guid.CreateVersion7();
-
         _db.Tenants.Add(new TenantEntity
         {
             Id = tenantId,
@@ -164,28 +189,13 @@ public class PlatformAdminBootstrapServiceTests : IDisposable
             IsActive = true,
             SysCreatedAt = createdAt,
         });
-        _db.TenantRoles.Add(new TenantRoleEntity
-        {
-            Id = roleId,
-            TenantId = tenantId,
-            Name = roleSlug,
-            Slug = roleSlug,
-            Permissions = [],
-            IsSystem = true,
-        });
-        _db.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = memberId,
-            TenantId = tenantId,
-            SubjectId = subjectId,
-        });
-        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = memberId,
-            TenantRoleId = roleId,
-        });
         await _db.SaveChangesAsync();
+
+        var subjectId = await TestDatabaseSeeder.SeedMemberAsync(
+            _db, tenantId, roleSlug,
+            name: $"{slug}-member",
+            isActive: subjectIsActive);
+
         _db.ChangeTracker.Clear();
         return subjectId;
     }

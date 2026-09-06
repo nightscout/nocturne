@@ -179,12 +179,14 @@ public class DataFetchStageTests
 
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<HeartRate>());
 
         _mockStepCountService
             .Setup(s => s.GetStepCountsByDateRangeAsync(
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<int?>(), It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<StepCount>());
 
         _mockSleepService

@@ -3,6 +3,7 @@ using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
@@ -23,9 +24,7 @@ public class TenantDbContextFactoryTests
 
     private static Mock<ITenantAccessor> ResolvedAccessor(Guid tenantId)
     {
-        var accessor = new Mock<ITenantAccessor>();
-        accessor.Setup(a => a.IsResolved).Returns(true);
-        accessor.Setup(a => a.TenantId).Returns(tenantId);
+        var accessor = MockTenantAccessor.Create(tenantId);
         return accessor;
     }
 

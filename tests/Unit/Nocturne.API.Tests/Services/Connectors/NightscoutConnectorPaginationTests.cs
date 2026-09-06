@@ -11,6 +11,8 @@ using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using SyncDataType = Nocturne.Connectors.Core.Models.SyncDataType;
+using SyncRequest = Nocturne.Connectors.Core.Models.SyncRequest;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -25,7 +27,8 @@ public class NightscoutConnectorPaginationTests
         HttpMessageHandler handler,
         NightscoutConnectorConfiguration? config = null,
         bool withPublisher = false,
-        List<Treatment>? publishedTreatments = null)
+        List<Treatment>? publishedTreatments = null,
+        List<Entry>? publishedEntries = null)
     {
         config ??= new NightscoutConnectorConfiguration
         {
@@ -45,6 +48,8 @@ public class NightscoutConnectorPaginationTests
             var glucoseMock = new Mock<IGlucosePublisher>();
             glucoseMock.Setup(p => p.PublishEntriesAsync(
                     It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<Entry>, string, WriteOrigin, CancellationToken>(
+                    (batch, _, _, _) => publishedEntries?.AddRange(batch))
                 .ReturnsAsync(true);
 
             var treatmentMock = new Mock<ITreatmentPublisher>();
@@ -112,47 +117,68 @@ public class NightscoutConnectorPaginationTests
 
     #region Glucose pagination tests
 
+    // An open-ended glucose sync (no From, no To) is the shape the crawl anchors to "now",
+    // so these drive the paging loop over the same bounds a background catch-up uses. The
+    // connector probes /entries.json?count=1 to authenticate before any page is fetched, so
+    // every handler here answers that probe first and request index 0 is never a data page.
+    private static SyncRequest OpenEndedGlucoseSync() =>
+        new()
+        {
+            From = null,
+            To = null,
+            DataTypes = [SyncDataType.Glucose],
+        };
+
+    private static NightscoutConnectorConfiguration GlucoseConfig(int maxCount = MaxCount) =>
+        new()
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = maxCount,
+        };
+
     [Fact]
-    public async Task FetchGlucoseData_SinglePage_ReturnsAllEntries()
+    public async Task SyncGlucose_SinglePage_SyncsAllEntries()
     {
         // Arrange: fewer entries than MaxCount → no pagination needed
-        var entries = CreateEntries(5, BaseTime);
-
         var handler = new SequentialMockHandler();
-        handler.Enqueue(JsonResponse(entries));
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateEntries(5, BaseTime)));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         // Act
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        var result = await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(5);
-        handler.RequestUrls.Should().HaveCount(1);
+        result.Success.Should().BeTrue();
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(5);
+        handler.RequestUrls.Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task FetchGlucoseData_ExactlyMaxCount_MakesSecondRequest()
+    public async Task SyncGlucose_ExactlyMaxCount_MakesSecondRequest()
     {
         // Arrange: exactly MaxCount entries triggers a second request to check for more
-        var entries = CreateEntries(MaxCount, BaseTime);
-
         var handler = new SequentialMockHandler();
-        handler.Enqueue(JsonResponse(entries));
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateEntries(MaxCount, BaseTime)));
         handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // second page empty
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         // Act
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        var result = await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(MaxCount);
-        handler.RequestUrls.Should().HaveCount(2, "a full page should trigger a follow-up request");
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(MaxCount);
+        handler.RequestUrls.Should().HaveCount(3, "a full page should trigger a follow-up request");
     }
 
     [Fact]
-    public async Task FetchGlucoseData_TwoFullPages_ReturnsAllEntries()
+    public async Task SyncGlucose_TwoFullPages_SyncsAllEntries()
     {
         // Arrange: two full pages followed by a partial page
         var page1 = CreateEntries(MaxCount, BaseTime);
@@ -161,23 +187,25 @@ public class NightscoutConnectorPaginationTests
         var page2 = CreateEntries(7, page2Start);
 
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(page1));
         handler.Enqueue(JsonResponse(page2));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         // Act
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        var result = await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(MaxCount + 7);
-        handler.RequestUrls.Should().HaveCount(2);
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(MaxCount + 7);
+        handler.RequestUrls.Should().HaveCount(3);
     }
 
     [Fact]
-    public async Task FetchGlucoseData_ThreePages_ReturnsAllEntries()
+    public async Task SyncGlucose_ThreePages_SyncsAllEntries()
     {
-        // Arrange: three pages of data (regression: without pagination only the first page is returned)
+        // Arrange: three pages of data (regression: without pagination only the first page is synced)
         var page1 = CreateEntries(MaxCount, BaseTime);
         var oldestPage1Ms = page1.Min(e => e.Mills);
         var page2Start = DateTimeOffset.FromUnixTimeMilliseconds(oldestPage1Ms).AddMilliseconds(-1);
@@ -187,101 +215,118 @@ public class NightscoutConnectorPaginationTests
         var page3 = CreateEntries(3, page3Start);
 
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(page1));
         handler.Enqueue(JsonResponse(page2));
         handler.Enqueue(JsonResponse(page3));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         // Act
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        var result = await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(MaxCount + MaxCount + 3,
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(MaxCount + MaxCount + 3,
             "pagination must retrieve entries across all pages, not just the first");
-        handler.RequestUrls.Should().HaveCount(3);
+        handler.RequestUrls.Should().HaveCount(4);
     }
 
     [Fact]
-    public async Task FetchGlucoseData_EmptyResponse_ReturnsEmpty()
+    public async Task SyncGlucose_EmptyResponse_SyncsNothing()
     {
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        var result = await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
-        result.Should().BeEmpty();
-        handler.RequestUrls.Should().HaveCount(1);
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(0);
+        handler.RequestUrls.Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task FetchGlucoseData_PaginationUsesOldestEntryDate()
+    public async Task SyncGlucose_PaginationUsesOldestEntryDate()
     {
-        // Arrange: verify that the second request's $lte parameter corresponds to the
+        // Arrange: verify that the second page's $lte parameter corresponds to the
         // oldest entry's date minus 1ms from the first page
         var page1 = CreateEntries(MaxCount, BaseTime);
         var oldestMs = page1.Min(e => e.Mills);
 
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(page1));
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         // Act
-        await service.FetchGlucoseDataAsync();
+        await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
-        // Assert: second URL should contain $lte with oldestMs - 1
-        var secondUrl = handler.RequestUrls[1];
+        // Assert: the second page's URL should contain $lte with oldestMs - 1
+        var secondPageUrl = handler.RequestUrls[2];
         var expectedLte = (oldestMs - 1).ToString();
-        secondUrl.Should().Contain($"find[date][$lte]={expectedLte}",
+        secondPageUrl.Should().Contain($"find[date][$lte]={expectedLte}",
             "pagination should request entries older than the oldest seen entry");
     }
 
     [Fact]
-    public async Task FetchGlucoseData_UnboundedFetch_AnchorsFirstPageToNow()
+    public async Task SyncGlucose_UnboundedFetch_AnchorsFirstPageToNow()
     {
         // Regression: a query with no find[date] bound at all makes Nightscout apply an
         // implicit recency window (~4 days), so an unbounded full-history backfill got a
         // truncated first page that the short-page check read as end-of-history.
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(CreateEntries(5, BaseTime)));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
         var before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        await service.FetchGlucoseDataAsync();
+        await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
         var after = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        var firstUrl = handler.RequestUrls[0];
-        firstUrl.Should().Contain("find[date][$lte]=",
+        var firstPageUrl = handler.RequestUrls[1];
+        firstPageUrl.Should().Contain("find[date][$lte]=",
             "an unbounded fetch must carry an explicit upper bound so the source cannot window it");
 
         var lte = long.Parse(System.Text.RegularExpressions.Regex
-            .Match(firstUrl, @"find\[date\]\[\$lte\]=(\d+)").Groups[1].Value);
+            .Match(firstPageUrl, @"find\[date\]\[\$lte\]=(\d+)").Groups[1].Value);
         lte.Should().BeInRange(before, after, "the anchor should be the moment of the fetch");
     }
 
     [Fact]
-    public async Task FetchGlucoseData_CatchUpWithSince_DoesNotAddUpperBound()
+    public async Task SyncGlucose_CatchUpWithSince_DoesNotAddUpperBound()
     {
-        // A catch-up fetch (since set, no upper bound) must stay unbounded at the top so
+        // A catch-up fetch (From set, no upper bound) must stay unbounded at the top so
         // future-dated readings from a fast device clock are still picked up immediately.
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(CreateEntries(3, BaseTime)));
 
-        var service = CreateService(handler);
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true);
 
-        await service.FetchGlucoseDataAsync(BaseTime.AddHours(-1).UtcDateTime);
+        var request = new SyncRequest
+        {
+            From = BaseTime.AddHours(-1).UtcDateTime,
+            To = null,
+            DataTypes = [SyncDataType.Glucose],
+        };
 
-        handler.RequestUrls[0].Should().Contain("find[date][$gte]=")
+        await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        handler.RequestUrls[1].Should().Contain("find[date][$gte]=")
             .And.NotContain("find[date][$lte]=");
     }
 
     [Fact]
-    public async Task FetchGlucoseData_SetsDataSourceOnAllEntries()
+    public async Task SyncGlucose_SetsDataSourceOnAllEntries()
     {
         var page1 = CreateEntries(MaxCount, BaseTime);
         var oldestPage1Ms = page1.Min(e => e.Mills);
@@ -289,20 +334,85 @@ public class NightscoutConnectorPaginationTests
         var page2 = CreateEntries(3, page2Start);
 
         var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
         handler.Enqueue(JsonResponse(page1));
         handler.Enqueue(JsonResponse(page2));
 
-        var service = CreateService(handler);
+        var publishedEntries = new List<Entry>();
+        var config = GlucoseConfig();
+        var service = CreateService(handler, config, withPublisher: true, publishedEntries: publishedEntries);
 
-        var result = (await service.FetchGlucoseDataAsync()).ToList();
+        await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
-        result.Should().OnlyContain(e => !string.IsNullOrEmpty(e.DataSource),
+        publishedEntries.Should().HaveCount(MaxCount + 3);
+        publishedEntries.Should().OnlyContain(e => !string.IsNullOrEmpty(e.DataSource),
             "every entry across all pages should have DataSource set");
     }
 
     #endregion
 
     #region Treatment pagination tests
+
+    [Fact]
+    public async Task FetchTreatments_WhenThePublishIsRejected_FailsAndReportsEveryActiveSubType()
+    {
+        // The whole batch is one publish, so its rejection belongs to every sub-type the batch was
+        // carrying — a tenant told only that "treatments" failed cannot tell which of their toggles
+        // is affected, and the counts still report what the sync handed over.
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateTreatments(5, BaseTime)));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+
+        var treatmentMock = new Mock<ITreatmentPublisher>();
+        treatmentMock.Setup(p => p.PublishTreatmentsAsync(
+                It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+        publisherMock.Setup(p => p.Treatments).Returns(treatmentMock.Object);
+        publisherMock.Setup(p => p.Glucose).Returns(Mock.Of<IGlucosePublisher>());
+        publisherMock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+
+        var service = new NightscoutConnectorService(
+            new HttpClient(handler) { BaseAddress = new Uri(config.Url) },
+            new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
+            Mock.Of<ILogger<NightscoutConnectorService>>(),
+            Mock.Of<IRetryDelayStrategy>(),
+            Mock.Of<IRateLimitingStrategy>(),
+            new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
+            publisherMock.Object);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-2).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeFalse("a batch that never reached the tenant is not a successful sync");
+        result.Errors.Should().BeEquivalentTo(["Boluses publish failed", "CarbIntake publish failed"]);
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = 5,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = 5,
+            });
+    }
 
     [Fact]
     public async Task FetchTreatments_SinglePage_ReturnsAll()
@@ -333,6 +443,99 @@ public class NightscoutConnectorPaginationTests
 
         result.Success.Should().BeTrue();
         result.ItemsSynced[Nocturne.Connectors.Core.Models.SyncDataType.Boluses].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task FetchTreatments_MultiplePagesFeedingSeveralTypes_RecordTheWholeTotalUnderEach()
+    {
+        // The treatments crawl is one paginated fetch feeding every active sub-type. What is pinned
+        // is that the recorded count spans every page rather than just the last, and that it
+        // reaches every active sub-type rather than the first — not the per-type repetition itself,
+        // which is this connector's existing reporting shape for a batch it cannot split.
+        var page1 = CreateTreatments(MaxCount, BaseTime);
+        var page2Start = page1
+            .Select(t => DateTimeOffset.Parse(t.CreatedAt!, CultureInfo.InvariantCulture))
+            .Min()
+            .AddMilliseconds(-1);
+        var page2 = CreateTreatments(4, page2Start);
+
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(page1));
+        handler.Enqueue(JsonResponse(page2));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+        var service = CreateService(handler, config, withPublisher: true);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-6).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+                Nocturne.Connectors.Core.Models.SyncDataType.DeviceEvents,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = MaxCount + 4,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = MaxCount + 4,
+                [Nocturne.Connectors.Core.Models.SyncDataType.DeviceEvents] = MaxCount + 4,
+            });
+        handler.RequestUrls.Count(u => u.Contains("treatments.json")).Should().Be(2,
+            "the total must span more than one page for this to prove anything");
+    }
+
+    [Fact]
+    public async Task FetchTreatments_ActiveTypesWithNoTreatments_RecordExplicitZeros()
+    {
+        // One fetch covers every treatment sub-type, and each active one has to say zero when it
+        // came back empty: the tenant's sync card renders a badge per key, so a missing key reads
+        // as "never checked" rather than "checked, found nothing".
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(Array.Empty<Treatment>()));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+        var service = CreateService(handler, config, withPublisher: true);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = BaseTime.AddHours(-2).UtcDateTime,
+            To = BaseTime.UtcDateTime,
+            DataTypes =
+            [
+                Nocturne.Connectors.Core.Models.SyncDataType.Boluses,
+                Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake,
+            ],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.ItemsSynced.Should().BeEquivalentTo(
+            new Dictionary<Nocturne.Connectors.Core.Models.SyncDataType, int>
+            {
+                [Nocturne.Connectors.Core.Models.SyncDataType.Boluses] = 0,
+                [Nocturne.Connectors.Core.Models.SyncDataType.CarbIntake] = 0,
+            });
     }
 
     [Fact]

@@ -23,7 +23,7 @@ public interface IOAuthGrantService
         Guid clientEntityId,
         Guid subjectId,
         IEnumerable<string> scopes,
-        string grantType = OAuthScopes.GrantTypeApp,
+        string grantType = OAuthGrantTypes.App,
         string? label = null,
         CancellationToken ct = default
     );
@@ -42,6 +42,20 @@ public interface IOAuthGrantService
     /// </summary>
     Task<IReadOnlyList<OAuthGrantInfo>> GetGrantsForSubjectAsync(
         Guid subjectId,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Get the active (non-revoked) grant with this id that this subject owns. A grant that is
+    /// revoked, absent, or owned by another subject all come back <c>null</c>, so a caller
+    /// authorizing against one cannot tell the three apart.
+    /// </summary>
+    /// <param name="grantId">The grant ID to look up</param>
+    /// <param name="ownerSubjectId">The owner subject ID (for authorization check)</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<OAuthGrantInfo?> GetGrantForSubjectAsync(
+        Guid grantId,
+        Guid ownerSubjectId,
         CancellationToken ct = default
     );
 
@@ -121,7 +135,7 @@ public class OAuthGrantInfo
     public Guid SubjectId { get; set; }
 
     /// <summary>Grant type: "app" for standard OAuth apps, "follower" for follower access.</summary>
-    public string GrantType { get; set; } = OAuthScopes.GrantTypeApp;
+    public string GrantType { get; set; } = OAuthGrantTypes.App;
 
     /// <summary>OAuth scopes granted.</summary>
     public List<string> Scopes { get; set; } = new();

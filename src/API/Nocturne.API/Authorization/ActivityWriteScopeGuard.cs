@@ -38,7 +38,7 @@ internal static class ActivityWriteScopeGuard
             .Where(scope => scope is not null)
             .Distinct())
         {
-            if (!OAuthScopes.SatisfiesScope(grantedScopes, scope!))
+            if (!Scope.Satisfies(grantedScopes, scope!))
                 return scope;
         }
 

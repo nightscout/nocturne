@@ -44,7 +44,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ApiController]
 [Tags("Treatments")]
 [Route("api/v4/nutrition")]
-[RequireScope(OAuthScopes.TreatmentsRead)]
+[RequireScope(Scope.TreatmentsRead)]
 [Produces("application/json")]
 public class NutritionController : ControllerBase, IWriteScopedController
 {
@@ -55,7 +55,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// treatment write endpoints. The per-carb-intake food breakdown is keyed by carb intake and
     /// reads the food catalog without mutating it, so it is gated with the treatment it describes.
     /// </summary>
-    public string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    public string WriteScope => Scope.TreatmentsReadWrite;
 
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBolusRepository _bolusRepo;
@@ -154,17 +154,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         [FromBody] CreateCarbIntakeRequest[] requests,
         CancellationToken ct = default)
     {
-        if (requests is not { Length: > 0 })
-            return Problem(detail: "Carb intake data is required", statusCode: 400, title: "Bad Request");
-
-        if (requests.Length > 1000)
-            return Problem(detail: "Bulk operations are limited to 1000 intakes per request", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => r.Timestamp == default))
-            return Problem(detail: "Timestamp must be set on every intake", statusCode: 400, title: "Bad Request");
-
-        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
-            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+        if (await this.ValidateBulkAsync(requests, "Carb intake", "intake", "intakes", ct) is { } invalid)
+            return invalid;
 
         var models = requests.Select(MapCreateToModel).ToList();
         var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);

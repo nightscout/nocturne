@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -18,22 +17,9 @@ public static class MeterGlucoseMapper
     {
         return new MeterGlucoseEntity
         {
-            Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            Timestamp = model.Timestamp,
-            UtcOffset = model.UtcOffset,
-            Device = model.Device,
-            App = model.App,
-            DataSource = model.DataSource,
-            CorrelationId = model.CorrelationId,
-            LegacyId = model.LegacyId,
             PatientDeviceId = model.PatientDeviceId,
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
             Mgdl = model.Mgdl,
-            AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-                ? JsonSerializer.Serialize(model.AdditionalProperties)
-                : null,
-        };
+        }.WithHeaderFrom(model);
     }
 
     /// <summary>
@@ -45,22 +31,9 @@ public static class MeterGlucoseMapper
     {
         return new MeterGlucose
         {
-            Id = entity.Id,
-            Timestamp = entity.Timestamp,
-            UtcOffset = entity.UtcOffset,
-            Device = entity.Device,
-            App = entity.App,
-            DataSource = entity.DataSource,
-            CorrelationId = entity.CorrelationId,
-            LegacyId = entity.LegacyId,
             PatientDeviceId = entity.PatientDeviceId,
-            CreatedAt = entity.SysCreatedAt,
-            ModifiedAt = entity.SysUpdatedAt,
             Mgdl = entity.Mgdl,
-            AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
-                : null,
-        };
+        }.WithHeaderFrom(entity);
     }
 
     /// <summary>
@@ -70,17 +43,8 @@ public static class MeterGlucoseMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(MeterGlucoseEntity entity, MeterGlucose model)
     {
-        entity.Timestamp = model.Timestamp;
-        entity.UtcOffset = model.UtcOffset;
-        entity.Device = model.Device;
-        entity.App = model.App;
-        entity.DataSource = model.DataSource;
-        entity.CorrelationId = model.CorrelationId;
-        entity.LegacyId = model.LegacyId;
+        V4RecordHeaderMapper.UpdateHeader(entity, model);
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.Mgdl = model.Mgdl;
-        entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
-            ? JsonSerializer.Serialize(model.AdditionalProperties)
-            : null;
     }
 }

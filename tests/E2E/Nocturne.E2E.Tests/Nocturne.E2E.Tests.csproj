@@ -4,7 +4,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <!-- Entering this assembly starts the entire Aspire stack (AppHostFixture), so the
+         project is built but not collected by `dotnet test` unless opted into:
+         `dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true`. -->
+    <RunE2E Condition="'$(RunE2E)' == ''">false</RunE2E>
+    <IsTestProject>$(RunE2E)</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Testing" />

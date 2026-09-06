@@ -5,7 +5,7 @@
    */
   import { resolve } from "$app/paths";
   import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
-  import { formatMinutesDuration } from "$lib/utils/sleep-format";
+  import { formatMinutesDuration } from "$lib/utils/duration";
 
   interface Props {
     weeks: SleepWeekSummary[];

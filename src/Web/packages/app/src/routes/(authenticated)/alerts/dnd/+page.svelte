@@ -6,6 +6,7 @@
     get as getDnd,
     update as updateDnd,
   } from "$api/generated/tenantAlertSettings.generated.remote";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type { TenantAlertSettingsResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
@@ -21,6 +22,7 @@
   } from "$lib/components/ui/card";
   import { ArrowLeft, BellOff, Save, Loader2, ShieldAlert } from "lucide-svelte";
   import { EditorActionBar } from "$lib/components/layout";
+  import { retainQuery } from "$lib/api/retain-query.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -33,6 +35,7 @@
   );
 
   const dndQuery = $derived(canSetDnd ? getDnd() : undefined);
+  retainQuery(() => dndQuery);
 
   let saving = $state(false);
   let error = $state<string | null>(null);
@@ -93,7 +96,7 @@
       });
       applyResponse(r);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to save DND settings";
+      error = describeSubmitError(e, "Failed to save DND settings");
     } finally {
       saving = false;
     }

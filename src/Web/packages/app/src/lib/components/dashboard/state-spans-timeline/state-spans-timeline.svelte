@@ -6,6 +6,7 @@
   import type { ProcessedSpan } from "../../../../routes/(authenticated)/time-spans/data.remote";
   import { BasalDeliveryOrigin } from "$lib/api";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatElapsedDuration } from "$lib/utils/duration";
 
   interface BasalDeliveryChartData {
     id: string;
@@ -111,17 +112,6 @@
   let hoveredSpan = $state<ProcessedSpan | null>(null);
   let tooltipX = $state(0);
   let tooltipY = $state(0);
-
-  // Format duration for tooltip
-  function formatDuration(start: Date, end: Date): string {
-    const ms = end.getTime() - start.getTime();
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  }
 
 </script>
 
@@ -283,7 +273,7 @@
         <div class="font-medium">{hoveredSpan.profileName ?? hoveredSpan.state}</div>
         <div class="text-xs text-muted-foreground mt-1">
           <div>{formatDateTimeCompact(hoveredSpan.startTime)} - {formatDateTimeCompact(hoveredSpan.endTime)}</div>
-          <div>Duration: {formatDuration(hoveredSpan.startTime, hoveredSpan.endTime)}</div>
+          <div>Duration: {formatElapsedDuration(hoveredSpan.startTime, hoveredSpan.endTime)}</div>
         </div>
       </div>
     {/if}

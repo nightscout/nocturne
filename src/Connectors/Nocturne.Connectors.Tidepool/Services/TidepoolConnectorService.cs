@@ -45,33 +45,15 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
     protected override string ConnectorSource => DataSources.TidepoolConnector;
     public override string ServiceName => "Tidepool";
-    public override List<SyncDataType> SupportedDataTypes =>
-    [
-        SyncDataType.Glucose,
-        SyncDataType.Boluses,
-        SyncDataType.CarbIntake
-    ];
-
-    public override Task<bool> AuthenticateAsync()
-    {
-        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
-        TrackSuccessfulRequest();
-        return Task.FromResult(true);
-    }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TidepoolConnectorConfiguration config,
-        CancellationToken cancellationToken,
-        ISyncProgressReporter? progressReporter = null)
+        CancellationToken cancellationToken)
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        if (!request.DataTypes.Any())
-            request.DataTypes = SupportedDataTypes;
-
-        var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
-        var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
+        var activeTypes = ResolveActiveTypes(request, config);
 
         // Authenticate up front. The data fetches below treat a missing token as "no data" and
         // return null without raising an error, so without this gate an auth failure (e.g. bad
@@ -83,15 +65,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
             if (string.IsNullOrEmpty(token))
             {
-                result.Success = false;
-                result.Errors.Add("Authentication failed");
-                result.EndTime = DateTimeOffset.UtcNow;
                 _logger.LogWarning("[{ConnectorSource}] Sync failed: authentication unsuccessful", ConnectorSource);
-                return result;
+                return AuthenticationFailedResult();
             }
         }
 
-        // Handle Glucose (CBG + SMBG → SensorGlucose)
+        // CBG and SMBG both map to SensorGlucose.
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
             try
@@ -101,27 +80,15 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                     $"{TidepoolConstants.DataTypes.Cbg},{TidepoolConstants.DataTypes.Smbg}",
                     request.From, request.To);
 
-                if (bgValues != null)
+                if (bgValues is null)
                 {
-                    var sgList = _sensorGlucoseMapper.MapBgValues(bgValues).ToList();
-                    result.ItemsSynced[SyncDataType.Glucose] = sgList.Count;
-                    if (sgList.Count > 0)
-                    {
-                        result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                            .FromUnixTimeMilliseconds(sgList.Max(s => s.Mills)).UtcDateTime;
-                        var publishSuccess = await PublishSensorGlucoseDataAsync(sgList, config, cancellationToken);
-                        if (!publishSuccess)
-                        {
-                            result.Success = false;
-                            result.Errors.Add("Glucose publish failed");
-                        }
-                        else
-                        {
-                            _logger.LogInformation(
-                                "[{ConnectorSource}] Synced {Count} SensorGlucose records from Tidepool",
-                                ConnectorSource, sgList.Count);
-                        }
-                    }
+                    RecordFetchFailure(result, SyncDataType.Glucose, activeTypes);
+                }
+                else
+                {
+                    await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                        _sensorGlucoseMapper.MapBgValues(bgValues).ToList(), PublishSensorGlucoseDataAsync,
+                        config, cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -132,7 +99,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             }
         }
 
-        // Handle Boluses and CarbIntake
         SyncDataType[] treatmentTypes = [SyncDataType.Boluses, SyncDataType.CarbIntake];
         if (activeTypes.Any(t => treatmentTypes.Contains(t)))
         {
@@ -147,35 +113,23 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
                 var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
-                if (activeTypes.Contains(SyncDataType.Boluses) && mappedBoluses.Count > 0)
-                {
-                    var success = await PublishBolusDataAsync(mappedBoluses, config, cancellationToken);
-                    if (success)
-                    {
-                        result.ItemsSynced[SyncDataType.Boluses] = mappedBoluses.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Synced {Count} Bolus records", ConnectorSource, mappedBoluses.Count);
-                    }
-                    else
-                    {
-                        result.Success = false;
-                        result.Errors.Add("Bolus publish failed");
-                    }
-                }
+                // Both fetches are issued whenever either type is active, because the correlation
+                // that pairs a carb intake with a bolus needs the boluses even when boluses
+                // themselves are not being synced.
+                if (boluses is null)
+                    RecordFetchFailure(result, SyncDataType.Boluses, activeTypes);
+                if (foods is null)
+                    RecordFetchFailure(result, SyncDataType.CarbIntake, activeTypes);
 
-                if (activeTypes.Contains(SyncDataType.CarbIntake) && mappedCarbs.Count > 0)
-                {
-                    var success = await PublishCarbIntakeDataAsync(mappedCarbs, config, cancellationToken);
-                    if (success)
-                    {
-                        result.ItemsSynced[SyncDataType.CarbIntake] = mappedCarbs.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Synced {Count} CarbIntake records", ConnectorSource, mappedCarbs.Count);
-                    }
-                    else
-                    {
-                        result.Success = false;
-                        result.Errors.Add("CarbIntake publish failed");
-                    }
-                }
+                // Boluses come from the bolus fetch and carb intakes from the food fetch, so each
+                // type is reported only when its own fetch came back.
+                if (boluses is not null)
+                    await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+                        mappedBoluses, PublishBolusDataAsync, config, cancellationToken);
+
+                if (foods is not null)
+                    await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+                        mappedCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -192,6 +146,12 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     /// <summary>
     ///     Fetches typed data from the Tidepool API data endpoint.
     /// </summary>
+    /// <returns>
+    ///     The deserialized collection, or <c>null</c> when the fetch failed — no token, an error
+    ///     response, or exhausted retries. A caller must not read that as an empty window: a type
+    ///     the sync could not check has to go unreported, because the count the tenant's sync card
+    ///     renders as "checked, found nothing" is a claim the source was reached.
+    /// </returns>
     private async Task<T?> FetchDataAsync<T>(
         TidepoolConnectorConfiguration config,
         string dataType, DateTime? startDate = null, DateTime? endDate = null) where T : class

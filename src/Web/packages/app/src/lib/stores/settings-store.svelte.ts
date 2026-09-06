@@ -8,15 +8,19 @@
 import { getContext, setContext } from "svelte";
 import { browser } from "$app/environment";
 import { getApiClient } from "$lib/api/client";
+import { getUiSettings } from "$api/ui-settings.remote";
+import { describeSubmitError } from "$lib/forms/submit-error";
+import { remoteErrorMessage } from "$lib/api/remote-error";
+import { SETTINGS_LOAD_FAILED } from "$lib/api/ui-settings-messages";
 import type {
   UISettingsConfiguration,
+  UserAlarmConfiguration as ApiUserAlarmConfiguration,
   DeviceSettings,
   AlgorithmSettings,
   FeatureSettings,
   NotificationSettings,
   ServicesSettings,
   DataQualitySettings,
-  SecuritySettings,
   ConnectedService,
 } from "$lib/api";
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
@@ -45,7 +49,6 @@ export class SettingsStore {
   notifications = $state<NotificationSettings | null>(null);
   services = $state<ServicesSettings | null>(null);
   dataQuality = $state<DataQualitySettings | null>(null);
-  security = $state<SecuritySettings | null>(null);
 
   // xDrip+-style alarm configuration (stored separately for convenience)
   alarmConfiguration = $state<UserAlarmConfiguration>(createDefaultUserAlarmConfiguration());
@@ -59,30 +62,38 @@ export class SettingsStore {
   private _hasChanges = $state(false);
   hasUnsavedChanges = $derived(this._hasChanges);
 
+  // `loadingState` cannot stand in for this: the constructor reports "loading"
+  // before the read has started.
+  private _loadInFlight: Promise<void> | null = null;
+
   // Track saving state
   private _isSaving = $state(false);
   isSaving = $derived(this._isSaving);
 
-  constructor() {
-    // Auto-load settings when store is created in browser
-    if (browser) {
-      this.load();
+  constructor(autoLoad = true) {
+    if (browser && autoLoad) {
+      // `.run()` rejects during render, and the store is constructed in the
+      // layout's. Reporting the state here rather than leaving it to the
+      // deferred load keeps a consumer from rendering against an idle store.
+      this.loadingState = "loading";
+      queueMicrotask(() => this.load());
     }
   }
 
-  /**
-   * Load settings from the API
-   */
+  /** Reads the settings, joining a read already in flight. */
   async load(): Promise<void> {
     if (!browser) {
       return;
     }
 
-    // Don't reload if already loading
-    if (this.loadingState === "loading") {
-      return;
-    }
+    this._loadInFlight ??= this.read().finally(() => {
+      this._loadInFlight = null;
+    });
 
+    await this._loadInFlight;
+  }
+
+  private async read(): Promise<void> {
     this.loadingState = "loading";
     this.error = null;
 
@@ -92,8 +103,7 @@ export class SettingsStore {
       // tenant scoping and nothing to clear it on logout — so on a shared device
       // the second person to sign in inherited the first person's settings, and a
       // save that the server had rejected still read back as persisted.
-      const apiClient = getApiClient();
-      const settings = await apiClient.uiSettings.getUISettings();
+      const settings = await getUiSettings().run();
 
       this._rawSettings = settings;
 
@@ -105,7 +115,6 @@ export class SettingsStore {
       this.notifications = settings.notifications ? { ...settings.notifications } : null;
       this.services = settings.services ? { ...settings.services } : null;
       this.dataQuality = settings.dataQuality ? { ...settings.dataQuality } : null;
-      this.security = settings.security ? { ...settings.security } : null;
 
       // Load alarm configuration from notifications or create default
       if (settings.notifications?.alarmConfiguration) {
@@ -117,16 +126,18 @@ export class SettingsStore {
       this.loadingState = "success";
       this._hasChanges = false;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : "Failed to load settings";
+      this.error = remoteErrorMessage(e, SETTINGS_LOAD_FAILED);
       this.loadingState = "error";
     }
   }
 
   /**
-   * Reload settings from the API (force refresh)
+   * Reads the settings again, so a caller that has just written them sees what
+   * was stored. A read already in flight was issued before that write, so it is
+   * waited out rather than joined.
    */
   async reload(): Promise<void> {
-    this.loadingState = "idle";
+    await this._loadInFlight;
     await this.load();
   }
 
@@ -141,8 +152,6 @@ export class SettingsStore {
    * Get combined settings object for saving
    */
   getSettings(): UISettingsConfiguration {
-    // Merge alarm configuration into notifications
-    // Note: Using type assertion since our frontend types use string dates while API uses Date
     const notifications = this.notifications ? {
       ...this.notifications,
       alarmConfiguration: this.alarmConfiguration as unknown as NotificationSettings["alarmConfiguration"],
@@ -155,7 +164,6 @@ export class SettingsStore {
       notifications,
       services: this.services ?? undefined,
       dataQuality: this.dataQuality ?? undefined,
-      security: this.security ?? undefined,
     };
   }
 
@@ -171,17 +179,15 @@ export class SettingsStore {
     this.error = null;
 
     try {
-      const settings = this.getSettings();
-      const apiClient = getApiClient();
-
-      // Save to backend API
-      const savedSettings = await apiClient.uiSettings.saveUISettings(settings);
+      const savedSettings = await getApiClient().uiSettings.saveUISettings(
+        this.getSettings()
+      );
 
       this._hasChanges = false;
       this._rawSettings = savedSettings;
       return true;
     } catch (e) {
-      this.error = e instanceof Error ? e.message : "Failed to save settings";
+      this.error = describeSubmitError(e);
       return false;
     } finally {
       this._isSaving = false;
@@ -201,8 +207,6 @@ export class SettingsStore {
     this.error = null;
 
     try {
-      const apiClient = getApiClient();
-
       const profiles = Array.isArray(this.alarmConfiguration?.profiles)
         ? this.alarmConfiguration.profiles
         : [];
@@ -217,13 +221,12 @@ export class SettingsStore {
         profiles: normalizedProfiles,
       };
 
-      // Convert to API format (the types are compatible, just use any for the API call)
-      const savedConfig = await apiClient.uiSettings.saveAlarmConfiguration(normalizedConfig as any);
+      const savedConfig = await getApiClient().uiSettings.saveAlarmConfiguration(
+        normalizedConfig as unknown as ApiUserAlarmConfiguration
+      );
 
-      // Update local state with response
       this.alarmConfiguration = savedConfig as unknown as UserAlarmConfiguration;
 
-      // Also update in notifications
       if (this.notifications) {
         this.notifications.alarmConfiguration = savedConfig as NotificationSettings["alarmConfiguration"];
       }
@@ -238,7 +241,10 @@ export class SettingsStore {
           .filter(Boolean);
         this.error = messages.length > 0 ? messages.join(" | ") : "Validation error";
       } else {
-        this.error = e instanceof Error ? e.message : "Failed to save alarm configuration";
+        this.error = describeSubmitError(
+          e,
+          "We couldn't save your alarm settings. Please try again."
+        );
       }
       return false;
     } finally {
@@ -306,10 +312,14 @@ export class SettingsStore {
 }
 
 /**
- * Creates a settings store and sets it in context
+ * Creates a settings store and sets it in context.
+ *
+ * @param autoLoad Whether to fetch the settings immediately. Pass false where the settings
+ * endpoint cannot answer — it is tenant-scoped, so a host that resolves no tenant would only 404.
+ * The store is still placed in context, so every consumer keeps resolving it.
  */
-export function createSettingsStore(): SettingsStore {
-  const store = new SettingsStore();
+export function createSettingsStore(autoLoad = true): SettingsStore {
+  const store = new SettingsStore(autoLoad);
   setContext(SETTINGS_STORE_KEY, store);
   return store;
 }
@@ -336,23 +346,4 @@ export function formatTime(time: string | undefined): string {
   const period = hours >= 12 ? "PM" : "AM";
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
-}
-
-/**
- * Helper to format last sync time
- */
-export function formatLastSync(date: Date | undefined): string {
-  if (!date) return "Never";
-  const now = Date.now();
-  const then = new Date(date).getTime();
-  const diff = now - then;
-  const minutes = Math.floor(diff / 60000);
-
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  return new Date(date).toLocaleDateString();
 }

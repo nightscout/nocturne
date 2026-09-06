@@ -11,6 +11,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
@@ -39,8 +40,8 @@ public sealed class ShareLinkServiceTests : IDisposable
             Id = Guid.NewGuid(),
             TenantId = TenantId,
             Name = "Viewer",
-            Slug = TenantPermissions.SeedRoles.Viewer,
-            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer],
+            Slug = RoleSeeds.Viewer,
+            Permissions = RoleSeeds.Permissions[RoleSeeds.Viewer],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -112,10 +113,10 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         var dto = await _service.RotateAsync(TenantId);
 
-        dto.Scopes.Should().BeEquivalentTo(TenantPermissions.DefaultPublicShareScopes);
+        dto.Scopes.Should().BeEquivalentTo(Scope.DefaultPublicShareScopes);
 
         var member = await GetPublicMemberAsync();
-        member.DirectPermissions.Should().BeEquivalentTo(TenantPermissions.DefaultPublicShareScopes);
+        member.DirectPermissions.Should().BeEquivalentTo(Scope.DefaultPublicShareScopes);
         member.MemberRoles.Should().BeEmpty("rotation seeds direct permissions rather than a role");
     }
 
@@ -173,10 +174,10 @@ public sealed class ShareLinkServiceTests : IDisposable
         var dto = await _service.GetAsync(TenantId);
 
         dto.Scopes.Should().Contain([
-            TenantPermissions.GlucoseRead,
-            TenantPermissions.TreatmentsRead,
+            Scope.GlucoseRead,
+            Scope.TreatmentsRead,
         ]);
-        dto.Scopes.Should().OnlyContain(s => TenantPermissions.PublicShareScopes.Contains(s));
+        dto.Scopes.Should().OnlyContain(s => Scope.PublicShareScopes.Contains(s));
     }
 
     [Fact]
@@ -195,11 +196,11 @@ public sealed class ShareLinkServiceTests : IDisposable
     {
         await ResetPublicMemberAccessAsync();
         await _service.RotateAsync(TenantId);
-        await _service.SetScopesAsync(TenantId, [TenantPermissions.GlucoseRead]);
+        await _service.SetScopesAsync(TenantId, [Scope.GlucoseRead]);
 
         var dto = await _service.RotateAsync(TenantId);
 
-        dto.Scopes.Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+        dto.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
     [Fact]
@@ -209,13 +210,13 @@ public sealed class ShareLinkServiceTests : IDisposable
         await _service.RotateAsync(TenantId);
 
         var dto = await _service.SetScopesAsync(TenantId,
-            [TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+            [Scope.GlucoseRead, Scope.TreatmentsRead]);
 
-        dto.Scopes.Should().BeEquivalentTo([TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+        dto.Scopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
 
         var member = await GetPublicMemberAsync();
         member.MemberRoles.Should().BeEmpty("choosing scopes migrates the link onto direct permissions");
-        member.DirectPermissions.Should().BeEquivalentTo([TenantPermissions.GlucoseRead, TenantPermissions.TreatmentsRead]);
+        member.DirectPermissions.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.TreatmentsRead]);
     }
 
     [Fact]
@@ -238,8 +239,8 @@ public sealed class ShareLinkServiceTests : IDisposable
     {
         await _service.RotateAsync(TenantId);
 
-        var setReadWrite = async () => await _service.SetScopesAsync(TenantId, [TenantPermissions.GlucoseReadWrite]);
-        var setAdmin = async () => await _service.SetScopesAsync(TenantId, [TenantPermissions.MembersManage]);
+        var setReadWrite = async () => await _service.SetScopesAsync(TenantId, [Scope.GlucoseReadWrite]);
+        var setAdmin = async () => await _service.SetScopesAsync(TenantId, [Scope.MembersManage]);
 
         await setReadWrite.Should().ThrowAsync<ArgumentException>();
         await setAdmin.Should().ThrowAsync<ArgumentException>();
@@ -262,4 +263,149 @@ public sealed class ShareLinkServiceTests : IDisposable
         dto.Enabled.Should().BeFalse();
         (await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId)).ShareToken.Should().BeNull();
     }
+
+    /// <summary>Stores display preferences against the seeded owner subject.</summary>
+    private async Task GiveTheOwnerPreferencesAsync(UserDisplayPreferences preferences)
+    {
+        var owner = await _db.Subjects.FirstAsync(s => s.Id == TestDatabaseSeeder.TestSubjectId);
+        owner.Preferences = preferences.Serialize();
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Adds a second owner of the tenant, joining <paramref name="joinedAfter"/> the seeded one.
+    /// </summary>
+    private Task AddOwnerAsync(
+        UserDisplayPreferences preferences,
+        DateTime joinedAfter,
+        bool isSystemSubject = false,
+        bool isActiveSubject = true) =>
+        TestDatabaseSeeder.SeedMemberAsync(
+            _db, TenantId,
+            isActive: isActiveSubject,
+            isSystemSubject: isSystemSubject,
+            joinedAt: joinedAfter,
+            preferences: preferences.Serialize());
+
+    /// <summary>Backdates the seeded owner's membership so later arrivals sort after it.</summary>
+    private async Task<DateTime> BackdateTheSeededOwnerAsync()
+    {
+        var joined = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var member = await _db.TenantMembers
+            .FirstAsync(m => m.SubjectId == TestDatabaseSeeder.TestSubjectId);
+        member.SysCreatedAt = joined;
+        await _db.SaveChangesAsync();
+        return joined;
+    }
+
+    [Fact]
+    public async Task SharedAppearance_is_the_owners_presentation_settings()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
+        {
+            GlucoseUnits = "mmol",
+            TimeFormat = "24",
+            RegionFormat = "en-GB",
+            ColorTheme = "trio",
+            Chart = new ChartPreferences { LineColorMode = "threshold", Lookback = 6 },
+            Prediction = new PredictionPreferences { Enabled = true, Minutes = 45 },
+        });
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol");
+        appearance.TimeFormat.Should().Be("24");
+        appearance.RegionFormat.Should().Be("en-GB");
+        appearance.ColorTheme.Should().Be("trio");
+        appearance.Chart!.LineColorMode.Should().Be("threshold");
+        appearance.Chart.Lookback.Should().Be(6);
+        appearance.Prediction!.Minutes.Should().Be(45);
+    }
+
+    [Fact]
+    public async Task SharedAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
+        {
+            GlucoseUnits = "mmol",
+            DashboardTopWidgets = [WidgetId.Tdd, WidgetId.Meals],
+            NightModeSchedule = true,
+        });
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol");
+        appearance.DashboardTopWidgets.Should().BeNull(
+            "the widgets an owner pins describe what they track, not how it looks");
+        appearance.NightModeSchedule.Should().BeNull(
+            "it tells a stranger holding the link roughly when the owner sleeps");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_is_empty_when_the_tenant_has_no_owner_left()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+
+        var owner = await _db.TenantMembers.FirstAsync(m => m.SubjectId == TestDatabaseSeeder.TestSubjectId);
+        owner.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().BeNull("a revoked member no longer speaks for the tenant");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_another_tenants_owner()
+    {
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+
+        var appearance = await _service.GetSharedAppearanceAsync(Guid.NewGuid());
+
+        appearance.GlucoseUnits.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SharedAppearance_settles_on_the_longest_standing_of_several_owners()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" }, seededJoined.AddYears(1));
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "a later co-owner does not restyle the link");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_a_system_subject_holding_the_owner_role()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" },
+            seededJoined.AddYears(-1),
+            isSystemSubject: true);
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "no person is behind a system subject");
+    }
+
+    [Fact]
+    public async Task SharedAppearance_ignores_an_owner_whose_subject_is_deactivated()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mg/dl" },
+            seededJoined.AddYears(-1),
+            isActiveSubject: false);
+
+        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "a deactivated subject cannot sign in either");
+    }
+
 }

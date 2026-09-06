@@ -1,6 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
 import { ApiClient, UserDisplayPreferences } from "$lib/api";
+import type { LastSignIn } from "$lib/components/auth/last-sign-in";
 
 
 export interface ServerSettings {
@@ -31,6 +32,9 @@ export interface AuthUser {
 	avatarUrl?: string;
 }
 
+/** The tenant status document, as returned by the API's status endpoint. */
+type TenantStatusResponse = Awaited<ReturnType<ApiClient["status"]["getStatus"]>>;
+
 declare global {
 	namespace App {
 		interface Error {
@@ -38,8 +42,21 @@ declare global {
 			details?: string;
 			errorId?: string;
 		}
+		type TenantStatus = TenantStatusResponse;
 		interface Locals {
 			apiClient: ApiClient;
+			/** Whether this request arrived on a public share host ({token}.share.{base-domain}). */
+			isShareHost: boolean;
+			/**
+			 * Set-Cookie headers to append verbatim to the outgoing response, for the half of a
+			 * same-named pair SvelteKit's cookie jar cannot hold. See propagateAuthCookies.
+			 */
+			rawSetCookies: string[];
+			/**
+			 * Memoized tenant status for this request. Read it through getRequestStatus rather
+			 * than touching it directly.
+			 */
+			statusPromise?: Promise<TenantStatusResponse | null>;
 			/**
 			 * Current authenticated user, or null if not authenticated
 			 */
@@ -49,13 +66,9 @@ declare global {
 			 */
 			isAuthenticated: boolean;
 			/**
-			 * Whether site security has been checked for this request
+			 * Whether the API readiness probe has already run for this request
 			 */
-			siteSecurityChecked?: boolean;
-			/**
-			 * Whether site requires authentication (lockdown mode)
-			 */
-			requireAuthentication?: boolean;
+			statusProbed?: boolean;
 			/**
 			 * Effective permissions (granted scopes) for the current user on the current tenant
 			 */
@@ -93,6 +106,8 @@ declare global {
 				history: number;
 				focusHours: number;
 			};
+			/** Resolved by the root layout from the hint cookie the API writes. */
+			lastSignIn: LastSignIn | null;
 		}
 
 		// Main PageData interface that allows additional properties for reports

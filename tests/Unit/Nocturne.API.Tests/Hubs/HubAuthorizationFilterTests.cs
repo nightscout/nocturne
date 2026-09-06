@@ -31,11 +31,14 @@ public class HubAuthorizationFilterTests
     /// connection carrying <paramref name="authorization"/> (null = anonymous).
     /// </summary>
     private static HubInvocationContext CreateInvocation(
-        Type hubType, string methodName, HubAuthorization? authorization)
+        Type hubType, string methodName, HubAuthorization? authorization, bool tenantResolved = true)
     {
         var httpContext = new DefaultHttpContext();
-        httpContext.Items["TenantContext"] =
-            new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
+        if (tenantResolved)
+        {
+            httpContext.Items["TenantContext"] =
+                new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
+        }
 
         var features = new FeatureCollection();
         features.Set<IHttpContextFeature>(new TestHttpContextFeature { HttpContext = httpContext });
@@ -68,7 +71,7 @@ public class HubAuthorizationFilterTests
 
     /// <summary>A member credential on the connection's own tenant carrying <paramref name="scopes"/>.</summary>
     private static HubAuthorization Member(params string[] scopes) => new(
-        Tenant, OAuthScopes.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid());
 
     /// <summary>
     /// A share-style credential — a guest link — carrying <paramref name="scopes"/>.
@@ -79,7 +82,7 @@ public class HubAuthorizationFilterTests
     /// the refusal must hold on the kind alone, not on the subject id happening to be absent.
     /// </remarks>
     private static HubAuthorization Guest(params string[] scopes) => new(
-        Tenant, OAuthScopes.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid());
 
     private static async Task<bool> InvokeAsync(HubInvocationContext invocation)
     {
@@ -117,12 +120,12 @@ public class HubAuthorizationFilterTests
     {
         // ConfigurationChangeEvent names the member who made each change, and connector
         // configuration is tenant administration with no narrower scope in the vocabulary.
-        var readOnly = Member(OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.GlucoseRead, Scope.AlertsRead);
 
         var attempt = Attempt(typeof(ConfigHub), nameof(ConfigHub.SubscribeAll), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.FullAccess));
+            .Where(e => e.Message.Contains(Scope.FullAccess));
     }
 
     [Theory]
@@ -139,7 +142,7 @@ public class HubAuthorizationFilterTests
     [MemberData(nameof(GatedMethods))]
     public async Task Full_access_connection_is_allowed(Type hubType, string methodName)
     {
-        var authorization = Member(OAuthScopes.FullAccess);
+        var authorization = Member(Scope.FullAccess);
 
         var reached = await InvokeAsync(CreateInvocation(hubType, methodName, authorization));
 
@@ -150,35 +153,35 @@ public class HubAuthorizationFilterTests
     public async Task Authorized_connection_without_the_declared_scope_is_denied()
     {
         // A read-only credential must not be able to silence alarms.
-        var readOnly = Member(OAuthScopes.GlucoseRead, OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.GlucoseRead, Scope.AlertsRead);
 
         var attempt = Attempt(typeof(AlarmHub), nameof(AlarmHub.Ack), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
     }
 
     [Fact]
     public async Task LoadRetro_requires_glucose_read()
     {
-        var therapyOnly = Member(OAuthScopes.TherapyRead);
+        var therapyOnly = Member(Scope.TherapyRead);
 
         var attempt = Attempt(typeof(DataHub), nameof(DataHub.LoadRetro), therapyOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.GlucoseRead));
+            .Where(e => e.Message.Contains(Scope.GlucoseRead));
     }
 
     [Fact]
     public async Task Home_assistant_acknowledge_requires_alerts_readwrite()
     {
-        var readOnly = Member(OAuthScopes.AlertsRead);
+        var readOnly = Member(Scope.AlertsRead);
 
         var attempt = Attempt(
             typeof(HomeAssistantHub), nameof(HomeAssistantHub.Acknowledge), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(OAuthScopes.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
     }
 
     [Fact]
@@ -195,6 +198,24 @@ public class HubAuthorizationFilterTests
                 CreateInvocation(hubType, methodName, authorization: null));
             reached.Should().BeTrue($"{hubType.Name}.{methodName} is an authentication entry point");
         }
+    }
+
+    /// <summary>
+    /// <see cref="OverviewHub"/> is reached from the apex, where <c>TenantResolutionMiddleware</c>
+    /// resolves no tenant. Its entry point must survive the filter there, which is the condition the
+    /// invocation below reproduces: <see cref="HubAuthorizationState.Resolve"/> returns null with no
+    /// <c>TenantContext</c> on the handshake, so a method the filter gates would be refused outright.
+    /// </summary>
+    [Fact]
+    public async Task Overview_authorization_survives_the_filter_with_no_tenant_on_the_handshake()
+    {
+        var reached = await InvokeAsync(CreateInvocation(
+            typeof(OverviewHub),
+            nameof(OverviewHub.Authorize),
+            authorization: null,
+            tenantResolved: false));
+
+        reached.Should().BeTrue();
     }
 
     /// <summary>
@@ -218,7 +239,7 @@ public class HubAuthorizationFilterTests
     {
         // Full access on purpose: the refusal must not depend on the guest scope set happening to
         // exclude alerts.read, because a grant update can widen a guest link's scopes.
-        var attempt = Attempt(hubType, methodName, Guest(OAuthScopes.FullAccess));
+        var attempt = Attempt(hubType, methodName, Guest(Scope.FullAccess));
 
         await attempt.Should().ThrowAsync<HubException>()
             .Where(e => e.Message.Contains("requires a credential belonging to the tenant"));
@@ -232,10 +253,10 @@ public class HubAuthorizationFilterTests
         // subscribe.
         foreach (var authorization in new[]
                  {
-                     Member(OAuthScopes.FullAccess),
+                     Member(Scope.FullAccess),
                      new HubAuthorization(
                          Tenant,
-                         OAuthScopes.Normalize([OAuthScopes.FullAccess]),
+                         Scope.Normalize([Scope.FullAccess]),
                          HubCredentialKind.Infrastructure,
                          SubjectId: null),
                  })
@@ -281,7 +302,8 @@ public class HubAuthorizationFilterTests
             .Select(Describe)
             .ToList();
 
-        entryPoints.Should().BeEquivalentTo(["DataHub.Authorize", "AlarmHub.Subscribe"]);
+        entryPoints.Should().BeEquivalentTo(
+            ["DataHub.Authorize", "AlarmHub.Subscribe", "OverviewHub.Authorize"]);
     }
 
     /// <summary>
@@ -289,6 +311,10 @@ public class HubAuthorizationFilterTests
     /// <see cref="Hub"/> lifetime member.
     /// </summary>
     /// <remarks>
+    /// Every <see cref="Hub"/> is scanned, not only <see cref="TenantAwareHub"/> descendants: the
+    /// filter is added to <c>HubOptions</c> globally, so it gates every hub in the assembly and the
+    /// scan has to cover the same set or a hub outside that hierarchy is guarded but unexamined.
+    ///
     /// The lifetime overrides (<c>OnConnectedAsync</c>, <c>OnDisconnectedAsync</c>) are excluded
     /// because <see cref="IHubFilter.InvokeMethodAsync"/> never sees them — SignalR routes them through
     /// <see cref="IHubFilter.OnConnectedAsync"/> and <see cref="IHubFilter.OnDisconnectedAsync"/>
@@ -297,7 +323,7 @@ public class HubAuthorizationFilterTests
     /// </remarks>
     private static IEnumerable<MethodInfo> HubMethods() =>
         typeof(DataHub).Assembly.GetTypes()
-            .Where(t => t.IsAssignableTo(typeof(TenantAwareHub)) && !t.IsAbstract)
+            .Where(t => t.IsAssignableTo(typeof(Hub)) && !t.IsAbstract)
             .SelectMany(t => t.GetMethods(
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
             .Where(m => m.GetBaseDefinition().DeclaringType == m.DeclaringType);

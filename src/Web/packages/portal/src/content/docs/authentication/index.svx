@@ -4,14 +4,18 @@ title: Authentication
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
 </script>
 
 # Authentication
 
-Nocturne is passwordless. Every account signs in with a **passkey** as its primary
-credential — there are no passwords to set, rotate, or leak. On top of passkeys you can
-optionally offer **social login** through any OpenID Connect (OIDC) provider, and every
-account keeps an **authenticator app (TOTP)** and **recovery codes** as fallbacks.
+Nocturne is passwordless. Every account signs in with a **passkey** — a credential stored
+on a phone, laptop or security key and unlocked with a fingerprint, a face scan or a PIN —
+as its primary credential. There are no passwords to set, rotate, or leak. On top of
+passkeys you can optionally offer **social login** through any OIDC provider (OpenID
+Connect, the standard that lets you sign in using an account you already have with Google,
+GitHub and others), and every account keeps an **authenticator app** and **recovery codes**
+as fallbacks.
 
 This page is for operators deciding which sign-in methods to offer on their instance.
 If you're building an app or device that talks to the Nocturne API, see
@@ -23,8 +27,11 @@ If you're building an app or device that talks to the Nocturne API, see
 |--------|--------------|------------|
 | **Passkeys (WebAuthn)** | Always on | The primary credential. Face ID, Touch ID, Windows Hello, or a hardware security key. |
 | **Social login (OIDC)** | Optional, per instance | Google, GitHub, or any OIDC provider. |
-| **Authenticator app (TOTP)** | Fallback | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. |
-| **Recovery codes** | Fallback | One-time backup codes for when no passkey or authenticator is available. |
+| **Authenticator app (TOTP)** | Optional second step | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. Asked for after the passkey, on accounts that have enrolled one. |
+| **Recovery codes** | Fallback | One-time backup codes. The only credential that gets an account in without a passkey. |
+
+For the step-by-step of what signing in actually looks like, see
+[Passkeys, recovery codes and the authenticator app](/docs/authentication/passkeys).
 
 ### Passkeys
 
@@ -41,9 +48,9 @@ The login screen offers two passkey paths:
 
 <Callout type="info" title="Browser support">
   Passkeys need a browser that supports WebAuthn. On a browser that doesn't, the login
-  screen tells the user to use an authenticator app, a recovery code, or a different
-  browser. Because TOTP and recovery codes don't depend on WebAuthn, accounts stay
-  reachable everywhere.
+  screen says so and points the user at a recovery code or a different browser. An
+  authenticator app is no help there: it is a second step <em>after</em> a passkey, so it
+  cannot get anyone in on its own. The recovery code is the one fallback that stands alone.
 </Callout>
 
 ### Social login (OIDC)
@@ -65,27 +72,47 @@ guide:
 
 ### Authenticator app & recovery codes
 
-These are fallbacks that users set up from their account settings, not methods you enable
-as an operator. The login screen always exposes *Use authenticator app* and *Use a
-recovery code* entry points so an account stays reachable if a passkey is lost or a device
-is unavailable.
+These are set up by users from their account settings, not methods you enable as an
+operator.
 
-- **Authenticator app (TOTP)** — the user enters their username and a six-digit code from
-  their authenticator app.
-- **Recovery codes** — the user enters their username and one of the one-time codes issued
-  when they set up their account.
+- **Authenticator app (TOTP)** — TOTP stands for time-based one-time password: a
+  six-digit code that changes every thirty seconds. When an account has enrolled an
+  authenticator app, signing in with a passkey is followed by a second step asking for the
+  current code. It does not apply to OIDC sign-ins, where the provider handles any extra
+  steps of its own.
+- **Recovery codes** — one-time backup codes issued when the account is set up, for when
+  no passkey is available. The login screen carries a *Use a recovery code* link.
+
+Both are covered in detail on
+[Passkeys, recovery codes and the authenticator app](/docs/authentication/passkeys).
 
 ## What your users see
 
-On the login screen, in order:
+The login screen leads with the passkey button, and — when membership requests are enabled
+— carries a *Request membership* link at the foot of the card:
+
+<Screenshot
+  id="sign-in"
+  callouts={[
+    { anchor: "passkey", label: "Sign in with a passkey" },
+    { anchor: "request-membership", label: "Ask the owner for access" },
+  ]}
+/>
+
+In order:
 
 1. **Sign in with passkey** — the primary button. Triggers a discoverable passkey prompt.
 2. **Sign in with username** — username-first passkey login, for when the discoverable
    prompt doesn't surface the right account.
 3. **OIDC provider buttons** — one per enabled provider, shown under *Or continue with*.
    Only appear when social login is configured.
-4. **Use authenticator app** / **Use a recovery code** — small links for the fallback
-   methods.
+4. **Use a recovery code** — a small link for the fallback method.
+5. **Request membership** — a link at the foot of the card for visitors who don't have an
+   account on this instance yet. See
+   [Request membership](/docs/authentication/request-membership).
+
+If the account has an authenticator app enrolled, a second step asking for the six-digit
+code follows the passkey.
 
 ## Enabling each method
 
@@ -94,3 +121,4 @@ On the login screen, in order:
 | Passkeys | Always on. Nothing to configure. |
 | Social login | Add a provider — see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), or [generic OIDC](/docs/authentication/oidc). |
 | Authenticator app / recovery codes | Always available. Users set these up from their account settings. |
+| Request membership | On by default. Each instance owner can switch it off under **Settings > Sharing & Privacy**. |

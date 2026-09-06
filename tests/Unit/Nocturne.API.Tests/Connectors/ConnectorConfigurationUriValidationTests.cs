@@ -13,7 +13,7 @@ namespace Nocturne.API.Tests.Connectors;
 /// <summary>
 /// What a <c>format: "uri"</c> connector field will accept into storage. Every connector taking a
 /// member-supplied base URL declares that format, and the stored value is later prepended with
-/// <c>https://</c> if it does not already start with <c>http</c>.
+/// <c>https://</c> if it carries no http/https scheme of its own.
 /// </summary>
 /// <remarks>
 /// The address a URL resolves to is judged at the sink, not here — this is about which strings are

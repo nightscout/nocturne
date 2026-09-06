@@ -7,6 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import { Droplet } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import { useToastSubmission } from "$lib/forms";
   import { create as createReservoirReport } from "$api/generated/reservoirReports.generated.remote";
 
   type ReportKind = "Reading" | "Fill";
@@ -29,7 +30,7 @@
   let kind = $state<ReportKind>("Reading");
   let units = $state<number | undefined>(undefined);
   let observedAt = $state("");
-  let isSubmitting = $state(false);
+  const submission = useToastSubmission("Failed to record reservoir value");
 
   const kindLabels: Record<ReportKind, string> = {
     Reading: "Current level",
@@ -52,9 +53,8 @@
   });
 
   async function handleSubmit() {
-    if (!units || units <= 0 || isSubmitting) return;
-    isSubmitting = true;
-    try {
+    if (!units || units <= 0) return;
+    await submission.run(async () => {
       await createReservoirReport({
         units,
         kind,
@@ -68,12 +68,7 @@
       open = false;
       await tick();
       onReported?.();
-    } catch (err) {
-      console.error("Failed to report reservoir value:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to record reservoir value");
-    } finally {
-      isSubmitting = false;
-    }
+    });
   }
 
   function handleClose() {
@@ -123,10 +118,10 @@
       </div>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={handleClose} disabled={isSubmitting}>
+      <Button variant="outline" onclick={handleClose} disabled={submission.busy}>
         Cancel
       </Button>
-      <Button onclick={handleSubmit} disabled={isSubmitting || !units || units <= 0}>
+      <Button onclick={handleSubmit} disabled={submission.busy || !units || units <= 0}>
         <Droplet class="h-4 w-4 mr-2" />
         Record
       </Button>

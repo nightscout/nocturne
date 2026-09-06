@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Nocturne.Core.Models;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Authorization;
 
@@ -60,7 +61,7 @@ public class HasPermissionsHandler : AuthorizationHandler<HasPermissionsRequirem
     {
         var httpContext = _httpContextAccessor.HttpContext;
 
-        if (httpContext?.Items["PermissionTrie"] is PermissionTrie trie && !trie.IsEmpty)
+        if (httpContext?.Items[AuthContextKeys.PermissionTrie] is PermissionTrie trie && !trie.IsEmpty)
         {
             context.Succeed(requirement);
         }

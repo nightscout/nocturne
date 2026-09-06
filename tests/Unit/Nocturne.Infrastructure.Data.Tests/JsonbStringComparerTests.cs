@@ -22,11 +22,7 @@ public class JsonbStringComparerTests
     private const string CompactJson = """[{"Time":"00:00","Value":1.5,"TimeAsSeconds":0}]""";
     private const string JsonbNormalizedJson = """[{"Time": "00:00", "Value": 1.5, "TimeAsSeconds": 0}]""";
 
-    private static NocturneDbContext NewContext() =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql("Host=localhost;Database=nocturne;Username=test;Password=test")
-            .Options)
-        { TenantId = Guid.NewGuid() };
+    private static NocturneDbContext NewContext() => OfflineDbContext.Create();
 
     [Fact]
     public void EveryJsonbStringColumn_UsesTheSemanticComparer()

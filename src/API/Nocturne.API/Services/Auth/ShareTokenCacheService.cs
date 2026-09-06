@@ -20,7 +20,7 @@ namespace Nocturne.API.Services.Auth;
 /// The token is only ever stored and cached as its SHA-256 digest, so neither the database nor the
 /// cache holds a value that can be replayed as a share link.
 /// </remarks>
-public sealed class ShareTokenCacheService
+public sealed class ShareTokenCacheService : IShareTokenResolver
 {
     private readonly IMemoryCache _cache;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
@@ -42,7 +42,14 @@ public sealed class ShareTokenCacheService
     /// Resolves the tenant owning the given share token, or <see langword="null"/> if no
     /// active or inactive tenant holds it.
     /// </summary>
-    public async Task<TenantContext?> ResolveByTokenAsync(string token)
+    public Task<TenantContext?> ResolveByTokenAsync(string token) =>
+        ResolveAsync(token, recordAccess: true, CancellationToken.None);
+
+    /// <inheritdoc />
+    public Task<TenantContext?> ResolveWithoutRecordingAccessAsync(string token, CancellationToken ct) =>
+        ResolveAsync(token, recordAccess: false, ct);
+
+    private async Task<TenantContext?> ResolveAsync(string token, bool recordAccess, CancellationToken ct)
     {
         var tokenHash = CredentialHash.ShareToken(token);
         var cacheKey = CacheKey(tokenHash);
@@ -50,28 +57,30 @@ public sealed class ShareTokenCacheService
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(ct);
 
         var tenant = await dbContext.Tenants
             .AsNoTracking()
             .Where(t => t.ShareToken == tokenHash)
             .Select(t => new { t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(ct);
 
         if (tenant == null)
             return null;
 
         // Stamp last-accessed on the database-hit path only: successful resolutions are
         // cached for CacheTtl, so the write is debounced to at most once per TTL per token.
-        // Skipped for inactive tenants (the middleware rejects those requests, so nothing was
-        // accessed), and non-fatal: the stamp is bookkeeping and must not fail the resolve.
-        if (tenant.IsActive)
+        // Skipped for inactive tenants, whose requests are refused before anything is served,
+        // and non-fatal: the stamp is bookkeeping and must not fail the resolve. Callers that
+        // are not serving the share pass recordAccess: false — the value is shown to the owner
+        // as "Last viewed", so anything other than a real view is a lie about who opened a link.
+        if (recordAccess && tenant.IsActive)
         {
             try
             {
                 await dbContext.Tenants
                     .Where(t => t.Id == tenant.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow));
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow), ct);
             }
             catch (DbUpdateException ex)
             {

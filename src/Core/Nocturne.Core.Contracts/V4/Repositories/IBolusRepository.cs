@@ -15,7 +15,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="BolusKind"/>
 /// <seealso cref="IBolusCalculationRepository"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IBolusRepository : IV4Repository<Bolus>, IDeviceAttributedRepository<Bolus>
+public interface IBolusRepository : ILegacyKeyedRepository<Bolus>, IDeviceAttributedRepository<Bolus>
 {
     /// <summary>
     /// Retrieve a page of <see cref="Bolus"/> records filtered by time range, device, source, origin, and kind.
@@ -51,51 +51,12 @@ public interface IBolusRepository : IV4Repository<Bolus>, IDeviceAttributedRepos
         int limit, int offset, bool descending, CancellationToken ct)
         => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, null, ct);
 
-    /// <summary>Returns a single <see cref="Bolus"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<Bolus?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve a <see cref="Bolus"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<Bolus?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="Bolus"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<Bolus> CreateAsync(Bolus model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="Bolus"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<Bolus> UpdateAsync(Guid id, Bolus model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete a <see cref="Bolus"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="Bolus"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
     /// <summary>Delete <see cref="Bolus"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="Bolus"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="Bolus"/>, optionally scoped to a data source.
@@ -111,14 +72,5 @@ public interface IBolusRepository : IV4Repository<Bolus>, IDeviceAttributedRepos
     Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
-    );
-
-    /// <summary>Insert multiple <see cref="Bolus"/> records in a single batch operation.</summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<Bolus>> BulkCreateAsync(
-        IEnumerable<Bolus> records,
-        WriteOrigin origin, CancellationToken ct = default
     );
 }

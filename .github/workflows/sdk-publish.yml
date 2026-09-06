@@ -424,9 +424,13 @@ jobs:
         working-directory: sdk/java/out
         run: |
           # Android consumers (xDrip) exclude this SDK's OkHttp 4.x/gson transitives and
-          # supply OkHttp 3.12.x / gson 2.8.x. The ApiClient template override in
-          # sdk/java/templates keeps the generated code compatible with both OkHttp majors;
+          # supply OkHttp 3.12.x / gson 2.8.x. The template overrides in
+          # sdk/java/templates keep the generated code compatible with both OkHttp majors;
           # this compile gate stops a generator upgrade from silently regressing that.
+          # The classpath is the generated build.gradle's declarations with okhttp and
+          # gson pinned DOWN to the floor, plus the transitives javac needs. Do not
+          # "sync" it to build.gradle — raising okhttp or gson here defeats the gate.
+          # New generated sources may need their own dependencies added.
           mkdir -p /tmp/floor
           for dep in \
             com/squareup/okhttp3/okhttp/3.12.13/okhttp-3.12.13.jar \
@@ -436,6 +440,8 @@ jobs:
             io/gsonfire/gson-fire/1.9.0/gson-fire-1.9.0.jar \
             com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar \
             org/openapitools/jackson-databind-nullable/0.2.9/jackson-databind-nullable-0.2.9.jar \
+            org/apache/oltu/oauth2/org.apache.oltu.oauth2.client/1.0.2/org.apache.oltu.oauth2.client-1.0.2.jar \
+            org/apache/oltu/oauth2/org.apache.oltu.oauth2.common/1.0.2/org.apache.oltu.oauth2.common-1.0.2.jar \
             jakarta/annotation/jakarta.annotation-api/1.3.5/jakarta.annotation-api-1.3.5.jar; do
             curl -sfL -o "/tmp/floor/$(basename "$dep")" "https://repo1.maven.org/maven2/$dep"
           done

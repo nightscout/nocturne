@@ -134,7 +134,7 @@ public class FoodServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public async Task GetFoodAsync_WithoutParameters_ReturnsAllFood()
+    public async Task GetFoodAsync_WithoutParameters_ReturnsTheDefaultPage()
     {
         // Arrange
         var expectedFoods = new List<Food>
@@ -162,7 +162,9 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -172,7 +174,9 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodAsync(It.IsAny<CancellationToken>()),
+            x => x.GetFoodWithAdvancedFilterAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -180,10 +184,10 @@ public class FoodServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public async Task GetFoodAsync_WithParameters_CallsMongoDbServiceCorrectly()
+    public async Task GetFoodAsync_WithParameters_PagesTheRepository()
     {
         // Arrange
-        var find = "{\"category\":\"Fruit\"}";
+        var find = "Fruit";
         var count = 10;
         var skip = 5;
         var expectedFoods = new List<Food>
@@ -197,7 +201,9 @@ public class FoodServiceTests
         };
 
         _mockFoodRepository
-            .Setup(x => x.GetFoodAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedFoods);
 
         // Act
@@ -207,7 +213,7 @@ public class FoodServiceTests
         result.Should().NotBeNull();
         result.Should().BeEquivalentTo(expectedFoods);
         _mockFoodRepository.Verify(
-            x => x.GetFoodAsync(It.IsAny<CancellationToken>()),
+            x => x.GetFoodWithAdvancedFilterAsync(count, skip, find, false, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -220,7 +226,9 @@ public class FoodServiceTests
         // Arrange
         var expectedException = new InvalidOperationException("Database error");
         _mockFoodRepository
-            .Setup(x => x.GetFoodAsync(It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetFoodWithAdvancedFilterAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
             .ThrowsAsync(expectedException);
 
         // Act & Assert

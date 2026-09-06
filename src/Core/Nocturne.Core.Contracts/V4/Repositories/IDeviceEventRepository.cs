@@ -16,7 +16,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="DeviceEvent"/>
 /// <seealso cref="DeviceEventType"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IDeviceEventRepository : IV4Repository<DeviceEvent>, IDeviceAttributionWriter
+public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, IDeviceAttributionWriter
 {
     /// <summary>
     /// Returns unattributed events (<c>PatientDeviceId == null</c>) of the given types within the time
@@ -64,51 +64,12 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>, IDeviceAtt
         int limit, int offset, bool descending, CancellationToken ct)
         => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
 
-    /// <summary>Returns a single <see cref="DeviceEvent"/> by its UUID v7, or <c>null</c> if not found.</summary>
-    /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<DeviceEvent?> GetByIdAsync(Guid id, CancellationToken ct = default);
-
-    /// <summary>Retrieve a <see cref="DeviceEvent"/> by its original MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The matching record, or <c>null</c> if not found.</returns>
-    Task<DeviceEvent?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
-
-    /// <summary>Persist a new <see cref="DeviceEvent"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<DeviceEvent> CreateAsync(DeviceEvent model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Replace an existing <see cref="DeviceEvent"/> identified by <paramref name="id"/>.</summary>
-    /// <param name="id">UUID v7 identifier of the record to update.</param>
-    /// <param name="model">Updated record data.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<DeviceEvent> UpdateAsync(Guid id, DeviceEvent model, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete a <see cref="DeviceEvent"/> by its UUID v7.</summary>
-    /// <param name="id">UUID v7 identifier of the record to delete.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Delete the <see cref="DeviceEvent"/> with the given legacy MongoDB ObjectId.</summary>
-    /// <param name="legacyId">Original MongoDB ObjectId string.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
-
     /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
-
-    /// <summary>Count <see cref="DeviceEvent"/> records within an optional time range.</summary>
-    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
-    new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="DeviceEvent"/>, optionally scoped to a data source.
@@ -124,15 +85,6 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>, IDeviceAtt
     Task<IEnumerable<DeviceEvent>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
-    );
-
-    /// <summary>Insert multiple <see cref="DeviceEvent"/> records in a single batch operation.</summary>
-    /// <param name="records">Records to insert.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<DeviceEvent>> BulkCreateAsync(
-        IEnumerable<DeviceEvent> records,
-        WriteOrigin origin, CancellationToken ct = default
     );
 
     /// <summary>

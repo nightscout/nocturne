@@ -57,6 +57,23 @@ public class InstanceKeyHandlerTests
     }
 
     [Fact]
+    public async Task ValidInstanceKey_AuthenticatedContext_CarriesTheKeysAuditIdentity()
+    {
+        var handler = CreateHandler();
+        var context = new DefaultHttpContext();
+        context.Request.Headers["X-Instance-Key"] = ValidHash;
+        context.Request.Headers["X-Instance-Service"] = "web";
+
+        var result = await handler.AuthenticateAsync(context);
+
+        var fingerprint = result.AuthContext!.CredentialFingerprint;
+        Assert.NotNull(fingerprint);
+        Assert.NotEqual(ValidHash, fingerprint);
+        Assert.DoesNotContain(fingerprint, ValidHash);
+        Assert.DoesNotContain(PlainKey, fingerprint);
+    }
+
+    [Fact]
     public async Task ValidInstanceKey_WithServiceMarker_AuthenticatesAsAdmin()
     {
         var handler = CreateHandler();

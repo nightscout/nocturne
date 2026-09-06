@@ -23,7 +23,7 @@ public class AlertHub : TenantAwareHub
     // alert-subscribers carries every rule's dispatches, resolutions and acknowledgements for the
     // whole tenant, including the alert text and who acknowledged it, so it is not one data category
     // and a share-style credential is refused it.
-    [HubScope(OAuthScopes.AlertsRead)]
+    [HubScope(Scope.AlertsRead)]
     [HubTenantGroup]
     public async Task Subscribe()
     {
@@ -35,7 +35,7 @@ public class AlertHub : TenantAwareHub
     /// This halts escalation but does not close excursions.
     /// </summary>
     /// <param name="acknowledgedBy">Display name or identifier of the person acknowledging.</param>
-    [HubScope(OAuthScopes.AlertsReadWrite)]
+    [HubScope(Scope.AlertsReadWrite)]
     public async Task Acknowledge(string acknowledgedBy)
     {
         var ackService = Context.GetHttpContext()!.RequestServices

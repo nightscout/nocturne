@@ -58,7 +58,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>404 Not Found to match Nightscout behavior</returns>
     [HttpGet("times")]
     [ApiExplorerSettings(IgnoreApi = true)] // Hide from OpenAPI as it's not a real endpoint
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     public ActionResult GetTimeBasedEntries()
     {
         return NotFound();
@@ -74,7 +74,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}")]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -99,7 +99,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}/{regex}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}/{regex}")]
-    [RequireScope(OAuthScopes.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]

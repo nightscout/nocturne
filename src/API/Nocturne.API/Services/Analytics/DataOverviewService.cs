@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
@@ -65,141 +66,26 @@ public class DataOverviewService : IDataOverviewService
         await using var context = await _factory.CreateAsync(cancellationToken);
 
         // Run all queries sequentially — DbContext is not thread-safe
-        var minMaxResults = new List<(long? Min, long? Max)>();
-
-        // V4 tables with Timestamp + DataSource
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.SensorGlucose.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.MeterGlucose.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.Boluses.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.CarbIntakes.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.BolusCalculations.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.Notes.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.DeviceEvents.Select(e => (DateTime?)e.Timestamp),
-                cancellationToken
-            )
-        );
-
-        // StateSpans uses StartTimestamp
-        minMaxResults.Add(
-            await GetMinMaxTimestamp(
-                context.StateSpans.Select(e => (DateTime?)e.StartTimestamp),
-                cancellationToken
-            )
-        );
-
-        // APS snapshots (V4 replacement for device statuses)
-        minMaxResults.Add(
-            await GetMinMaxMills(
-                context.ApsSnapshots.Select(e =>
-                    (long?)new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds()),
-                cancellationToken
-            )
-        );
-
-        // Collect data sources from tables that have DataSource
-        var allDataSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.SensorGlucose.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.MeterGlucose.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.Boluses.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.CarbIntakes.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context
-                    .BolusCalculations.Where(e => e.DataSource != null)
-                    .Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.Notes.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.DeviceEvents.Where(e => e.DataSource != null).Select(e => e.DataSource!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        // StateSpans uses Source (not DataSource)
-        foreach (
-            var ds in await GetDistinctDataSources(
-                context.StateSpans.Where(e => e.Source != null).Select(e => e.Source!),
-                cancellationToken
-            )
-        )
-            allDataSources.Add(ds);
-        // Derive year range from all min/max mills
         long? globalMin = null;
         long? globalMax = null;
+        var allDataSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (min, max) in minMaxResults)
+        foreach (var table in DataOverviewTables.All)
         {
+            var (min, max) = await GetMinMaxTimestamp(
+                table.Timestamps(context),
+                cancellationToken
+            );
             if (min.HasValue && (!globalMin.HasValue || min.Value < globalMin.Value))
                 globalMin = min.Value;
             if (max.HasValue && (!globalMax.HasValue || max.Value > globalMax.Value))
                 globalMax = max.Value;
+
+            if (table.Sources(context) is not { } sources)
+                continue;
+
+            foreach (var ds in await GetDistinctDataSources(sources, cancellationToken))
+                allDataSources.Add(ds);
         }
 
         var tz = await GetUserTimeZoneAsync(cancellationToken);
@@ -214,7 +100,16 @@ public class DataOverviewService : IDataOverviewService
                 DateTimeOffset.FromUnixTimeMilliseconds(globalMax.Value),
                 tz
             );
-            years = Enumerable.Range(minLocal.Year, maxLocal.Year - minLocal.Year + 1).ToArray();
+
+            // Some uploaders emit future-dated records, and the range is derived from a
+            // bare MAX() over every table — so one bad row would otherwise stretch the
+            // list to its year and open the report on a century of empty ones. Clamping
+            // both ends keeps the range non-empty when every record is future-dated.
+            var currentYear = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Year;
+            var minYear = Math.Min(minLocal.Year, currentYear);
+            var maxYear = Math.Min(maxLocal.Year, currentYear);
+
+            years = Enumerable.Range(minYear, maxYear - minYear + 1).ToArray();
         }
 
         return new DataOverviewYearsResponse
@@ -242,12 +137,7 @@ public class DataOverviewService : IDataOverviewService
         await using var context = await _factory.CreateAsync(cancellationToken);
 
         var tz = await GetUserTimeZoneAsync(cancellationToken);
-        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz);
-        var startMills = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        var endMills = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         var hasFilter = dataSources is { Length: > 0 };
 
@@ -255,137 +145,25 @@ public class DataOverviewService : IDataOverviewService
         var dayMap = new Dictionary<string, DailySummaryDay>();
 
         // Run all queries sequentially — DbContext is not thread-safe
-
-        // Exclude non-primary duplicates from cross-connector deduplication
-        var npSensorGlucose = context
-            .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npBolus = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npCarbIntake = context
-            .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npBolusCalc = context
-            .LinkedRecords.Where(lr => lr.RecordType == "boluscalculation" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npNote = context
-            .LinkedRecords.Where(lr => lr.RecordType == "note" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npDeviceEvent = context
-            .LinkedRecords.Where(lr => lr.RecordType == "deviceevent" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var npStateSpan = context
-            .LinkedRecords.Where(lr => lr.RecordType == "statespan" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-
-        // V4 tables with Timestamp + DataSource
-        await CollectCountsFromTimestampTable(
-            "Glucose",
-            context
-                .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npSensorGlucose.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "ManualBG",
-            context
-                .MeterGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "Boluses",
-            context
-                .Boluses.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npBolus.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "CarbIntake",
-            context
-                .CarbIntakes.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npCarbIntake.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "BolusCalculations",
-            context
-                .BolusCalculations.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npBolusCalc.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "Notes",
-            context
-                .Notes.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npNote.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        await CollectCountsFromTimestampTable(
-            "DeviceEvents",
-            context
-                .DeviceEvents.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npDeviceEvent.Contains(e.Id))
-                .Select(e => e.Timestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        // StateSpans: uses StartTimestamp and Source (not Timestamp/DataSource)
-        await CollectCountsFromTimestampTable(
-            "StateSpans",
-            context
-                .StateSpans.Where(e => e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc)
-                .Where(e => !hasFilter || dataSources!.Contains(e.Source!))
-                .Where(e => !npStateSpan.Contains(e.Id))
-                .Select(e => e.StartTimestamp),
-            dayMap,
-            tz,
-            cancellationToken
-        );
-
-        // APS snapshots: V4 replacement for device statuses - skip when filter is active
-        if (!hasFilter)
+        foreach (var table in DataOverviewTables.All)
         {
-            var apsStartUtc = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
-            var apsEndUtc = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+            var nonPrimaryIds = table.DedupRecordType is { } recordType
+                ? NonPrimaryRecordIds(context, recordType)
+                : null;
+
+            var timestamps = table.TimestampsInRange(
+                context,
+                startUtc,
+                endUtc,
+                dataSources,
+                nonPrimaryIds
+            );
+            if (timestamps is null)
+                continue;
+
             await CollectCountsFromTimestampTable(
-                "DeviceStatus",
-                context
-                    .ApsSnapshots.Where(e => e.Timestamp >= apsStartUtc && e.Timestamp < apsEndUtc)
-                    .Select(e => e.Timestamp),
+                table.CountsKey,
+                timestamps,
                 dayMap,
                 tz,
                 cancellationToken
@@ -469,25 +247,13 @@ public class DataOverviewService : IDataOverviewService
         // Minimum readings required for a valid GRI calculation (72 = ~6 hours of 5-min CGM data)
         const int minimumReadings = 72;
 
-        // Compute year-level UTC boundaries once
-        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz);
+        var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         // Hoist LinkedRecord subqueries — IQueryable construction is free
-        var npSensorGlucoseIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryBolusIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryTempBasalIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        var nonPrimaryCarbIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
+        var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
+        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
+        var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
+        var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
 
         // --- Collect glucose readings by month (CGM + meter) ---
         // Each source is queried independently so one failure doesn't prevent the others.
@@ -496,7 +262,8 @@ public class DataOverviewService : IDataOverviewService
         // SensorGlucose (CGM)
         await AccumulateMonthlyReadingsAsync(
             context.SensorGlucose
-                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !npSensorGlucoseIds.Contains(e.Id))
                 .Select(e => new { e.Timestamp, e.Mgdl }),
@@ -506,7 +273,8 @@ public class DataOverviewService : IDataOverviewService
         // MeterGlucose (finger sticks)
         await AccumulateMonthlyReadingsAsync(
             context.MeterGlucose
-                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
@@ -574,6 +342,21 @@ public class DataOverviewService : IDataOverviewService
         }
 
         return new GriTimelineResponse { Year = year, Periods = periods.ToArray() };
+    }
+
+    /// <summary>
+    /// The half-open UTC interval covering <paramref name="year"/> in <paramref name="tz"/>, so a
+    /// year runs from local midnight to local midnight rather than from midnight UTC.
+    /// </summary>
+    private static (DateTime StartUtc, DateTime EndUtc) LocalYearBoundsUtc(int year, TimeZoneInfo tz)
+    {
+        var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var localNextYearStart = new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+
+        return (
+            TimeZoneInfo.ConvertTimeToUtc(localYearStart, tz),
+            TimeZoneInfo.ConvertTimeToUtc(localNextYearStart, tz)
+        );
     }
 
     /// <summary>
@@ -654,10 +437,34 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Builds one month's GRI timeline period, or null when the month has fewer than
-    /// <paramref name="minimumReadings"/> glucose readings.
+    /// The zones the GRI is scored over. These are the consensus bounds rather than the tenant's
+    /// thresholds — <see cref="GetGriTimelineAsync"/> takes no <c>GlycemicThresholds</c>, so no
+    /// caller can move them.
     /// </summary>
-    private GriTimelinePeriod? BuildGriPeriod(
+    private enum GriZone
+    {
+        VeryLow,
+        Low,
+        Target,
+        High,
+        VeryHigh,
+    }
+
+    private static readonly GlucoseZoneScale GriZones = new(
+        GlucoseZoneBound.Under(GlucoseConstants.VeryLowMgdl),
+        GlucoseZoneBound.Under(GlucoseConstants.TargetBottomMgdl),
+        GlucoseZoneBound.UpTo(GlucoseConstants.TargetTopMgdl),
+        GlucoseZoneBound.UpTo(GlucoseConstants.VeryHighMgdl)
+    );
+
+    /// <summary>
+    /// Builds one month's GRI timeline period, or null when the month has fewer than
+    /// <paramref name="minimumReadings"/> glucose readings. Values that are not readings are
+    /// dropped before anything is counted, so they reach neither a zone nor the denominator — see
+    /// <see cref="GlucoseStatistics.IsReading"/>. Internal for the test assembly; not part of the
+    /// service's contract.
+    /// </summary>
+    internal GriTimelinePeriod? BuildGriPeriod(
         int month,
         int year,
         int minimumReadings,
@@ -667,27 +474,24 @@ public class DataOverviewService : IDataOverviewService
         Dictionary<int, double> tempBasalByMonth,
         Dictionary<int, double> carbsByMonth)
     {
-        if (
-            !allGlucoseByMonth.TryGetValue(month, out var glucoseReadings)
-            || glucoseReadings.Count < minimumReadings
-        )
+        if (!allGlucoseByMonth.TryGetValue(month, out var monthValues))
             return null;
 
-        // Bucket readings into TIR zones
+        var glucoseReadings = monthValues.Where(GlucoseStatistics.IsReading).ToList();
+        if (glucoseReadings.Count < minimumReadings)
+            return null;
+
         var totalCount = glucoseReadings.Count;
-        var veryLowCount = glucoseReadings.Count(v => v < 54);
-        var lowCount = glucoseReadings.Count(v => v >= 54 && v < 70);
-        var targetCount = glucoseReadings.Count(v => v >= 70 && v <= 180);
-        var highCount = glucoseReadings.Count(v => v > 180 && v <= 250);
-        var veryHighCount = glucoseReadings.Count(v => v > 250);
+        var counts = GriZones.Count(glucoseReadings);
+        double Percent(GriZone zone) => (double)counts[(int)zone] / totalCount * 100.0;
 
         var percentages = new TimeInRangePercentages
         {
-            VeryLow = (double)veryLowCount / totalCount * 100.0,
-            Low = (double)lowCount / totalCount * 100.0,
-            Target = (double)targetCount / totalCount * 100.0,
-            High = (double)highCount / totalCount * 100.0,
-            VeryHigh = (double)veryHighCount / totalCount * 100.0,
+            VeryLow = Percent(GriZone.VeryLow),
+            Low = Percent(GriZone.Low),
+            Target = Percent(GriZone.Target),
+            High = Percent(GriZone.High),
+            VeryHigh = Percent(GriZone.VeryHigh),
         };
 
         var timeInRange = new TimeInRangeMetrics { Percentages = percentages };
@@ -736,29 +540,17 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Gets min and max from an IQueryable of nullable longs, with exception handling per table.
+    /// The ids of records deduplication resolved to a non-primary member of a canonical group.
     /// </summary>
-    private async Task<(long? Min, long? Max)> GetMinMaxMills(
-        IQueryable<long?> millsQuery,
-        CancellationToken cancellationToken
+    private static IQueryable<Guid> NonPrimaryRecordIds(
+        NocturneDbContext context,
+        RecordType recordType
     )
     {
-        try
-        {
-            var min = await millsQuery.MinAsync(cancellationToken);
-            var max = await millsQuery.MaxAsync(cancellationToken);
-            return (min, max);
-        }
-        catch (InvalidOperationException)
-        {
-            // Table is empty - Min/Max on empty sequence
-            return (null, null);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get min/max mills from table");
-            return (null, null);
-        }
+        var key = RecordTypeKeys.Key(recordType);
+        return context
+            .LinkedRecords.Where(lr => lr.RecordType == key && !lr.IsPrimary)
+            .Select(lr => lr.RecordId);
     }
 
     /// <summary>
@@ -813,43 +605,6 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Materializes mills values from a table, groups by date in-memory, and merges counts into the dayMap.
-    /// </summary>
-    private async Task CollectCountsFromMillsTable(
-        string dataType,
-        IQueryable<long> millsQuery,
-        Dictionary<string, DailySummaryDay> dayMap,
-        TimeZoneInfo tz,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            var millsList = await millsQuery.ToListAsync(cancellationToken);
-
-            var grouped = millsList
-                .GroupBy(m => MillsToDateString(m, tz))
-                .Select(g => new { Date = g.Key, Count = g.Count() });
-
-            foreach (var group in grouped)
-            {
-                if (!dayMap.TryGetValue(group.Date, out var day))
-                {
-                    day = new DailySummaryDay { Date = group.Date };
-                    dayMap[group.Date] = day;
-                }
-
-                day.Counts.TryGetValue(dataType, out var existing);
-                day.Counts[dataType] = existing + group.Count;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect counts for {DataType}", dataType);
-        }
-    }
-
-    /// <summary>
     /// Collects glucose averages from SensorGlucose and MeterGlucose.
     /// Each source is queried independently so one failure doesn't prevent the others.
     /// </summary>
@@ -870,14 +625,11 @@ public class DataOverviewService : IDataOverviewService
         // SensorGlucose (CGM) - V4 entity uses Timestamp
         try
         {
-            var npSensorGlucoseIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
 
             var sensorReadings = await context
-                .SensorGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+                .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !npSensorGlucoseIds.Contains(e.Id))
                 .Select(e => new { e.Timestamp, e.Mgdl })
@@ -894,9 +646,8 @@ public class DataOverviewService : IDataOverviewService
         try
         {
             var meterReadings = await context
-                .MeterGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+                .MeterGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
+                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ToListAsync(cancellationToken);
@@ -920,12 +671,14 @@ public class DataOverviewService : IDataOverviewService
 
         // Group by date and compute daily averages + time in range
         var grouped = allReadings
+            .Where(r => GlucoseStatistics.IsReading(r.Mgdl))
             .GroupBy(r => TimestampToDateString(r.Timestamp, tz))
             .Select(g =>
             {
                 var readings = g.ToList();
                 var total = readings.Count;
-                var inRange = readings.Count(r => r.Mgdl >= 70 && r.Mgdl <= 180);
+                var inRange = readings.Count(
+                    r => r.Mgdl >= GlucoseConstants.TargetBottomMgdl && r.Mgdl <= GlucoseConstants.TargetTopMgdl);
                 return new
                 {
                     Date = g.Key,
@@ -962,10 +715,7 @@ public class DataOverviewService : IDataOverviewService
         CancellationToken cancellationToken
     )
     {
-        // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryBolusIds = context
-            .LinkedRecords.Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
+        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
 
         // Manual bolus records — only user-initiated boluses count as bolus insulin
         try
@@ -1046,9 +796,7 @@ public class DataOverviewService : IDataOverviewService
         // TempBasal records (pump basal delivery with rate x duration)
         try
         {
-            var nonPrimaryTempBasalIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
 
             var tempBasalRecords = await context
                 .TempBasals.Where(e =>
@@ -1124,9 +872,7 @@ public class DataOverviewService : IDataOverviewService
     {
         try
         {
-            var nonPrimaryCarbIds = context
-                .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
-                .Select(lr => lr.RecordId);
+            var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
 
             var carbRecords = await context
                 .CarbIntakes.Where(e =>
@@ -1159,16 +905,6 @@ public class DataOverviewService : IDataOverviewService
         {
             _logger.LogWarning(ex, "Failed to collect carb totals");
         }
-    }
-
-    /// <summary>
-    /// Converts Unix milliseconds to a local date string in "yyyy-MM-dd" format using the given timezone.
-    /// </summary>
-    private static string MillsToDateString(long mills, TimeZoneInfo tz)
-    {
-        var utc = DateTimeOffset.FromUnixTimeMilliseconds(mills);
-        var local = TimeZoneInfo.ConvertTime(utc, tz);
-        return local.ToString("yyyy-MM-dd");
     }
 
     /// <summary>

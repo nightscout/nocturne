@@ -31,7 +31,7 @@ public static class SensorGlucoseToEntryMapper
             Mgdl = sg.Mgdl,
             Mmol = sg.Mmol,
             Mbg = 0,
-            Direction = sg.Direction?.ToString(),
+            Direction = sg.Direction?.ToWireString(),
             Trend = sg.Trend.HasValue ? (int?)sg.Trend.Value : null,
             TrendRate = sg.TrendRate,
             Noise = sg.Noise,

@@ -31,7 +31,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="max-w-md" data-testid="request-membership-dialog">
     <Dialog.Header>
       <Dialog.Title>Request Membership</Dialog.Title>
       <Dialog.Description>

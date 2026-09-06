@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Xunit;
 
@@ -37,10 +39,19 @@ public class ConnectorCursorResetJobServiceTests
     private static (ConnectorCursorResetJobService Service, IServiceProvider Provider) BuildService(
         IConnectorCursorResetService engine,
         IServiceProvider? existingProvider = null)
+        => BuildService(_ => engine, existingProvider);
+
+    /// <inheritdoc cref="BuildService(IConnectorCursorResetService, IServiceProvider?)"/>
+    private static (ConnectorCursorResetJobService Service, IServiceProvider Provider) BuildService(
+        Func<IServiceProvider, IConnectorCursorResetService> engineFactory,
+        IServiceProvider? existingProvider = null)
     {
         var dbName = $"reset-jobs-{Guid.NewGuid():N}";
         var provider = existingProvider ?? new ServiceCollection()
-            .AddScoped(_ => engine)
+            .AddScoped(engineFactory)
+            // Mirrors the production registration: the job's background scope marks its own
+            // ambient audit context as system for the fan-out's duration.
+            .AddScoped<IAuditContext, AuditContext>()
             .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .BuildServiceProvider();
 
@@ -146,6 +157,58 @@ public class ConnectorCursorResetJobServiceTests
     }
 
     [Fact]
+    public async Task StartResetAsync_AttributesTheBackgroundScopeToTheSystem()
+    {
+        // The fan-out re-ingests connector data; none of it is a person editing records. The audit
+        // interceptor reads the context-level audit context first and otherwise falls back to the
+        // ambient HTTP request's scope, so both paths of the background scope must say "system" or
+        // the job's writes are attributed to the admin who triggered it.
+        AttributionCapturingEngine? engine = null;
+        var (service, _) = BuildService(
+            sp => engine = new AttributionCapturingEngine(sp, Connectors(_tenantId)));
+
+        var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
+        await WaitForTerminalAsync(service, info!.JobId);
+
+        engine!.AmbientIsSystemMutation.Should().BeTrue();
+        // A context left unstamped is not neutral: the interceptor then falls back to the
+        // triggering request's user context, so this must be a system context, not merely null.
+        engine.ContextAuditContext.Should().BeOfType<SystemAuditContext>();
+    }
+
+    /// <summary>
+    /// Stands in for the reset engine and records how the scope it was resolved from is
+    /// audit-attributed at the moment the fan-out runs.
+    /// </summary>
+    private sealed class AttributionCapturingEngine(
+        IServiceProvider scopeServices,
+        TenantConnectorsDto connectors) : IConnectorCursorResetService
+    {
+        public bool? AmbientIsSystemMutation { get; private set; }
+
+        public IAuditContext? ContextAuditContext { get; private set; }
+
+        public Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct)
+            => Task.FromResult<TenantConnectorsDto?>(connectors);
+
+        public Task<TenantCursorResetResult?> ResetTenantCursorsAsync(
+            Guid tenantId,
+            DateTime? from,
+            List<SyncDataType>? dataTypes,
+            IConnectorResetProgress? progress,
+            CancellationToken ct)
+        {
+            AmbientIsSystemMutation = scopeServices
+                .GetRequiredService<IAuditContext>().IsSystemMutation();
+            ContextAuditContext = scopeServices
+                .GetRequiredService<NocturneDbContext>().AuditContext;
+
+            return Task.FromResult<TenantCursorResetResult?>(
+                new TenantCursorResetResult(tenantId, connectors.TenantSlug, []));
+        }
+    }
+
+    [Fact]
     public async Task GetStatusAsync_UnknownJob_Throws()
     {
         var (service, _) = BuildService(Mock.Of<IConnectorCursorResetService>());
@@ -177,13 +240,15 @@ public class ConnectorCursorResetJobServiceTests
         var (service, provider) = BuildService(engine.Object);
 
         var info = await service.StartResetAsync(_tenantId, null, null, CancellationToken.None);
-        await WaitForTerminalAsync(service, info!.JobId);
 
         // A fresh service over the same store models the post-restart process: empty job map,
         // same database.
         var (restarted, _) = BuildService(engine.Object, provider);
 
-        var status = await restarted.GetStatusAsync(info.JobId);
+        // Poll the persisted view, not the in-memory one: ExecuteAsync sets the terminal state on
+        // the snapshot and only writes it in the finally that follows, so waiting on the original
+        // service would let this read the record as it stood at start.
+        var status = await WaitForTerminalAsync(restarted, info!.JobId);
         status.JobId.Should().Be(info.JobId);
         status.TenantId.Should().Be(_tenantId);
         status.TenantSlug.Should().Be("erik");

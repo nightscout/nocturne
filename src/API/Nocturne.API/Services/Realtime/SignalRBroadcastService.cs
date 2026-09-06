@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -161,7 +162,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     private readonly IHubContext<ConfigHub> _configHubContext;
     private readonly IHubContext<AlertHub> _alertHubContext;
     private readonly IHubContext<HomeAssistantHub> _homeAssistantHubContext;
+    private readonly IHubContext<OverviewHub> _overviewHubContext;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly IOptions<JsonHubProtocolOptions> _hubProtocolOptions;
     private readonly ILogger<SignalRBroadcastService> _logger;
 
     /// <summary>
@@ -172,7 +175,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     /// <param name="configHubContext">Hub context for <see cref="ConfigHub"/> — configuration changes and sync progress.</param>
     /// <param name="alertHubContext">Hub context for <see cref="AlertHub"/> — alert engine dispatch, resolution, and acknowledgement events.</param>
     /// <param name="homeAssistantHubContext">Hub context for <see cref="HomeAssistantHub"/> — glucose relay and alert event relay to Home Assistant instances.</param>
+    /// <param name="overviewHubContext">Hub context for <see cref="OverviewHub"/> — cross-tenant overview pings.</param>
     /// <param name="tenantAccessor">Provides the current tenant context for scoping group names.</param>
+    /// <param name="hubProtocolOptions">The serializer the hubs write payloads with — see <see cref="WithWireIdentifier"/>.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalRBroadcastService(
         IHubContext<DataHub> dataHubContext,
@@ -180,7 +185,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         IHubContext<ConfigHub> configHubContext,
         IHubContext<AlertHub> alertHubContext,
         IHubContext<HomeAssistantHub> homeAssistantHubContext,
+        IHubContext<OverviewHub> overviewHubContext,
         ITenantAccessor tenantAccessor,
+        IOptions<JsonHubProtocolOptions> hubProtocolOptions,
         ILogger<SignalRBroadcastService> logger
     )
     {
@@ -189,7 +196,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         _configHubContext = configHubContext;
         _alertHubContext = alertHubContext;
         _homeAssistantHubContext = homeAssistantHubContext;
+        _overviewHubContext = overviewHubContext;
         _tenantAccessor = tenantAccessor;
+        _hubProtocolOptions = hubProtocolOptions;
         _logger = logger;
     }
 
@@ -235,6 +244,21 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting data update");
+        }
+
+        // Tenant-tagged ping to cross-tenant overview subscribers. Same "{tenantId}:" group
+        // scheme but on OverviewHub, so no collision with DataHub groups. Minimal payload:
+        // clients refetch the overview endpoint.
+        try
+        {
+            var tenantId = GetTenantId();
+            await _overviewHubContext
+                .Clients.Group(TenantAwareHub.FormatTenantGroup(tenantId, OverviewHub.GroupName))
+                .SendCoreAsync("overviewUpdate", new object[] { new { tenantId } });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting overview update");
         }
     }
 
@@ -391,7 +415,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("delete", new[] { data });
+                .SendCoreAsync("delete", new[] { WithWireIdentifier(data) });
         }
         catch (Exception ex)
         {
@@ -401,6 +425,26 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 collectionName
             );
         }
+    }
+
+    /// <summary>
+    /// Resolves a <see cref="StorageDeleteEvent"/> against the payload serializer this hub sends with,
+    /// which is the only serializer whose output a client ever sees. Any other payload passes through.
+    /// </summary>
+    private object WithWireIdentifier(object data)
+    {
+        if (data is not StorageDeleteEvent delete)
+            return data;
+
+        var resolved = delete.OnWire(_hubProtocolOptions.Value.PayloadSerializerOptions);
+
+        if (resolved.Identifier is null)
+            _logger.LogWarning(
+                "Storage delete for {Collection} carries no identifier; no client can resolve it",
+                resolved.ColName
+            );
+
+        return resolved;
     }
 
     /// <inheritdoc />
@@ -665,10 +709,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         try
         {
             _logger.LogDebug(
-                "Broadcasting sync progress for {ConnectorId}: {Phase} - {DataType}",
+                "Broadcasting sync progress for {ConnectorId}: {Phase}",
                 progress.ConnectorId,
-                progress.Phase,
-                progress.CurrentDataType
+                progress.Phase
             );
 
             await _configHubContext

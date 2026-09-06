@@ -127,7 +127,7 @@
   }
 </script>
 
-<Card.Root>
+<Card.Root data-testid="create-invite-card">
   <Card.Header>
     <Card.Title class="text-lg">Create Invite Link</Card.Title>
     <Card.Description>

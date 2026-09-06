@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -29,10 +30,12 @@ public class TestRecord : IV4Record
     public Dictionary<string, object?>? AdditionalProperties { get; set; }
 }
 
-public class TestCreateRequest
+public class TestCreateRequest : IBulkUpsertRequest
 {
-    public DateTime Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
     public string? Device { get; set; }
+    public string? DataSource { get; set; }
+    public string? SyncIdentifier { get; set; }
 }
 
 public class TestUpdateRequest
@@ -41,19 +44,22 @@ public class TestUpdateRequest
     public string? Device { get; set; }
 }
 
-public interface ITestRecordRepository : IV4Repository<TestRecord>;
+public interface ITestRecordRepository : IV4Repository<TestRecord>, IBulkCreateRepository<TestRecord>;
 
 [ApiController]
 [Route("api/v4/test")]
 public class TestCrudController(ITestRecordRepository repository)
     : V4CrudControllerBase<TestRecord, TestCreateRequest, TestUpdateRequest, ITestRecordRepository>(repository)
 {
-    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+    public override string WriteScope => Scope.GlucoseReadWrite;
+
+    protected override V4BulkNaming BulkNaming => new("Test record", "record", "records");
 
     protected override TestRecord MapCreateToModel(TestCreateRequest request) => new()
     {
-        Timestamp = request.Timestamp,
+        Timestamp = request.Timestamp.UtcDateTime,
         Device = request.Device,
+        DataSource = request.DataSource,
     };
 
     protected override TestRecord MapUpdateToModel(Guid id, TestUpdateRequest request, TestRecord existing) => new()
@@ -65,6 +71,50 @@ public class TestCrudController(ITestRecordRepository repository)
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,
     };
+}
+
+/// <summary>
+/// A controller whose before-write hooks always reject, with a detail no guard produces. A response
+/// carrying that detail proves the hook ran; a response carrying a guard's detail proves it did not.
+/// </summary>
+public class RejectingCrudController(ITestRecordRepository repository) : TestCrudController(repository)
+{
+    public const string HookDetail = "hook ran";
+
+    public int BeforeCreateCalls { get; private set; }
+
+    public int BeforeUpdateCalls { get; private set; }
+
+    protected override Task<ObjectResult?> OnBeforeCreateAsync(TestRecord model, TestCreateRequest request, CancellationToken ct)
+    {
+        BeforeCreateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+
+    protected override Task<ObjectResult?> OnBeforeUpdateAsync(TestRecord model, TestUpdateRequest request, TestRecord existing, CancellationToken ct)
+    {
+        BeforeUpdateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+
+    protected override Task<ObjectResult?> OnBeforeBulkCreateAsync(
+        IReadOnlyList<TestRecord> models, IReadOnlyList<TestCreateRequest> requests, CancellationToken ct)
+    {
+        BeforeCreateCalls++;
+        return Task.FromResult<ObjectResult?>(Problem(detail: HookDetail, statusCode: 400, title: "Bad Request"));
+    }
+}
+
+/// <summary>A controller that records how often the base ran the per-record after-create hook.</summary>
+public class CountingCrudController(ITestRecordRepository repository) : TestCrudController(repository)
+{
+    public int AfterCreateCalls { get; private set; }
+
+    protected override Task<TestRecord> OnAfterCreateAsync(TestRecord created, CancellationToken ct)
+    {
+        AfterCreateCalls++;
+        return base.OnAfterCreateAsync(created, ct);
+    }
 }
 
 #endregion
@@ -179,7 +229,7 @@ public class V4CrudControllerBaseTests
     public async Task Create_Valid_Returns201()
     {
         var request = new TestCreateRequest { Timestamp = DateTime.UtcNow, Device = "test" };
-        var model = new TestRecord { Id = Guid.NewGuid(), Timestamp = request.Timestamp, Device = request.Device };
+        var model = new TestRecord { Id = Guid.NewGuid(), Timestamp = request.Timestamp.UtcDateTime, Device = request.Device };
         _repo.Setup(r => r.CreateAsync(It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(model);
 
@@ -250,6 +300,103 @@ public class V4CrudControllerBaseTests
     }
 
     [Fact]
+    public async Task Create_DefaultTimestamp_IsRejectedBeforeTheBeforeCreateHookRuns()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.Create(new TestCreateRequest { Timestamp = default });
+
+        Detail(result.Result).Should().Be("Timestamp must be set");
+        controller.BeforeCreateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Update_DefaultTimestamp_IsRejectedBeforeTheBeforeUpdateHookRuns()
+    {
+        var id = Guid.NewGuid();
+        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TestRecord { Id = id, Timestamp = DateTime.UtcNow });
+        var controller = Rejecting();
+
+        var result = await controller.Update(id, new TestUpdateRequest { Timestamp = default });
+
+        Detail(result.Result).Should().Be("Timestamp must be set");
+        controller.BeforeUpdateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CreateBulk_FailedValidation_IsRejectedBeforeTheBeforeBulkHookRuns()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.CreateBulk(
+        [
+            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow },
+            new TestCreateRequest { Timestamp = default },
+        ]);
+
+        Detail(result.Result).Should().Be("Timestamp must be set on every record");
+        controller.BeforeCreateCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Create_TimestampSet_ReachesTheBeforeCreateHook()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.Create(new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow });
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeCreateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.CreateAsync(It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_TimestampSet_ReachesTheBeforeUpdateHook()
+    {
+        var id = Guid.NewGuid();
+        _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TestRecord { Id = id, Timestamp = DateTime.UtcNow });
+        var controller = Rejecting();
+
+        var result = await controller.Update(id, new TestUpdateRequest { Timestamp = DateTime.UtcNow });
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeUpdateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.UpdateAsync(id, It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateBulk_ValidPayload_ReachesTheBeforeBulkHook()
+    {
+        var controller = Rejecting();
+
+        var result = await controller.CreateBulk([new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow }]);
+
+        Detail(result.Result).Should().Be(RejectingCrudController.HookDetail);
+        controller.BeforeCreateCalls.Should().Be(1);
+        _repo.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private RejectingCrudController Rejecting() => new(_repo.Object)
+    {
+        ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+    };
+
+    private static string? Detail(ActionResult? result)
+    {
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        return objectResult.Value.Should().BeOfType<ProblemDetails>().Subject.Detail;
+    }
+
+    [Fact]
     public async Task Delete_Exists_ReturnsNoContent()
     {
         var id = Guid.NewGuid();
@@ -259,6 +406,71 @@ public class V4CrudControllerBaseTests
         var result = await _controller.Delete(id);
 
         result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task CreateBulk_WritesEveryItemAndReturnsThem()
+    {
+        _repo.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<TestRecord> models, WriteOrigin _, CancellationToken _) => [.. models]);
+
+        var result = await _controller.CreateBulk(
+        [
+            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow, Device = "a" },
+            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow.AddMinutes(1), Device = "b" },
+        ]);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(201);
+        objectResult.Value.Should().BeOfType<TestRecord[]>()
+            .Which.Select(r => r.Device).Should().Equal("a", "b");
+    }
+
+    [Fact]
+    public async Task CreateBulk_OverTheCap_ReturnsBadRequest()
+    {
+        var result = await _controller.CreateBulk(
+            [.. Enumerable.Repeat(0, V4BulkValidation.MaxItems + 1).Select(_ => new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow })]);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be($"Bulk operations are limited to {V4BulkValidation.MaxItems} records per request");
+        _repo.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateBulk_DefaultTimestampOnOneItem_RejectsTheWholeBatch()
+    {
+        var result = await _controller.CreateBulk(
+        [
+            new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow },
+            new TestCreateRequest { Timestamp = default },
+        ]);
+
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        _repo.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateBulk_RunsTheAfterCreateHookOncePerRecord()
+    {
+        _repo.Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<TestRecord>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<TestRecord> models, WriteOrigin _, CancellationToken _) => [.. models]);
+        var controller = new CountingCrudController(_repo.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        await controller.CreateBulk(
+            [.. Enumerable.Repeat(0, 4).Select(_ => new TestCreateRequest { Timestamp = DateTimeOffset.UtcNow })]);
+
+        controller.AfterCreateCalls.Should().Be(4);
     }
 
     [Fact]

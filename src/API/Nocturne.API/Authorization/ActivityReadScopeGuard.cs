@@ -27,21 +27,36 @@ internal static class ActivityReadScopeGuard
     /// </summary>
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead,
+        Scope.TreatmentsRead,
+        Scope.HeartRateRead,
+        Scope.StepCountRead,
+        Scope.SleepRead,
     ];
 
     /// <summary>
+    /// The categories the caller may read, for a count that asks each source separately instead of
+    /// filtering records the way <see cref="Filter"/> does. Named by the same read scope
+    /// <see cref="IActivityDecomposer.RequiredReadScope"/> returns, so the two agree on what a
+    /// category is.
+    /// </summary>
+    public static IReadOnlySet<string> GrantedCategories(HttpContext httpContext)
+    {
+        var granted = httpContext.GetGrantedScopes();
+        return AdmissionScopes
+            .Where(scope => Scope.Satisfies(granted, scope))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// The result to return instead of a merged activity count, or <see langword="null"/> when the
-    /// caller may have it. A count cannot be filtered the way <see cref="Filter"/> filters records,
-    /// so it takes every category rather than any one of them.
+    /// caller may have it. A single number cannot be attributed to a category the way
+    /// <see cref="GrantedCategories"/> lets a per-category count be, so it takes every category
+    /// rather than any one of them.
     /// </summary>
     public static ActionResult? RefuseUnlessEveryCategory(HttpContext httpContext)
     {
         var granted = httpContext.GetGrantedScopes();
-        if (AdmissionScopes.All(scope => OAuthScopes.SatisfiesScope(granted, scope)))
+        if (AdmissionScopes.All(scope => Scope.Satisfies(granted, scope)))
             return null;
 
         return new ObjectResult(new
@@ -66,7 +81,7 @@ internal static class ActivityReadScopeGuard
         IActivityDecomposer decomposer,
         IReadOnlySet<string> grantedScopes)
     {
-        return OAuthScopes.SatisfiesScope(grantedScopes, decomposer.RequiredReadScope(activity));
+        return Scope.Satisfies(grantedScopes, decomposer.RequiredReadScope(activity));
     }
 
     /// <summary>

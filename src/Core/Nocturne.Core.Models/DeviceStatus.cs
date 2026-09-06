@@ -33,12 +33,21 @@ public class DeviceStatus : ProcessableDocumentBase
     [JsonPropertyName("mills")]
     public override long Mills { get; set; }
 
+    private long? _date;
+
     /// <summary>
     /// Timestamp in milliseconds since Unix epoch. AAPS sends "date" instead of "mills".
+    /// Falls back to Mills only — never to <c>created_at</c>, because DeviceStatusDecomposer
+    /// seeds Mills from this property when a doc arrives without one, and a deeper fallback
+    /// here would pre-empt the richer precedence in its ResolveTimestamp.
     /// </summary>
     [JsonPropertyName("date")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? Date { get; set; }
+    public long? Date
+    {
+        get => _date ?? V3Timestamps.Resolve(Mills);
+        set => _date = value;
+    }
 
     /// <summary>
     /// Gets or sets the ISO 8601 formatted creation timestamp
@@ -49,8 +58,8 @@ public class DeviceStatus : ProcessableDocumentBase
 
     /// <summary>
     /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
-    /// Falls back to Mills, matching the V3 REST projection: NS v3 socket clients (AAPS)
-    /// read it unconditionally from realtime storage events and drop docs without it.
+    /// Falls back to <see cref="FallbackTimestampMills"/>; see <see cref="V3Timestamps"/> for
+    /// why it may never serialize as null.
     /// </summary>
     private long? _srvModified;
 
@@ -58,7 +67,7 @@ public class DeviceStatus : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvModified
     {
-        get => _srvModified ?? (Mills > 0 ? Mills : null);
+        get => _srvModified ?? FallbackTimestampMills();
         set => _srvModified = value;
     }
 
@@ -71,9 +80,19 @@ public class DeviceStatus : ProcessableDocumentBase
     [JsonConverter(typeof(FlexibleNullableLongConverter))]
     public long? SrvCreated
     {
-        get => _srvCreated ?? (Mills > 0 ? Mills : null);
+        get => _srvCreated ?? FallbackTimestampMills();
         set => _srvCreated = value;
     }
+
+    /// <summary>
+    /// Resolves the V3 compatibility timestamps: Mills, then <c>date</c>, then <c>created_at</c>.
+    /// Loop and xDrip+ upload a devicestatus carrying neither <c>mills</c> nor <c>date</c>, and
+    /// the broadcast document is the raw upload, so without the <c>created_at</c> leg those
+    /// fields serialize as null. Reads <see cref="_date"/> rather than <see cref="Date"/> so
+    /// deepening that property can never make this recurse.
+    /// </summary>
+    private long? FallbackTimestampMills() =>
+        V3Timestamps.Resolve(Mills != 0 ? Mills : _date, CreatedAt);
 
     /// <summary>
     /// Gets or sets the UTC offset in minutes

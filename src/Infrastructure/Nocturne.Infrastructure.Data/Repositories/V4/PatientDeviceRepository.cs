@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -204,48 +206,27 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     public async Task<PatientDevice> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.PatientDevices.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted PatientDevice {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return PatientDeviceMapper.ToDomainModel(entity);
+        return PatientDeviceMapper.ToDomainModel(await ctx.RestoreDeletedAsync<PatientDeviceEntity>(id, nameof(PatientDevice), ct));
     }
 
     /// <inheritdoc />
     public async Task<IEnumerable<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.PatientDevices.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(PatientDeviceMapper.ToDomainModel);
+        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, ct)).Select(PatientDeviceMapper.ToDomainModel);
     }
 
     /// <inheritdoc />
     public async Task<IEnumerable<PatientDevice>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.PatientDevices.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(PatientDeviceMapper.ToDomainModel);
+        return (await ctx.GetDeletedAsync<PatientDeviceEntity>(limit, offset, ct)).Select(PatientDeviceMapper.ToDomainModel);
     }
 
     /// <inheritdoc />
     public async Task<int> CountDeletedAsync(CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.PatientDevices.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
+        return await ctx.CountDeletedAsync<PatientDeviceEntity>(ct);
     }
 }

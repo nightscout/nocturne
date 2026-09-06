@@ -7,7 +7,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -15,13 +15,12 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing note records in the database. A DeduplicationService participant, so it
-/// inherits the shared CRUD/soft-delete surface from <see cref="V4RepositoryBase{TModel,TEntity}"/>
-/// and keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
-/// non-primary LinkedRecords filter, dedup <c>BulkCreateAsync</c>). Soft-deletes inherit the base's
-/// audited path.
+/// Repository for managing note records in the database. A DeduplicationService participant on top of
+/// the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only the
+/// extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
+/// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
-public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepository
+public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<NoteRepository> _logger;
@@ -54,12 +53,8 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
     /// <inheritdoc />
     protected override void ApplyUpdate(NoteEntity target, Note source) => NoteMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
-    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<NoteEntity> ApplyReadVisibility(IQueryable<NoteEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "note" && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.Note;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended note query (non-primary LinkedRecords
@@ -110,9 +105,7 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "note" && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
@@ -139,20 +132,6 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
     }
 
     /// <summary>
-    /// Deletes note records matching the given data source and sync identifier.
-    /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
-    }
-
-    /// <summary>
     /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
     protected override async Task PostCommitDedupAsync(
@@ -167,7 +146,7 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: new MatchCriteria()
+                Criteria: MatchCriteriaMapper.ForNote()
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);

@@ -17,13 +17,18 @@ public class NSwagDocumentConfigurationTests
     }
 
     [Fact]
-    public void Document_PublishesTheNocturneTitleAndVersion()
+    public void Document_PublishesTheNocturneTitleVersionAndDescription()
     {
         var settings = ConfiguredSettings();
 
         settings.DocumentName.Should().Be("nocturne");
         settings.Title.Should().Be("Nocturne API");
         settings.Version.Should().Be("0.0.1");
+        settings.Description.Should()
+            .Be(
+                "Modern C# rewrite of the Nightscout API. v1-v3 are 1:1 compatible with the legacy "
+                + "JavaScript implementation; v4 is new."
+            );
     }
 
     [Fact]

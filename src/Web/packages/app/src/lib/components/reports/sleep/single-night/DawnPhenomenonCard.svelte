@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
   import { Sunrise } from "lucide-svelte";
-  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
-  import { toDate } from "$lib/utils/sleep-format";
+  import { bg, bgDelta, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
   import type { SleepDawnPhenomenon } from "$lib/api";
 
   interface Props {
@@ -11,7 +10,9 @@
 
   let { dawnPhenomenon }: Props = $props();
 
-  const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+  const timeFormatter = $derived(
+    new Intl.DateTimeFormat(formatLocale(), { hour: "2-digit", minute: "2-digit" })
+  );
 
   const windowStart = $derived(toDate(dawnPhenomenon.windowStart));
   const windowEnd = $derived(toDate(dawnPhenomenon.windowEnd));

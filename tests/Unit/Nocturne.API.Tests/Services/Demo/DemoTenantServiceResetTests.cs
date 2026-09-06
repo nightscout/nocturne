@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Demo;
@@ -12,6 +10,7 @@ using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Demo;
@@ -25,27 +24,17 @@ public class DemoTenantServiceResetTests : IDisposable
     private const string DemoSlug = "demo";
     private const string ShareToken = "sharetoken123";
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<ITenantService> _tenantService = new();
     private readonly DemoTenantService _service;
 
     public DemoTenantServiceResetTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using var seed = new NocturneDbContext(_dbOptions);
-        seed.Database.EnsureCreated();
+        _db = TestDbContextFactory.CreateSqlite();
 
         var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
+            .ReturnsAsync(() => _db.CreateContext());
 
         // Stand in for the real re-seed, which recreates the seed roles and the Public
         // membership that ConfigureAccessAsync then grants on top.
@@ -70,7 +59,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         result.Should().Be(tenantId);
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         var tenant = await db.Tenants.SingleAsync(t => t.Id == tenantId);
         tenant.Slug.Should().Be(DemoSlug);
         tenant.ShareToken.Should().Be(ShareToken, "share links must keep resolving across a reset");
@@ -88,7 +77,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ResetAsync();
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         var tenant = await db.Tenants.SingleAsync(t => t.Id == tenantId);
         tenant.AllowPublicDocs.Should().BeTrue();
     }
@@ -100,7 +89,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ResetAsync();
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         var config = await db.Set<TenantDemoConfigEntity>().SingleAsync(c => c.TenantId == tenantId);
         config.ResetIntervalMinutes.Should().Be(1440);
         config.BackfillDays.Should().Be(90);
@@ -115,7 +104,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ResetAsync();
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         db.TenantId = tenantId;
 
         (await db.AlertRules.CountAsync()).Should().Be(0, "alert rules are configuration and must be reset");
@@ -135,7 +124,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var subjectId = await _service.FindDemoMemberSubjectIdAsync(tenantId);
         subjectId.Should().NotBeNull("visitors are signed in as the demo member after a reset");
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         db.TenantId = tenantId;
 
         var members = await db.TenantMembers
@@ -149,7 +138,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var publicMember = members.Single(m => m.Subject!.IsSystemSubject);
         publicMember.LimitTo24Hours.Should().BeFalse();
         publicMember.DirectPermissions.Should().BeEquivalentTo(
-            TenantPermissions.PublicShareScopes,
+            Scope.PublicShareScopes,
             "the share link shows every shareable category, and nothing beyond that vocabulary");
         publicMember.MemberRoles.Should().BeEmpty(
             "the Public subject must not hold the demo member's write and administration atoms");
@@ -173,7 +162,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         // Put the tenant back into the state the replaced code left it in: the Public
         // membership carrying the seed admin role.
-        await using (var db = new NocturneDbContext(_dbOptions))
+        await using (var db = _db.CreateContext())
         {
             db.TenantId = tenantId;
             var publicMemberId = await db.TenantMembers
@@ -181,7 +170,7 @@ public class DemoTenantServiceResetTests : IDisposable
                 .Select(m => m.Id)
                 .SingleAsync();
             var adminRoleId = await db.TenantRoles
-                .Where(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin)
+                .Where(r => r.TenantId == tenantId && r.Slug == RoleSeeds.Admin)
                 .Select(r => r.Id)
                 .SingleAsync();
 
@@ -197,7 +186,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ConfigureAccessAsync(tenantId);
 
-        await using (var db = new NocturneDbContext(_dbOptions))
+        await using (var db = _db.CreateContext())
         {
             db.TenantId = tenantId;
             var publicMember = await db.TenantMembers
@@ -208,7 +197,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
             publicMember.MemberRoles.Should().BeEmpty(
                 "provisioning rewrites the Public grant from source, so a stale admin role must go");
-            publicMember.DirectPermissions.Should().BeEquivalentTo(TenantPermissions.PublicShareScopes);
+            publicMember.DirectPermissions.Should().BeEquivalentTo(Scope.PublicShareScopes);
         }
     }
 
@@ -219,7 +208,7 @@ public class DemoTenantServiceResetTests : IDisposable
         // one, so resolving the demo member by global username could hand an anonymous
         // caller a session for someone else's account.
         Guid impostorId;
-        using (var db = new NocturneDbContext(_dbOptions))
+        using (var db = _db.CreateContext())
         {
             var impostor = new SubjectEntity
             {
@@ -239,7 +228,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var subjectId = await _service.FindDemoMemberSubjectIdAsync(tenantId);
         subjectId.Should().NotBeNull().And.NotBe(impostorId);
 
-        await using var check = new NocturneDbContext(_dbOptions);
+        await using var check = _db.CreateContext();
         var impostorAfter = await check.Subjects.SingleAsync(s => s.Id == impostorId);
         impostorAfter.IsPlatformAdmin.Should().BeTrue("the demo must not touch an unrelated account");
         (await check.TenantMembers.AnyAsync(m => m.SubjectId == impostorId))
@@ -252,7 +241,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var tenantId = SeedDemoTenant();
         var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
 
-        using (var db = new NocturneDbContext(_dbOptions))
+        using (var db = _db.CreateContext())
         {
             db.RefreshTokens.Add(new RefreshTokenEntity
             {
@@ -268,7 +257,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ResetAsync();
 
-        await using var check = new NocturneDbContext(_dbOptions);
+        await using var check = _db.CreateContext();
         (await check.RefreshTokens.CountAsync()).Should().Be(
             0, "a reset must not leave visitor sessions or their recorded IPs behind");
     }
@@ -280,7 +269,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
 
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
         var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId);
         subject.IsDemoSubject.Should().BeTrue(
             "anyone can obtain a session for it, so endpoints that assume a real user must refuse it");
@@ -304,7 +293,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         // Mutation of the state, not of the assertion: the membership is untouched and still
         // matches on username, so only the flag can be what makes this fail to resolve.
-        await using (var db = new NocturneDbContext(_dbOptions))
+        await using (var db = _db.CreateContext())
         {
             var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId);
             subject.IsDemoSubject = false;
@@ -324,7 +313,7 @@ public class DemoTenantServiceResetTests : IDisposable
         var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
 
         var otherTenantId = Guid.CreateVersion7();
-        using (var db = new NocturneDbContext(_dbOptions))
+        using (var db = _db.CreateContext())
         {
             db.Add(new TenantEntity
             {
@@ -344,7 +333,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
         await _service.ResetAsync();
 
-        await using var check = new NocturneDbContext(_dbOptions);
+        await using var check = _db.CreateContext();
         (await check.TenantMembers.AnyAsync(m => m.SubjectId == subjectId))
             .Should().BeFalse("the retired demo subject must hold no memberships anywhere");
         (await check.Subjects.AnyAsync(s => s.Id == subjectId))
@@ -366,7 +355,7 @@ public class DemoTenantServiceResetTests : IDisposable
     /// <summary>Seeds a provisioned demo tenant: roles, Public membership, demo member, demo config.</summary>
     private Guid SeedDemoTenant()
     {
-        using var db = new NocturneDbContext(_dbOptions);
+        using var db = _db.CreateContext();
 
         var tenant = new TenantEntity
         {
@@ -398,7 +387,7 @@ public class DemoTenantServiceResetTests : IDisposable
     /// <summary>Configuration and data a visitor could leave behind, all of which a reset must clear.</summary>
     private void SeedVisitorChanges(Guid tenantId)
     {
-        using var db = new NocturneDbContext(_dbOptions);
+        using var db = _db.CreateContext();
         db.TenantId = tenantId;
 
         db.AlertRules.Add(new AlertRuleEntity
@@ -455,10 +444,10 @@ public class DemoTenantServiceResetTests : IDisposable
     /// </summary>
     private async Task SeedRolesAndPublicMemberAsync(Guid tenantId)
     {
-        await using var db = new NocturneDbContext(_dbOptions);
+        await using var db = _db.CreateContext();
 
         var roles = new Dictionary<string, Guid>();
-        foreach (var (slug, permissions) in TenantPermissions.SeedRolePermissions)
+        foreach (var (slug, permissions) in RoleSeeds.Permissions)
         {
             var roleId = Guid.CreateVersion7();
             roles[slug] = roleId;
@@ -466,7 +455,7 @@ public class DemoTenantServiceResetTests : IDisposable
             {
                 Id = roleId,
                 TenantId = tenantId,
-                Name = TenantPermissions.SeedRoleNames[slug],
+                Name = RoleSeeds.DisplayNames[slug],
                 Slug = slug,
                 Permissions = new List<string>(permissions),
                 IsSystem = true,
@@ -502,7 +491,7 @@ public class DemoTenantServiceResetTests : IDisposable
         {
             Id = Guid.CreateVersion7(),
             TenantMemberId = publicMemberId,
-            TenantRoleId = roles[TenantPermissions.SeedRoles.Admin],
+            TenantRoleId = roles[RoleSeeds.Admin],
             SysCreatedAt = DateTime.UtcNow,
         });
 
@@ -511,7 +500,7 @@ public class DemoTenantServiceResetTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 }

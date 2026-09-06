@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Audit;
 
@@ -49,6 +50,24 @@ public sealed class SystemAuditScope : IDisposable
         => ambient is AuditContext mutable
             ? new SystemAuditScope(mutable)
             : NoOpScope.Instance;
+
+    /// <summary>
+    /// System-attributes every write a DI scope makes, on both context paths: the scope's own
+    /// <see cref="NocturneDbContext"/> carries its own <see cref="IAuditContext"/> property, which
+    /// the interceptor prefers over the ambient one, while the contexts
+    /// <c>ITenantDbContextFactory</c> creates are stamped from the scoped ambient context. Covering
+    /// only one leaves the other attributing the scope's writes to whoever started it — and the
+    /// interceptor derives <c>DeletedByUser</c> from that, which blocks a later resync from
+    /// re-creating rows a sync soft-deleted.
+    /// </summary>
+    /// <param name="scopeServices">The child scope's service provider.</param>
+    /// <param name="endpoint">Descriptive identifier, e.g. <c>"connector:dexcom"</c>.</param>
+    public static IDisposable PushForScope(IServiceProvider scopeServices, string endpoint)
+    {
+        scopeServices.GetRequiredService<NocturneDbContext>().AuditContext =
+            SystemAuditContext.ForService(endpoint);
+        return Push(scopeServices.GetRequiredService<IAuditContext>());
+    }
 
     public void Dispose()
     {

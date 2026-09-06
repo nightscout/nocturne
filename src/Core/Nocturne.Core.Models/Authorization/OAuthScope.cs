@@ -4,10 +4,13 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
-/// Backend-owned OAuth scope taxonomy exposed to generated frontend clients.
-/// Values intentionally match the RFC 6749 scope strings used on the wire.
+/// The requestable scope vocabulary, as an enum, so the generated TypeScript client has a typed
+/// handle on it. <see cref="Scope"/> is the source of truth; this restates it for the wire only.
+/// Values are the RFC 6749 scope strings. <c>OAuthScopeEnumConformanceTests</c> pins the two
+/// together — a member added to one and not the other fails the build, which is how
+/// <c>device.notify</c> and <c>device.actuate</c> previously went missing from here.
 /// </summary>
-/// <seealso cref="OAuthScopes"/>
+/// <seealso cref="Scope"/>
 /// <seealso cref="ScopeTranslator"/>
 [JsonConverter(typeof(JsonStringEnumConverter<OAuthScope>))]
 public enum OAuthScope
@@ -74,6 +77,12 @@ public enum OAuthScope
 
     [EnumMember(Value = "food.readwrite"), JsonStringEnumMemberName("food.readwrite")]
     FoodReadWrite,
+
+    [EnumMember(Value = "device.notify"), JsonStringEnumMemberName("device.notify")]
+    DeviceNotify,
+
+    [EnumMember(Value = "device.actuate"), JsonStringEnumMemberName("device.actuate")]
+    DeviceActuate,
 
     [EnumMember(Value = "health.read"), JsonStringEnumMemberName("health.read")]
     HealthRead,

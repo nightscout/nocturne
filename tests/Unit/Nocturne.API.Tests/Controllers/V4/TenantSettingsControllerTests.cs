@@ -21,7 +21,7 @@ public class TenantSettingsControllerTests
     [Fact]
     public async Task SetPublicDocs_RefusesAMemberWithoutTenantSettings()
     {
-        var (controller, tenants) = Build(TenantPermissions.IdentityRead);
+        var (controller, tenants) = Build(Scope.IdentityRead);
 
         var result = await controller.SetPublicDocs(new SetPublicDocsRequest(true), CancellationToken.None);
 
@@ -34,7 +34,7 @@ public class TenantSettingsControllerTests
     [Fact]
     public async Task SetPublicDocs_WritesTheTenantsOwnFlag()
     {
-        var (controller, tenants) = Build(TenantPermissions.TenantSettings);
+        var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.SetAllowPublicDocsAsync(TenantId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantSettingsDto(true));
 
@@ -48,7 +48,7 @@ public class TenantSettingsControllerTests
     [Fact]
     public async Task SetPublicDocs_TurnsTheDocumentationSurfaceOffAgain()
     {
-        var (controller, tenants) = Build(TenantPermissions.TenantSettings);
+        var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.SetAllowPublicDocsAsync(TenantId, false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantSettingsDto(false));
 
@@ -60,7 +60,7 @@ public class TenantSettingsControllerTests
     [Fact]
     public async Task GetTenantSettings_RefusesAMemberWithoutTenantSettings()
     {
-        var (controller, tenants) = Build(TenantPermissions.IdentityRead);
+        var (controller, tenants) = Build(Scope.IdentityRead);
 
         var result = await controller.GetTenantSettings(CancellationToken.None);
 
@@ -72,7 +72,7 @@ public class TenantSettingsControllerTests
     [Fact]
     public async Task GetTenantSettings_ReadsTheResolvedTenant()
     {
-        var (controller, tenants) = Build(TenantPermissions.TenantSettings);
+        var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TenantSettingsDto(true));
 

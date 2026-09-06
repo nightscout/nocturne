@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -28,8 +27,7 @@ public class TenantOwnerResolver : ITenantOwnerResolver
             tenantId, cancellationToken);
 
         var ownerSubjectId = await context.TenantMembers.AsNoTracking()
-            .Where(tm => tm.TenantId == tenantId
-                && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
+            .OwnersOf(tenantId)
             .Select(tm => tm.SubjectId)
             .FirstOrDefaultAsync(cancellationToken);
 

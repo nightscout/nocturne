@@ -9,7 +9,6 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Controllers.V4.Admin;
 
@@ -176,10 +175,7 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        var deleted = await DemoDataPurge.PurgeEntriesAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
@@ -200,16 +196,8 @@ public class DemoAdminController : ControllerBase
 
         db.TenantId = tenant.Id;
 
-        var deleted = 0L;
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
-        deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        var deleted = await DemoDataPurge.PurgeTreatmentsAsync(db, ct)
+            + await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }

@@ -1,33 +1,25 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
 
 // Mock the generated remote functions before importing the component. DeviceListState reads
 // getDevices()/getDiscoveredSources() as reactive queries (`.current`) and calls reorderDevices()
-// as a command.
-const createDevice = Object.assign((..._args: unknown[]) => Promise.resolve({}), {
-  enhance: () => ({}),
-  pending: 0,
-  result: undefined,
-  fields: { allIssues: () => [] },
-});
-const updateDevice = Object.assign((..._args: unknown[]) => Promise.resolve({}), {
-  enhance: () => ({}),
-  pending: 0,
-  result: undefined,
-  fields: { allIssues: () => [] },
-});
-const reorderDevices = vi.fn().mockResolvedValue([]);
-const deleteDevice = vi.fn().mockResolvedValue(undefined);
+// as a command. The spies are hoisted with the `vi.mock` call that reaches them: the factory runs
+// while the component is imported, which is before a module-level `const` is initialised.
+const { reorderDevices, deleteDevice } = vi.hoisted(() => ({
+  reorderDevices: vi.fn().mockResolvedValue([]),
+  deleteDevice: vi.fn().mockResolvedValue(undefined),
+}));
 
 let devicesCurrent: unknown[] = [];
 let discoveredCurrent: unknown[] = [];
 
 vi.mock("$api/generated/patientRecords.generated.remote", () => ({
-  getDevices: () => ({ get current() { return devicesCurrent; } }),
-  getDiscoveredSources: () => ({ get current() { return discoveredCurrent; } }),
-  createDevice,
-  updateDevice,
+  getDevices: () => remoteQuery(() => devicesCurrent),
+  getDiscoveredSources: () => remoteQuery(() => discoveredCurrent),
+  createDevice: remoteForm(),
+  updateDevice: remoteForm(),
   deleteDevice: (...args: unknown[]) => deleteDevice(...args),
   reorderDevices: (...args: unknown[]) => reorderDevices(...args),
 }));

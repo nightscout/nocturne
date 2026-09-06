@@ -39,7 +39,7 @@ public class HomeAssistantHub : TenantAwareHub
     // ha-glucose and ha-alerts carry the tenant's glucose relay and every alert dispatch, and the
     // catch-up replays undelivered alert payloads to the caller, so a share-style credential is
     // refused. The instanceId is caller-chosen, so ha:{instanceId} is tenant-wide too.
-    [HubScope(OAuthScopes.AlertsRead)]
+    [HubScope(Scope.AlertsRead)]
     [HubTenantGroup]
     public async Task Subscribe(string instanceId)
     {
@@ -105,7 +105,7 @@ public class HomeAssistantHub : TenantAwareHub
     // not a "scope" claim on the principal: that claim is minted only by JwtService and so only ever
     // appeared on the principal the framework's JwtBearer scheme built, and the custom chain owns the
     // final principal on every path.
-    [HubScope(OAuthScopes.AlertsReadWrite)]
+    [HubScope(Scope.AlertsReadWrite)]
     public async Task Acknowledge(Guid excursionId, string acknowledgedBy)
     {
         var ct = Context.ConnectionAborted;
