@@ -294,22 +294,25 @@ describe("ack_alert action", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it("acknowledges nothing when it cannot read which excursion the value names", async () => {
-    const ctx = createContext([HOME, WORK]);
-    const { event, post } = createActionEvent(
-      `${encodeTenantKey(WORK_TENANT)}:nonsense`,
-    );
+  it.each(["nonsense", "*".repeat(22), "", ":"])(
+    "acknowledges nothing when the excursion segment is %p",
+    async (segment) => {
+      const ctx = createContext([HOME, WORK]);
+      const { event, post } = createActionEvent(
+        `${encodeTenantKey(WORK_TENANT)}:${segment}`,
+      );
 
-    await runWithContext(ctx.context, () => handler(event));
+      await runWithContext(ctx.context, () => handler(event));
 
-    const alerts = ctx.alertsBySlug.get("work-clinic");
-    expect(alerts?.acknowledge).toBeUndefined();
-    expect(alerts?.acknowledgeExcursion).toBeUndefined();
-    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
-    expect(post).toHaveBeenCalledExactlyOnceWith(
-      "Couldn't tell which alert this button is for. Nothing was acknowledged.",
-    );
-  });
+      const alerts = ctx.alertsBySlug.get("work-clinic");
+      expect(alerts?.acknowledge).toBeUndefined();
+      expect(alerts?.acknowledgeExcursion).toBeUndefined();
+      expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+      expect(post).toHaveBeenCalledExactlyOnceWith(
+        "Couldn't tell which alert this button is for. Nothing was acknowledged.",
+      );
+    },
+  );
 
   it("reports a failure without retrying against another tenant", async () => {
     const ctx = createContext([HOME, WORK]);

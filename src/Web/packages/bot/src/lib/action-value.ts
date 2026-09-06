@@ -77,17 +77,20 @@ export function encodeActionValue(target: {
 }
 
 /**
- * A value with no second segment addresses only a tenant. An excursion is
- * meaningless without the tenant to resolve it against, so a value whose first
- * segment is empty yields neither.
+ * A value carrying no separator at all addresses only a tenant; a separator is
+ * an attempt to name an excursion, and one that does not decode — including an
+ * empty one — is unreadable rather than absent. An excursion is meaningless
+ * without the tenant to resolve it against, so a value whose first segment is
+ * empty yields neither.
  */
 export function decodeActionValue(value: string | null | undefined): ActionTarget {
-  const [tenant, excursion] = (value ?? "").split(SEPARATOR);
+  const raw = value ?? "";
+  const [tenant, excursion] = raw.split(SEPARATOR);
   if (!tenant) return { tenantKey: null, excursionId: null, unreadableExcursion: false };
-  const excursionId = excursion ? readUuid(excursion) : null;
+  const excursionId = readUuid(excursion ?? "");
   return {
     tenantKey: UUID.test(tenant) ? encodeTenantKey(tenant) : tenant,
     excursionId,
-    unreadableExcursion: Boolean(excursion) && excursionId === null,
+    unreadableExcursion: raw.includes(SEPARATOR) && excursionId === null,
   };
 }

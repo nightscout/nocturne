@@ -82,16 +82,21 @@ describe("card button values", () => {
     });
   });
 
-  it("marks a second segment that is no excursion id unreadable", () => {
-    expect(decodeActionValue(`${encodeTenantKey(TENANT)}:nonsense`)).toEqual({
-      tenantKey: encodeTenantKey(TENANT),
-      excursionId: null,
-      unreadableExcursion: true,
-    });
-  });
+  it.each(["nonsense", "*".repeat(22), "", ":"])(
+    "marks the second segment %p unreadable",
+    (segment) => {
+      const value = `${encodeTenantKey(TENANT)}:${segment}`;
 
-  it("reads a trailing separator as naming no excursion", () => {
-    expect(decodeActionValue(`${encodeTenantKey(TENANT)}:`)).toEqual({
+      expect(decodeActionValue(value)).toEqual({
+        tenantKey: encodeTenantKey(TENANT),
+        excursionId: null,
+        unreadableExcursion: true,
+      });
+    },
+  );
+
+  it("addresses only a tenant when the value carries no separator", () => {
+    expect(decodeActionValue(encodeTenantKey(TENANT))).toEqual({
       tenantKey: encodeTenantKey(TENANT),
       excursionId: null,
       unreadableExcursion: false,
