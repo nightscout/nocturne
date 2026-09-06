@@ -8,12 +8,14 @@
     open?: boolean;
     selectedConnector: ConnectorStatusWithDescription | null;
     selectedConnectorCapabilities: ConnectorCapabilities | null;
+    onSyncComplete?: () => Promise<void>;
   }
 
   let {
     open = $bindable(false),
     selectedConnector,
     selectedConnectorCapabilities,
+    onSyncComplete,
   }: Props = $props();
 </script>
 
@@ -22,5 +24,6 @@
     bind:open
     {selectedConnector}
     {selectedConnectorCapabilities}
+    {onSyncComplete}
   />
 </Tooltip.Provider>

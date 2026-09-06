@@ -225,4 +225,20 @@ public static class AuthAuditEventType
     /// Event type when a platform administrator revokes a tenant member's direct grant.
     /// </summary>
     public const string PlatformAdminGrantRevoked = "platform_admin_grant_revoked";
+
+    /// <summary>
+    /// Event type when a platform administrator mints a single-use login code for a tenant member.
+    /// </summary>
+    public const string LoginCodeIssued = "login_code_issued";
+
+    /// <summary>
+    /// Event type when a login code is exchanged for a session.
+    /// </summary>
+    public const string LoginHandoff = "login_handoff";
+
+    /// <summary>
+    /// Event type when a login code exchange is refused. The row names no subject: the presented
+    /// code did not resolve to one.
+    /// </summary>
+    public const string LoginHandoffFailed = "login_handoff_failed";
 }

@@ -305,6 +305,18 @@ public class AlarmVisualSettings
     /// </summary>
     [JsonPropertyName("wakeScreen")]
     public bool WakeScreen { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show emergency contacts during the alarm overlay
+    /// </summary>
+    [JsonPropertyName("showEmergencyContacts")]
+    public bool ShowEmergencyContacts { get; set; }
+
+    /// <summary>
+    /// Custom instructions to display to emergency contacts
+    /// </summary>
+    [JsonPropertyName("emergencyInstructions")]
+    public string? EmergencyInstructions { get; set; }
 }
 
 /// <summary>

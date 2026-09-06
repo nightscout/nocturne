@@ -14,7 +14,7 @@
   } from "lucide-svelte";
   import { OidcProviderType } from "$api";
   import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
-  import { describeSubmitError, errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
 
   const OIDC_SCOPES = "openid profile email";
 
@@ -191,7 +191,7 @@
       await onSave(providerData);
       open = false;
     } catch (err: unknown) {
-      providerDialogError = errorMessage(err) ?? "Failed to save provider.";
+      providerDialogError = describeSubmitError(err, "Failed to save provider.");
     } finally {
       providerSaving = false;
     }

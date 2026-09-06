@@ -34,6 +34,9 @@ public class NoteController(INoteRepository repo)
     /// <remarks>Notes are the V4 form of a legacy text treatment (Note/Announcement/Question).</remarks>
     public override string WriteScope => Scope.TreatmentsReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("Note", "note", "notes");
+
     protected override Note MapCreateToModel(UpsertNoteRequest request) => new()
     {
         Timestamp = request.Timestamp.UtcDateTime,

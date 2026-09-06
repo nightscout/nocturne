@@ -101,7 +101,7 @@ public class SensorGlucoseControllerTests
         var controller = CreateController();
 
         // Act
-        var result = await controller.CreateSensorGlucoseBulk(requests);
+        var result = await controller.CreateBulk(requests);
 
         // Assert
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
@@ -198,7 +198,7 @@ public class SensorGlucoseControllerTests
 
         var controller = CreateController();
 
-        await controller.CreateSensorGlucoseBulk(requests);
+        await controller.CreateBulk(requests);
 
         _deviceStamperMock.Verify(s => s.StampAsync(
             It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
@@ -392,7 +392,7 @@ public class SensorGlucoseControllerTests
             .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
             .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
 
-        await CreateController().CreateSensorGlucoseBulk(requests);
+        await CreateController().CreateBulk(requests);
 
         persisted.Should().NotBeNull();
         persisted!.Should().SatisfyRespectively(

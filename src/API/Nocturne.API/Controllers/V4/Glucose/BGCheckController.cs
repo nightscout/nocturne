@@ -39,6 +39,9 @@ public class BGCheckController(IBGCheckRepository repo)
     /// </remarks>
     public override string WriteScope => Scope.GlucoseReadWrite;
 
+    /// <inheritdoc/>
+    protected override V4BulkNaming BulkNaming => new("BG check", "check", "checks");
+
     /// <summary>
     /// Maps a <see cref="UpsertBGCheckRequest"/> to a new <see cref="BGCheck"/> domain model for creation.
     /// </summary>

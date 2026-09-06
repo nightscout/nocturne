@@ -215,46 +215,48 @@
 										{/if}
 									</div>
 								</div>
-								<div class="flex gap-1 shrink-0">
-									{#if !link.isDefault}
+								{#if link.isOwnedByCaller}
+									<div class="flex gap-1 shrink-0">
+										{#if !link.isDefault}
+											<Button
+												size="icon"
+												variant="ghost"
+												title="Set as default"
+												disabled={isSettingDefault === link.id}
+												onclick={() => handleSetDefault(link.id ?? "")}
+											>
+												{#if isSettingDefault === link.id}
+													<Loader2 class="size-4 animate-spin" />
+												{:else}
+													<Star class="size-4" />
+												{/if}
+											</Button>
+										{/if}
 										<Button
+											type="button"
 											size="icon"
 											variant="ghost"
-											title="Set as default"
-											disabled={isSettingDefault === link.id}
-											onclick={() => handleSetDefault(link.id ?? "")}
+											title="Edit"
+											onclick={() => startEdit(link.id ?? "", link.label ?? "", link.displayName ?? "")}
 										>
-											{#if isSettingDefault === link.id}
+											<Pencil class="size-4" />
+										</Button>
+										<Button
+											type="button"
+											size="icon"
+											variant="ghost"
+											title="Revoke"
+											disabled={isRevoking === link.id}
+											onclick={() => handleRevokeLink(link.id ?? "")}
+										>
+											{#if isRevoking === link.id}
 												<Loader2 class="size-4 animate-spin" />
 											{:else}
-												<Star class="size-4" />
+												<Link2Off class="size-4" />
 											{/if}
 										</Button>
-									{/if}
-									<Button
-										type="button"
-										size="icon"
-										variant="ghost"
-										title="Edit"
-										onclick={() => startEdit(link.id ?? "", link.label ?? "", link.displayName ?? "")}
-									>
-										<Pencil class="size-4" />
-									</Button>
-									<Button
-										type="button"
-										size="icon"
-										variant="ghost"
-										title="Revoke"
-										disabled={isRevoking === link.id}
-										onclick={() => handleRevokeLink(link.id ?? "")}
-									>
-										{#if isRevoking === link.id}
-											<Loader2 class="size-4 animate-spin" />
-										{:else}
-											<Link2Off class="size-4" />
-										{/if}
-									</Button>
-								</div>
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>

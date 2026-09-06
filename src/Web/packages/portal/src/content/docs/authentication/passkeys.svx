@@ -33,6 +33,13 @@ There are two ways in, both on the sign-in page:
   never stranded.
 </Callout>
 
+<Callout type="info" title="Running your own instance">
+  A passkey is tied to one address: the **BASE_DOMAIN** you configured. A browser will only
+  create or use one when the address in its bar is that host or a subdomain of it, so if
+  passkeys are refused on an instance you run, check that setting matches the address people
+  actually browse to and restart. See [Configuration](/docs/configuration).
+</Callout>
+
 ## The authenticator app step
 
 An **authenticator app** — Aegis, 1Password, Google Authenticator and others — shows a

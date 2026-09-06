@@ -192,7 +192,7 @@ public class ParityTestFixture : IAsyncLifetime
                         }
 
                         // Add PostgreSQL infrastructure
-                        services.AddPostgreSqlInfrastructure(connectionString, config =>
+                        services.AddPostgreSqlInfrastructure(connectionString, configuration: null, configure: config =>
                         {
                             config.EnableDetailedErrors = true;
                             config.EnableSensitiveDataLogging = true;

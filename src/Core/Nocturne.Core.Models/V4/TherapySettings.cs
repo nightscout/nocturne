@@ -9,7 +9,7 @@ namespace Nocturne.Core.Models.V4;
 /// <remarks>
 /// <see cref="TherapySettings"/> holds the non-scheduled configuration for a profile. The scheduled
 /// parameters (basal rates, carb ratios, ISF, target ranges) are stored in their respective schedule
-/// types. All records decomposed from the same legacy <see cref="Profile"/> share the same
+/// types. All records decomposed from one named profile store share the same
 /// <see cref="IV4Record.CorrelationId"/>.
 /// </remarks>
 /// <seealso cref="Profile"/>
@@ -20,7 +20,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="TargetRangeSchedule"/>
 /// <seealso cref="ProfileSummary"/>
 [JsonSchemaFlatten]
-public class TherapySettings : V4RecordBase
+public class TherapySettings : V4RecordBase, IProfileScoped
 {
     /// <summary>
     /// Named profile this came from (e.g., "Default", "Weekday")

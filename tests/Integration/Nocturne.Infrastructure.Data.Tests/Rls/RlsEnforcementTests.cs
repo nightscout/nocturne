@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 using Xunit;
 
@@ -45,6 +46,41 @@ public class RlsEnforcementTests
 
         await act.Should().NotThrowAsync(
             "VerifyRlsAsync is the canonical schema fingerprint — failing means a tenant-scoped table is missing RLS, FORCE RLS, a policy, or correct ownership");
+    }
+
+    /// <summary>
+    /// The share-category policy is the one a partial reconcile drops, and the one a policy
+    /// count cannot miss: tenant_isolation is still there, so the table reads as policied.
+    /// </summary>
+    [Fact]
+    public async Task MissingSharePolicy_IsNamed_EvenThoughTenantIsolationRemains()
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+
+        var verify = () => DatabaseInitializationExtensions.VerifyRlsAsync(
+            conn, _fx.TenantScopedTableNames.ToArray(), NullLogger.Instance);
+
+        try
+        {
+            await using (var drop = conn.CreateCommand())
+            {
+                drop.CommandText = $"DROP POLICY {ShareRlsPolicy.PolicyName} ON {SampleTable}";
+                await drop.ExecuteNonQueryAsync();
+            }
+
+            // The policy name alone is in every failure message's fixed prefix; only the
+            // per-problem fragment shows the table was actually named.
+            (await verify.Should().ThrowAsync<InvalidOperationException>())
+                .Which.Message.Should().Contain(
+                    $"'{ShareRlsPolicy.PolicyName}' policy missing on: {SampleTable}");
+        }
+        finally
+        {
+            await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
+                _fx.MigratorConnectionString, NullLogger.Instance);
+        }
+
+        await verify.Should().NotThrowAsync("the reconciler restored the policy");
     }
 
     [Fact]

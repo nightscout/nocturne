@@ -147,7 +147,7 @@ public partial class SetupController : ControllerBase
 
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        var tenant = await context.Tenants.AsNoTracking().FirstOrDefaultAsync(ct);
+        var tenant = await context.Tenants.AsNoTracking().ExcludeDemo().FirstOrDefaultAsync(ct);
         if (tenant == null)
             return Ok(new SlugValidationResult(false, "No tenant exists"));
 
@@ -178,6 +178,9 @@ public partial class SetupController : ControllerBase
     public async Task<IActionResult> OwnerOptions(
         [FromBody] SetupOwnerOptionsRequest request, CancellationToken ct)
     {
+        if (this.PasskeyHostRefusal(_passkeyService) is { } refusal)
+            return refusal;
+
         var (tenant, error) = await GetSoleTenantWithoutOwnerAsync(ct);
         if (error != null)
             return error;
@@ -465,11 +468,17 @@ public partial class SetupController : ControllerBase
     /// Returns the sole tenant if exactly one exists and it has no non-system members,
     /// or an error result if the preconditions are not met.
     /// </summary>
+    /// <remarks>
+    /// A demo tenant never trips the credentialed-member arm (<see cref="DemoExclusionFilter"/>),
+    /// so a demo-only instance answers <c>no_tenant_exists</c>, from which a tenant can still be
+    /// created, rather than <c>setup_already_complete</c>, which would strand the operator on a
+    /// tenant nobody can adopt.
+    /// </remarks>
     private async Task<(TenantEntity? Tenant, IActionResult? Error)> GetSoleTenantWithoutOwnerAsync(CancellationToken ct)
     {
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        var tenants = await context.Tenants.Take(2).ToListAsync(ct);
+        var tenants = await context.Tenants.ExcludeDemo().Take(2).ToListAsync(ct);
 
         if (tenants.Count == 0)
             return (null, Conflict(new { error = "no_tenant_exists" }));
@@ -491,12 +500,17 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// The first-run owner subject: the earliest non-system active subject. Setup only runs while
-    /// no member of the tenant holds credentials, so this is the account the owner options step
-    /// created or reused. Ordered so the options and complete steps resolve the same row.
+    /// The first-run owner subject: the earliest active subject that is neither a system subject
+    /// nor the demo visitor (<see cref="DemoExclusionFilter"/>). Setup only runs while no member
+    /// of the tenant holds credentials, so this is the account the owner options step created or
+    /// reused. Ordered so the options and complete steps resolve the same row.
     /// </summary>
+    /// <remarks>
+    /// <c>subjects</c> is not tenant-scoped, so this sees every subject on the instance — the
+    /// demo visitor included, and it is older than the operator's.
+    /// </remarks>
     private static IQueryable<SubjectEntity> SetupOwnerSubjects(NocturneDbContext context) =>
-        context.Subjects.Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
+        context.Subjects.ExcludeDemo().Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
 
     /// <summary>
     /// Returns the first-run owner subject's id as resolved from the database, or

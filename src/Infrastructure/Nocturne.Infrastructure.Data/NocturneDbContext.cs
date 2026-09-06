@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -225,6 +227,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<OAuthDeviceCodeEntity> OAuthDeviceCodes { get; set; }
 
     public DbSet<OAuthAuthorizationCodeEntity> OAuthAuthorizationCodes { get; set; }
+
+    public DbSet<LoginCodeEntity> LoginCodes { get; set; } = null!;
 
     public DbSet<MemberInviteEntity> MemberInvites { get; set; } = null!;
 
@@ -559,6 +563,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             typeof(ClockFaceEntity),
             typeof(DndWindowEntity),
             typeof(InAppNotificationEntity),
+            typeof(LoginCodeEntity),
             typeof(MutationAuditLogEntity),
             typeof(OAuthAuthorizationCodeEntity),
             typeof(OAuthClientEntity),
@@ -634,6 +639,36 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(nameof(IV4TimeSeriesEntity.Timestamp))
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_timestamp")
                 .IsDescending();
+        }
+
+        // The connector watermark -- V4RepositoryBase.GetLatestTimestampAsync -- asks for the
+        // newest timestamp of one tenant and one data source. With neither column leading, the
+        // planner walks ix_<table>_timestamp backwards across every other tenant's rows, so a
+        // tenant whose newest row for that source is old reads most of the table to return one
+        // value. The deleted_at filter keeps the scan index-only: soft-deleted rows left in the
+        // index have to be skipped a heap fetch at a time, which is why it is not a size saving.
+        foreach (var entity in V4TimeSeriesRecordEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.DataSource),
+                    nameof(IV4TimeSeriesEntity.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_source_timestamp")
+                .IsDescending(false, false, true)
+                .HasFilter("deleted_at IS NULL");
+        }
+
+        // GetLatestAsync and GetLatestBeforeAsync read a snapshot table newest-first for one
+        // tenant, with no data source to pin, so the watermark index above cannot serve them.
+        // ix_<table>_timestamp answers them today at 2,452 to 20,368 index tuples read per scan.
+        foreach (var entity in V4SnapshotEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_timestamp")
+                .IsDescending(false, true)
+                .HasFilter("deleted_at IS NULL");
         }
 
         // The legacy-id uniqueness must drop soft-deleted rows, or the next resync of a
@@ -1336,14 +1371,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.RecordId })
-            .HasDatabaseName("ix_linked_records_record");
-
-        modelBuilder
-            .Entity<LinkedRecordEntity>()
             .HasIndex(l => new { l.TenantId, l.RecordType, l.RecordId })
             .IsUnique()
             .HasDatabaseName("ix_linked_records_tenant_type_id");
+
+        // DeduplicationService.ReconcileNewLinksAsync pages the tenant's links by creation order.
+        // The unique index above leads with tenant_id but then record_type, so it can only supply
+        // the tenant and the rest is a filter plus a sort of everything that tenant owns.
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.TenantId, l.SysCreatedAt })
+            .HasDatabaseName("ix_linked_records_tenant_created");
 
         modelBuilder
             .Entity<LinkedRecordEntity>()
@@ -1355,10 +1393,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             })
             .HasDatabaseName("ix_linked_records_type_canonical_primary");
 
+        // Every read of this table is tenant-scoped, by the global query filter and again by the
+        // tenant_isolation RLS policy, so leading on record_type made the window scan span all
+        // tenants -- 41,414 index tuples read per scan, the worst ratio in the schema. Serves the
+        // dedup window reads whether or not they also pin is_primary, which is selective enough to
+        // leave as a filter.
         modelBuilder
             .Entity<LinkedRecordEntity>()
-            .HasIndex(l => new { l.RecordType, l.SourceTimestamp })
-            .HasDatabaseName("ix_linked_records_type_timestamp");
+            .HasIndex(l => new { l.TenantId, l.RecordType, l.SourceTimestamp })
+            .HasDatabaseName("ix_linked_records_tenant_type_timestamp");
 
         // Partial index for the NOT EXISTS anti-join in read queries —
         // only non-primary rows enter the index, keeping it small.
@@ -1616,11 +1659,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.StartTimestamp)
             .HasDatabaseName("ix_temp_basals_start_timestamp")
             .IsDescending();
-
-        modelBuilder
-            .Entity<TempBasalEntity>()
-            .HasIndex(e => e.EndTimestamp)
-            .HasDatabaseName("ix_temp_basals_end_timestamp");
 
         modelBuilder
             .Entity<TempBasalEntity>()
@@ -2064,10 +2102,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_subject");
 
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_mutation_audit_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
-
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_created");
         });
@@ -2082,10 +2116,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_read_access_log_created");
-
-            entity.HasIndex(e => e.TraceId)
-                .HasDatabaseName("ix_read_access_log_correlation")
-                .HasFilter("correlation_id IS NOT NULL");
         });
 
         modelBuilder.Entity<TenantAuditConfigEntity>(entity =>
@@ -2201,6 +2231,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .WithMany()
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LoginCodeEntity>(entity =>
+        {
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.CodeHash).IsUnique();
+            entity.HasIndex(e => e.ExpiresAt);
         });
 
         modelBuilder.Entity<MemberInviteEntity>(entity =>
@@ -2477,12 +2518,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     private void UpdateTimestamps()
     {
         var utcNow = DateTime.UtcNow;
+        // Column types are a relational concept: asking the InMemory provider for one throws.
+        var isRelational = Database.IsRelational();
 
         foreach (var entry in ChangeTracker.Entries())
         {
             var isAdded = entry.State == EntityState.Added;
 
             EnforceTenantOwnership(entry, isAdded);
+            StripNulCharacters(entry, isAdded, isRelational);
 
             // Update timestamps are stamped on insert and on real modifications only. An
             // unchanged tracked row is left alone rather than rewritten on every save, and a row
@@ -2556,6 +2600,63 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             throw new InvalidOperationException(
                 $"Cannot modify {entry.Entity.GetType().Name} belonging to tenant " +
                 $"{tenantScoped.TenantId} from tenant context {TenantId}.");
+        }
+    }
+
+    /// <summary>
+    /// The string-mapped properties of an entity type, each flagged with whether its column is
+    /// jsonb, so the model metadata is read once per type rather than once per row.
+    /// </summary>
+    private static readonly ConcurrentDictionary<IEntityType, (string Name, bool IsJsonb)[]> StringColumns = new();
+
+    /// <summary>
+    /// The six-character JSON escape for U+0000, matched only where the backslash opening it is
+    /// preceded by an even number of backslashes. An odd count is an escaped backslash followed by
+    /// the literal text u0000, which is a valid jsonb value and must survive.
+    /// </summary>
+    private static readonly Regex JsonNulEscape = new(@"(?<!\\)((?:\\\\)*)\\u0000", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Strips NUL characters out of the string columns of a row about to be written. Legacy
+    /// Nightscout records carry an embedded U+0000 in string fields — a device name from some old
+    /// uploaders — which Mongo and JSON both accept; Postgres rejects the raw byte in a text column
+    /// (22021) and the escape sequence in a jsonb one (22P05), failing the whole insert batch the
+    /// row happens to land in. Runs in the SaveChanges walk, before any interceptor sees the entry,
+    /// so audit snapshots record what is actually persisted.
+    /// </summary>
+    private static void StripNulCharacters(EntityEntry entry, bool isAdded, bool isRelational)
+    {
+        if (!isAdded && entry.State != EntityState.Modified)
+        {
+            return;
+        }
+
+        var columns = StringColumns.GetOrAdd(
+            entry.Metadata,
+            static (entityType, relational) =>
+                [.. entityType.GetProperties()
+                    .Where(p => p.ClrType == typeof(string))
+                    .Select(p => (p.Name, IsJsonb: relational && p.GetColumnType() == "jsonb"))],
+            isRelational);
+
+        foreach (var (name, isJsonb) in columns)
+        {
+            var property = entry.Property(name);
+            if (property.CurrentValue is not string value)
+            {
+                continue;
+            }
+
+            var stripped = value.Contains('\0') ? value.Replace("\0", string.Empty) : value;
+            if (isJsonb && stripped.Contains(@"\u0000", StringComparison.Ordinal))
+            {
+                stripped = JsonNulEscape.Replace(stripped, "$1");
+            }
+
+            if (!string.Equals(stripped, value, StringComparison.Ordinal))
+            {
+                property.CurrentValue = stripped;
+            }
         }
     }
 

@@ -34,7 +34,7 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
-  import { describeSubmitError, errorMessage } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
 
   const tenantIdQuery = getCurrentTenantId();
@@ -147,8 +147,10 @@
         ),
       };
     } catch (err: unknown) {
-      platformAdminError =
-        errorMessage(err) ?? "Failed to update platform admin status.";
+      platformAdminError = describeSubmitError(
+        err,
+        "Failed to update platform admin status."
+      );
     } finally {
       platformAdminSavingId = null;
     }

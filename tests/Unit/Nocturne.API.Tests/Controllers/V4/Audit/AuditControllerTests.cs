@@ -39,15 +39,20 @@ public class AuditControllerTests : IDisposable
         _db.Dispose();
     }
 
-    private AuditController CreateController(IReadOnlySet<string>? scopes = null)
+    private AuditController CreateController(
+        IReadOnlySet<string>? scopes = null,
+        Dictionary<string, string?>? settings = null)
     {
         var factoryMock = new Mock<IDbContextFactory<NocturneDbContext>>();
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _db.CreateContext());
 
-        // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default.
-        var configuration = new ConfigurationBuilder().Build();
+        // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default and
+        // AuditRetentionPolicy to its 90-day default.
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(settings ?? [])
+            .Build();
 
         var controller = new AuditController(
             factoryMock.Object,
@@ -200,6 +205,110 @@ public class AuditControllerTests : IDisposable
         }, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// A null mutation retention is the platform default (90 days), not infinity, so it does not
+    /// automatically clear a longer soft-delete window. The tenant did not choose the failing
+    /// value, so the floor is stored rather than the save refused — otherwise they could not
+    /// change any other audit setting.
+    /// </summary>
+    [Fact]
+    public async Task UpdateConfig_NullMutationRetentionBelowSoftDeleteWindow_StoresTheFloor()
+    {
+        var controller = CreateController(
+            Scopes(Scope.AuditManage),
+            new Dictionary<string, string?>
+            {
+                ["DataRetention:SoftDeleteRetentionDays"] = "180",
+            });
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AuditConfigDto>()
+            .Which.MutationAuditRetentionDays.Should().Be(180);
+    }
+
+    /// <summary>
+    /// A value the tenant chose explicitly is still refused rather than silently raised.
+    /// </summary>
+    [Fact]
+    public async Task UpdateConfig_ExplicitMutationRetentionBelowSoftDeleteWindow_Returns400()
+    {
+        var controller = CreateController(
+            Scopes(Scope.AuditManage),
+            new Dictionary<string, string?>
+            {
+                ["DataRetention:SoftDeleteRetentionDays"] = "180",
+            });
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 90,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_NullMutationRetentionCoveringSoftDeleteWindow_Returns200()
+    {
+        var controller = CreateController(Scopes(Scope.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// A zero or negative retention window puts the purge cutoff at or after now, which would
+    /// delete access records for reads that just happened. Model validation rejects it before the
+    /// action runs, so the bound lives on the DTO rather than in the action body.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-3650)]
+    public void AuditConfigDto_RejectsANonPositiveRetentionWindow(int days)
+    {
+        ValidationErrorsFor(new AuditConfigDto { ReadAuditRetentionDays = days })
+            .Should().Contain(m => m.Contains(nameof(AuditConfigDto.ReadAuditRetentionDays)));
+
+        ValidationErrorsFor(new AuditConfigDto { MutationAuditRetentionDays = days })
+            .Should().Contain(m => m.Contains(nameof(AuditConfigDto.MutationAuditRetentionDays)));
+    }
+
+    [Fact]
+    public void AuditConfigDto_AcceptsNullAndPositiveRetentionWindows()
+    {
+        ValidationErrorsFor(new AuditConfigDto()).Should().BeEmpty();
+
+        ValidationErrorsFor(new AuditConfigDto
+        {
+            ReadAuditRetentionDays = 1,
+            MutationAuditRetentionDays = 3650,
+        }).Should().BeEmpty();
+    }
+
+    private static List<string> ValidationErrorsFor(AuditConfigDto dto)
+    {
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+            dto,
+            new System.ComponentModel.DataAnnotations.ValidationContext(dto),
+            results,
+            validateAllProperties: true);
+        return [.. results.SelectMany(r => r.MemberNames)];
     }
 
     // ── Query tests ─────────────────────────────────────────────────

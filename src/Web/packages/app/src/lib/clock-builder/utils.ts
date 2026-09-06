@@ -5,11 +5,13 @@
  * and other utilities used by the clock face builder.
  */
 
-import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
-import { ELEMENT_INFO, type ClockElementType, type InternalElement } from "./types";
+import type { ClockElement, ClockSettings, TrackerDefinitionDto } from "$lib/api";
+import {
+  TEXT_ELEMENT_TYPES,
+  elementInfo,
+  type InternalElement,
+} from "./types";
 import { browser } from "$app/environment";
-import { formatClockTime } from "$lib/components/clock/clock-time";
-import { bg, bgDelta as formatBgDelta, bgLabel } from "$lib/utils/formatting";
 
 /**
  * Resolve CSS variable to its computed value
@@ -18,6 +20,16 @@ function resolveCssVar(name: string): string {
   if (!browser) return "#000000"; // fallback for SSR
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
+
+export const DEFAULT_ELEMENT_COLOR = "#ffffff";
+
+/**
+ * Named colours a face may carry, resolved to CSS the browser will accept.
+ * `dynamic` is resolved separately because it needs the reading.
+ */
+const NAMED_ELEMENT_COLORS = new Map([["muted", "var(--muted-foreground)"]]);
+
+const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /**
  * Get BG color based on glucose value
@@ -28,6 +40,25 @@ export function getBgColor(bg: number): string {
   if (bg > 250) return resolveCssVar("--glucose-very-high");
   if (bg > 180) return resolveCssVar("--glucose-high");
   return resolveCssVar("--glucose-in-range");
+}
+
+/**
+ * Background of a whole clock face. A face set to colour itself by glucose
+ * takes `fallback` when there is no reading, rather than painting the screen
+ * with the colour of a value nothing reported.
+ */
+export function clockBackgroundStyle(
+  settings: ClockSettings | undefined,
+  currentBG: number | null,
+  fallback: string
+): string {
+  if (settings?.backgroundImage) {
+    return `background-image: url(${settings.backgroundImage}); background-size: cover; background-position: center;`;
+  }
+  if (settings?.bgColor && currentBG !== null) {
+    return `background-color: ${getBgColor(currentBG)};`;
+  }
+  return `background-color: ${fallback};`;
 }
 
 /**
@@ -88,12 +119,25 @@ export function getFontWeightClass(weight: string | undefined): string {
 }
 
 /**
- * Get element text color from style
+ * Get element text color from style. A null `currentBG` has no glucose colour:
+ * a dynamic element falls back to the static default rather than painting the
+ * absence of a reading as a severe low. Anything that is neither a known token
+ * nor a hex literal takes the default too — emitting it raw would be a colour
+ * the browser discards, leaving the element to inherit the page foreground.
  */
-export function getElementColor(element: ClockElement, currentBG: number): string {
+export function getElementColor(
+  element: ClockElement,
+  currentBG: number | null
+): string {
   const color = element.style?.color;
-  if (color === "dynamic") return getBgColor(currentBG);
-  return color || "#ffffff";
+  if (color === "dynamic") {
+    return currentBG === null ? DEFAULT_ELEMENT_COLOR : getBgColor(currentBG);
+  }
+  if (!color) return DEFAULT_ELEMENT_COLOR;
+  return (
+    NAMED_ELEMENT_COLORS.get(color) ??
+    (HEX_COLOR.test(color) ? color : DEFAULT_ELEMENT_COLOR)
+  );
 }
 
 /**
@@ -110,15 +154,15 @@ export function buildCustomCssString(element: ClockElement): string {
 /**
  * Build inline style string from element.style (including custom properties)
  */
-export function buildStyleString(element: ClockElement, currentBG: number): string {
+export function buildStyleString(
+  element: ClockElement,
+  currentBG: number | null
+): string {
   const style = element.style;
   const parts: string[] = [];
 
   // Font size from element.size
-  const size =
-    element.size ||
-    ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-    20;
+  const size = element.size || elementInfo(element.type)?.defaultSize || 20;
   parts.push(`font-size: ${size * 0.8}px`);
 
   // Color
@@ -140,22 +184,7 @@ export function buildStyleString(element: ClockElement, currentBG: number): stri
  * Check if element is a text-based element (uses unified text rendering)
  */
 export function isTextElement(type: string): boolean {
-  const textTypes = [
-    "sg",
-    "delta",
-    "arrow",
-    "age",
-    "time",
-    "iob",
-    "cob",
-    "basal",
-    "forecast",
-    "summary",
-    "text",
-    "tracker",
-    "trackers",
-  ];
-  return textTypes.includes(type);
+  return TEXT_ELEMENT_TYPES.includes(type);
 }
 
 /**
@@ -195,53 +224,4 @@ export function isCategoryChecked(
 ): boolean {
   if (!categories || categories.length === 0) return true;
   return categories.includes(category);
-}
-
-/**
- * Render element value (for text-based elements, not arrow/tracker)
- *
- * @param currentBG Sample glucose in mg/dL; converted here to the user's units so the
- *   builder preview matches what the saved face will actually show.
- * @param bgDelta Sample delta in mg/dL.
- */
-export function renderElementValue(
-  element: ClockElement,
-  currentBG: number,
-  bgDelta: number,
-  currentTime: Date
-): string {
-  switch (element.type) {
-    case "sg":
-      return String(bg(currentBG));
-    case "delta":
-      return element.showUnits !== false
-        ? `${formatBgDelta(bgDelta)} ${bgLabel()}`
-        : formatBgDelta(bgDelta);
-    case "arrow":
-      return ""; // Handled separately with Lucide icon
-    case "age":
-      return "3m ago";
-    case "time":
-      return formatClockTime(currentTime, element.format);
-    case "iob":
-      return "--U";
-    case "cob":
-      return "--g";
-    case "basal":
-      return "0.8U/h";
-    case "forecast":
-      return String(bg(currentBG + 10));
-    case "summary":
-      return "92% in range";
-    case "tracker":
-      return ""; // Handled separately with icon + time
-    case "trackers":
-      return "[trackers]";
-    case "text":
-      return element.text || "Text";
-    case "chart":
-      return "[chart]";
-    default:
-      return "";
-  }
 }

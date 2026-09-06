@@ -640,7 +640,13 @@
                           Started: {formatDate(job.startedAt)}
                         </div>
                         {#if job.errorMessage}
-                          <div class="text-sm text-destructive mt-1">
+                          <div
+                            class="text-sm mt-1 {job.hasFailures ||
+                            job.state === MigrationJobState.Failed ||
+                            job.state === MigrationJobState.Cancelled
+                              ? 'text-destructive'
+                              : 'text-muted-foreground'}"
+                          >
                             {job.errorMessage}
                           </div>
                         {/if}

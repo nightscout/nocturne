@@ -3,6 +3,7 @@ import type { ActionEvent, Chat } from "chat";
 import { registerAlertCommands } from "./alerts.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
 import type { BotApiClient, DirectoryCandidate } from "../types.js";
+import { encodeActionValue, encodeTenantKey } from "../lib/action-value.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -15,9 +16,20 @@ vi.mock("../lib/logger.js", () => ({
 
 const HOME_TENANT = "11111111-1111-1111-1111-111111111111";
 const WORK_TENANT = "22222222-2222-2222-2222-222222222222";
+const EXCURSION = "33333333-3333-3333-3333-333333333333";
 
 const HOME = candidate(HOME_TENANT, "home-clinic", "home");
 const WORK = candidate(WORK_TENANT, "work-clinic", "work");
+
+/** Two tenant ids whose trailing bytes — and so whose button-value keys — are identical. */
+const TWIN_TENANT_A = "11111111-1111-7000-8000-000000000001";
+const TWIN_TENANT_B = "22222222-2222-7000-8000-000000000001";
+const TWIN_A = candidate(TWIN_TENANT_A, "twin-a-clinic", "twin-a");
+const TWIN_B = candidate(TWIN_TENANT_B, "twin-b-clinic", "twin-b");
+
+/** The value the alert card puts on its buttons: the tenant and the excursion. */
+const cardValue = (tenantId: string, excursionId: string) =>
+  encodeActionValue({ tenantId, excursionId });
 
 function candidate(
   tenantId: string,
@@ -40,18 +52,26 @@ const asDefault = (c: DirectoryCandidate): DirectoryCandidate => ({
   isDefault: true,
 });
 
+interface ScopedAlerts {
+  acknowledge: Mock;
+  acknowledgeExcursion: Mock;
+}
+
 function createContext(candidates: DirectoryCandidate[] | null) {
   const resolve = vi.fn().mockResolvedValue(candidates);
   const ambientAcknowledge = vi.fn().mockResolvedValue(undefined);
-  const acknowledgeBySlug = new Map<string, Mock>();
+  const alertsBySlug = new Map<string, ScopedAlerts>();
 
   const scopedApiFactory = vi.fn((tenantSlug: string) => {
-    let acknowledge = acknowledgeBySlug.get(tenantSlug);
-    if (!acknowledge) {
-      acknowledge = vi.fn().mockResolvedValue(undefined);
-      acknowledgeBySlug.set(tenantSlug, acknowledge);
+    let alerts = alertsBySlug.get(tenantSlug);
+    if (!alerts) {
+      alerts = {
+        acknowledge: vi.fn().mockResolvedValue(undefined),
+        acknowledgeExcursion: vi.fn().mockResolvedValue(undefined),
+      };
+      alertsBySlug.set(tenantSlug, alerts);
     }
-    return { alerts: { acknowledge } } as unknown as BotApiClient;
+    return { alerts } as unknown as BotApiClient;
   });
 
   const context: BotRequestContext = {
@@ -64,7 +84,7 @@ function createContext(candidates: DirectoryCandidate[] | null) {
     resolvedLink: null,
   };
 
-  return { context, resolve, scopedApiFactory, ambientAcknowledge, acknowledgeBySlug };
+  return { context, resolve, scopedApiFactory, ambientAcknowledge, alertsBySlug };
 }
 
 function createActionEvent(value?: string) {
@@ -98,20 +118,60 @@ describe("ack_alert action", () => {
     handler = actions.get("ack_alert")!;
   });
 
-  it("acknowledges through the client scoped to the alert's tenant", async () => {
+  it("acknowledges only the excursion the card is about", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    const alerts = ctx.alertsBySlug.get("work-clinic")!;
+    expect(alerts.acknowledgeExcursion).toHaveBeenCalledExactlyOnceWith(
+      EXCURSION,
+      { acknowledgedBy: "Sam Tester" },
+    );
+    expect(alerts.acknowledge).not.toHaveBeenCalled();
+    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledExactlyOnceWith(
+      "Acknowledged this alert. Any other active alerts are untouched.",
+    );
+  });
+
+  it("acknowledges the whole tenant for a value that names only a tenant", async () => {
     const ctx = createContext([HOME, WORK]);
     const { event, post } = createActionEvent(WORK_TENANT);
 
     await runWithContext(ctx.context, () => handler(event));
 
-    expect(ctx.resolve).toHaveBeenCalledExactlyOnceWith("discord", "discord-user-1");
-    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
-    expect(ctx.acknowledgeBySlug.get("work-clinic")).toHaveBeenCalledExactlyOnceWith({
+    const alerts = ctx.alertsBySlug.get("work-clinic")!;
+    expect(alerts.acknowledge).toHaveBeenCalledExactlyOnceWith({
       acknowledgedBy: "Sam Tester",
     });
-    expect(ctx.acknowledgeBySlug.has("home-clinic")).toBe(false);
-    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+    expect(alerts.acknowledgeExcursion).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+  });
+
+  it("acknowledges the excursion named by a two-UUID value", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event } = createActionEvent(`${WORK_TENANT}:${EXCURSION}`);
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
+    ).toHaveBeenCalledExactlyOnceWith(EXCURSION, { acknowledgedBy: "Sam Tester" });
+  });
+
+  it("acknowledges through the client scoped to the alert's tenant", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.resolve).toHaveBeenCalledExactlyOnceWith("discord", "discord-user-1");
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(ctx.alertsBySlug.has("home-clinic")).toBe(false);
+    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
   });
 
   it("falls back to the only link when the button carries no tenant", async () => {
@@ -121,15 +181,17 @@ describe("ack_alert action", () => {
     await runWithContext(ctx.context, () => handler(event));
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("home-clinic");
-    expect(ctx.acknowledgeBySlug.get("home-clinic")).toHaveBeenCalledExactlyOnceWith({
-      acknowledgedBy: "Sam Tester",
-    });
+    expect(
+      ctx.alertsBySlug.get("home-clinic")!.acknowledge,
+    ).toHaveBeenCalledExactlyOnceWith({ acknowledgedBy: "Sam Tester" });
     expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
   });
 
   it("tells an unlinked user to connect and calls no api", async () => {
     const ctx = createContext([]);
-    const { event, post, postEphemeral } = createActionEvent(WORK_TENANT);
+    const { event, post, postEphemeral } = createActionEvent(
+      cardValue(WORK_TENANT, EXCURSION),
+    );
 
     await runWithContext(ctx.context, () => handler(event));
 
@@ -145,7 +207,9 @@ describe("ack_alert action", () => {
 
   it("treats a missing directory response as unlinked", async () => {
     const ctx = createContext(null);
-    const { event, post, postEphemeral } = createActionEvent(WORK_TENANT);
+    const { event, post, postEphemeral } = createActionEvent(
+      cardValue(WORK_TENANT, EXCURSION),
+    );
 
     await runWithContext(ctx.context, () => handler(event));
 
@@ -157,7 +221,9 @@ describe("ack_alert action", () => {
 
   it("refuses a tenant the tapping user has no link to", async () => {
     const ctx = createContext([HOME]);
-    const { event, post, postEphemeral } = createActionEvent(WORK_TENANT);
+    const { event, post, postEphemeral } = createActionEvent(
+      cardValue(WORK_TENANT, EXCURSION),
+    );
 
     await runWithContext(ctx.context, () => handler(event));
 
@@ -172,13 +238,15 @@ describe("ack_alert action", () => {
 
   it("uses the tenant on the button over the user's default", async () => {
     const ctx = createContext([asDefault(HOME), WORK]);
-    const { event, post } = createActionEvent(WORK_TENANT);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
 
     await runWithContext(ctx.context, () => handler(event));
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
-    expect(ctx.acknowledgeBySlug.has("home-clinic")).toBe(false);
-    expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
+    expect(ctx.alertsBySlug.has("home-clinic")).toBe(false);
+    expect(post).toHaveBeenCalledExactlyOnceWith(
+      "Acknowledged this alert. Any other active alerts are untouched.",
+    );
   });
 
   it("falls back to the default when the button carries no tenant", async () => {
@@ -207,13 +275,54 @@ describe("ack_alert action", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("refuses when two linked tenants answer to the same key", async () => {
+    expect(encodeTenantKey(TWIN_TENANT_A)).toBe(encodeTenantKey(TWIN_TENANT_B));
+    const ctx = createContext([TWIN_A, TWIN_B]);
+    const { event, post, postEphemeral } = createActionEvent(
+      cardValue(TWIN_TENANT_A, EXCURSION),
+    );
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(postEphemeral).toHaveBeenCalledExactlyOnceWith(
+      event.user,
+      "You have multiple linked Nocturne accounts: `twin-a` (TWIN-A), `twin-b` (TWIN-B). Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+      { fallbackToDM: true },
+    );
+    expect(ctx.scopedApiFactory).not.toHaveBeenCalled();
+    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it.each(["nonsense", "*".repeat(22), "", ":"])(
+    "acknowledges nothing when the excursion segment is %p",
+    async (segment) => {
+      const ctx = createContext([HOME, WORK]);
+      const { event, post } = createActionEvent(
+        `${encodeTenantKey(WORK_TENANT)}:${segment}`,
+      );
+
+      await runWithContext(ctx.context, () => handler(event));
+
+      const alerts = ctx.alertsBySlug.get("work-clinic");
+      expect(alerts?.acknowledge).toBeUndefined();
+      expect(alerts?.acknowledgeExcursion).toBeUndefined();
+      expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+      expect(post).toHaveBeenCalledExactlyOnceWith(
+        "Couldn't tell which alert this button is for. Nothing was acknowledged.",
+      );
+    },
+  );
+
   it("reports a failure without retrying against another tenant", async () => {
     const ctx = createContext([HOME, WORK]);
-    const { event, post } = createActionEvent(WORK_TENANT);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
     ctx.scopedApiFactory.mockImplementation(
       () =>
         ({
-          alerts: { acknowledge: vi.fn().mockRejectedValue(new Error("503")) },
+          alerts: {
+            acknowledgeExcursion: vi.fn().mockRejectedValue(new Error("503")),
+          },
         }) as unknown as BotApiClient,
     );
 

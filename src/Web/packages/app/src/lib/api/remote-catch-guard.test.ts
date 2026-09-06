@@ -82,25 +82,47 @@ interface Offence {
   line: number;
 }
 
-function sourceFiles(): string[] {
+interface SourceFile {
+  file: string;
+  source: string;
+}
+
+let cachedSources: SourceFile[] | undefined;
+
+/**
+ * Every source file under `src/` with its text. Walking the tree and reading
+ * ~800 files synchronously is the entire cost of this file — the pattern
+ * matching below is milliseconds — so both guards share one pass rather than
+ * each taking its own.
+ */
+function sources(): SourceFile[] {
   // readdirSync yields the platform's separator, so the directory exclusions
   // below would only bite on posix if the paths were left as they arrive.
-  return readdirSync(SRC, { recursive: true, encoding: "utf8" })
+  cachedSources ??= readdirSync(SRC, { recursive: true, encoding: "utf8" })
     .map((file) => file.replaceAll("\\", "/"))
     .filter(
       (file) =>
         /\.(svelte|ts)$/.test(file) &&
         !file.endsWith(".test.ts") &&
         !/(^|\/)(generated|test-stubs)(\/|$)/.test(file)
-    );
+    )
+    .map((file) => ({ file, source: readFileSync(`${SRC}/${file}`, "utf8") }));
+
+  return cachedSources;
 }
+
+/**
+ * Budget for a guard that reads the whole source tree. The default five seconds
+ * is sized for logic tests; a cold file cache alone can put these reads an order
+ * of magnitude above it.
+ */
+const WALK_TIMEOUT_MS = 60_000;
 
 function offences(): { found: Offence[]; scanned: number } {
   const found: Offence[] = [];
   let scanned = 0;
 
-  for (const file of sourceFiles()) {
-    const source = readFileSync(`${SRC}/${file}`, "utf8");
+  for (const { file, source } of sources()) {
     const imported = remoteImports(source);
     if (imported.length === 0) continue;
     scanned++;
@@ -120,16 +142,81 @@ function offences(): { found: Offence[]; scanned: number } {
   return { found, scanned };
 }
 
-describe("catches around generated remote calls", () => {
-  it("bind the error, or say why they do not", () => {
-    const { found, scanned } = offences();
+/**
+ * The other way a site loses the copy it chose: `errorMessage` is the raw
+ * accessor for `body.message`, which reports what NSwag, SvelteKit or our own
+ * codegen synthesized as readily as what the server wrote. A `??` on it
+ * therefore renders "An unexpected server error occurred." exactly where the
+ * fallback beside it was meant to stand in. `describeSubmitError` and
+ * `remoteErrorMessage` take that same sentence as their fallback and consult
+ * `CLIENT_WRITTEN_REASONS` first.
+ *
+ * Reading the value for something other than display — matching it against a
+ * closed set of failure codes, as `totp-errors` does — is not this shape and is
+ * not asked about.
+ *
+ * Limits: the argument may nest one level of parentheses; a value bound on one
+ * line and defaulted on the next, or defaulted through a ternary, is not seen.
+ */
+const RAW_FALLBACK = /\berrorMessage\((?:[^()]|\([^()]*\))*\)\s*(?:\?\?|\|\|)/g;
 
-    // An empty result is the pass condition, so a walk that read nothing — a
-    // moved source root, a separator the filter did not expect — would pass
-    // for the wrong reason. Assert it found files to judge.
-    expect(scanned).toBeGreaterThan(20);
-    expect(found).toEqual([]);
+function rawFallbacks(): { found: Offence[]; scanned: number } {
+  const found: Offence[] = [];
+  const files = sources();
+
+  for (const { file, source } of files) {
+    for (const match of source.matchAll(RAW_FALLBACK)) {
+      found.push({
+        file,
+        line: source.slice(0, match.index!).split("\n").length,
+      });
+    }
+  }
+
+  return { found, scanned: files.length };
+}
+
+describe("fallbacks beside a remote call's reason", () => {
+  it(
+    "are reached through a helper that knows who wrote it",
+    () => {
+      const { found, scanned } = rawFallbacks();
+
+      expect(scanned).toBeGreaterThan(400);
+      expect(found).toEqual([]);
+    },
+    WALK_TIMEOUT_MS
+  );
+
+  it("still recognises a raw fallback when it sees one", () => {
+    const lossy = `oidcError = errorMessage(err) ?? "Failed to delete provider.";`;
+
+    expect([...lossy.matchAll(RAW_FALLBACK)]).toHaveLength(1);
   });
+
+  it("leaves a read that is not a fallback alone", () => {
+    const matching = `const body = errorMessage(err)?.trim();`;
+    const wrapped = `return remoteErrorMessage(err, "Failed to load.");`;
+
+    expect([...matching.matchAll(RAW_FALLBACK)]).toHaveLength(0);
+    expect([...wrapped.matchAll(RAW_FALLBACK)]).toHaveLength(0);
+  });
+});
+
+describe("catches around generated remote calls", () => {
+  it(
+    "bind the error, or say why they do not",
+    () => {
+      const { found, scanned } = offences();
+
+      // An empty result is the pass condition, so a walk that read nothing — a
+      // moved source root, a separator the filter did not expect — would pass
+      // for the wrong reason. Assert it found files to judge.
+      expect(scanned).toBeGreaterThan(20);
+      expect(found).toEqual([]);
+    },
+    WALK_TIMEOUT_MS
+  );
 
   it("still recognises a discarded reason when it sees one", () => {
     // The guard is only worth its cost if it fails on the shape it exists to

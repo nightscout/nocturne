@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Web;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Tandem.Configurations;
@@ -20,9 +21,13 @@ public class TandemAuthTokenProvider(
     IConnectorTokenCache tokenCache,
     IConnectorServerResolver<TandemConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
-    ILogger<TandemAuthTokenProvider> logger)
+    ILogger<TandemAuthTokenProvider> logger,
+    IRetryDelayStrategy retryDelayStrategy)
     : AuthTokenProviderBase<TandemConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
+    private readonly IRetryDelayStrategy _retryDelayStrategy =
+        retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
+
     /// <summary>Metadata key under which the resolved pumper id is cached alongside the token.</summary>
     public const string PumperIdKey = "PumperId";
 
@@ -38,9 +43,51 @@ public class TandemAuthTokenProvider(
         AcquireTokenAsync(TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var region = TandemConstants.ForRegion(config.Region);
+        var maxRetries = LoginAttempts(config);
+        var expiresAt = DateTime.MinValue;
+        IReadOnlyDictionary<string, string>? metadata = null;
 
+        var accessToken = await ExecuteWithRetryAsync<string>(
+            async attempt =>
+            {
+                _logger.LogInformation(
+                    "Authenticating with Tandem Source (region {Region}, attempt {Attempt}/{MaxRetries})",
+                    region == TandemConstants.Eu ? "EU" : "US", attempt + 1, maxRetries);
+
+                var signIn = await SignInAsync(region, config, cancellationToken);
+                if (signIn.Token == null)
+                    return (null, signIn.ShouldRetry);
+
+                expiresAt = signIn.ExpiresAt;
+                metadata = signIn.Metadata;
+                return (signIn.Token, false);
+            },
+            _retryDelayStrategy,
+            maxRetries,
+            "Tandem Source authentication",
+            cancellationToken);
+
+        if (string.IsNullOrEmpty(accessToken))
+            return (null, DateTime.MinValue, null);
+
+        _logger.LogInformation(
+            "Tandem Source authentication successful (region {Region}), token expires at {ExpiresAt}",
+            region == TandemConstants.Eu ? "EU" : "US", expiresAt);
+
+        return (accessToken, expiresAt, metadata);
+    }
+
+    /// <summary>
+    ///     Runs one full OIDC sign-in, returning the access token plus what to cache with it, or null
+    ///     plus whether the failure is worth another attempt.
+    /// </summary>
+    private async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata, bool ShouldRetry)>
+        SignInAsync(
+            TandemConstants.RegionUrls region, TandemConnectorConfiguration config,
+            CancellationToken cancellationToken)
+    {
         // One cookie jar per login attempt, matching tconnectsync's fresh requests.Session.
-        using var client = OutboundHttpClient.CreateIsolated(followRedirects: true);
+        using var client = CreateLoginClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd(TandemConstants.UserAgent);
 
         try
@@ -48,26 +95,27 @@ public class TandemAuthTokenProvider(
             // 1. Prime the SSO session, then post credentials to the login API.
             await client.GetAsync(TandemConstants.LoginPageUrl, cancellationToken);
 
-            if (!await LoginAsync(client, region, config, cancellationToken))
-                return (null, DateTime.MinValue, null);
+            var login = await LoginAsync(client, region, config, cancellationToken);
+            if (!login.Succeeded)
+                return (null, DateTime.MinValue, null, login.ShouldRetry);
 
             // 2. PKCE authorize → authorization code.
             var (verifier, challenge) = GeneratePkcePair();
-            var code = await AuthorizeAsync(client, region, challenge, cancellationToken);
+            var (code, authorizeShouldRetry) = await AuthorizeAsync(client, region, challenge, cancellationToken);
             if (code == null)
-                return (null, DateTime.MinValue, null);
+                return (null, DateTime.MinValue, null, authorizeShouldRetry);
 
             // 3. Exchange the code for tokens.
-            var tokens = await ExchangeCodeAsync(client, region, code, verifier, cancellationToken);
+            var (tokens, exchangeShouldRetry) = await ExchangeCodeAsync(client, region, code, verifier, cancellationToken);
             if (tokens?.AccessToken == null || tokens.IdToken == null)
-                return (null, DateTime.MinValue, null);
+                return (null, DateTime.MinValue, null, exchangeShouldRetry);
 
             // 4. Extract pumper/account ids from the id_token claims.
             var (pumperId, accountId) = ExtractIds(tokens.IdToken);
             if (pumperId == null)
             {
                 _logger.LogError("Tandem id_token did not contain a pumperId claim");
-                return (null, DateTime.MinValue, null);
+                return (null, DateTime.MinValue, null, false);
             }
 
             var metadata = new Dictionary<string, string> { [PumperIdKey] = pumperId };
@@ -75,25 +123,23 @@ public class TandemAuthTokenProvider(
                 metadata[AccountIdKey] = accountId;
 
             var expiresAt = DateTime.UtcNow.AddSeconds(tokens.ExpiresIn > 0 ? tokens.ExpiresIn : 3600);
-            _logger.LogInformation(
-                "Tandem Source authentication successful (region {Region}), token expires at {ExpiresAt}",
-                region == TandemConstants.Eu ? "EU" : "US", expiresAt);
 
-            return (tokens.AccessToken, expiresAt, metadata);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "HTTP error during Tandem Source authentication");
-            return (null, DateTime.MinValue, null);
+            return (tokens.AccessToken, expiresAt, metadata, false);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to parse Tandem Source authentication response");
-            return (null, DateTime.MinValue, null);
+            return (null, DateTime.MinValue, null, false);
         }
     }
 
-    private async Task<bool> LoginAsync(
+    /// <summary>
+    ///     Creates the cookie-jar-per-attempt client the sign-in walks its redirect chain on.
+    ///     Overridden in tests to supply a fake transport.
+    /// </summary>
+    protected virtual HttpClient CreateLoginClient() => OutboundHttpClient.CreateIsolated(followRedirects: true);
+
+    private async Task<(bool Succeeded, bool ShouldRetry)> LoginAsync(
         HttpClient client, TandemConstants.RegionUrls region,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
@@ -108,7 +154,7 @@ public class TandemAuthTokenProvider(
         {
             _logger.LogError(
                 "Tandem Source login failed with HTTP {StatusCode}", (int)response.StatusCode);
-            return false;
+            return (false, response.IsRetryableError());
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -116,14 +162,16 @@ public class TandemAuthTokenProvider(
         var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() : null;
         if (!string.Equals(status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
         {
+            // Tandem answers a rejected credential with HTTP 200 and a non-SUCCESS status in the
+            // body, so this — not the status line — is the sign that retrying cannot help.
             _logger.LogError("Tandem Source login did not return SUCCESS (status: {Status})", status);
-            return false;
+            return (false, false);
         }
 
-        return true;
+        return (true, false);
     }
 
-    private async Task<string?> AuthorizeAsync(
+    private async Task<(string? Code, bool ShouldRetry)> AuthorizeAsync(
         HttpClient client, TandemConstants.RegionUrls region, string codeChallenge,
         CancellationToken cancellationToken)
     {
@@ -144,22 +192,25 @@ public class TandemAuthTokenProvider(
         {
             _logger.LogError(
                 "Tandem Source authorize step failed with HTTP {StatusCode}", (int)response.StatusCode);
-            return null;
+            return (null, response.IsRetryableError());
         }
 
         // After following redirects, the authorization code is in the final request URL's query.
         var finalUri = response.RequestMessage?.RequestUri;
         if (finalUri == null)
-            return null;
+            return (null, false);
 
         var code = HttpUtility.ParseQueryString(finalUri.Query)["code"];
         if (string.IsNullOrEmpty(code))
+        {
             _logger.LogError("Tandem Source authorize step returned no code in redirect URL");
+            return (null, false);
+        }
 
-        return string.IsNullOrEmpty(code) ? null : code;
+        return (code, false);
     }
 
-    private async Task<TandemTokenResponse?> ExchangeCodeAsync(
+    private async Task<(TandemTokenResponse? Tokens, bool ShouldRetry)> ExchangeCodeAsync(
         HttpClient client, TandemConstants.RegionUrls region, string code, string codeVerifier,
         CancellationToken cancellationToken)
     {
@@ -178,12 +229,14 @@ public class TandemAuthTokenProvider(
         {
             _logger.LogError(
                 "Tandem Source token exchange failed with HTTP {StatusCode}", (int)response.StatusCode);
-            return null;
+            return (null, response.IsRetryableError());
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonSerializer.DeserializeAsync<TandemTokenResponse>(
+        var tokens = await JsonSerializer.DeserializeAsync<TandemTokenResponse>(
             stream, cancellationToken: cancellationToken);
+
+        return (tokens, false);
     }
 
     /// <summary>

@@ -7,7 +7,10 @@
   import { useToastSubmission } from "$lib/forms";
   import { X, Loader2 } from "lucide-svelte";
   import { StateHistory } from "runed";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import {
+    clockGlucoseSourceOf,
+    getRealtimeStore,
+  } from "$lib/stores/realtime-store.svelte";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
   import { getByIdForEdit as getClockFaceById } from "$api/clockfaces.remote";
   import { update as updateClockFace } from "$api/generated/clockFaces.generated.remote";
@@ -26,7 +29,7 @@
     toApiConfig,
     createInternalElement,
     createInternalRow,
-    getBgColor,
+    clockBackgroundStyle,
     isTrackerBelowThreshold,
   } from "$lib/clock-builder";
 
@@ -64,10 +67,8 @@
   );
 
   // Realtime store for live preview
-  const realtimeStore = getRealtimeStore();
-  const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
-  const direction = $derived(realtimeStore.direction);
+  const glucose = clockGlucoseSourceOf(getRealtimeStore());
+  const currentBG = $derived(glucose.currentBG);
 
   // Tracker definitions
   const definitionsQuery = getDefinitions({});
@@ -112,11 +113,7 @@
   // Computed styles
   const hasBackgroundImage = $derived(!!config.settings?.backgroundImage);
   const previewBgStyle = $derived(
-    hasBackgroundImage
-      ? `background-image: url(${config.settings.backgroundImage}); background-size: cover; background-position: center;`
-      : config.settings?.bgColor
-        ? `background-color: ${getBgColor(currentBG)};`
-        : "background-color: #0a0a0a;"
+    clockBackgroundStyle(config.settings, currentBG, "#0a0a0a")
   );
   const overlayOpacity = $derived(
     hasBackgroundImage
@@ -449,10 +446,8 @@
       {:else}
         <ClockElementPreview
           {element}
-          {currentBG}
-          {bgDelta}
-          {direction}
-          {currentTime}
+          {glucose}
+          now={currentTime}
           {trackerDefinitions}
         />
       {/if}

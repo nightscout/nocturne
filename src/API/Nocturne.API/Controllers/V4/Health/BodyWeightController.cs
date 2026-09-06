@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -109,10 +108,8 @@ public class BodyWeightController(IBodyWeightService bodyWeightService)
     }
 
     /// <summary>
-    /// Create one or more body weight records (single object or array)
+    /// Create one or more body weight records
     /// </summary>
-    // Untyped so one route takes either a bare record or an array of them. Seven published SDKs
-    // are generated from this operation, so the request shape cannot be tightened in place.
     [HttpPost("batch")]
     [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
@@ -120,24 +117,9 @@ public class BodyWeightController(IBodyWeightService bodyWeightService)
     [ProducesResponseType(500)]
     [ErrorEnvelope]
     public Task<ActionResult<IEnumerable<BodyWeight>>> CreateBodyWeights(
-        [FromBody] object bodyWeights,
+        [FromBody] BodyWeight[] bodyWeights,
         CancellationToken cancellationToken = default
-    )
-    {
-        if (bodyWeights is null)
-            return Task.FromResult<ActionResult<IEnumerable<BodyWeight>>>(
-                Problem(detail: "Body weight data is required", statusCode: 400, title: "Bad Request"));
-
-        if (bodyWeights is not JsonElement json)
-            return Task.FromResult<ActionResult<IEnumerable<BodyWeight>>>(
-                Problem(detail: "Invalid data format", statusCode: 400, title: "Bad Request"));
-
-        List<BodyWeight> models = json.ValueKind == JsonValueKind.Array
-            ? JsonSerializer.Deserialize<List<BodyWeight>>(json.GetRawText()) ?? []
-            : JsonSerializer.Deserialize<BodyWeight>(json.GetRawText()) is { } single ? [single] : [];
-
-        return CreateResponseAsync(models, cancellationToken);
-    }
+    ) => CreateResponseAsync(bodyWeights, cancellationToken);
 
     /// <summary>
     /// Update an existing body weight record

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Chat } from "chat";
 import { AlertDeliveryHandler } from "./deliver.js";
 import type { AlertDispatchEvent, BotApiClient } from "../types.js";
+import { cardButtons } from "../cards/card-buttons.test-utils.js";
+import { encodeActionValue } from "../lib/action-value.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -12,7 +14,13 @@ vi.mock("../lib/logger.js", () => ({
   }),
 }));
 
+const buttonValue = (node: unknown, id: string) =>
+  cardButtons(node).find((b) => b.id === id)?.value;
+
 const ADAPTERS_WITH_DM = ["discord", "slack", "telegram", "whatsapp", "resend"];
+
+const TENANT = "11111111-1111-1111-1111-111111111111";
+const EXCURSION = "33333333-3333-3333-3333-333333333333";
 
 function createBot(options: { adaptersWithDm?: string[] } = {}) {
   const withDm = options.adaptersWithDm ?? ADAPTERS_WITH_DM;
@@ -48,7 +56,8 @@ function createEvent(
     destination,
     tenantSlug: "acme",
     payload: {
-      tenantId: "11111111-1111-1111-1111-111111111111",
+      tenantId: TENANT,
+      excursionId: EXCURSION,
       ruleName: "Urgent low",
       subjectName: "Alex",
       glucoseValue: 54,
@@ -172,6 +181,24 @@ describe("AlertDeliveryHandler adapter routing", () => {
       error: "Adapter 'resend' cannot open a direct message",
     });
   });
+});
+
+describe("AlertDeliveryHandler card actions", () => {
+  it.each(["ack_alert", "mute_30"])(
+    "addresses the %s button at the tenant and the excursion",
+    async (id) => {
+      const bits = createBot();
+      const apiBits = createApi();
+
+      await new AlertDeliveryHandler(bits.bot, apiBits.api).deliver(
+        createEvent("discord_dm", "123456789012345678"),
+      );
+
+      expect(buttonValue(bits.post.mock.calls[0]?.[0], id)).toBe(
+        encodeActionValue({ tenantId: TENANT, excursionId: EXCURSION }),
+      );
+    },
+  );
 });
 
 describe("AlertDeliveryHandler outcome reporting", () => {

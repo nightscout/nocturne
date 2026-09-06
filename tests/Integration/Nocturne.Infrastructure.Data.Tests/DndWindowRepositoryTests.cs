@@ -180,7 +180,7 @@ public class DndWindowRepositoryTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddHttpContextAccessor();
-        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString);
+        services.AddPostgreSqlInfrastructure(_fx.AppConnectionString, configuration: null);
         return services.BuildServiceProvider();
     }
 
