@@ -53,6 +53,14 @@ describe("Google Health source presentation", () => {
     await expect.element(page.getByRole("button", { name: /Google Health/ })).not.toHaveTextContent("0 records");
   });
 
+  it.each([
+    { change: { previewRequired: true }, guidance: "Review available data and confirm the import selection" },
+    { change: { selectedTypes: [] }, guidance: "Choose at least one data type to start importing" },
+  ])("explains the next action for $guidance", async ({ change, guidance }) => {
+    render(GoogleHealthSourceRow, { connection: { ...connected, ...change } });
+    await expect.element(page.getByRole("button", { name: /Google Health/ })).toHaveTextContent(guidance);
+  });
+
   it("offers a working refresh when Google Health is the only configured connector", async () => {
     const refresh = vi.fn();
     render(ServerConnectorsCard, {

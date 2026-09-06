@@ -29,8 +29,10 @@
     <p class="text-sm text-muted-foreground">
       {#if !connection.connected}
         Reconnect to resume importing
-      {:else if connection.previewRequired || !connection.selectedTypes?.length}
+      {:else if connection.previewRequired}
         Review available data and confirm the import selection
+      {:else if !connection.selectedTypes?.length}
+        Choose at least one data type to start importing
       {:else if connection.lastSync}
         Last successful sync: {lastSeen(connection.lastSync)}
       {:else}
