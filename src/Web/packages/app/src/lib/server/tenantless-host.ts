@@ -24,7 +24,7 @@
  * unset: the apex serves the dashboard whenever it resolves no tenant either way.
  */
 
-import { extractTenantSlug, isShareHost } from "./request-host";
+import { extractTenantSlug, getOriginalHost, isShareHost } from "./request-host";
 
 /**
  * Parse the DASHBOARD_SLUGS env var (comma-separated). Unset or empty reserves nothing, so the
@@ -86,6 +86,27 @@ export function classifyHost(
  * tenant there and must keep serving the full app, or its owner is trimmed to a dashboard and
  * then bounced to a wildcard subdomain that may not even have a certificate.
  */
+/**
+ * Classify the host a request arrived on, against the configured base domain and reserved
+ * dashboard slugs. Both settings come back with the answer, since a caller that has to know
+ * which tenant it is serving generally has to know where the other tenants live too.
+ */
+export function classifyRequestHost(request: Request): {
+  kind: HostKind;
+  slug: string | null;
+  baseDomain: string | null;
+  dashboardSlugs: string[];
+} {
+  const baseDomain = process.env.BASE_DOMAIN ?? null;
+  const dashboardSlugs = parseDashboardSlugs(process.env.DASHBOARD_SLUGS);
+
+  return {
+    ...classifyHost(getOriginalHost(request), baseDomain, dashboardSlugs),
+    baseDomain,
+    dashboardSlugs,
+  };
+}
+
 export function isTenantlessHost(kind: HostKind, apexResolvesTenant: boolean): boolean {
   if (kind === "dashboard-slug") return true;
   if (kind === "apex") return !apexResolvesTenant;

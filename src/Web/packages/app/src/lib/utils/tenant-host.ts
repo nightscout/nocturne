@@ -89,9 +89,8 @@ export function resolveSingleTenantLanding(
   return tenantUrl(slug, baseDomain, protocol);
 }
 
-/** One entry of the sidebar tenant switcher: a tenant this host can be swapped for. */
+/** One entry of the sidebar tenant switcher: a tenant this visitor can view. */
 export interface TenantSwitcherTarget {
-  id: string;
   slug: string;
   displayName: string | null;
 }
@@ -103,23 +102,19 @@ export interface TenantSwitcher {
 }
 
 /**
- * The sidebar tenant switcher for a visitor viewing `currentSlug` (null on a tenantless host).
+ * The sidebar tenant switcher: every tenant the visitor can view, including the one they are
+ * already on, so the switcher can name what is on screen from the same list it offers.
  */
 export function resolveTenantSwitcher(
-  tenants: readonly TenantListEntry[] | null | undefined,
-  currentSlug: string | null | undefined
+  tenants: readonly TenantListEntry[] | null | undefined
 ): TenantSwitcher {
   const active = activeTenants(tenants);
 
   return {
     totalCount: active.length,
     targets: active
-      .filter(
-        (t): t is TenantListEntry & { id: string; slug: string } =>
-          !!t.id && !!t.slug && t.slug !== currentSlug
-      )
+      .filter((t): t is TenantListEntry & { slug: string } => !!t.slug)
       .map((t) => ({
-        id: t.id,
         slug: t.slug,
         displayName: t.displayName ?? null,
       })),
