@@ -25,7 +25,8 @@ namespace Nocturne.API.Controllers;
 /// configuration shapes, OAuth scope lists). It is excluded from the interactive API explorer via
 /// <see cref="ApiExplorerSettingsAttribute"/> with <c>IgnoreApi = true</c>.
 ///
-/// None of the endpoints here perform real business logic — they return empty/stub responses.
+/// Most answer with a constant, usually an enum's values, but not all: widget definitions serve the
+/// widget catalogue and multitenancy answers from configuration and the resolved tenant.
 /// All endpoints are permitted during initial setup (<see cref="AllowDuringSetupAttribute"/>).
 /// </remarks>
 [ApiController]

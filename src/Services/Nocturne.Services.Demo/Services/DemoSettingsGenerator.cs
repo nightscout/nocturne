@@ -110,15 +110,6 @@ public class DemoSettingsGenerator
     {
         return new FeatureSettings
         {
-            Display = new DisplaySettings
-            {
-                NightMode = false,
-                Theme = "system",
-                TimeFormat = "12",
-                Units = "mg/dl",
-                ShowRawBG = false,
-                FocusHours = 3,
-            },
             Widgets = WidgetCatalog.Defaults(),
             Plugins = new Dictionary<string, PluginSettings>
             {
