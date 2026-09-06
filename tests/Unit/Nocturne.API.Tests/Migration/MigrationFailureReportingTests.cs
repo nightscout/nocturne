@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Migration;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -126,6 +128,199 @@ public class MigrationFailureReportingTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorMessage.Should().StartWith(UnreachableMessage);
+    }
+
+    [Fact]
+    public async Task A_forbidden_response_is_a_rejected_secret_and_not_just_a_status()
+    {
+        // Nightscout answers 403 for a secret it will not honour as readily as 401, and the two
+        // need the same advice; classifying 403 as an ordinary status would print the number.
+        var handler = new RoutedNightscout(_ => Json(HttpStatusCode.Forbidden));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().StartWith(ApiSecretMessage);
+        status.ErrorMessage.Should().NotContain("403");
+    }
+
+    [Fact]
+    public async Task A_rejected_count_fails_the_run_even_when_the_pages_would_have_succeeded()
+    {
+        // The count runs before any collection, so nothing else may be relied on to notice the
+        // rejection: with the pages answering normally, only the count step can fail this run.
+        var handler = new RoutedNightscout(path => path.StartsWith("/api/v1/count/")
+            ? Json(HttpStatusCode.Unauthorized)
+            : Json(HttpStatusCode.OK));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().StartWith(ApiSecretMessage);
+    }
+
+    [Fact]
+    public async Task A_user_cancelling_mid_fetch_is_not_reported_as_an_unreachable_server()
+    {
+        MigrationJob? running = null;
+        var handler = new ThrowingHost(() =>
+        {
+            running!.Cancel();
+            return new TaskCanceledException("The operation was canceled.");
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(
+            provider, job => running = job, ["entries"]);
+
+        status.State.Should().Be(MigrationJobState.Cancelled);
+        status.ErrorMessage.Should().NotBe(UnreachableMessage);
+    }
+
+    [Fact]
+    public async Task An_error_on_the_first_collection_with_nothing_imported_fails_the_run()
+    {
+        var handler = new RoutedNightscout(path => path.StartsWith("/api/v1/count/")
+            ? Json(HttpStatusCode.NotFound)
+            : Json(HttpStatusCode.InternalServerError));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().Be("Nightscout answered 500 for entries.");
+    }
+
+    [Fact]
+    public async Task Subjects_alone_being_refused_is_tolerated_and_named()
+    {
+        // The admin route refuses a read-only secret that is otherwise correct, so this rejection
+        // must not condemn the run — but it is still the reason no sign-ins came across.
+        var handler = new RoutedNightscout(path => path == "/api/v2/authorization/subjects"
+            ? Json(HttpStatusCode.Forbidden)
+            : Json(HttpStatusCode.NotFound));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "subjects");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["subjects"].FailureReason.Should().Be(
+            "Nightscout would not list the people and devices that can sign in. This usually "
+            + "means the API secret is not an admin one.");
+    }
+
+    [Fact]
+    public async Task Subjects_does_not_tolerate_a_server_it_cannot_reach()
+    {
+        await using var provider = MigrationJobHarness.BuildProvider(UnreachableHost());
+        var status = await MigrationJobHarness.RunAsync(provider, "subjects");
+
+        status.State.Should().Be(MigrationJobState.Failed);
+        status.ErrorMessage.Should().StartWith(UnreachableMessage);
+    }
+
+    [Fact]
+    public async Task A_host_that_dies_mid_run_abandons_the_rest_and_says_so_once()
+    {
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            "/api/v1/treatments.json" => throw new HttpRequestException("Connection timed out."),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(
+            provider, "entries", "treatments", "profile", "food", "activity");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.ErrorMessage.Should().StartWith(
+            "1 of 5 collections imported, 1 failed, 3 not attempted.");
+        status.ErrorMessage.Should().Contain(UnreachableMessage);
+
+        // The connection failed once; saying so once is the point of abandoning the rest.
+        Regex.Matches(status.ErrorMessage!, Regex.Escape(UnreachableMessage)).Should().ContainSingle();
+        status.CollectionProgress["profile"].FailureReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_rejection_arriving_after_data_does_not_repeat_the_api_secret_advice()
+    {
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            "/api/v1/treatments.json" => Json(HttpStatusCode.Unauthorized),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(
+            provider, "entries", "treatments", "profile");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["treatments"].FailureReason.Should().StartWith(
+            "Nightscout refused to hand this over.");
+
+        // The secret plainly works — it fetched the entries — so telling them to check it is wrong.
+        status.ErrorMessage.Should().NotContain("API_SECRET");
+    }
+
+    [Fact]
+    public async Task A_collection_Nocturne_cannot_store_is_named_without_leaking_the_exception()
+    {
+        // A malformed page reaches the collection loop as a JsonException; its text is a parser
+        // position, which tells whoever ran the import nothing they can act on.
+        var handler = new RoutedNightscout(path => path switch
+        {
+            "/api/v1/entries.json" => Json(HttpStatusCode.OK, """[{"date":1770000000000}]"""),
+            "/api/v1/treatments.json" => Json(HttpStatusCode.OK, "{ not json"),
+            _ => Json(HttpStatusCode.NotFound),
+        });
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "entries", "treatments");
+
+        status.State.Should().Be(MigrationJobState.Completed);
+        status.CollectionProgress["treatments"].FailureReason.Should()
+            .Be("Nocturne could not store the treatments it received.");
+    }
+
+    [Fact]
+    public void Per_collection_outcomes_survive_a_round_trip_through_the_run_record()
+    {
+        var run = new MigrationRunEntity
+        {
+            State = nameof(MigrationJobState.Completed),
+            CollectionOutcomes = """
+                [{"collectionName":"entries","totalDocuments":9,"documentsMigrated":9,"documentsFailed":0,"isComplete":true,"failureReason":null},
+                 {"collectionName":"treatments","totalDocuments":0,"documentsMigrated":0,"documentsFailed":0,"isComplete":true,"failureReason":"Nightscout answered 500 for treatments."}]
+                """,
+        };
+
+        var status = MigrationJob.StatusFromRecord(run);
+
+        status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(9);
+        status.CollectionProgress["treatments"].FailureReason.Should()
+            .Be("Nightscout answered 500 for treatments.");
+    }
+
+    [Fact]
+    public void A_run_record_whose_outcomes_cannot_be_read_falls_back_to_the_count_columns()
+    {
+        var run = new MigrationRunEntity
+        {
+            State = nameof(MigrationJobState.Completed),
+            EntriesMigrated = 4,
+            TreatmentsMigrated = 2,
+            CollectionOutcomes = "{ not an outcome array",
+        };
+
+        var status = MigrationJob.StatusFromRecord(run);
+
+        status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(4);
+        status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(2);
     }
 
     [Fact]

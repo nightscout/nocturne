@@ -153,6 +153,9 @@ internal enum MigrationFailureCause
 
     /// <summary>The source answered, with a status that is not success.</summary>
     Status,
+
+    /// <summary>The source answered and Nocturne could not use what came back.</summary>
+    Internal,
 }
 
 /// <summary>

@@ -417,6 +417,16 @@ internal class MigrationJob
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
     private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// The one shape <see cref="MigrationRunEntity.CollectionOutcomes"/> is written and read in.
+    /// Writing with one set of options and reading with another would silently lose every field.
+    /// </summary>
+    private static readonly System.Text.Json.JsonSerializerOptions s_outcomeJson = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
     public MigrationJob(
         Guid id,
         Guid tenantId,
@@ -597,7 +607,7 @@ internal class MigrationJob
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
             run.CollectionOutcomes = _collectionProgress.IsEmpty
                 ? null
-                : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList());
+                : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList(), s_outcomeJson);
 
             if (_state == MigrationJobState.Completed)
             {
@@ -693,12 +703,20 @@ internal class MigrationJob
     private static Dictionary<string, CollectionProgress> OutcomesFromRecord(
         MigrationRunEntity run, MigrationJobState state)
     {
-        if (!string.IsNullOrEmpty(run.CollectionOutcomes))
+        // The column is free-form to the database, so a row written by another version — or by
+        // hand — must degrade to the counts below rather than break the status endpoint.
+        try
         {
-            var stored = System.Text.Json.JsonSerializer
-                .Deserialize<List<CollectionProgress>>(run.CollectionOutcomes, s_caseInsensitiveJson);
+            var stored = string.IsNullOrEmpty(run.CollectionOutcomes)
+                ? null
+                : System.Text.Json.JsonSerializer
+                    .Deserialize<List<CollectionProgress>>(run.CollectionOutcomes, s_outcomeJson);
+
             if (stored is { Count: > 0 })
                 return stored.ToDictionary(c => c.CollectionName);
+        }
+        catch (System.Text.Json.JsonException)
+        {
         }
 
         return new Dictionary<string, CollectionProgress>
@@ -785,39 +803,71 @@ internal class MigrationJob
             _totalDocumentsAllCollections += count;
         }
 
-        foreach (var (name, migrate) in collectionsToMigrate)
+        for (var i = 0; i < collectionsToMigrate.Count; i++)
         {
+            var (name, migrate) = collectionsToMigrate[i];
             try
             {
                 await migrate(httpClient, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                var cause = (ex as MigrationSourceException)?.Cause ?? MigrationFailureCause.Status;
                 _logger.LogError(ex, "Migration of {Collection} failed", name);
-                RecordCollectionFailure(name, ex.Message);
 
-                if (IsFatal(cause))
-                    throw new MigrationSourceException(ex.Message, cause);
+                var failure = ex as MigrationSourceException ?? new MigrationSourceException(
+                    $"Nocturne could not store the {name} it received.",
+                    MigrationFailureCause.Internal,
+                    ex);
+
+                RecordCollectionFailure(name, ReasonFor(failure));
+
+                if (IsFatal(failure.Cause))
+                    throw new MigrationSourceException(failure.Message, failure.Cause);
+
+                if (IsConnectionLevel(failure.Cause))
+                {
+                    // The connection, not this collection, is what failed. Trying the rest would
+                    // spend a timeout each to arrive at the sentence already recorded.
+                    _abandonedAfter = failure.Cause;
+                    return;
+                }
             }
         }
     }
 
+    /// <summary>A cause that belongs to the connection, so every remaining collection would meet it too.</summary>
+    private static bool IsConnectionLevel(MigrationFailureCause cause) =>
+        cause is MigrationFailureCause.ApiSecretRejected or MigrationFailureCause.Unreachable;
+
+    /// <summary>Set when a connection-level failure ended the run's remaining collections early.</summary>
+    private MigrationFailureCause? _abandonedAfter;
+
     /// <summary>
-    /// Whether a collection failing for <paramref name="cause"/> should end the whole run rather
-    /// than leave the remaining collections to try. A rejected secret or an unreachable host will
-    /// repeat for every one of them; any other status is only fatal while the run has nothing to
-    /// show for itself, since a run that already imported something is a partial success and its
-    /// summary can name what failed.
+    /// Whether <paramref name="cause"/> ends the whole run. Only while nothing has been imported:
+    /// there is no partial success to preserve, and a connection-level cause defeats every
+    /// remaining collection anyway. Once records are in, the run keeps them and completes — a
+    /// connection-level cause then abandons the collections it has not reached rather than
+    /// attempting each one.
     /// </summary>
     private bool IsFatal(MigrationFailureCause cause)
     {
         if (_collectionProgress.Values.Any(c => c.DocumentsMigrated > 0))
             return false;
 
-        return cause is not MigrationFailureCause.Status
+        return IsConnectionLevel(cause)
             || !_collectionProgress.Values.Any(c => c.IsComplete && c.FailureReason is null);
     }
+
+    /// <summary>
+    /// What to record against the collection that failed. A rejection arriving after other data
+    /// has already come across is not the "check your API_SECRET" case — the secret demonstrably
+    /// works — so it is worded as a limit on what this credential may read.
+    /// </summary>
+    private string ReasonFor(MigrationSourceException failure) =>
+        failure.Cause is MigrationFailureCause.ApiSecretRejected
+        && _collectionProgress.Values.Any(c => c.DocumentsMigrated > 0)
+            ? PartialAccessMessage
+            : failure.Message;
 
     /// <summary>Marks a collection finished-and-failed, keeping whatever it managed to import.</summary>
     private void RecordCollectionFailure(string collectionName, string reason)
@@ -830,19 +880,36 @@ internal class MigrationJob
     }
 
     /// <summary>
-    /// One line naming how much of the run got through, plus each collection that did not, or
-    /// <see langword="null"/> when every collection finished. Carried on the run's error message
-    /// so a partial success does not read as an unqualified Completed.
+    /// How much of the run got through, each collection that did not and why, and — once — the
+    /// reason any remaining collections were never attempted. <see langword="null"/> when every
+    /// collection finished, so an untroubled run carries no message at all.
     /// </summary>
+    /// <remarks>
+    /// A collection is "not attempted" when it never completed and recorded no reason of its own:
+    /// the run stopped before reaching it. Naming those separately is what keeps one connection
+    /// failure from being reported as six.
+    /// </remarks>
     private string? FailureSummary()
     {
         var failed = _collectionProgress.Values.Where(c => c.FailureReason is not null).ToList();
-        if (failed.Count == 0)
+        var notAttempted = _collectionProgress.Values.Count(c => c.FailureReason is null && !c.IsComplete);
+        if (failed.Count == 0 && notAttempted == 0)
             return null;
 
         var total = _collectionProgress.Count;
-        return $"{total - failed.Count} of {total} collections imported, {failed.Count} failed. "
-            + string.Join(" ", failed.Select(c => $"{c.CollectionName}: {c.FailureReason}"));
+        var counts = $"{total - failed.Count - notAttempted} of {total} collections imported, {failed.Count} failed";
+        if (notAttempted > 0)
+            counts += $", {notAttempted} not attempted";
+
+        var detail = failed.Select(c => $"{c.CollectionName}: {c.FailureReason}").ToList();
+        if (_abandonedAfter is { } cause && notAttempted > 0)
+        {
+            detail.Add(cause is MigrationFailureCause.Unreachable
+                ? "The rest were not attempted because the connection to Nightscout had already failed."
+                : "The rest were not attempted because Nightscout had already refused this credential.");
+        }
+
+        return $"{counts}. " + string.Join(" ", detail);
     }
 
     /// <summary>
@@ -888,6 +955,10 @@ internal class MigrationJob
         "Could not reach your Nightscout server. Check it is online and that it allows connections "
         + "from Nocturne.";
 
+    private const string PartialAccessMessage =
+        "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
+        + "may not be allowed to read this.";
+
     /// <summary>
     /// Fetches the document count for a collection via the Nightscout count API.
     /// Collections that don't support the count endpoint return 0.
@@ -895,9 +966,8 @@ internal class MigrationJob
     /// <remarks>
     /// A count is optional — it only sharpens the progress bar — so an error status is tolerated:
     /// Nightscout versions that lack the route answer 404, and the collection pull that follows
-    /// will report the same status properly if it is real. A rejected secret or an unreachable
-    /// host is not tolerated: those will defeat every collection, and surfacing them here fails the
-    /// run in seconds with the right words instead of after seven silent collection failures.
+    /// reports the same status properly if it is real. A rejected secret or an unreachable host is
+    /// not tolerated: those defeat every collection, so the run fails here with the right words.
     /// </remarks>
     private async Task<long> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
@@ -1563,8 +1633,8 @@ internal class MigrationJob
                 ex.Message);
             RecordCollectionFailure(
                 collectionName,
-                "Nightscout would not list the people and devices that can sign in. "
-                + "This usually means the API secret is not an admin one; everything else still imports.");
+                "Nightscout would not list the people and devices that can sign in. This usually "
+                + "means the API secret is not an admin one.");
             return;
         }
 

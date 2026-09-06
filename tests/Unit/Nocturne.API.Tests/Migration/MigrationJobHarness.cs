@@ -72,8 +72,16 @@ internal static class MigrationJobHarness
             .BuildServiceProvider();
     }
 
+    public static Task<MigrationJobStatus> RunAsync(
+        IServiceProvider provider, params string[] collections) =>
+        RunAsync(provider, onCreated: null, collections);
+
+    /// <summary>
+    /// <paramref name="onCreated"/> receives the job before it starts, so a test's stub source can
+    /// cancel it mid-fetch the way the user's Cancel button does.
+    /// </summary>
     public static async Task<MigrationJobStatus> RunAsync(
-        IServiceProvider provider, params string[] collections)
+        IServiceProvider provider, Action<MigrationJob>? onCreated, string[] collections)
     {
         var tenant = new TenantContext(
             Guid.CreateVersion7(), "migrated", "Migrated Tenant", true, IsDemo: false);
@@ -96,6 +104,8 @@ internal static class MigrationJobHarness
             tenant,
             NullLogger.Instance,
             provider);
+
+        onCreated?.Invoke(job);
 
         await job.ExecuteAsync(CancellationToken.None);
 
