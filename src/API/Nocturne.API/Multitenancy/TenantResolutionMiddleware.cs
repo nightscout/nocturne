@@ -472,9 +472,9 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
-    /// Returns the sole active non-demo tenant if exactly one exists, enabling single-tenant
-    /// mode where the apex domain auto-resolves without a subdomain.
-    /// Returns null when zero or multiple such tenants exist.
+    /// Returns the install's <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>,
+    /// enabling single-tenant mode where the apex domain auto-resolves without a subdomain, or null
+    /// when there is none or several.
     /// </summary>
     /// <remarks>
     /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
@@ -490,17 +490,11 @@ public class TenantResolutionMiddleware
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
 
-        var tenants = await context.Tenants.AsNoTracking()
-            .ExcludeDemo()
-            .Where(t => t.IsActive)
-            .OrderBy(t => t.Id)
-            .Take(2)
-            .ToListAsync();
+        var tenant = await context.Tenants.SoleTenantAsync();
 
-        if (tenants.Count != 1)
+        if (tenant is null)
             return null;
 
-        var tenant = tenants[0];
         var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;
