@@ -307,8 +307,13 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
-        // Derive WebAuthn RP config from the base domain (single source of truth)
-        var baseDomain = configuration[BaseDomainOptions.ConfigKey] ?? "localhost:1612";
+        // Derive WebAuthn RP config from the base domain (single source of truth). Blank counts as
+        // unset: it is what the shipped .env.example leaves behind, and an origin built from it is
+        // one Fido2Configuration refuses to parse.
+        var configuredBaseDomain = configuration[BaseDomainOptions.ConfigKey];
+        var baseDomain = string.IsNullOrWhiteSpace(configuredBaseDomain)
+            ? "localhost:1612"
+            : configuredBaseDomain;
         var rpId = baseDomain.Split(':')[0]; // hostname without port
         var origin = $"https://{baseDomain}";
         services.AddFido2(options =>
