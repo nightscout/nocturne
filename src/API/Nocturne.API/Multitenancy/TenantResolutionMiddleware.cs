@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
@@ -460,21 +461,25 @@ public class TenantResolutionMiddleware
     }
 
     /// <summary>
-    /// Checks whether any tenant exists at all (used to distinguish "no tenants
-    /// yet" from "tenant not found" on the apex domain).
+    /// Checks whether any tenant a caller could be served exists at all (used to distinguish
+    /// "no tenants yet" from "tenant not found" on the apex domain).
     /// </summary>
     private async Task<bool> AnyTenantExistsAsync(IServiceProvider services)
     {
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
-        return await context.Tenants.AsNoTracking().AnyAsync();
+        return await context.Tenants.AsNoTracking().ExcludeDemo().AnyAsync();
     }
 
     /// <summary>
-    /// Returns the sole active tenant if exactly one exists, enabling single-tenant
-    /// mode where the apex domain auto-resolves without a subdomain.
-    /// Returns null when zero or multiple tenants exist.
+    /// Returns the install's <see cref="SoleTenantQuery.SoleTenantAsync">sole servable tenant</see>,
+    /// enabling single-tenant mode where the apex domain auto-resolves without a subdomain, or null
+    /// when there is none or several.
     /// </summary>
+    /// <remarks>
+    /// A demo tenant is an ordinary active tenant, so it would otherwise be counted here; see
+    /// <see cref="DemoExclusionFilter"/>.
+    /// </remarks>
     private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
     {
         var cacheKey = SoleTenantCacheKey;
@@ -485,16 +490,11 @@ public class TenantResolutionMiddleware
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
 
-        var tenants = await context.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .OrderBy(t => t.Id)
-            .Take(2)
-            .ToListAsync();
+        var tenant = await context.Tenants.SoleTenantAsync();
 
-        if (tenants.Count != 1)
+        if (tenant is null)
             return null;
 
-        var tenant = tenants[0];
         var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;

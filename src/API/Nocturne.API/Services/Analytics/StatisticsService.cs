@@ -1484,11 +1484,35 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// The gap credited to the final reading of a series whose entries show no gap of their own:
-    /// a lone reading, or several stamped at the same instant. The readings before it in such a
-    /// series cover no elapsed time and are credited none.
+    /// The cadence assumed of a series whose entries show no interval of their own: a lone
+    /// reading, or several stamped at the same instant. In <see cref="ReadingMinutes"/> it is what
+    /// the final reading of such a series stands for, the readings before it covering no elapsed
+    /// time; in <see cref="AssessDataQuality"/> it is the coverage that reading is credited.
     /// </summary>
     private const double DefaultCadenceMinutes = 5;
+
+    /// <summary>
+    /// The minutes from each reading to the next, in series order; empty for a series of one.
+    /// </summary>
+    private static double[] ReadingIntervals(IList<SensorGlucose> sortedEntries)
+    {
+        var intervals = new double[Math.Max(sortedEntries.Count - 1, 0)];
+        for (var i = 1; i < sortedEntries.Count; i++)
+            intervals[i - 1] = (sortedEntries[i].Mills - sortedEntries[i - 1].Mills) / 60000.0;
+
+        return intervals;
+    }
+
+    /// <summary>
+    /// The cadence the series reports about itself: the median of its intervals, which a sensor
+    /// outage or a warmup cannot drag the way it would a mean. Intervals of no elapsed time are
+    /// excluded, and a series with none left falls back to <see cref="DefaultCadenceMinutes"/>.
+    /// </summary>
+    private static double SeriesCadenceMinutes(IEnumerable<double> intervals)
+    {
+        var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
+        return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
+    }
 
     /// <summary>
     /// The minutes each reading stands for: the gap to the next reading, capped at twice the
@@ -1497,15 +1521,12 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     private static double[] ReadingMinutes(IList<SensorGlucose> sortedEntries)
     {
+        var intervals = ReadingIntervals(sortedEntries);
+        var cadence = SeriesCadenceMinutes(intervals);
+
         var minutes = new double[sortedEntries.Count];
-        for (var i = 1; i < sortedEntries.Count; i++)
-            minutes[i - 1] = (sortedEntries[i].Mills - sortedEntries[i - 1].Mills) / 60000.0;
-
-        var gaps = minutes.Take(sortedEntries.Count - 1).Where(g => g > 0).Order().ToList();
-        var cadence = gaps.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(gaps);
-
-        for (var i = 0; i < sortedEntries.Count - 1; i++)
-            minutes[i] = Math.Min(minutes[i], cadence * 2);
+        for (var i = 0; i < intervals.Length; i++)
+            minutes[i] = Math.Min(intervals[i], cadence * 2);
         minutes[^1] = cadence;
 
         return minutes;
@@ -2725,8 +2746,7 @@ public class StatisticsService : IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null,
-        int updateIntervalMinutes = 5
+        DateTime? endDate = null
     )
     {
         config ??= new ExtendedAnalysisConfig();
@@ -2756,7 +2776,7 @@ public class StatisticsService : IStatisticsService
         var basicStats = CalculateBasicStats(glucoseValues);
         var timeInRange = CalculateTimeInRange(sortedEntries, config.Thresholds);
         var glycemicVariability = CalculateGlycemicVariability(glucoseValues, sortedEntries);
-        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate, updateIntervalMinutes);
+        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate);
 
         var timeStart = sortedEntries.FirstOrDefault()?.Mills ?? 0;
         var timeEnd = sortedEntries.LastOrDefault()?.Mills ?? 0;
@@ -2784,65 +2804,80 @@ public class StatisticsService : IStatisticsService
         };
     }
 
+    /// <summary>
+    /// A stretch longer than three cadences is a gap: two readings the sensor owed are absent.
+    /// </summary>
+    private const double GapCadences = 3;
+
     private DataQuality AssessDataQuality(
         IList<SensorGlucose> entries,
         DateTime? reportStart = null,
-        DateTime? reportEnd = null,
-        int updateIntervalMinutes = 5)
+        DateTime? reportEnd = null)
     {
         var totalReadings = entries.Count;
         var gaps = new List<DataGap>();
+        var missingReadings = 0;
+        double coveredMinutes = 0;
+        double streamSpanMinutes = 0;
 
-        if (entries.Count > 1)
+        // Cadence belongs to a sensor, not to a report: a window spanning a switch from a
+        // one-minute sensor to a five-minute one holds two of them. Streams are told apart on the
+        // identity CanonicalGlucoseStream.Select selects on.
+        foreach (var stream in entries.GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal))
         {
-            for (int i = 1; i < entries.Count; i++)
-            {
-                var prevTime = entries[i - 1].Mills;
-                var currentTime = entries[i].Mills;
-                var gapMinutes = (currentTime - prevTime) / (1000.0 * 60);
+            var readings = stream.ToList();
+            var intervals = ReadingIntervals(readings);
+            var cadence = SeriesCadenceMinutes(intervals);
 
-                if (gapMinutes > 15)
+            coveredMinutes += readings.Count * cadence;
+            streamSpanMinutes += intervals.Sum();
+
+            for (int i = 0; i < intervals.Length; i++)
+            {
+                if (intervals[i] <= cadence * GapCadences)
+                    continue;
+
+                gaps.Add(new DataGap
                 {
-                    gaps.Add(new DataGap
-                    {
-                        Start = prevTime,
-                        End = currentTime,
-                        Duration = gapMinutes,
-                    });
-                }
+                    Start = readings[i].Mills,
+                    End = readings[i + 1].Mills,
+                    Duration = intervals[i],
+                });
+
+                // A gap spanning n cadences is missing n - 1 readings: the one that closed it
+                // arrived.
+                missingReadings += (int)(intervals[i] / cadence) - 1;
             }
         }
 
         var longestGap = gaps.Any() ? gaps.Max(g => g.Duration) : 0;
         var averageGap = gaps.Any() ? gaps.Average(g => g.Duration) : 0;
 
-        // CgmActivePercent: actual readings vs expected readings over report period
+        // CgmActivePercent: minutes the sensors covered, each reading standing for one cadence of
+        // its own stream, against the report period.
         var effectiveStart = reportStart ?? (entries.Count > 0 ? entries[0].Timestamp : DateTime.UtcNow);
         var effectiveEnd = reportEnd ?? (entries.Count > 0 ? entries[^1].Timestamp : DateTime.UtcNow);
         var reportSpanMinutes = (effectiveEnd - effectiveStart).TotalMinutes;
-        var expectedReadings = reportSpanMinutes / updateIntervalMinutes;
-        var cgmActivePercent = expectedReadings > 0
-            ? Math.Min(totalReadings / expectedReadings * 100.0, 100.0)
+        var cgmActivePercent = reportSpanMinutes > 0
+            ? Math.Min(coveredMinutes / reportSpanMinutes * 100.0, 100.0)
             : 0;
 
-        // DataCompleteness: time coverage within the data range (first->last reading)
-        var dataSpanMinutes = entries.Count > 1
-            ? (entries[^1].Mills - entries[0].Mills) / (1000.0 * 60)
-            : 0;
+        // DataCompleteness: time coverage within each stream's own range (first->last reading)
         var totalGapMinutes = gaps.Sum(g => g.Duration);
-        var dataCompleteness = dataSpanMinutes > 0
-            ? ((dataSpanMinutes - totalGapMinutes) / dataSpanMinutes) * 100.0
+        var dataCompleteness = streamSpanMinutes > 0
+            ? ((streamSpanMinutes - totalGapMinutes) / streamSpanMinutes) * 100.0
             : 0;
 
         return new DataQuality
         {
             TotalReadings = totalReadings,
-            MissingReadings = gaps.Sum(g => (int)(g.Duration / updateIntervalMinutes)),
+            MissingReadings = missingReadings,
             DataCompleteness = dataCompleteness,
             CgmActivePercent = cgmActivePercent,
             GapAnalysis = new GapAnalysis
             {
-                Gaps = gaps,
+                // Collected a stream at a time, so put them back in the order they happened.
+                Gaps = gaps.OrderBy(g => g.Start).ToList(),
                 LongestGap = longestGap,
                 AverageGap = averageGap,
             },

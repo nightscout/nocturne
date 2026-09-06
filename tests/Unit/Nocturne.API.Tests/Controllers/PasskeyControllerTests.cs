@@ -1330,4 +1330,25 @@ public class PasskeyControllerTests : IDisposable
     }
 
     #endregion
+
+    #region ListCredentials reports whether the account has a backup way in
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ListCredentials_CarriesTheSingleSignInMethodVerdict(bool single)
+    {
+        Authenticate();
+        _passkeyService.Setup(s => s.GetCredentialsAsync(_subjectId)).ReturnsAsync([]);
+        _subjectService.Setup(s => s.CountPrimaryAuthFactorsAsync(_subjectId)).ReturnsAsync(1);
+        _subjectService.Setup(s => s.HasSingleSignInMethodAsync(_subjectId)).ReturnsAsync(single);
+
+        var result = await _controller.ListCredentials();
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<PasskeyCredentialListResponse>(okResult.Value);
+        response.HasSingleSignInMethod.Should().Be(single);
+    }
+
+    #endregion
 }

@@ -89,6 +89,13 @@ public interface ISubjectService
     /// <param name="subjectId">Subject identifier.</param>
     Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId);
 
+    /// <summary>
+    /// Returns whether the subject can sign in exactly one way — a single primary factor with no
+    /// unused recovery codes behind it — so that losing that one credential locks the account out.
+    /// </summary>
+    /// <param name="subjectId">Subject identifier.</param>
+    Task<bool> HasSingleSignInMethodAsync(Guid subjectId);
+
     /// <summary>Updates the last-used timestamp on an OIDC identity to track recent activity.</summary>
     /// <param name="identityId">The OIDC identity ID to update.</param>
     Task UpdateOidcIdentityLastUsedAsync(Guid identityId);

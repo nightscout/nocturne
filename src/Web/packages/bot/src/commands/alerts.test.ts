@@ -3,6 +3,7 @@ import type { ActionEvent, Chat } from "chat";
 import { registerAlertCommands } from "./alerts.js";
 import { runWithContext, type BotRequestContext } from "../lib/request-context.js";
 import type { BotApiClient, DirectoryCandidate } from "../types.js";
+import { encodeActionValue, encodeTenantKey } from "../lib/action-value.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -20,9 +21,15 @@ const EXCURSION = "33333333-3333-3333-3333-333333333333";
 const HOME = candidate(HOME_TENANT, "home-clinic", "home");
 const WORK = candidate(WORK_TENANT, "work-clinic", "work");
 
+/** Two tenant ids whose trailing bytes — and so whose button-value keys — are identical. */
+const TWIN_TENANT_A = "11111111-1111-7000-8000-000000000001";
+const TWIN_TENANT_B = "22222222-2222-7000-8000-000000000001";
+const TWIN_A = candidate(TWIN_TENANT_A, "twin-a-clinic", "twin-a");
+const TWIN_B = candidate(TWIN_TENANT_B, "twin-b-clinic", "twin-b");
+
 /** The value the alert card puts on its buttons: the tenant and the excursion. */
 const cardValue = (tenantId: string, excursionId: string) =>
-  `${tenantId}:${excursionId}`;
+  encodeActionValue({ tenantId, excursionId });
 
 function candidate(
   tenantId: string,
@@ -143,6 +150,18 @@ describe("ack_alert action", () => {
     expect(post).toHaveBeenCalledExactlyOnceWith("All alerts acknowledged.");
   });
 
+  it("acknowledges the excursion named by a two-UUID value", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event } = createActionEvent(`${WORK_TENANT}:${EXCURSION}`);
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
+    ).toHaveBeenCalledExactlyOnceWith(EXCURSION, { acknowledgedBy: "Sam Tester" });
+  });
+
   it("acknowledges through the client scoped to the alert's tenant", async () => {
     const ctx = createContext([HOME, WORK]);
     const { event } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
@@ -255,6 +274,45 @@ describe("ack_alert action", () => {
     expect(ctx.scopedApiFactory).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
   });
+
+  it("refuses when two linked tenants answer to the same key", async () => {
+    expect(encodeTenantKey(TWIN_TENANT_A)).toBe(encodeTenantKey(TWIN_TENANT_B));
+    const ctx = createContext([TWIN_A, TWIN_B]);
+    const { event, post, postEphemeral } = createActionEvent(
+      cardValue(TWIN_TENANT_A, EXCURSION),
+    );
+
+    await runWithContext(ctx.context, () => handler(event));
+
+    expect(postEphemeral).toHaveBeenCalledExactlyOnceWith(
+      event.user,
+      "You have multiple linked Nocturne accounts: `twin-a` (TWIN-A), `twin-b` (TWIN-B). Set a default in Settings → Integrations → Discord, or use the matching slash command with a label.",
+      { fallbackToDM: true },
+    );
+    expect(ctx.scopedApiFactory).not.toHaveBeenCalled();
+    expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it.each(["nonsense", "*".repeat(22), "", ":"])(
+    "acknowledges nothing when the excursion segment is %p",
+    async (segment) => {
+      const ctx = createContext([HOME, WORK]);
+      const { event, post } = createActionEvent(
+        `${encodeTenantKey(WORK_TENANT)}:${segment}`,
+      );
+
+      await runWithContext(ctx.context, () => handler(event));
+
+      const alerts = ctx.alertsBySlug.get("work-clinic");
+      expect(alerts?.acknowledge).toBeUndefined();
+      expect(alerts?.acknowledgeExcursion).toBeUndefined();
+      expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
+      expect(post).toHaveBeenCalledExactlyOnceWith(
+        "Couldn't tell which alert this button is for. Nothing was acknowledged.",
+      );
+    },
+  );
 
   it("reports a failure without retrying against another tenant", async () => {
     const ctx = createContext([HOME, WORK]);

@@ -19,6 +19,7 @@
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
+  import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
@@ -215,6 +216,9 @@
       {/if}
       {#if data.isGuestSession && data.guestExpiresAt}
         <GuestBanner expiresAt={data.guestExpiresAt} />
+      {/if}
+      {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
+        <BackupSignInPrompt />
       {/if}
       {#if !tenantless}
         <MembershipRequestAutoSubmit

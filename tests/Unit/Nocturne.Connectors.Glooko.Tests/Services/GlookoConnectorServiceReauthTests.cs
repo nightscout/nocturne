@@ -202,7 +202,8 @@ public class GlookoConnectorServiceReauthTests
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
                 new FakeTenantAccessor(),
-                NullLogger<GlookoAuthTokenProvider>.Instance)
+                NullLogger<GlookoAuthTokenProvider>.Instance,
+                Mock.Of<IRetryDelayStrategy>())
         {
             _codes = new Queue<string>(codes);
         }
