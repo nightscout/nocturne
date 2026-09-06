@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
@@ -182,6 +183,12 @@ public static class ServiceRegistrationExtensions
         IConfiguration configuration
     )
     {
+        // The clock every constructor-injected TimeProvider resolves to, stated here rather than
+        // left to AddAuthentication, which TryAdds the same instance in passing. In this host
+        // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
+        // that do not add the cache.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();
         services.AddSingleton<IXmlDocumentationService, XmlDocumentationService>();
