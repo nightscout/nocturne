@@ -226,6 +226,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<OAuthAuthorizationCodeEntity> OAuthAuthorizationCodes { get; set; }
 
+    public DbSet<LoginCodeEntity> LoginCodes { get; set; } = null!;
+
     public DbSet<MemberInviteEntity> MemberInvites { get; set; } = null!;
 
     public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
@@ -553,6 +555,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             typeof(ClockFaceEntity),
             typeof(DndWindowEntity),
             typeof(InAppNotificationEntity),
+            typeof(LoginCodeEntity),
             typeof(MutationAuditLogEntity),
             typeof(OAuthAuthorizationCodeEntity),
             typeof(OAuthClientEntity),
@@ -2213,6 +2216,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .WithMany()
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LoginCodeEntity>(entity =>
+        {
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.CodeHash).IsUnique();
+            entity.HasIndex(e => e.ExpiresAt);
         });
 
         modelBuilder.Entity<MemberInviteEntity>(entity =>

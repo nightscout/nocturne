@@ -114,8 +114,7 @@ public class OidcController : ControllerBase
         [FromQuery] string? returnUrl = null
     )
     {
-        // Validate return URL to prevent open redirect attacks
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
         {
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
         }
@@ -291,7 +290,7 @@ public class OidcController : ControllerBase
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
             return Unauthorized(new { error = "not_authenticated", message = "Authentication required" });
 
-        if (!string.IsNullOrEmpty(returnUrl) && !IsValidReturnUrl(returnUrl))
+        if (!string.IsNullOrEmpty(returnUrl) && !_baseDomain.IsValidReturnUrl(returnUrl))
             return BadRequest(new { error = "invalid_return_url", message = "Invalid return URL" });
 
         try
@@ -662,30 +661,6 @@ public class OidcController : ControllerBase
     }
 
     #region Private Helper Methods
-
-    /// <summary>
-    /// Validate that a return URL is safe (prevents open redirect attacks)
-    /// </summary>
-    private bool IsValidReturnUrl(string returnUrl)
-    {
-        // Site-local path: starts with "/" but not "//" or "/\", which browsers
-        // resolve as scheme-relative — "Location: //evil.com" leaves the site.
-        if (returnUrl.StartsWith('/'))
-        {
-            return returnUrl.Length == 1 || (returnUrl[1] != '/' && returnUrl[1] != '\\');
-        }
-
-        // Absolute URL: parse and compare scheme + authority against the public
-        // origin, so neither "https://example.com.evil.com" (prefix) nor
-        // "https://example.com@evil.com" (userinfo) can pass a string match.
-        var origin = _baseDomain.PublicOrigin;
-        return !string.IsNullOrEmpty(origin)
-            && Uri.TryCreate(returnUrl, UriKind.Absolute, out var target)
-            && Uri.TryCreate(origin, UriKind.Absolute, out var expected)
-            && target.Scheme == expected.Scheme
-            && string.Equals(target.Authority, expected.Authority, StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrEmpty(target.UserInfo);
-    }
 
     private void SetStateCookie(string state, DateTimeOffset expiresAt) =>
         Response.SetStateCookie(_options.Cookie.StateCookieName, state, expiresAt, _options);
