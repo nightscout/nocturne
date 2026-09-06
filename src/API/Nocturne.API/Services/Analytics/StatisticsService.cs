@@ -770,8 +770,11 @@ public class StatisticsService : IStatisticsService
     /// <returns>Collection of glucose values in mg/dL</returns>
     public IEnumerable<double> ExtractGlucoseValues(IEnumerable<SensorGlucose> entries)
     {
-        return entries.Select(entry => entry.Mgdl).Where(value => value > 0 && value < 600);
+        return entries.Where(IsPlausibleReading).Select(entry => entry.Mgdl);
     }
+
+    private static bool IsPlausibleReading(SensorGlucose entry) =>
+        entry.Mgdl > 0 && entry.Mgdl < 600;
 
     #endregion
 
@@ -1224,7 +1227,9 @@ public class StatisticsService : IStatisticsService
     {
         thresholds ??= new GlycemicThresholds();
 
-        var entriesList = entries.Where(e => e.Mgdl > 0).OrderBy(e => e.Mills).ToList();
+        // Filtered on the same predicate as the values, so entry i is the reading value i came
+        // from and the minutes derived from the entry timestamps line up with it.
+        var entriesList = entries.Where(IsPlausibleReading).OrderBy(e => e.Mills).ToList();
 
         var glucoseValues = ExtractGlucoseValues(entriesList).ToList();
         var totalReadings = glucoseValues.Count;
@@ -1245,12 +1250,30 @@ public class StatisticsService : IStatisticsService
         // scale rather than read off it.
         var zones = ExcludingZones(thresholds);
         var zoneCounts = new int[zones.ZoneCount];
+        var zoneMinutes = new double[zones.ZoneCount];
         int targetCount = 0, tightTargetCount = 0;
-        foreach (var v in glucoseValues)
+        double targetMinutes = 0, tightTargetMinutes = 0;
+        var readingMinutes = ReadingMinutes(entriesList);
+        for (var i = 0; i < totalReadings; i++)
         {
-            zoneCounts[zones.Classify(v)]++;
-            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetCount++;
-            if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop) tightTargetCount++;
+            var v = glucoseValues[i];
+            var minutes = readingMinutes[i];
+
+            var zone = zones.Classify(v);
+            zoneCounts[zone]++;
+            zoneMinutes[zone] += minutes;
+
+            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
+            {
+                targetCount++;
+                targetMinutes += minutes;
+            }
+
+            if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop)
+            {
+                tightTargetCount++;
+                tightTargetMinutes += minutes;
+            }
         }
 
         var veryLowCount = zoneCounts[(int)ExcludingZone.VeryLow];
@@ -1269,20 +1292,18 @@ public class StatisticsService : IStatisticsService
             VeryHigh = (double)veryHighCount / totalReadings * 100,
         };
 
-        // Calculate durations (assuming 5-minute intervals)
-        const int intervalMinutes = 5;
         var durations = new TimeInRangeDurations
         {
-            VeryLow = (long)veryLowCount * intervalMinutes,
-            Low = (long)lowCount * intervalMinutes,
-            Target = (long)targetCount * intervalMinutes,
-            TightTarget = (long)tightTargetCount * intervalMinutes,
-            High = (long)highCount * intervalMinutes,
-            VeryHigh = (long)veryHighCount * intervalMinutes,
-            AboveRange = (long)(highCount + veryHighCount) * intervalMinutes,
+            VeryLow = zoneMinutes[(int)ExcludingZone.VeryLow],
+            Low = zoneMinutes[(int)ExcludingZone.Low],
+            Target = targetMinutes,
+            TightTarget = tightTargetMinutes,
+            High = zoneMinutes[(int)ExcludingZone.High],
+            VeryHigh = zoneMinutes[(int)ExcludingZone.VeryHigh],
+            AboveRange =
+                zoneMinutes[(int)ExcludingZone.High] + zoneMinutes[(int)ExcludingZone.VeryHigh],
         };
 
-        // Calculate episodes (simplified - consecutive readings in same range)
         var episodes = CalculateEpisodes(glucoseValues, thresholds);
 
         // Calculate per-range detailed statistics
@@ -1397,46 +1418,95 @@ public class StatisticsService : IStatisticsService
         };
     }
 
-    private TimeInRangeEpisodes CalculateEpisodes(
+    /// <summary>
+    /// A run of consecutive readings on the same side of target is one episode, counted against
+    /// the most extreme zone the run reached — so a rise through High into VeryHigh and back is
+    /// one very-high episode, not three. <see cref="ExcludingZone"/> lists the severe zone of each
+    /// side ahead of the milder one, so the most extreme zone of a run is the lowest-numbered.
+    /// </summary>
+    private static TimeInRangeEpisodes CalculateEpisodes(
         IList<double> glucoseValues,
         GlycemicThresholds thresholds
     )
     {
-        var episodes = new TimeInRangeEpisodes();
-
-        if (!glucoseValues.Any())
-            return episodes;
-
         var zones = ExcludingZones(thresholds);
         var episodeCounts = new int[zones.ZoneCount];
-        var lastZone = -1;
         var aboveRange = 0;
+        var side = 0;
+        var extreme = (int)ExcludingZone.Target;
 
         foreach (var value in glucoseValues)
         {
             var zone = zones.Classify(value);
+            var zoneSide = Side(zone);
 
-            if (zone != lastZone && zone != (int)ExcludingZone.Target)
-                episodeCounts[zone]++;
-
-            // One excursion above range may cross between High and VeryHigh any number of
-            // times; it is one excursion, so it is counted on entry only.
-            if (IsAboveRange(zone) && !IsAboveRange(lastZone))
-                aboveRange++;
-
-            lastZone = zone;
+            if (zoneSide != side)
+            {
+                CloseEpisode();
+                side = zoneSide;
+                extreme = zone;
+            }
+            else if (zone < extreme)
+            {
+                extreme = zone;
+            }
         }
 
-        episodes.VeryLow = episodeCounts[(int)ExcludingZone.VeryLow];
-        episodes.Low = episodeCounts[(int)ExcludingZone.Low];
-        episodes.High = episodeCounts[(int)ExcludingZone.High];
-        episodes.VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh];
-        episodes.AboveRange = aboveRange;
+        CloseEpisode();
 
-        return episodes;
+        return new TimeInRangeEpisodes
+        {
+            VeryLow = episodeCounts[(int)ExcludingZone.VeryLow],
+            Low = episodeCounts[(int)ExcludingZone.Low],
+            High = episodeCounts[(int)ExcludingZone.High],
+            VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh],
+            AboveRange = aboveRange,
+        };
 
-        static bool IsAboveRange(int zone) =>
-            zone is (int)ExcludingZone.High or (int)ExcludingZone.VeryHigh;
+        void CloseEpisode()
+        {
+            if (side == 0)
+                return;
+
+            episodeCounts[extreme]++;
+            if (side > 0)
+                aboveRange++;
+        }
+
+        static int Side(int zone) =>
+            zone switch
+            {
+                (int)ExcludingZone.VeryLow or (int)ExcludingZone.Low => -1,
+                (int)ExcludingZone.VeryHigh or (int)ExcludingZone.High => 1,
+                _ => 0,
+            };
+    }
+
+    /// <summary>
+    /// The cadence assumed for a series whose entries do not show one: a single reading, or
+    /// several stamped at the same instant.
+    /// </summary>
+    private const double DefaultCadenceMinutes = 5;
+
+    /// <summary>
+    /// The minutes each reading stands for: the gap to the next reading, capped at twice the
+    /// series' median gap so that a stretch the sensor did not cover is not credited to the zone
+    /// the last reading before it happened to be in. The final reading stands for one median gap.
+    /// </summary>
+    private static double[] ReadingMinutes(IList<SensorGlucose> sortedEntries)
+    {
+        var minutes = new double[sortedEntries.Count];
+        for (var i = 1; i < sortedEntries.Count; i++)
+            minutes[i - 1] = (sortedEntries[i].Mills - sortedEntries[i - 1].Mills) / 60000.0;
+
+        var gaps = minutes.Take(sortedEntries.Count - 1).Where(g => g > 0).Order().ToList();
+        var cadence = gaps.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(gaps);
+
+        for (var i = 0; i < sortedEntries.Count - 1; i++)
+            minutes[i] = Math.Min(minutes[i], cadence * 2);
+        minutes[^1] = cadence;
+
+        return minutes;
     }
 
     #endregion

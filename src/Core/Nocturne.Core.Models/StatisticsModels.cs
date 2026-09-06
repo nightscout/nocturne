@@ -334,7 +334,9 @@ public class ExtendedTimeInRangePercentages
 }
 
 /// <summary>
-/// Time in range durations (in minutes)
+/// Time in range durations (in minutes), measured from the gaps between the readings themselves
+/// rather than assuming a cadence, so a one-minute sensor and a five-minute one both report the
+/// time they actually covered. A gap the sensor did not cover counts as one reading interval.
 /// </summary>
 public class TimeInRangeDurations
 {
@@ -376,7 +378,9 @@ public class TimeInRangeDurations
 }
 
 /// <summary>
-/// Time in range episodes
+/// Time in range episodes. A run of consecutive readings on the same side of target is one
+/// episode, counted against the most extreme zone the run reached: a rise from high into very
+/// high and back is one very-high episode, not a high one and a very-high one.
 /// </summary>
 public class TimeInRangeEpisodes
 {
@@ -401,9 +405,8 @@ public class TimeInRangeEpisodes
     public int VeryHigh { get; set; }
 
     /// <summary>
-    /// Number of excursions above range. A run of consecutive readings in <see cref="High"/> or
-    /// <see cref="VeryHigh"/> is one excursion however often it crosses between the two, so this
-    /// is at most, and usually less than, the sum of those counts.
+    /// Number of excursions above range, which is <see cref="High"/> plus <see cref="VeryHigh"/>:
+    /// every excursion above target is counted once, against whichever of the two it reached.
     /// </summary>
     public int AboveRange { get; set; }
 }

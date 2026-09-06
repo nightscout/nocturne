@@ -286,33 +286,114 @@ public class StatisticsServiceTests
         result.Durations.VeryHigh.Should().Be(5);
         result.Durations.Low.Should().Be(5);
         result.Durations.AboveRange.Should().Be(15);
-        // The zone counters see 200 then 300 as one High and one VeryHigh episode; above range
-        // it is a single excursion, and the later 200 the second.
-        result.Episodes.High.Should().Be(2);
+        // 200 then 300 is one excursion, counted against the very-high zone it reached; the
+        // later 200 is a second, counted against high.
+        result.Episodes.High.Should().Be(1);
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.Low.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
     }
 
     [Fact]
-    public void CalculateTimeInRange_AboveRangeEpisodes_CountAnExcursionOnceHoweverOftenItCrossesVeryHigh()
+    public void CalculateTimeInRange_Episodes_CountAnExcursionOnceAgainstTheMostExtremeZoneItReached()
     {
-        // High, VeryHigh, High, Target, High: the zone counters report three High episodes.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(190, 260, 190, 100, 190));
+        // High, VeryHigh, High, Target, High.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(180, 260, 190, 100, 190));
 
-        result.Episodes.High.Should().Be(3);
+        result.Episodes.High.Should().Be(1);
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
     }
 
-    private static SensorGlucose[] Sequence(params int[] mgdl)
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnce()
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Low, VeryLow, Low: one excursion below target, at its worst very low.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(65, 45, 65, 100));
+
+        result.Episodes.VeryLow.Should().Be(1);
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAReturnToTargetAsTheEndOfTheExcursion()
+    {
+        // High, Target, High: two excursions, because target separates them.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 100, 200));
+
+        result.Episodes.High.Should().Be(2);
+        result.Episodes.AboveRange.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountACrossingFromHighStraightToLowOnEachSide()
+    {
+        // No target reading separates them, but they are excursions on opposite sides.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 60));
+
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountNoneWhenTheReadingsNeverLeaveTarget()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 120, 140, 110));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.High.Should().Be(0);
+        result.Episodes.VeryHigh.Should().Be(0);
+        result.Episodes.AboveRange.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_FollowTheSensorsOwnCadence()
+    {
+        int[] values = [200, 300, 100, 60, 200, 100];
+
+        var fiveMinute = _statisticsService.CalculateTimeInRange(Sequence(5, values));
+        var oneMinute = _statisticsService.CalculateTimeInRange(Sequence(1, values));
+
+        oneMinute.Durations.High.Should().Be(fiveMinute.Durations.High / 5).And.Be(2);
+        oneMinute.Durations.VeryHigh.Should().Be(fiveMinute.Durations.VeryHigh / 5).And.Be(1);
+        oneMinute.Durations.Low.Should().Be(fiveMinute.Durations.Low / 5).And.Be(1);
+        oneMinute.Durations.Target.Should().Be(fiveMinute.Durations.Target / 5).And.Be(2);
+        oneMinute.Durations.AboveRange.Should().Be(fiveMinute.Durations.AboveRange / 5).And.Be(3);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditAGapWithOneIntervalOnly()
+    {
+        // Five-minute readings, then a two-hour gap the sensor did not cover, then two more.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 200, Timestamp = start },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(5) },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(10) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(130) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(135) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        // The reading before the gap is credited two intervals, not the 120 minutes it spans.
+        result.Durations.High.Should().Be(20);
+        result.Durations.Target.Should().Be(10);
+    }
+
+    private static SensorGlucose[] Sequence(params int[] mgdl) => Sequence(5, mgdl);
+
+    private static SensorGlucose[] Sequence(double cadenceMinutes, params int[] mgdl)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         return mgdl
             .Select((value, i) => new SensorGlucose
             {
                 Mgdl = value,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + i).UtcDateTime,
+                Timestamp = start.AddMinutes(i * cadenceMinutes),
             })
             .ToArray();
     }
