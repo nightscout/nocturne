@@ -13,7 +13,7 @@ export function AlertCard(props: {
       ? formatGlucose(payload.glucoseValue, unit)
       : "N/A";
   const arrow = payload.trend ? trendArrow(payload.trend) : "";
-  const acknowledgeTarget = encodeActionValue({
+  const target = encodeActionValue({
     tenantId: payload.tenantId,
     excursionId: payload.excursionId,
   });
@@ -34,10 +34,10 @@ export function AlertCard(props: {
         )}
       </Fields>
       <Actions>
-        <Button id="ack_alert" value={acknowledgeTarget} style="primary">
+        <Button id="ack_alert" value={target} style="primary">
           Acknowledge
         </Button>
-        <Button id="mute_30" value={payload.tenantId}>
+        <Button id="mute_30" value={target}>
           Mute 30 min
         </Button>
       </Actions>
