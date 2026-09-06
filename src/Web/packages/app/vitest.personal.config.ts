@@ -22,6 +22,10 @@ export default defineConfig({
     dedupe: ["svelte"],
     alias: [
       {
+        find: /(?:\$lib\/utils\/|\.\/)data-type-labels$/,
+        replacement: local("./src/lib/test-stubs/data-type-labels.ts"),
+      },
+      {
         find: "$lib/api/generated/personalGoogleHealths.generated.remote",
         replacement: local("./src/lib/test-stubs/personal-google-health.ts"),
       },
@@ -68,6 +72,7 @@ export default defineConfig({
   test: {
     include: [
       "src/**/google-health-page.svelte.test.ts",
+      "src/**/google-health-source.svelte.test.ts",
       "src/lib/connectors/google-health-error.test.ts",
       "src/lib/utils/metric-color-focus.test.ts",
       "src/**/color-focus-range.svelte.test.ts",
