@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -99,9 +98,7 @@ public class PlatformAdminBootstrapService
     }
 
     /// <summary>
-    /// The subject holding the owner role on the oldest tenant that has one, or
-    /// <see langword="null"/> when no tenant does. Tenants without an owner are skipped, matching
-    /// the ordered membership scan this replaces.
+    /// The owner of the oldest tenant that has one, or <see langword="null"/> when no tenant does.
     /// </summary>
     private static async Task<Guid?> FindOldestTenantOwnerAsync(
         NocturneDbContext db, CancellationToken cancellationToken)
@@ -117,8 +114,7 @@ public class PlatformAdminBootstrapService
             await db.PinTenantAsync(tenantId, cancellationToken);
 
             var ownerSubjectId = await db.TenantMembers
-                .Where(tm => tm.TenantId == tenantId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
+                .OwnersOf(tenantId)
                 .Select(tm => tm.SubjectId)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -141,7 +137,7 @@ public class PlatformAdminBootstrapService
     /// <para>
     /// The caller names the subject, but this method re-derives whether that subject is
     /// eligible rather than taking its word: the instance must still be a single-tenant
-    /// install and the subject must hold that tenant's <c>owner</c> role. A privilege grant
+    /// install and the subject must be an owner of that tenant. A privilege grant
     /// shouldn't depend on every present and future call site having checked setup state
     /// first, and the setup OIDC callback in particular is reachable anonymously.
     /// </para>
@@ -175,11 +171,8 @@ public class PlatformAdminBootstrapService
         await db.PinTenantAsync(tenantIds[0], cancellationToken);
 
         var isTenantOwner = await db.TenantMembers
-            .AnyAsync(
-                tm => tm.TenantId == tenantIds[0]
-                    && tm.SubjectId == subjectId
-                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner),
-                cancellationToken);
+            .OwnersOf(tenantIds[0])
+            .AnyAsync(tm => tm.SubjectId == subjectId, cancellationToken);
 
         if (!isTenantOwner)
         {

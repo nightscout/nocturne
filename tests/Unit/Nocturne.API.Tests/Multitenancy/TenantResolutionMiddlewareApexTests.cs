@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
@@ -48,6 +49,9 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
     [Fact]
     public async Task Apex_status_with_multiple_tenants_stays_tenantless()
     {
+        // The demo takes the lowest id so it orders first: a demo dropped after the two-row
+        // limit rather than before it would leave one row here and serve alpha from the apex.
+        SeedTenant("demo", isDemo: true, id: new Guid("00000000-0000-7000-8000-000000000001"));
         SeedTenant("alpha");
         SeedTenant("beta");
 
@@ -87,6 +91,55 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
         read.Should().BeTrue();
         created.Should().BeFalse();
         createContext.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Fact]
+    public async Task Apex_keeps_resolving_the_operators_tenant_once_a_demo_is_provisioned()
+    {
+        var tenantId = SeedTenant("theconen");
+        SeedTenant("demo", isDemo: true);
+        // One scope for both requests: the pin has to survive the second resolution, not just
+        // be recomputed from a clean scope each time.
+        using var scope = Root.CreateScope();
+
+        var (pageContext, served) = await InvokeAsync(scope, BaseDomain, "/api/v4/entries");
+        var (statusContext, _) = await InvokeAsync(scope, BaseDomain, "/api/v4/status");
+
+        // Turning the demo on is a second active tenant, which would otherwise end single-tenant
+        // mode: every apex page 404s and status stops naming the operator's tenant.
+        served.Should().BeTrue();
+        pageContext.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        Resolve<ITenantAccessor>(pageContext).TenantId.Should().Be(tenantId);
+        Resolve<ITenantAccessor>(statusContext).TenantId.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task Apex_with_only_a_demo_tenant_answers_as_a_fresh_install()
+    {
+        SeedTenant("demo", isDemo: true);
+        using var scope = Root.CreateScope();
+
+        var (pageContext, served) = await InvokeAsync(scope, BaseDomain, "/api/v4/entries");
+        await InvokeAsync(scope, BaseDomain, "/api/v4/status");
+
+        // The demo is served on its own host, never adopted by the apex — so an instance holding
+        // only a demo has no tenant to resolve, and answers 503 so the frontend goes to /setup
+        // rather than the 404 that would strand an operator with nowhere to create one.
+        served.Should().BeFalse();
+        pageContext.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        Resolve<ITenantAccessor>(pageContext).IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apex_with_a_single_inactive_tenant_does_not_resolve_it()
+    {
+        SeedTenant("paused", isActive: false);
+
+        var (context, served) = await InvokeAsync(BaseDomain, "/api/v4/entries");
+
+        served.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
     }
 
     [Fact]

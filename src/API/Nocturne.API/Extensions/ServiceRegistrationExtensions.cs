@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
@@ -141,6 +142,12 @@ public static class ServiceRegistrationExtensions
         // ceiling room for reloads and for a clinic behind one NAT.
         ("invite-lookup", 30, TimeSpan.FromMinutes(1)),
         ("guest-activate", 5, TimeSpan.FromMinutes(10)),
+        // Redeeming a login code. The code is a random string of refresh-token length, so grinding
+        // one is infeasible at any rate; the ceiling bounds what an anonymous attempt costs, which
+        // is one indexed lookup and the audit row a refusal writes. A browser handed a code spends
+        // one permit, and every code its holder could legitimately present was minted in the last
+        // five minutes.
+        ("login-handoff", 10, TimeSpan.FromMinutes(1)),
         // Friction against naive abuse only — this does NOT bound the refresh_tokens table. The
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
@@ -182,6 +189,12 @@ public static class ServiceRegistrationExtensions
         IConfiguration configuration
     )
     {
+        // The clock every constructor-injected TimeProvider resolves to, stated here rather than
+        // left to AddAuthentication, which TryAdds the same instance in passing. In this host
+        // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
+        // that do not add the cache.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();
         services.AddSingleton<IXmlDocumentationService, XmlDocumentationService>();
@@ -267,6 +280,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IDirectGrantService, DirectGrantService>();
         services.AddScoped<IJwtService, JwtService>();
+        services.AddScoped<ILoginCodeService, LoginCodeService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
@@ -342,7 +356,13 @@ public static class ServiceRegistrationExtensions
                 if (config.Support.AccountBilling is { } ab)
                     return !string.IsNullOrWhiteSpace(ab.Url);
                 return true;
-            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured");
+            }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured")
+            .Validate(config =>
+            {
+                if (config.Support.AccountPortal is { } portal)
+                    return !string.IsNullOrWhiteSpace(portal.Url);
+                return true;
+            }, "Operator:Support:AccountPortal:Url is required when AccountPortal is configured");
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();

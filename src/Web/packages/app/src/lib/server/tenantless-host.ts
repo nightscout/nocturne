@@ -24,7 +24,7 @@
  * unset: the apex serves the dashboard whenever it resolves no tenant either way.
  */
 
-import { extractTenantSlug, isShareHost } from "./request-host";
+import { extractTenantSlug, getOriginalHost, isShareHost } from "./request-host";
 
 /**
  * Parse the DASHBOARD_SLUGS env var (comma-separated). Unset or empty reserves nothing, so the
@@ -76,6 +76,26 @@ export function classifyHost(
   }
 
   return { kind: "tenant", slug };
+}
+
+/**
+ * Classify the host a request arrived on, against the configured base domain and reserved
+ * dashboard slugs.
+ */
+export function classifyRequestHost(request: Request): {
+  kind: HostKind;
+  slug: string | null;
+  baseDomain: string | null;
+  dashboardSlugs: string[];
+} {
+  const baseDomain = process.env.BASE_DOMAIN ?? null;
+  const dashboardSlugs = parseDashboardSlugs(process.env.DASHBOARD_SLUGS);
+
+  return {
+    ...classifyHost(getOriginalHost(request), baseDomain, dashboardSlugs),
+    baseDomain,
+    dashboardSlugs,
+  };
 }
 
 /**

@@ -84,7 +84,7 @@ public class NocturneRemoteConnectorBackgroundService
                 var connection = new HubConnectionBuilder()
                     .WithUrl(hubUrl, options =>
                     {
-                        options.Headers.Add("Authorization", $"Bearer {config.Token}");
+                        options.Headers.Add("Authorization", $"Bearer {config.AccessToken}");
                     })
                     .WithAutomaticReconnect(new InfiniteRetryPolicy())
                     .Build();

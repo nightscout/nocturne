@@ -460,7 +460,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         var manual = NewConfig();
         manual.MaxCount = ManualRunPageSize;
-        manual.Token = ManualRunToken;
+        manual.AccessToken = ManualRunToken;
 
         await fixture.Service.SyncDataAsync(
             new SyncRequest { DataTypes = [SyncDataType.Glucose] },
@@ -628,7 +628,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 new HttpResponseMessage(HttpStatusCode.BadGateway)
                 {
                     Content = new StringContent(
-                        $"upstream refused; sent authorization: Bearer {config.Token}"),
+                        $"upstream refused; sent authorization: Bearer {config.AccessToken}"),
                 });
         var fixture = new ServiceFixture(handler, config: config);
 
@@ -639,7 +639,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.Errors.Should().ContainSingle()
-            .Which.Should().NotContain(config.Token).And.Contain("HTTP 502 BadGateway");
+            .Which.Should().NotContain(config.AccessToken).And.Contain("HTTP 502 BadGateway");
     }
 
     /// <summary>
@@ -657,7 +657,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         int maxRetryAttempts = 1) => new()
     {
         Url = RemoteFakeHandler.BaseUrl,
-        Token = "direct-grant-token",
+        AccessToken = "direct-grant-token",
         MaxCount = RemoteFakeHandler.PageSize,
         // One attempt unless a test is about the budget, so each scripted response answers exactly
         // one request and a crawl script reads in the order the crawl makes them.

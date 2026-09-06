@@ -275,44 +275,17 @@ public sealed class ShareLinkServiceTests : IDisposable
     /// <summary>
     /// Adds a second owner of the tenant, joining <paramref name="joinedAfter"/> the seeded one.
     /// </summary>
-    private async Task AddOwnerAsync(
+    private Task AddOwnerAsync(
         UserDisplayPreferences preferences,
         DateTime joinedAfter,
         bool isSystemSubject = false,
-        bool isActiveSubject = true)
-    {
-        var subjectId = Guid.NewGuid();
-        _db.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId,
-            Name = $"Owner {subjectId:N}",
-            IsActive = isActiveSubject,
-            IsSystemSubject = isSystemSubject,
-            Preferences = preferences.Serialize(),
-        });
-
-        var member = new TenantMemberEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantId = TenantId,
-            SubjectId = subjectId,
-        };
-        _db.TenantMembers.Add(member);
-        _db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.NewGuid(),
-            TenantMemberId = member.Id,
-            TenantRoleId = await _db.TenantRoles
-                .Where(r => r.TenantId == TenantId && r.Slug == RoleSeeds.Owner)
-                .Select(r => r.Id)
-                .FirstAsync(),
-        });
-        await _db.SaveChangesAsync();
-
-        // The context stamps SysCreatedAt on insert, so the join time can only be set afterwards.
-        member.SysCreatedAt = joinedAfter;
-        await _db.SaveChangesAsync();
-    }
+        bool isActiveSubject = true) =>
+        TestDatabaseSeeder.SeedMemberAsync(
+            _db, TenantId,
+            isActive: isActiveSubject,
+            isSystemSubject: isSystemSubject,
+            joinedAt: joinedAfter,
+            preferences: preferences.Serialize());
 
     /// <summary>Backdates the seeded owner's membership so later arrivals sort after it.</summary>
     private async Task<DateTime> BackdateTheSeededOwnerAsync()

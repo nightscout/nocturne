@@ -286,33 +286,130 @@ public class StatisticsServiceTests
         result.Durations.VeryHigh.Should().Be(5);
         result.Durations.Low.Should().Be(5);
         result.Durations.AboveRange.Should().Be(15);
-        // The zone counters see 200 then 300 as one High and one VeryHigh episode; above range
-        // it is a single excursion, and the later 200 the second.
-        result.Episodes.High.Should().Be(2);
+        // 200 then 300 is one excursion, counted against the very-high zone it reached; the
+        // later 200 is a second, counted against high.
+        result.Episodes.High.Should().Be(1);
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.Low.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
     }
 
     [Fact]
-    public void CalculateTimeInRange_AboveRangeEpisodes_CountAnExcursionOnceHoweverOftenItCrossesVeryHigh()
+    public void CalculateTimeInRange_Episodes_CountAnExcursionOnceAgainstTheMostExtremeZoneItReached()
     {
-        // High, VeryHigh, High, Target, High: the zone counters report three High episodes.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(190, 260, 190, 100, 190));
+        // High, VeryHigh, High, Target, High.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(180, 260, 190, 100, 190));
 
-        result.Episodes.High.Should().Be(3);
+        result.Episodes.High.Should().Be(1);
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
     }
 
-    private static SensorGlucose[] Sequence(params int[] mgdl)
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnce()
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Low, VeryLow, Low: one excursion below target, at its worst very low.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(65, 45, 65, 100));
+
+        result.Episodes.VeryLow.Should().Be(1);
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAReturnToTargetAsTheEndOfTheExcursion()
+    {
+        // High, Target, High: two excursions, because target separates them.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 100, 200));
+
+        result.Episodes.High.Should().Be(2);
+        result.Episodes.AboveRange.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountACrossingFromHighStraightToLowOnEachSide()
+    {
+        // No target reading separates them, but they are excursions on opposite sides.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 60));
+
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.AboveRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountNoneWhenTheReadingsNeverLeaveTarget()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 120, 140, 110));
+
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.High.Should().Be(0);
+        result.Episodes.VeryHigh.Should().Be(0);
+        result.Episodes.AboveRange.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_FollowTheSensorsOwnCadence()
+    {
+        int[] values = [200, 300, 100, 60, 200, 100];
+
+        var fiveMinute = _statisticsService.CalculateTimeInRange(Sequence(5, values));
+        var oneMinute = _statisticsService.CalculateTimeInRange(Sequence(1, values));
+
+        oneMinute.Durations.High.Should().Be(fiveMinute.Durations.High / 5).And.Be(2);
+        oneMinute.Durations.VeryHigh.Should().Be(fiveMinute.Durations.VeryHigh / 5).And.Be(1);
+        oneMinute.Durations.Low.Should().Be(fiveMinute.Durations.Low / 5).And.Be(1);
+        oneMinute.Durations.Target.Should().Be(fiveMinute.Durations.Target / 5).And.Be(2);
+        oneMinute.Durations.AboveRange.Should().Be(fiveMinute.Durations.AboveRange / 5).And.Be(3);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditAGapWithOneIntervalOnly()
+    {
+        // Five-minute readings, then a two-hour gap the sensor did not cover, then two more.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 200, Timestamp = start },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(5) },
+            new SensorGlucose { Mgdl = 200, Timestamp = start.AddMinutes(10) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(130) },
+            new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(135) },
+        };
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        // The reading before the gap is credited two intervals, not the 120 minutes it spans.
+        result.Durations.High.Should().Be(20);
+        result.Durations.Target.Should().Be(10);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_CreditReadingsStampedAtTheSameInstantWithOneInterval()
+    {
+        // Readings sharing a timestamp cover no time between them, so only the last is credited.
+        var at = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable
+            .Range(0, 4)
+            .Select(_ => new SensorGlucose { Mgdl = 100, Timestamp = at })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Target.Should().Be(5);
+        result.Percentages.Target.Should().Be(100);
+    }
+
+    private static SensorGlucose[] Sequence(params int[] mgdl) => Sequence(5, mgdl);
+
+    private static SensorGlucose[] Sequence(double cadenceMinutes, params int[] mgdl)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         return mgdl
             .Select((value, i) => new SensorGlucose
             {
                 Mgdl = value,
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + i).UtcDateTime,
+                Timestamp = start.AddMinutes(i * cadenceMinutes),
             })
             .ToArray();
     }
@@ -850,20 +947,31 @@ public class StatisticsServiceTests
 
     #region CGM Active Percent Tests
 
+    private static SensorGlucose[] AtCadence(
+        DateTime start,
+        double cadenceMinutes,
+        int count,
+        Guid? patientDeviceId = null
+    ) =>
+        Enumerable
+            .Range(0, count)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = 120,
+                Timestamp = start.AddMinutes(i * cadenceMinutes),
+                PatientDeviceId = patientDeviceId,
+            })
+            .ToArray();
+
     [Fact]
     public void AnalyzeGlucoseData_HalfCoverage_Returns50PercentCgmActive()
     {
-        // 144 readings over 24 hours with 5-min interval = 50% (expected 288)
+        // 144 five-minute readings cover twelve hours of a twenty-four hour report.
         var start = DateTime.UtcNow.AddDays(-1);
-        var entries = Enumerable.Range(0, 144).Select(i => new SensorGlucose
-        {
-            Mgdl = 120,
-            Timestamp = start.AddMinutes(i * 10),
-        });
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
-            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 5);
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            startDate: start, endDate: start.AddDays(1));
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
     }
@@ -872,49 +980,100 @@ public class StatisticsServiceTests
     public void AnalyzeGlucoseData_FullCoverage_Returns100PercentCgmActive()
     {
         var start = DateTime.UtcNow.AddDays(-1);
-        var entries = Enumerable.Range(0, 288).Select(i => new SensorGlucose
-        {
-            Mgdl = 120,
-            Timestamp = start.AddMinutes(i * 5),
-        });
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
-            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 5);
+            AtCadence(start, 5, 288), Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            startDate: start, endDate: start.AddDays(1));
 
         result.DataQuality.CgmActivePercent.Should().Be(100.0);
     }
 
-    [Fact]
-    public void AnalyzeGlucoseData_Libre1MinInterval_CalculatesCorrectly()
+    [Theory]
+    [InlineData(1, 60, 100.0)]
+    [InlineData(1, 30, 50.0)]
+    [InlineData(5, 12, 100.0)]
+    [InlineData(10, 6, 100.0)]
+    [InlineData(15, 4, 100.0)]
+    [InlineData(15, 2, 50.0)]
+    public void AnalyzeGlucoseData_ScoresCoverageAgainstTheSeriesOwnCadence(
+        int cadenceMinutes,
+        int readingCount,
+        double expectedPercent
+    )
     {
-        // 720 readings over 24 hours with 1-min interval = 50% (expected 1440)
+        var start = DateTime.UtcNow.AddHours(-1);
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            AtCadence(start, cadenceMinutes, readingCount),
+            Array.Empty<Bolus>(),
+            Array.Empty<CarbIntake>(),
+            startDate: start,
+            endDate: start.AddHours(1));
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(expectedPercent, 1.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_HoleInAFiveMinuteSeries_CountsTheReadingsItOwed()
+    {
+        var start = DateTime.UtcNow.AddHours(-2);
+        var entries = AtCadence(start, 5, 7).Concat(AtCadence(start.AddMinutes(60), 5, 7));
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+
+        result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(1);
+        result.DataQuality.GapAnalysis.LongestGap.Should().Be(30);
+        result.DataQuality.MissingReadings.Should().Be(5);
+    }
+
+    [Theory]
+    [InlineData(30, 0, 0)]
+    [InlineData(40, 0, 0)]
+    [InlineData(50, 1, 2)]
+    [InlineData(60, 1, 3)]
+    public void AnalyzeGlucoseData_GapThresholdFollowsTheCadence(
+        double holeMinutes,
+        int expectedGaps,
+        int expectedMissing
+    )
+    {
+        // A fifteen-minute sensor: one interval missed is jitter, three are a gap.
+        var start = DateTime.UtcNow.AddHours(-4);
+        var entries = AtCadence(start, 15, 6)
+            .Concat(AtCadence(start.AddMinutes(75 + holeMinutes), 15, 6));
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+
+        result.DataQuality.GapAnalysis.Gaps.Should().HaveCount(expectedGaps);
+        result.DataQuality.MissingReadings.Should().Be(expectedMissing);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_SensorSwitchMidReport_ScoresEachStreamAtItsOwnCadence()
+    {
+        // Twelve hours of a one-minute Libre, then twelve of a five-minute Dexcom.
         var start = DateTime.UtcNow.AddDays(-1);
-        var entries = Enumerable.Range(0, 720).Select(i => new SensorGlucose
-        {
-            Mgdl = 120,
-            Timestamp = start.AddMinutes(i * 2),
-        });
+        var entries = AtCadence(start, 1, 720, Guid.NewGuid())
+            .Concat(AtCadence(start.AddHours(12), 5, 144, Guid.NewGuid()));
 
         var result = _statisticsService.AnalyzeGlucoseData(
             entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
-            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 1);
+            startDate: start, endDate: start.AddDays(1));
 
-        result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 1.0);
+        result.DataQuality.DataCompleteness.Should().BeApproximately(100.0, 1.0);
+        result.DataQuality.GapAnalysis.Gaps.Should().BeEmpty();
     }
 
     [Fact]
     public void AnalyzeGlucoseData_NoReportPeriod_InfersFromEntries()
     {
         var start = DateTime.UtcNow.AddHours(-12);
-        var entries = Enumerable.Range(0, 144).Select(i => new SensorGlucose
-        {
-            Mgdl = 120,
-            Timestamp = start.AddMinutes(i * 5),
-        });
 
         var result = _statisticsService.AnalyzeGlucoseData(
-            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+            AtCadence(start, 5, 144), Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
 
         result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 2.0);
     }

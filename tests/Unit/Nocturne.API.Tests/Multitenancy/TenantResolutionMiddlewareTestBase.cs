@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,6 +10,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Multitenancy;
 
@@ -26,28 +25,20 @@ namespace Nocturne.API.Tests.Multitenancy;
 /// </remarks>
 public abstract class TenantResolutionMiddlewareTestBase : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
 
     protected TenantResolutionMiddlewareTestBase()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
         var services = new ServiceCollection();
-        services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
+        _db.AddToServices(services);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddSingleton<ShareTokenCacheService>();
         services.AddMemoryCache();
         services.AddLogging();
         Root = services.BuildServiceProvider();
-
-        using var seed = Db();
-        seed.Database.EnsureCreated();
-        seed.SaveChanges();
     }
 
     protected ServiceProvider Root { get; }
@@ -58,15 +49,23 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
     public void Dispose()
     {
         Root.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
     protected NocturneDbContext Db() =>
         Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
 
-    protected Guid SeedTenant(string slug, bool isActive = true) =>
-        SeedTenant(new TenantEntity { Slug = slug, DisplayName = slug, IsActive = isActive });
+    protected Guid SeedTenant(
+        string slug, bool isActive = true, bool isDemo = false, Guid? id = null) =>
+        SeedTenant(new TenantEntity
+        {
+            Id = id ?? Guid.Empty,
+            Slug = slug,
+            DisplayName = slug,
+            IsActive = isActive,
+            IsDemo = isDemo,
+        });
 
     protected Guid SeedTenant(TenantEntity tenant)
     {

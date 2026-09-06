@@ -5,15 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Attributes;
 using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
@@ -258,14 +256,11 @@ public class MemberScopeFilterPipelineTests
     private static async Task<IReadOnlySet<string>> ResolveScopesForRoleAsync(
         string roleSlug, AuthType authType, params string[] credentialScopes)
     {
-        using var connection = new SqliteConnection("DataSource=:memory:");
-        connection.Open();
-        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        using var db = TestDbContextFactory.CreateSqlite();
 
         var subjectId = Guid.CreateVersion7();
-        using (var seed = new NocturneDbContext(options))
+        using (var seed = db.CreateContext())
         {
-            seed.Database.EnsureCreated();
             TestDatabaseSeeder.Seed(seed);
 
             seed.Subjects.Add(new Nocturne.Infrastructure.Data.Entities.SubjectEntity
@@ -302,7 +297,7 @@ public class MemberScopeFilterPipelineTests
         }
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => new NocturneDbContext(options));
+        services.AddScoped(_ => db.CreateContext());
         using var provider = services.BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext { RequestServices = provider };

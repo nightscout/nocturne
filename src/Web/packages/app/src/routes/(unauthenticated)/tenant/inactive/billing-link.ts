@@ -1,15 +1,19 @@
-import type { SupportChannelConfig } from "$api/generated/nocturne-api-client";
+import type { SupportConfigResponse } from "$api/generated/nocturne-api-client";
 
 /**
- * The operator's billing address as a link, or null when there is nothing to link to.
+ * The operator's account address as a link, or null when there is nothing to link to.
  *
- * Api mode is an issue-intake endpoint the app POSTs to, not a page: rendering it as an href
- * would send the visitor to a route with no GET.
+ * Api-mode accountBilling is an issue-intake endpoint the app POSTs to, not a page: rendering it
+ * as an href would send the visitor to a route with no GET. accountPortal is always a page.
  */
 export function resolveBillingLink(
-  config: SupportChannelConfig | null | undefined
+  config: SupportConfigResponse | null | undefined
 ): { url: string; label: string | null } | null {
-  if (config?.mode !== "redirect" || !config.url) return null;
+  const portal = config?.accountPortal;
+  if (portal?.url) return { url: portal.url, label: portal.label ?? null };
 
-  return { url: config.url, label: config.label ?? null };
+  const billing = config?.accountBilling;
+  if (billing?.mode !== "redirect" || !billing.url) return null;
+
+  return { url: billing.url, label: billing.label ?? null };
 }

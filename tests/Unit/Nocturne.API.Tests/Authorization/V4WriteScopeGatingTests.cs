@@ -118,9 +118,10 @@ public class V4WriteScopeGatingTests
         /// <summary>
         /// The required scope depends on the record being written, so no attribute scan can see it.
         /// The controller calls a per-record guard in the handler instead. Every action filed under
-        /// this reason must be covered by a route-level test that drives the real gate, so the
-        /// exemption is asserted rather than trusted — see
-        /// <see cref="PerRecordGuardedActions_AreCoveredByARouteLevelTest"/>.
+        /// this reason must be covered by a test that drives the real gate, so the exemption is
+        /// asserted rather than trusted — see
+        /// <see cref="PerRecordGuardedActions_HaveABehaviouralTest"/>, which requires that of every
+        /// action calling a per-record guard, exempt or not.
         /// </summary>
         public const string PerRecordGuard = "per-record scope enforced in the handler";
 
@@ -244,14 +245,6 @@ public class V4WriteScopeGatingTests
     private static readonly IReadOnlyDictionary<string, string> GateExemptWriteActions =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            // A single activity payload decomposes into a different data category per record, so the
-            // required scope is not known until the handler has read the body. ActivityController
-            // calls ActivityWriteScopeGuard.FindMissingScope per record instead, which no attribute
-            // scan can see.
-            ["ActivityController.CreateActivities"] = NotDataCategory.PerRecordGuard,
-            ["ActivityController.UpdateActivity"] = NotDataCategory.PerRecordGuard,
-            ["ActivityController.DeleteActivity"] = NotDataCategory.PerRecordGuard,
-
             // state_spans holds four data categories behind one table and the caller picks which by
             // setting Category in the body, so StateSpanWriteScopeGuard resolves the scope per
             // record. A flat controller scope under-gated three of the four — notably DataExclusion,
@@ -367,6 +360,11 @@ public class V4WriteScopeGatingTests
 
             // Controllers that gate with a per-action [RequireScope] rather than a declaration. Their
             // categories are their own dedicated tables.
+            // treatments: the baseline admitting an activity write, underneath the per-record
+            // ActivityWriteScopeGuard that gates the record's own category. The rationale for the
+            // category is on ActivityController itself.
+            ["ActivityController"] = Scope.TreatmentsReadWrite,
+
             ["SleepController"] = Scope.SleepReadWrite,
             ["HeartRateController"] = Scope.HeartRateReadWrite,
             ["StepCountController"] = Scope.StepCountReadWrite,
@@ -596,11 +594,18 @@ public class V4WriteScopeGatingTests
     }
 
     /// <summary>
-    /// The per-record exemptions are the one reason whose mechanism is a method call in the handler,
-    /// which no attribute scan can see — delete the call and the sweep stays green. So each one must
-    /// be covered by a test that drives the real handler. That coverage is listed here rather than
-    /// discovered, so adding a per-record exemption without adding a behavioural test fails.
+    /// A per-record gate is a method call in the handler, which no attribute scan can see — delete
+    /// the call and every sweep here stays green. So each action making one must be covered by a
+    /// test that drives the real handler. The requirement holds whether or not the action also
+    /// carries a baseline scope attribute: a baseline narrows what a caller can reach, it does not
+    /// substitute for the record's own category.
     /// </summary>
+    /// <remarks>
+    /// The population is discovered from the call itself rather than from
+    /// <see cref="GateExemptWriteActions"/>, so an action that gains a baseline attribute — and with
+    /// it an exit from the exemption list — keeps its coverage requirement. The coverage side stays
+    /// listed, so adding a per-record gate without a behavioural test fails.
+    /// </remarks>
     [Fact]
     public void PerRecordGuardedActions_HaveABehaviouralTest()
     {
@@ -610,18 +615,73 @@ public class V4WriteScopeGatingTests
             "StateSpansController.CreateStateSpan",
             "StateSpansController.UpdateStateSpan",
             "StateSpansController.DeleteStateSpan",
-            // ActivityWriteScopeGuardTests covers the guard; the handler wiring is asserted by
-            // ActivityControllerScopeTests.
+            // ActivityControllerV4Tests drives all three through the real handler.
             "ActivityController.CreateActivities",
             "ActivityController.UpdateActivity",
             "ActivityController.DeleteActivity",
         };
 
-        GateExemptWriteActions
-            .Where(entry => entry.Value == NotDataCategory.PerRecordGuard)
-            .Select(entry => entry.Key)
-            .Should().BeEquivalentTo(covered,
-                "every per-record-guarded action needs a test that drives its handler");
+        var guarded = V4Controllers()
+            .SelectMany(c => WriteActions(c)
+                .Where(CallsAPerRecordGuard)
+                .Select(a => $"{c.Name}.{a.Name}"))
+            .ToList();
+
+        guarded.Should().NotBeEmpty(
+            "the scan must find the per-record guard calls, or this test passes vacuously");
+
+        guarded.Should().BeEquivalentTo(covered,
+            "every per-record-guarded action needs a test that drives its handler");
+    }
+
+    /// <summary>
+    /// Whether the action's body calls a <c>*WriteScopeGuard.FindMissingScope</c>. Read from the
+    /// compiled IL because the call is the gate: a source-text or attribute check would not notice
+    /// the call being deleted, which is the failure this exists to catch.
+    /// </summary>
+    private static bool CallsAPerRecordGuard(MethodInfo action)
+    {
+        // An async action's body is the compiler-generated MoveNext; the action method itself only
+        // starts the state machine, so the call is not in its IL.
+        var body = action.GetCustomAttribute<AsyncStateMachineAttribute>() is { } asyncMachine
+            ? asyncMachine.StateMachineType.GetMethod(
+                "MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            : action;
+
+        var il = body?.GetMethodBody()?.GetILAsByteArray();
+        if (body is null || il is null)
+            return false;
+
+        const byte Call = 0x28;
+        const byte Callvirt = 0x6F;
+
+        // Every offset is probed rather than the instruction stream decoded: an operand byte that
+        // happens to look like a call yields a token that either fails to resolve or resolves to
+        // some unrelated member, and only the name match below counts.
+        for (var i = 0; i + 4 < il.Length; i++)
+        {
+            if (il[i] != Call && il[i] != Callvirt)
+                continue;
+
+            MethodBase? callee;
+            try
+            {
+                callee = body.Module.ResolveMethod(
+                    BitConverter.ToInt32(il, i + 1),
+                    body.DeclaringType?.GetGenericArguments(),
+                    body.IsGenericMethodDefinition ? body.GetGenericArguments() : null);
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+
+            if (callee?.Name == "FindMissingScope"
+                && callee.DeclaringType?.Name.EndsWith("WriteScopeGuard", StringComparison.Ordinal) == true)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
