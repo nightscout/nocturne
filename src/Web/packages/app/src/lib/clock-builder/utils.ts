@@ -27,9 +27,7 @@ export const DEFAULT_ELEMENT_COLOR = "#ffffff";
  * Named colours a face may carry, resolved to CSS the browser will accept.
  * `dynamic` is resolved separately because it needs the reading.
  */
-const NAMED_ELEMENT_COLORS: Record<string, string> = {
-  muted: "var(--muted-foreground)",
-};
+const NAMED_ELEMENT_COLORS = new Map([["muted", "var(--muted-foreground)"]]);
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -137,7 +135,7 @@ export function getElementColor(
   }
   if (!color) return DEFAULT_ELEMENT_COLOR;
   return (
-    NAMED_ELEMENT_COLORS[color] ??
+    NAMED_ELEMENT_COLORS.get(color) ??
     (HEX_COLOR.test(color) ? color : DEFAULT_ELEMENT_COLOR)
   );
 }

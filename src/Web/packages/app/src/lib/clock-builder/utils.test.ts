@@ -29,6 +29,20 @@ describe("getElementColor", () => {
     expect(getElementColor(unknown, null)).toBe("#ffffff");
     expect(getElementColor({ type: "sg", style: {} }, null)).toBe("#ffffff");
   });
+
+  it("does not resolve a token off the token map's prototype", () => {
+    for (const inherited of ["constructor", "toString", "__proto__"]) {
+      const element: ClockElement = { type: "sg", style: { color: inherited } };
+      expect(getElementColor(element, null)).toBe("#ffffff");
+    }
+  });
+
+  it("takes the default for a CSS colour that is not a hex literal", () => {
+    for (const css of ["red", "rgb(255 0 0)", "hsl(0 100% 50%)"]) {
+      const element: ClockElement = { type: "sg", style: { color: css } };
+      expect(getElementColor(element, null)).toBe("#ffffff");
+    }
+  });
 });
 
 describe("clockBackgroundStyle", () => {
