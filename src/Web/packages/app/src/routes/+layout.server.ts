@@ -1,4 +1,5 @@
 import type { LayoutServerLoad } from "./$types";
+import type { UserDisplayPreferences } from "$lib/api";
 import { getOriginalHost } from "$lib/server/request-host";
 import {
   classifyHost,
@@ -33,6 +34,28 @@ async function resolveEffectivePermissions(locals: App.Locals): Promise<string[]
 }
 
 /**
+ * The saved display preferences this viewer's page is rendered with. A signed-in member has
+ * their own. A public share viewer has no account to have any, so the link owner's presentation
+ * settings stand in: a share link should show its recipient the data the way its sender reads
+ * it — their units, their clock, their colours — rather than the frontend's defaults. Only
+ * presentation crosses; the owner's display language does not, because adopting it would rewrite
+ * the viewer's own base-domain-wide language cookie. A refused call leaves the viewer on the
+ * defaults instead of failing the page.
+ */
+async function resolveServerPreferences(
+  locals: App.Locals
+): Promise<UserDisplayPreferences | null> {
+  if (locals.isAuthenticated) return locals.user?.preferences ?? null;
+  if (!locals.isShareHost) return null;
+
+  try {
+    return await locals.apiClient.shareAppearance.getShareAppearance();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Root layout server load function.
  * Provides session data to all routes.
  * Auth gating is handled by route group layouts.
@@ -58,8 +81,12 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   );
 
   // Display preferences for SSR, in the same precedence the browser applies them
-  // (backend blob over the mirrored cookie) so the markup matches hydration.
-  const serverPrefs = locals.isAuthenticated ? locals.user?.preferences : null;
+  // (backend blob over the mirrored cookie) so the markup matches hydration. Together with the
+  // scopes because on a share host both are API round-trips and neither reads the other.
+  const [serverPrefs, effectivePermissions] = await Promise.all([
+    resolveServerPreferences(locals),
+    resolveEffectivePermissions(locals),
+  ]);
   const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const displayPreferences = [
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
@@ -73,9 +100,11 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   return {
     displayPreferences,
     displayLanguage,
+    serverPreferences: serverPrefs,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
-    effectivePermissions: await resolveEffectivePermissions(locals),
+    isShareHost: locals.isShareHost,
+    effectivePermissions,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     tenantSlug,
