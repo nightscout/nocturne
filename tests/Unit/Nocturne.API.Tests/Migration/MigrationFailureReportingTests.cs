@@ -365,6 +365,32 @@ public class MigrationFailureReportingTests
         status.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(2);
     }
 
+    [Theory]
+    [InlineData("""[{"collectionName":"subjects","isComplete":true,"skippedReason":"Skipped: needs an admin API secret."}]""", false)]
+    [InlineData("""[{"collectionName":"treatments","isComplete":true,"failureReason":"Nightscout answered 500 for treatments."}]""", true)]
+    [InlineData(null, false)]
+    public void History_marks_a_run_at_fault_only_when_a_collection_failed(string? outcomes, bool expected)
+    {
+        // The settings page colours a history entry off this: history carries no per-collection
+        // detail, so a skip-only run and a failed one would otherwise look identical to it.
+        var run = new MigrationRunEntity
+        {
+            State = nameof(MigrationJobState.Completed),
+            CollectionOutcomes = outcomes,
+        };
+
+        MigrationJob.InfoFromRecord(run).HasFailures.Should().Be(expected);
+    }
+
+    [Fact]
+    public void History_marks_a_failed_run_at_fault_even_with_no_collection_outcomes()
+    {
+        // A run rejected while counting never reaches a collection, so nothing records a reason.
+        var run = new MigrationRunEntity { State = nameof(MigrationJobState.Failed) };
+
+        MigrationJob.InfoFromRecord(run).HasFailures.Should().BeTrue();
+    }
+
     [Fact]
     public async Task One_collection_failing_after_another_imported_is_reported_without_failing_the_run()
     {

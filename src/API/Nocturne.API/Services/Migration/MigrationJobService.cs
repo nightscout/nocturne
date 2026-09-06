@@ -737,17 +737,26 @@ internal class MigrationJob
     }
 
     /// <summary>Reconstructs a history entry from a persisted run.</summary>
-    public static MigrationJobInfo InfoFromRecord(MigrationRunEntity run) => new()
+    public static MigrationJobInfo InfoFromRecord(MigrationRunEntity run)
     {
-        Id = run.Id,
-        Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
-        CreatedAt = run.CreatedAt,
-        SourceDescription = run.SourceDescription,
-        State = Enum.TryParse<MigrationJobState>(run.State, out var s) ? s : MigrationJobState.Interrupted,
-        StartedAt = run.StartedAt,
-        CompletedAt = run.CompletedAt,
-        ErrorMessage = run.ErrorMessage,
-    };
+        var state = Enum.TryParse<MigrationJobState>(run.State, out var s) ? s : MigrationJobState.Interrupted;
+
+        return new MigrationJobInfo
+        {
+            Id = run.Id,
+            Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
+            CreatedAt = run.CreatedAt,
+            SourceDescription = run.SourceDescription,
+            State = state,
+            StartedAt = run.StartedAt,
+            CompletedAt = run.CompletedAt,
+            ErrorMessage = run.ErrorMessage,
+            // A Failed run's message is a fault whether or not a collection recorded one — it can
+            // end before reaching any collection at all.
+            HasFailures = state is MigrationJobState.Failed
+                || OutcomesFromRecord(run, state).Values.Any(c => c.FailureReason is not null),
+        };
+    }
 
     private long _totalDocumentsAllCollections;
     private long _migratedDocumentsAllCollections; // computed by UpdateOverallProgress

@@ -97,6 +97,14 @@ public record MigrationJobInfo
     public DateTime? StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="ErrorMessage"/> reports a fault. A run that completed carrying only a
+    /// skip — a read-only API secret cannot list sign-ins, which is the ordinary setup — has a
+    /// message to show and nothing to warn about, and history has no per-collection detail of its
+    /// own to tell the two apart with.
+    /// </summary>
+    public bool HasFailures { get; init; }
 }
 
 
