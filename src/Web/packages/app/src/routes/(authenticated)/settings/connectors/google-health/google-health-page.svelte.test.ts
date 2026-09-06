@@ -58,6 +58,51 @@ describe("Google Health connector page", () => {
     await expect.element(page.getByText("Step history")).toBeVisible();
   });
 
+  it("allows problematic selected types to be unchecked and saved without syncing", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true, selectedTypes: ["steps", "heart-rate", "weight"] }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "steps", granted: true, supported: true, count: 4 },
+      { dataType: "heart-rate", granted: true, supported: true, count: 0 },
+      { dataType: "weight", granted: true, supported: true, count: 0, errorCode: "google_unavailable" },
+    ] });
+    render(GoogleHealthPage);
+    await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
+    await page.getByRole("checkbox", { name: "Import Weight" }).click();
+    await page.getByRole("button", { name: "Save import settings", exact: true }).click();
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(expect.objectContaining({ dataTypes: ["steps"] }));
+    expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+    expect(googleHealthMocks.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("saves an older history date and an empty selection without reconnecting", async () => {
+    googleHealthMocks.status
+      .mockResolvedValueOnce(status({ configured: true, connected: true, selectedTypes: ["heart-rate"], importFrom: new Date("2026-08-29T00:00:00Z") }))
+      .mockResolvedValue(status({ configured: true, connected: true, selectedTypes: [], importFrom: new Date("2020-01-01T00:00:00Z") }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "heart-rate", granted: true, supported: true, count: 0 },
+    ] });
+    render(GoogleHealthPage);
+    await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
+    await page.getByLabelText("Import data from").fill("2020-01-01");
+    await page.getByRole("button", { name: "Save import settings", exact: true }).click();
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(expect.objectContaining({ dataTypes: [], importFrom: "2020-01-01T00:00:00.000Z", clientSecret: null }));
+    expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+    expect(googleHealthMocks.start).not.toHaveBeenCalled();
+    expect(googleHealthMocks.disconnect).not.toHaveBeenCalled();
+    await expect.element(page.getByText("Google Health is connected. Imports are paused because no data types are selected.")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Sync now", exact: true })).toBeDisabled();
+  });
+
+  it("allows a supported empty type to be enabled for future measurements", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true, selectedTypes: ["steps"] }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [
+      { dataType: "heart-rate", granted: true, supported: true, count: 0 },
+    ] });
+    render(GoogleHealthPage);
+    await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
+    await expect.element(page.getByRole("checkbox", { name: "Import Heart rate" })).toBeChecked();
+  });
+
   it("explains the history safety limit without silently truncating the import", async () => {
     googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
     googleHealthMocks.preview.mockRejectedValue({ status: 400, body: { message: "history_too_large" } });

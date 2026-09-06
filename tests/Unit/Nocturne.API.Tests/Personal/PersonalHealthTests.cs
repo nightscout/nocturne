@@ -471,7 +471,7 @@ public class PersonalHealthTests
     }
 
     [Fact]
-    public async Task Persists_safe_data_type_diagnostics_when_google_account_is_not_linked()
+    public async Task Persists_provider_errors_but_allows_empty_results_and_import_reconfiguration()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
         await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
@@ -507,9 +507,44 @@ public class PersonalHealthTests
         handler.Responder = _ => Json("{\"dataPoints\":[]}");
         await service.SyncAsync(true, default);
         status = await service.StatusAsync(default);
-        Assert.Equal("no_google_data", status.ErrorCode);
-        Assert.Equal(["weight"], status.ErrorDataTypes);
+        Assert.Null(status.ErrorCode);
+        Assert.Empty(status.ErrorDataTypes);
         Assert.NotNull(status.LastSync);
+
+        var token = (await db.PersonalGoogleConnections.SingleAsync()).ProtectedToken;
+        db.PersonalHealthReadings.Add(new PersonalHealthReadingEntity
+        {
+            Id = Guid.CreateVersion7(), DataType = "weight", SourceKey = "existing-import",
+            Mills = DateTimeOffset.UtcNow.AddDays(-30).ToUnixTimeMilliseconds(), Value = 72m, Unit = "kg"
+        });
+        await db.SaveChangesAsync();
+        var options = Options();
+        options.ClientSecret = null;
+        options.DataTypes = [];
+        options.ImportFrom = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await service.SaveAsync(options, subject, default);
+        handler.Responder = _ => throw new InvalidOperationException("Paused imports must not call Google");
+        await service.SyncAsync(true, default);
+        status = await service.StatusAsync(default);
+        Assert.True(status.Connected);
+        Assert.Empty(status.SelectedTypes);
+        Assert.Null(status.ErrorCode);
+        Assert.Equal(options.ImportFrom, status.ImportFrom);
+        Assert.Equal(token, (await db.PersonalGoogleConnections.SingleAsync()).ProtectedToken);
+        Assert.Equal(72m, (await db.PersonalHealthReadings.SingleAsync()).Value);
+
+        options.DataTypes = ["weight"];
+        await service.SaveAsync(options, subject, default);
+        var readCalls = 0;
+        handler.Responder = request =>
+        {
+            readCalls++;
+            Assert.Contains("2000-01-01", QueryHelpers.ParseQuery(request.RequestUri!.Query)["filter"].ToString());
+            return Json("{\"dataPoints\":[]}");
+        };
+        await service.SyncAsync(true, default);
+        Assert.Equal(1, readCalls);
+        Assert.Null((await service.StatusAsync(default)).ErrorCode);
     }
 
     [Fact]
@@ -604,6 +639,17 @@ public class PersonalHealthTests
 
         options.ImportFrom = DateTimeOffset.UtcNow.AddDays(2);
         Assert.Throws<GoogleHealthException>(() => GoogleHealthService.ValidateOptions(options));
+    }
+
+    [Fact]
+    public void Empty_import_selection_is_valid_for_pausing()
+    {
+        var options = Options();
+        options.DataTypes = [];
+        GoogleHealthService.ValidateOptions(options);
+        Assert.True(System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+            options, new System.ComponentModel.DataAnnotations.ValidationContext(options),
+            new List<System.ComponentModel.DataAnnotations.ValidationResult>(), true));
     }
 
     [Fact]

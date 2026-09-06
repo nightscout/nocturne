@@ -19,12 +19,20 @@ expire after seven days. Production use can require additional Google verificati
 
 ## Import behaviour
 
-- Nocturne retrieves every available result page from the selected start date.
+- Choose **Import data from** to retrieve older shared data without reconnecting.
+  Seven days is the default window, not a maximum. Explicit start dates can go back
+  to 2000-01-01. The API follows up to 10,000 pages per type/operation and reports an
+  error if that safety limit is exceeded; it never silently reports a complete import.
+- Use **Save import settings** to change the date or uncheck problematic types without
+  running an immediate import. Clear all types and save to pause imports while keeping
+  the connection and previously imported data. **Save selection and import** also
+  starts a manual import.
 - Steps, heart rate, weight, and sleep are written to their native Nocturne stores.
 - Known types without a Nocturne destination are shown but are not imported.
 - Automatic synchronization runs approximately every 15 minutes and reconciles the
   configured history range.
-- A missing measurement is not stored as zero.
+- An empty result is not a connector error and a missing measurement is not stored as
+  zero. Real permission, provider and parsing failures remain visible.
 
 Use **Sync now** for a manual retry. Errors include a stable technical code; correlate
 that code and the attempt time with the API server log when troubleshooting.

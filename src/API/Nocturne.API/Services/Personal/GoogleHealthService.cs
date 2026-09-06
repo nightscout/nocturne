@@ -165,7 +165,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
 
     public static void ValidateOptions(GoogleHealthOptions options)
     {
-        if (options.DataTypes is null || options.DataTypes.Length == 0 || options.DataTypes.Length > 32 || options.DataTypes.Distinct().Count() != options.DataTypes.Length || options.DataTypes.Except(GoogleHealthClient.SupportedTypes).Any())
+        if (options.DataTypes is null || options.DataTypes.Length > 32 || options.DataTypes.Distinct().Count() != options.DataTypes.Length || options.DataTypes.Except(GoogleHealthClient.SupportedTypes).Any())
             throw new GoogleHealthException("unsupported_type");
         if (!options.ClientId.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal) || options.HistoryDays is < 1 or > 90 ||
             options.ImportFrom is { } importFrom && (importFrom < new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) || importFrom > DateTimeOffset.UtcNow.AddDays(1)))
@@ -416,7 +416,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                 {
                     throw new GoogleHealthException("stored_google_configuration_unreadable", stage: stage);
                 }
-                if (settings.PreviewOnly) return;
+                if (settings.PreviewOnly || settings.DataTypes.Length == 0) return;
                 var now = DateTimeOffset.UtcNow;
                 var access = token.AccessToken ?? "";
                 if (string.IsNullOrWhiteSpace(access) || token.AccessTokenExpiresAt is null ||
@@ -485,9 +485,6 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     EndMills = r.EndMills, UtcOffsetMinutes = r.UtcOffsetMinutes, Value = r.Value, Unit = r.Unit
                 }).ToArray();
                 var missingConsent = settings.DataTypes.Except(active, StringComparer.Ordinal).ToArray();
-                var emptyTypes = active.Where(type => type == "sleep"
-                    ? sleepSessions.Count == 0
-                    : readings.All(reading => reading.DataType != type)).ToArray();
                 var strategy = db.Database.CreateExecutionStrategy();
                 stage = "database_write";
                 await strategy.ExecuteAsync(async () =>
@@ -503,7 +500,7 @@ public sealed class GoogleHealthService(NocturneDbContext db, IDataProtectionPro
                     row.LastSync = to; row.NextAttempt = null;
                     row.ErrorCode = missingConsent.Length > 0
                         ? EncodeError("partial_consent", missingConsent)
-                        : emptyTypes.Length > 0 ? EncodeError("no_google_data", emptyTypes) : null;
+                        : null;
                     await db.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
                 });
                 stage = "native_write";
