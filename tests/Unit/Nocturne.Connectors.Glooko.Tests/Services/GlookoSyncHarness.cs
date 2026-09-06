@@ -126,7 +126,7 @@ internal sealed class StaticGlookoTokenProvider : GlookoAuthTokenProvider
             new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
             new FakeTenantAccessor(),
             NullLogger<GlookoAuthTokenProvider>.Instance,
-                Mock.Of<IRetryDelayStrategy>())
+            Mock.Of<IRetryDelayStrategy>())
     {
     }
 

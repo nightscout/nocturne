@@ -47,7 +47,49 @@ public class GlookoAuthTokenProviderRetryTests
         handler.CallCount.Should().Be(1, "retrying a rejected credential cannot help and risks lockout");
     }
 
-    private static async Task<string?> AuthenticateAsync(ScriptedHandler handler)
+    /// <summary>
+    ///     V3 declines a sign-in in the body — 200 with { success, two_fa_required } and no
+    ///     Set-Cookie — so the status line alone would read it as a success worth retrying.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_DoesNotRetry_WhenV3SignInReturnsNoSessionCookie()
+    {
+        var handler = new ScriptedHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"success\":false,\"two_fa_required\":false}")
+            });
+
+        var token = await AuthenticateAsync(handler, useV3Api: true);
+
+        token.Should().BeNull();
+        handler.CallCount.Should().Be(1, "a sign-in Glooko declined in the body cannot succeed on a retry");
+    }
+
+    /// <summary>
+    ///     The configured MaxRetryAttempts is what the login loop spends, so a tenant lowering or
+    ///     raising it changes how many times the connector authenticates.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    public async Task GetValidTokenAsync_SpendsExactlyMaxRetryAttempts_OnAPersistentRetryableError(
+        int maxRetryAttempts)
+    {
+        var handler = new ScriptedHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("upstream unavailable")
+            });
+
+        var token = await AuthenticateAsync(handler, maxRetryAttempts: maxRetryAttempts);
+
+        token.Should().BeNull();
+        handler.CallCount.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
+    }
+
+    private static async Task<string?> AuthenticateAsync(
+        ScriptedHandler handler, bool useV3Api = false, int maxRetryAttempts = 3)
     {
         using var httpClient = new HttpClient(handler);
 
@@ -71,8 +113,8 @@ public class GlookoAuthTokenProviderRetryTests
         {
             Email = "someone@example.com",
             Password = "hunter2",
-            UseV3Api = false,
-            MaxRetryAttempts = 3
+            UseV3Api = useV3Api,
+            MaxRetryAttempts = maxRetryAttempts
         };
 
         return await provider.GetValidTokenAsync(config, CancellationToken.None);

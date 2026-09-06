@@ -57,7 +57,51 @@ public class MyLifeAuthTokenProviderRetryTests
         handler.LoginAttempts.Should().Be(1, "a login answered without a token is a rejected credential");
     }
 
-    private static async Task<string?> AuthenticateAsync(SoapHandler handler)
+    [Fact]
+    public async Task GetValidTokenAsync_DoesNotRetry_WhenMyLifeAnswersLoginWith403()
+    {
+        var handler = new SoapHandler { LoginStatus = HttpStatusCode.Forbidden };
+
+        var token = await AuthenticateAsync(handler);
+
+        token.Should().BeNull();
+        handler.LoginAttempts.Should().Be(1, "a refused request is not transient");
+    }
+
+    /// <summary>
+    ///     A member-supplied ServiceUrl the SOAP client refuses to send to: no request is made, so
+    ///     nothing about a second attempt could differ.
+    /// </summary>
+    [Fact]
+    public async Task GetValidTokenAsync_DoesNotRetry_WhenServiceUrlIsUnusable()
+    {
+        var handler = new SoapHandler();
+
+        var token = await AuthenticateAsync(handler, serviceUrl: "http://insecure.example.com");
+
+        token.Should().BeNull();
+        handler.LoginAttempts.Should().Be(1, "an unusable service URL is a config fault, not a transient one");
+    }
+
+    /// <summary>
+    ///     The configured MaxRetryAttempts is what the login loop spends.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task GetValidTokenAsync_SpendsExactlyMaxRetryAttempts_OnAPersistentRetryableError(
+        int maxRetryAttempts)
+    {
+        var handler = new SoapHandler { LoginStatus = HttpStatusCode.ServiceUnavailable };
+
+        var token = await AuthenticateAsync(handler, maxRetryAttempts: maxRetryAttempts);
+
+        token.Should().BeNull();
+        handler.LoginAttempts.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
+    }
+
+    private static async Task<string?> AuthenticateAsync(
+        SoapHandler handler, string serviceUrl = "", int maxRetryAttempts = 3)
     {
         using var httpClient = new HttpClient(handler);
 
@@ -82,7 +126,8 @@ public class MyLifeAuthTokenProviderRetryTests
         {
             Username = "someone@example.com",
             Password = "hunter2",
-            MaxRetryAttempts = 3
+            ServiceUrl = serviceUrl,
+            MaxRetryAttempts = maxRetryAttempts
         };
 
         return await provider.GetValidTokenAsync(config, CancellationToken.None);

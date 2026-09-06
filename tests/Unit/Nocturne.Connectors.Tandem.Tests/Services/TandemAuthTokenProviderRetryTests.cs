@@ -59,7 +59,25 @@ public class TandemAuthTokenProviderRetryTests
         handler.LoginCalls.Should().Be(1, "a non-SUCCESS login body is a rejected credential");
     }
 
-    private static async Task<string?> AuthenticateAsync(TandemLoginHandler handler)
+    /// <summary>
+    ///     The configured MaxRetryAttempts is what the login loop spends.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task GetValidTokenAsync_SpendsExactlyMaxRetryAttempts_OnAPersistentRetryableError(
+        int maxRetryAttempts)
+    {
+        var handler = new TandemLoginHandler { LoginStatus = HttpStatusCode.ServiceUnavailable };
+
+        var token = await AuthenticateAsync(handler, maxRetryAttempts);
+
+        token.Should().BeNull();
+        handler.LoginCalls.Should().Be(maxRetryAttempts, "the configured attempt budget is what gets spent");
+    }
+
+    private static async Task<string?> AuthenticateAsync(
+        TandemLoginHandler handler, int maxRetryAttempts = 3)
     {
         using var httpClient = new HttpClient();
 
@@ -84,7 +102,7 @@ public class TandemAuthTokenProviderRetryTests
             Email = "someone@example.com",
             Password = "hunter2",
             Region = "US",
-            MaxRetryAttempts = 3
+            MaxRetryAttempts = maxRetryAttempts
         };
 
         return await provider.GetValidTokenAsync(config, CancellationToken.None);

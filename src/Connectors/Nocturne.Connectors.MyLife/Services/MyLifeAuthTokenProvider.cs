@@ -58,13 +58,18 @@ public class MyLifeAuthTokenProvider(
     ///     token or null plus whether the failure is worth another attempt.
     /// </summary>
     /// <remarks>
-    ///     MyLife has no status line to classify: <see cref="MyLifeSoapClient"/> flattens every failed
-    ///     SOAP call to an empty response, so a step that returned nothing could be a 5xx and is
-    ///     retried. The one credential verdict it does expose is a Login that answers with a result
-    ///     carrying no auth token — that is MyLife rejecting the username/password, and it is not
-    ///     retried. A rejected auth token arrives as an <see cref="HttpRequestException"/> carrying
-    ///     HTTP 401, which is classified like any other status; a transport failure carries no status
-    ///     and reaches the base class, which retries it.
+    ///     Only a failed status or a transport failure can buy another attempt. Every non-2xx leaves
+    ///     <see cref="MyLifeSoapClient"/> as an <see cref="HttpRequestException"/> carrying the status,
+    ///     which is classified by the shared
+    ///     <see cref="HttpResponseExtensions.IsRetryableStatusCode"/>; a transport failure carries no
+    ///     status and reaches the base class, which retries it.
+    ///     <para>
+    ///     Everything else here is a 2xx that did not carry what the next step needs — an unknown
+    ///     username, a login MyLife declined, an account with no matching patient. Asking again
+    ///     produces the same answer, so none of them retries. MyLife declines a login by returning a
+    ///     <see cref="MyLifeLoginResult"/> with no <see cref="MyLifeLoginResult.AuthToken"/> rather
+    ///     than by failing the request.
+    ///     </para>
     ///     <para>
     ///     Every step logs which one failed, because a null token surfaces downstream only as the
     ///     generic "MyLife authentication failed". Messages are intentionally free of credentials/PII.
@@ -82,7 +87,7 @@ public class MyLifeAuthTokenProvider(
             if (location == null)
             {
                 _logger.LogWarning("MyLife auth failed at user-location lookup (GetUser20 returned no result)");
-                return (null, true);
+                return (null, false);
             }
 
             var serviceUrl = config.ServiceUrl;
@@ -108,7 +113,7 @@ public class MyLifeAuthTokenProvider(
                 _logger.LogWarning(
                     "MyLife auth failed at login: no response (appVersion {AppVersion}, appPlatform {AppPlatform})",
                     config.AppVersion, config.AppPlatform);
-                return (null, true);
+                return (null, false);
             }
 
             if (string.IsNullOrWhiteSpace(login.AuthToken))
@@ -127,7 +132,7 @@ public class MyLifeAuthTokenProvider(
             if (patients.Count == 0)
             {
                 _logger.LogWarning("MyLife auth failed: patient list was empty");
-                return (null, true);
+                return (null, false);
             }
 
             var patient = ResolvePatient(patients, config.PatientId);
@@ -154,6 +159,13 @@ public class MyLifeAuthTokenProvider(
         catch (HttpRequestException ex) when (ex.StatusCode is { } status && !HttpResponseExtensions.IsRetryableStatusCode(status))
         {
             _logger.LogError("MyLife auth failed with non-retryable HTTP {StatusCode}", (int)status);
+            return (null, false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A member-supplied ServiceUrl the SOAP client refuses to send to; no request was made
+            // and the next attempt would build the same URL.
+            _logger.LogError(ex, "MyLife auth failed: service URL is unusable");
             return (null, false);
         }
     }
