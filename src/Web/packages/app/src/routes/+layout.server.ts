@@ -7,6 +7,8 @@ import {
   parseDashboardSlugs,
 } from "$lib/server/tenantless-host";
 import { getRequestStatus } from "$lib/server/request-status";
+import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
 import {
   LANGUAGE_COOKIE_NAME,
   PREFS_COOKIE_NAME,
@@ -111,5 +113,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     tenantless,
     baseDomain,
     dashboardSlugs,
+    // Read here rather than from document.cookie so the login form renders its "Last used" badge
+    // in the server markup, and the buttons don't reorder under the visitor on hydration.
+    lastSignIn: parseLastSignIn(cookies.get(AUTH_COOKIE_NAMES.lastSignIn)),
   };
 };

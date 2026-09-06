@@ -348,3 +348,33 @@ describe("propagateAuthCookies with a same-name pair", () => {
     expect(calls.filter((c) => c.opts.domain === ".nocturne.run")).toHaveLength(2);
   });
 });
+
+describe("propagateAuthCookies and the last-used sign-in hint", () => {
+  it("forwards the hint the API wrote, so the passkey flow records one at all", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    // The passkey and authenticator sign-ins complete inside a remote function, so the API's
+    // Set-Cookie lands on a server-to-server response and reaches the browser only through here.
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.lastSignIn}=passkey; Path=/; Domain=.nocturne.run; Secure; SameSite=Lax; Max-Age=31536000`,
+      ],
+      cookies
+    );
+
+    expect(calls).toEqual([
+      {
+        op: "set",
+        name: AUTH_COOKIE_NAMES.lastSignIn,
+        value: "passkey",
+        opts: {
+          path: "/",
+          domain: ".nocturne.run",
+          secure: true,
+          sameSite: "lax",
+          maxAge: 31536000,
+        },
+      },
+    ]);
+  });
+});
