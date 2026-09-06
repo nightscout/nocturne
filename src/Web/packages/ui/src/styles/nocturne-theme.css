@@ -14,8 +14,8 @@
      meaning on their own: the hues are spread to keep neighbouring values in the
      70–250 range distinguishable across a calendar grid. Stop-to-mg/dL mapping
      lives with the interpolation in chart-colors.ts. */
-  --glucose-heatmap-1: #2563eb; /* blue-600 */
-  --glucose-heatmap-2: #3b82f6; /* blue-500 */
+  --glucose-heatmap-1: #000000;
+  --glucose-heatmap-2: #000000;
   --glucose-heatmap-3: #06b6d4; /* cyan-500 */
   --glucose-heatmap-4: #10b981; /* emerald-500 */
   --glucose-heatmap-5: #84cc16; /* lime-500 */
