@@ -627,7 +627,8 @@ public class TandemE2eSyncTests
         new ConnectorTokenCache(),
         new ConnectorServerResolver<TandemConnectorConfiguration>(null, null, null),
         new FakeTenantAccessor(),
-        NullLogger<TandemAuthTokenProvider>.Instance)
+        NullLogger<TandemAuthTokenProvider>.Instance,
+        Mock.Of<IRetryDelayStrategy>())
     {
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>
             AcquireTokenAsync(TandemConnectorConfiguration config, CancellationToken cancellationToken) =>

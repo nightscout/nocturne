@@ -229,7 +229,8 @@ public class GlookoConnectorServiceStateIsolationTests
                 new ConnectorTokenCache(),
                 new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null),
                 new AmbientTenantAccessor(),
-                NullLogger<GlookoAuthTokenProvider>.Instance)
+                NullLogger<GlookoAuthTokenProvider>.Instance,
+                Mock.Of<IRetryDelayStrategy>())
         {
         }
 
