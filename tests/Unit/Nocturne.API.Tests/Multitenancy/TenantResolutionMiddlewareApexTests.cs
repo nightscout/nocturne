@@ -1,15 +1,8 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -22,74 +15,21 @@ namespace Nocturne.API.Tests.Multitenancy;
 /// configured single-tenant install to /setup. Multi-tenant and zero-tenant behaviour is
 /// unchanged, and infrastructure/liveness paths stay tenant-agnostic.
 /// </summary>
-public sealed class TenantResolutionMiddlewareApexTests : IDisposable
+public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddlewareTestBase
 {
-    private readonly SqliteTestDatabase _db;
-    private readonly ServiceProvider _root;
-    private const string BaseDomain = "nocturne.theconen.de";
-
-    public TenantResolutionMiddlewareApexTests()
-    {
-        _db = TestDbContextFactory.CreateSqlite();
-
-        var services = new ServiceCollection();
-        _db.AddToServices(services);
-        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddMemoryCache();
-        _root = services.BuildServiceProvider();
-    }
-
-    public void Dispose()
-    {
-        _root.Dispose();
-        _db.Dispose();
-    }
-
-    private TenantResolutionMiddleware Build(RequestDelegate next) => new(
-        next,
-        NullLogger<TenantResolutionMiddleware>.Instance,
-        Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
-        _root.GetRequiredService<IMemoryCache>());
-
-    private Guid SeedTenant(string slug, bool isDemo = false, Guid? id = null, bool isActive = true)
-    {
-        var tenantId = id ?? Guid.CreateVersion7();
-        using var seed = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
-        seed.Tenants.Add(new TenantEntity
-        {
-            Id = tenantId, Slug = slug, DisplayName = slug, IsActive = isActive, IsDemo = isDemo,
-        });
-        seed.SaveChanges();
-        return tenantId;
-    }
-
-    // Host == BaseDomain → apex, no subdomain.
-    private DefaultHttpContext ApexRequest(IServiceScope scope, string path, string method = "GET")
-    {
-        var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = BaseDomain;
-        ctx.Request.Path = path;
-        ctx.Request.Method = method;
-        ctx.Response.Body = new MemoryStream();
-        return ctx;
-    }
+    protected override string BaseDomain => "nocturne.theconen.de";
 
     [Fact]
     public async Task Apex_status_resolves_the_sole_tenant_in_single_tenant_mode()
     {
         var tenantId = SeedTenant("theconen");
-        using var scope = _root.CreateScope();
 
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = ApexRequest(scope, "/api/v4/status");
-
-        await mw.InvokeAsync(ctx);
+        var (context, nextCalled) = await InvokeAsync(BaseDomain, "/api/v4/status");
 
         // /api/v4/status is tenantless-allowed, but on the apex the sole tenant is resolved
         // so StatusService reports that tenant instead of "setup_required".
         nextCalled.Should().BeTrue();
-        var accessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+        var accessor = Resolve<ITenantAccessor>(context);
         accessor.IsResolved.Should().BeTrue();
         accessor.TenantId.Should().Be(tenantId);
     }
@@ -98,17 +38,12 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     public async Task Apex_health_probe_passes_through_without_resolving_a_tenant()
     {
         SeedTenant("theconen");
-        using var scope = _root.CreateScope();
 
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = ApexRequest(scope, "/health");
-
-        await mw.InvokeAsync(ctx);
+        var (context, nextCalled) = await InvokeAsync(BaseDomain, "/health");
 
         // Liveness/readiness probes must never depend on tenant state — no resolution, no DB touch.
         nextCalled.Should().BeTrue();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
     }
 
     [Fact]
@@ -119,36 +54,26 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
         SeedTenant("demo", isDemo: true, id: new Guid("00000000-0000-7000-8000-000000000001"));
         SeedTenant("alpha");
         SeedTenant("beta");
-        using var scope = _root.CreateScope();
 
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = ApexRequest(scope, "/api/v4/status");
-
-        await mw.InvokeAsync(ctx);
+        var (context, nextCalled) = await InvokeAsync(BaseDomain, "/api/v4/status");
 
         // With more than one tenant there is no sole tenant; status stays tenantless and passes
         // through, so the apex status response is unchanged for multi-tenant deployments.
         nextCalled.Should().BeTrue();
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
     }
 
     [Fact]
     public async Task Apex_status_with_a_sole_tenant_names_it_so_the_web_serves_the_full_app()
     {
         SeedTenant("theconen");
-        using var scope = _root.CreateScope();
 
-        var mw = Build(_ => Task.CompletedTask);
-        var ctx = ApexRequest(scope, "/api/v4/status");
-
-        await mw.InvokeAsync(ctx);
+        var (context, _) = await InvokeAsync(BaseDomain, "/api/v4/status");
 
         // The status response carries this slug, and it is the only thing that tells the web app
         // an apex serving a single-tenant install apart from one serving the dashboard. Getting
         // it wrong trims that install's sidebar and bounces it to a wildcard subdomain.
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().Context!.Slug
-            .Should().Be("theconen");
+        Resolve<ITenantAccessor>(context).Context!.Slug.Should().Be("theconen");
     }
 
     [Fact]
@@ -156,22 +81,16 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     {
         SeedTenant("alpha");
         SeedTenant("beta");
-        using var scope = _root.CreateScope();
 
-        var read = false;
-        var readCtx = ApexRequest(scope, "/api/v4/me/tenants");
-        await Build(_ => { read = true; return Task.CompletedTask; }).InvokeAsync(readCtx);
-
-        var created = false;
-        var createCtx = ApexRequest(scope, "/api/v4/me/tenants", "POST");
-        await Build(_ => { created = true; return Task.CompletedTask; }).InvokeAsync(createCtx);
+        var (_, read) = await InvokeAsync(BaseDomain, "/api/v4/me/tenants");
+        var (createContext, created) = await InvokeAsync(BaseDomain, "/api/v4/me/tenants", HttpMethods.Post);
 
         // The list is keyed on the caller's subject and is what the dashboard navigates by. The
         // POST on the same path provisions a tenant, which is not a cross-tenant read and has no
         // business on a host that resolves none — so it falls through to the ordinary apex 404.
         read.Should().BeTrue();
         created.Should().BeFalse();
-        createCtx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        createContext.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
     [Fact]
@@ -179,74 +98,57 @@ public sealed class TenantResolutionMiddlewareApexTests : IDisposable
     {
         var tenantId = SeedTenant("theconen");
         SeedTenant("demo", isDemo: true);
-        using var scope = _root.CreateScope();
-        var accessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+        // One scope for both requests: the pin has to survive the second resolution, not just
+        // be recomputed from a clean scope each time.
+        using var scope = Root.CreateScope();
 
-        var served = false;
-        var pageCtx = ApexRequest(scope, "/api/v4/entries");
-        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(pageCtx);
-
-        var statusTenant = Guid.Empty;
-        var statusCtx = ApexRequest(scope, "/api/v4/status");
-        await Build(_ => { statusTenant = accessor.TenantId; return Task.CompletedTask; }).InvokeAsync(statusCtx);
+        var (pageContext, served) = await InvokeAsync(scope, BaseDomain, "/api/v4/entries");
+        var (statusContext, _) = await InvokeAsync(scope, BaseDomain, "/api/v4/status");
 
         // Turning the demo on is a second active tenant, which would otherwise end single-tenant
         // mode: every apex page 404s and status stops naming the operator's tenant.
         served.Should().BeTrue();
-        pageCtx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
-        accessor.TenantId.Should().Be(tenantId);
-        statusTenant.Should().Be(tenantId);
+        pageContext.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        Resolve<ITenantAccessor>(pageContext).TenantId.Should().Be(tenantId);
+        Resolve<ITenantAccessor>(statusContext).TenantId.Should().Be(tenantId);
     }
 
     [Fact]
     public async Task Apex_with_only_a_demo_tenant_answers_as_a_fresh_install()
     {
         SeedTenant("demo", isDemo: true);
-        using var scope = _root.CreateScope();
+        using var scope = Root.CreateScope();
 
-        var served = false;
-        var pageCtx = ApexRequest(scope, "/api/v4/entries");
-        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(pageCtx);
-
-        var statusCtx = ApexRequest(scope, "/api/v4/status");
-        await Build(_ => Task.CompletedTask).InvokeAsync(statusCtx);
+        var (pageContext, served) = await InvokeAsync(scope, BaseDomain, "/api/v4/entries");
+        await InvokeAsync(scope, BaseDomain, "/api/v4/status");
 
         // The demo is served on its own host, never adopted by the apex — so an instance holding
         // only a demo has no tenant to resolve, and answers 503 so the frontend goes to /setup
         // rather than the 404 that would strand an operator with nowhere to create one.
         served.Should().BeFalse();
-        pageCtx.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+        pageContext.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        Resolve<ITenantAccessor>(pageContext).IsResolved.Should().BeFalse();
     }
 
     [Fact]
     public async Task Apex_with_a_single_inactive_tenant_does_not_resolve_it()
     {
         SeedTenant("paused", isActive: false);
-        using var scope = _root.CreateScope();
 
-        var served = false;
-        var ctx = ApexRequest(scope, "/api/v4/entries");
-        await Build(_ => { served = true; return Task.CompletedTask; }).InvokeAsync(ctx);
+        var (context, served) = await InvokeAsync(BaseDomain, "/api/v4/entries");
 
         served.Should().BeFalse();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
     }
 
     [Fact]
     public async Task Apex_non_tenantless_path_with_no_tenants_returns_503_setup_required()
     {
-        using var scope = _root.CreateScope();
-
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = ApexRequest(scope, "/api/v4/entries");
-
-        await mw.InvokeAsync(ctx);
+        var (context, nextCalled) = await InvokeAsync(BaseDomain, "/api/v4/entries");
 
         // Fresh install (zero tenants), non-tenantless path: 503 so the frontend goes to /setup.
         nextCalled.Should().BeFalse();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
     }
 }

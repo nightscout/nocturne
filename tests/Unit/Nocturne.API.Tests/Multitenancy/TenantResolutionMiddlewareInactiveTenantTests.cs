@@ -1,14 +1,8 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -21,70 +15,17 @@ namespace Nocturne.API.Tests.Multitenancy;
 /// a broken one and the page explaining the refusal has nowhere to point.
 /// </summary>
 [Trait("Category", "Unit")]
-public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
+public sealed class TenantResolutionMiddlewareInactiveTenantTests : TenantResolutionMiddlewareTestBase
 {
-    private readonly SqliteTestDatabase _db;
-    private readonly ServiceProvider _root;
-    private const string BaseDomain = "nocturne.example";
     private const string Slug = "lapsed";
 
-    public TenantResolutionMiddlewareInactiveTenantTests()
-    {
-        _db = TestDbContextFactory.CreateSqlite();
+    protected override string BaseDomain => "nocturne.example";
 
-        var services = new ServiceCollection();
-        _db.AddToServices(services);
-        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddMemoryCache();
-        _root = services.BuildServiceProvider();
+    public TenantResolutionMiddlewareInactiveTenantTests() => SeedTenant(Slug, isActive: false);
 
-        using var seed = _db.CreateContext();
-        seed.Tenants.Add(new TenantEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Slug = Slug,
-            DisplayName = Slug,
-            IsActive = false,
-        });
-        seed.SaveChanges();
-    }
-
-    public void Dispose()
-    {
-        _root.Dispose();
-        _db.Dispose();
-    }
-
-    private TenantResolutionMiddleware Build(RequestDelegate next) => new(
-        next,
-        NullLogger<TenantResolutionMiddleware>.Instance,
-        Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
-        _root.GetRequiredService<IMemoryCache>());
-
-    private static DefaultHttpContext Request(IServiceScope scope, string path, string method = "GET")
-    {
-        var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
-        ctx.Request.Headers["X-Forwarded-Host"] = $"{Slug}.{BaseDomain}";
-        ctx.Request.Path = path;
-        ctx.Request.Method = method;
-        ctx.Response.Body = new MemoryStream();
-        return ctx;
-    }
-
-    private async Task<(bool NextCalled, DefaultHttpContext Context, string Body)> InvokeAsync(
-        string path, string method = "GET")
-    {
-        using var scope = _root.CreateScope();
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = Request(scope, path, method);
-
-        await mw.InvokeAsync(ctx);
-
-        ctx.Response.Body.Position = 0;
-        var body = await new StreamReader(ctx.Response.Body).ReadToEndAsync();
-        return (nextCalled, ctx, body);
-    }
+    private Task<(DefaultHttpContext Context, bool NextCalled)> OnTheLapsedHost(
+        string path, string method = "GET") =>
+        InvokeAsync($"{Slug}.{BaseDomain}", path, method);
 
     [Theory]
     [InlineData("/api/v4/sensorglucose")]
@@ -92,11 +33,11 @@ public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
     [InlineData("/api/auth/oidc/session")]
     public async Task Refuses_with_a_code_the_web_app_can_recognise(string path)
     {
-        var (nextCalled, ctx, body) = await InvokeAsync(path);
+        var (context, nextCalled) = await OnTheLapsedHost(path);
 
         nextCalled.Should().BeFalse();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
-        JsonDocument.Parse(body).RootElement.GetProperty("error").GetString()
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        JsonDocument.Parse(await ReadBodyAsync(context)).RootElement.GetProperty("error").GetString()
             .Should().Be(TenantResolutionMiddleware.TenantInactiveCode);
     }
 
@@ -105,34 +46,29 @@ public sealed class TenantResolutionMiddlewareInactiveTenantTests : IDisposable
     [InlineData("/alive")]
     public async Task Liveness_probes_answer_without_resolving_the_tenant(string path)
     {
-        using var scope = _root.CreateScope();
-        var nextCalled = false;
-        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
-        var ctx = Request(scope, path);
-
-        await mw.InvokeAsync(ctx);
+        var (context, nextCalled) = await OnTheLapsedHost(path);
 
         nextCalled.Should().BeTrue();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
-        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().IsResolved.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
     }
 
     [Fact]
     public async Task The_operators_address_is_readable_so_the_refusal_can_be_explained()
     {
-        var (nextCalled, ctx, _) = await InvokeAsync("/api/v4/support/config");
+        var (context, nextCalled) = await OnTheLapsedHost("/api/v4/support/config");
 
         nextCalled.Should().BeTrue();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 
     [Fact]
     public async Task Only_the_method_the_slice_names_is_served()
     {
-        var (nextCalled, ctx, _) = await InvokeAsync("/api/v4/support/config", HttpMethods.Post);
+        var (context, nextCalled) = await OnTheLapsedHost("/api/v4/support/config", HttpMethods.Post);
 
         nextCalled.Should().BeFalse();
-        ctx.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 
     /// <summary>

@@ -138,12 +138,8 @@ public class PlatformAccessController(
             "Platform-admin {SubjectId} was granted access to tenant {TenantId} ({Slug})",
             auth.SubjectId, target.Id, target.Slug);
 
-        // Only honour a sensible forwarded scheme; never reflect an arbitrary client value
-        // into the redirect. Prod is always behind TLS, so default to https.
-        var forwardedProto = Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
-        var proto = forwardedProto is "http" or "https" ? forwardedProto : "https";
-        var redirectUrl = $"{proto}://{target.Slug}.{baseDomainOptions.Value.BaseDomain}/";
-        return Redirect(redirectUrl);
+        return Redirect(
+            $"{Request.PublicScheme()}://{target.Slug}.{baseDomainOptions.Value.BaseDomain}/");
     }
 
     private string? GetClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();

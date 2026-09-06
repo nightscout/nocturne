@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 
@@ -281,7 +282,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         Response.Headers["X-Offset"] = parameters.Offset.ToString();
 
         // Set Link header for pagination
-        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}";
+        var baseUrl = $"{Request.PublicScheme()}://{Request.Host}{Request.Path}";
         var links = new List<string>();
 
         if (parameters.Offset > 0)
