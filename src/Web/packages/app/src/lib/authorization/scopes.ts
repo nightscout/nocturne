@@ -24,3 +24,11 @@ export function satisfiesScope(
     granted.includes(`${required.slice(0, -".read".length)}.readwrite`)
   );
 }
+
+/** Whether `granted` covers every scope in `required`. */
+export function satisfiesAllScopes(
+  granted: readonly string[],
+  required: readonly string[]
+): boolean {
+  return required.every((scope) => satisfiesScope(granted, scope));
+}
