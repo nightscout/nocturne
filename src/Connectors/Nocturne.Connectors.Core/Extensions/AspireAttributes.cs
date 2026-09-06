@@ -147,6 +147,15 @@ public class ConnectorRegistrationAttribute(
     public int DefaultStaleThresholdMinutes { get; set; } = 60;
 
     /// <summary>
+    ///     The name <paramref name="configType"/> answers to in messages, falling back to its type
+    ///     name less the <c>Configuration</c> suffix for a config that declares no registration of
+    ///     its own.
+    /// </summary>
+    public static string NameFor(Type configType) =>
+        configType.GetCustomAttribute<ConnectorRegistrationAttribute>()?.ConnectorName
+        ?? configType.Name.Replace("Configuration", "");
+
+    /// <summary>
     ///     The registration <paramref name="configType"/> declares itself.
     /// </summary>
     /// <remarks>

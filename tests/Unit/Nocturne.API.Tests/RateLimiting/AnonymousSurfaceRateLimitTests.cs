@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.RateLimiting;
+using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Controllers.V4.Monitoring;
@@ -48,6 +49,19 @@ public class AnonymousSurfaceRateLimitTests
     }
 
     /// <summary>
+    /// Redeems a bearer code with no session, so its one action carries a ceiling.
+    /// </summary>
+    [Fact]
+    public void TheLoginHandoff_CarriesAClientAddressPolicy()
+    {
+        var actions = Actions(typeof(LoginHandoffController));
+
+        actions.Should().ContainSingle();
+
+        Uncovered(actions).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Each of these answers from the database on a caller-supplied string with no session, so the
     /// anonymous request has to cost a permit.
     /// </summary>
@@ -78,6 +92,7 @@ public class AnonymousSurfaceRateLimitTests
     [InlineData(typeof(MyTenantsController), nameof(MyTenantsController.ValidateSlug), "name-availability")]
     [InlineData(typeof(MemberInviteController), nameof(MemberInviteController.GetInviteInfo), "invite-lookup")]
     [InlineData(typeof(AlertInvitesController), nameof(AlertInvitesController.ValidateInvite), "invite-lookup")]
+    [InlineData(typeof(LoginHandoffController), nameof(LoginHandoffController.ExchangeLoginCode), "login-handoff")]
     public void EachAnonymousAction_CarriesItsOwnPolicy(Type controller, string action, string policy)
     {
         PolicyOn(Action(controller, action)).Should().Be(policy);

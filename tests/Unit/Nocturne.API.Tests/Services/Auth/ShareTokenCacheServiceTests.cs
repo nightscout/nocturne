@@ -1,43 +1,30 @@
 using System.Linq;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
 public sealed class ShareTokenCacheServiceTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly ServiceProvider _root;
+    private readonly SqliteTestDatabase _db;
     private readonly IDbContextFactory<NocturneDbContext> _factory;
-    private readonly IMemoryCache _cache;
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private const string Token = "k7m2q9x4r3wt";
 
     public ShareTokenCacheServiceTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        var services = new ServiceCollection();
-        services.AddDbContextFactory<NocturneDbContext>(o => o
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-        services.AddMemoryCache();
-        _root = services.BuildServiceProvider();
-        _factory = _root.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        _cache = _root.GetRequiredService<IMemoryCache>();
+        _db = TestDbContextFactory.CreateSqlite();
+        _factory = _db.ContextFactory;
 
         using var seed = _factory.CreateDbContext();
-        seed.Database.EnsureCreated();
         seed.Tenants.Add(new TenantEntity
         {
             Id = _tenantId,
@@ -50,8 +37,8 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
 
     public void Dispose()
     {
-        _root.Dispose();
-        _connection.Dispose();
+        _cache.Dispose();
+        _db.Dispose();
     }
 
     private ShareTokenCacheService Service() =>

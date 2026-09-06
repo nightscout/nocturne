@@ -3,7 +3,6 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -13,6 +12,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Services.Connectors;
 using Nocturne.Core.Contracts.Auth;
@@ -20,6 +20,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -34,8 +35,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 /// </remarks>
 public class SetupControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<ITenantService> _tenantService;
     private readonly Mock<IPasskeyService> _passkeyService;
@@ -51,16 +51,9 @@ public class SetupControllerTests : IDisposable
 
     public SetupControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_dbOptions);
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext();
 
         _tenantService = new Mock<ITenantService>();
         _passkeyService = new Mock<IPasskeyService>();
@@ -83,7 +76,7 @@ public class SetupControllerTests : IDisposable
         _dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
-                var ctx = new NocturneDbContext(_dbOptions);
+                var ctx = _db.CreateContext();
                 return ctx;
             });
 
@@ -126,7 +119,7 @@ public class SetupControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     // ── CreateTenant ──────────────────────────────────────────────────────
@@ -479,6 +472,60 @@ public class SetupControllerTests : IDisposable
         conflict.Value.Should().BeEquivalentTo(new { error = "owner_already_exists" });
     }
 
+    [Fact]
+    public async Task OwnerOptions_WhenTheOnlyTenantIsTheDemoTenant_Returns409NoTenantExists()
+    {
+        // An operator who deletes every real tenant leaves one tenant whose member holds no
+        // credential — which must not read as a tenant awaiting its first owner.
+        await SeedDemoTenantAsync();
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "someone", DisplayName = "Someone" },
+            CancellationToken.None);
+
+        var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
+        conflict.Value.Should().BeEquivalentTo(new { error = "no_tenant_exists" });
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenADemoTenantAccompaniesTheOwnerlessTenant_EnrolsANewSubject()
+    {
+        // A stock install provisions the demo at boot, so the operator's first-run setup runs
+        // with the demo visitor already the oldest non-system subject on the instance. Enrolling
+        // it would hand the operator's tenant to an account anyone can mint a session for.
+        var demoSubjectId = await SeedDemoTenantAsync();
+        var tenantId = Guid.CreateVersion7();
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        await _dbContext.SaveChangesAsync();
+
+        Guid enrolling = default;
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Callback((Guid subjectId, string _) => enrolling = subjectId)
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<SetupOwnerOptionsResponse>().Subject.TenantId.Should().Be(tenantId);
+        enrolling.Should().NotBe(demoSubjectId).And.NotBe(default(Guid));
+
+        var context = FreshContext();
+        var demoSubject = await context.Subjects.SingleAsync(s => s.Id == demoSubjectId);
+        demoSubject.Name.Should().Be(DemoTenantService.DemoMemberName);
+        demoSubject.Username.Should().BeNull();
+        (await context.TenantMembers
+            .AnyAsync(m => m.TenantId == tenantId && m.SubjectId == demoSubjectId))
+            .Should().BeFalse();
+    }
+
     // SoftLock_TenantWithOnlySystemMembers_OwnerOptionsSucceeds is an integration test — it
     // asserts what the tenant pin makes reachable, which needs real policies.
 
@@ -523,6 +570,21 @@ public class SetupControllerTests : IDisposable
         var validation = ok.Value.Should().BeOfType<SlugValidationResult>().Subject;
         validation.IsValid.Should().BeFalse();
         validation.Message.Should().Contain("reserved");
+    }
+
+    [Fact]
+    public async Task ValidateUsername_WhenTheOnlyTenantIsTheDemoTenant_ReportsNoTenant()
+    {
+        // Setup is anonymous while no credential exists anywhere, so answering off the demo
+        // tenant would make its member names probeable.
+        await SeedDemoTenantAsync();
+
+        var result = await _controller.ValidateUsername("demo", CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var validation = ok.Value.Should().BeOfType<SlugValidationResult>().Subject;
+        validation.IsValid.Should().BeFalse();
+        validation.Message.Should().Contain("No tenant exists");
     }
 
     [Fact]
@@ -742,6 +804,23 @@ public class SetupControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task OwnerComplete_WhenADemoTenantAccompaniesTheSoleTenant_StillGrantsPlatformAdmin()
+    {
+        // The grant re-derives single-tenant-ness for itself, so it has to count tenants the way
+        // the guard that admitted this setup does — or a stock install's owner completes setup
+        // and still cannot reach the admin UI.
+        await SeedDemoTenantAsync();
+        var (_, subjectId) = await SeedSoleTenantWithOwnerRoleAsync();
+        StubPasskeyCompletion(subjectId);
+
+        var result = await CompleteOwnerSetupAsync();
+
+        result.Should().BeOfType<OkObjectResult>();
+        var subject = await FreshContext().Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsPlatformAdmin.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task OwnerOptions_BeforeCeremonyCompletes_DoesNotGrantPlatformAdmin()
     {
         // An abandoned WebAuthn ceremony must not leave a credential-less subject holding
@@ -884,7 +963,7 @@ public class SetupControllerTests : IDisposable
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private NocturneDbContext FreshContext() => new(_dbOptions);
+    private NocturneDbContext FreshContext() => _db.CreateContext();
 
     /// <summary>
     /// Drives the passkey completion step with the mocks it needs to reach the grant.
@@ -932,6 +1011,39 @@ public class SetupControllerTests : IDisposable
             IsPlatformAdmin = true,
         });
         await _dbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds the demo tenant in the shape <see cref="DemoTenantService.ConfigureAccessAsync"/>
+    /// leaves it: the visitor subject carries no global username and no credential, and the
+    /// membership carries the <c>demo</c> username. Returns the visitor subject's id.
+    /// </summary>
+    /// <remarks>
+    /// Seeded first in every test that uses it, so its UUIDv7 subject id sorts ahead of the
+    /// operator's — which is the ordering that makes it the first-run owner candidate.
+    /// </remarks>
+    private async Task<Guid> SeedDemoTenantAsync()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "demo", DisplayName = "Demo", IsDemo = true,
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = DemoTenantService.DemoMemberName,
+            IsActive = true, IsSystemSubject = false, IsDemoSubject = true,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId,
+            Username = DemoTenantService.DemoMemberUsername,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        return subjectId;
     }
 
     /// <summary>

@@ -17,7 +17,9 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(Mock.Of<IHttpContextAccessor>());
-        services.AddPostgreSqlInfrastructure("Host=localhost;Database=nocturne_test;Username=nocturne_app;Password=x");
+        services.AddPostgreSqlInfrastructure(
+            "Host=localhost;Database=nocturne_test;Username=nocturne_app;Password=x",
+            configuration: null);
 
         using var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();

@@ -75,13 +75,16 @@ public class NocturneRemoteConnectorBackgroundService
                 if (!config.Enabled || string.IsNullOrWhiteSpace(config.Url))
                     continue;
 
-                var hubUrl = $"{config.Url.TrimEnd('/')}/hubs/data";
+                if (ResolveListenerBaseUrl(config.Url, tenant.Slug) is not { } baseUrl)
+                    continue;
+
+                var hubUrl = $"{baseUrl}/hubs/data";
                 var tenantId = tenant.Id;
 
                 var connection = new HubConnectionBuilder()
                     .WithUrl(hubUrl, options =>
                     {
-                        options.Headers.Add("Authorization", $"Bearer {config.Token}");
+                        options.Headers.Add("Authorization", $"Bearer {config.AccessToken}");
                     })
                     .WithAutomaticReconnect(new InfiniteRetryPolicy())
                     .Build();

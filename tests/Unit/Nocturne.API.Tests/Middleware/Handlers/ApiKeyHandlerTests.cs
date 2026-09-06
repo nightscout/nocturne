@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
-using Microsoft.Data.Sqlite;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
@@ -15,14 +13,14 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
 
 public class ApiKeyHandlerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<IDbContextFactory<NocturneDbContext>> _dbContextFactory;
     private readonly ApiKeyHandler _handler;
 
@@ -34,18 +32,10 @@ public class ApiKeyHandlerTests : IDisposable
 
     public ApiKeyHandlerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        using (var ctx = _db.CreateContext(_testTenantId))
         {
-            ctx.Database.EnsureCreated();
-
             ctx.Tenants.Add(new TenantEntity
             {
                 Id = _testTenantId,
@@ -65,7 +55,7 @@ public class ApiKeyHandlerTests : IDisposable
         _dbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
         _dbContextFactory
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = _testTenantId });
+            .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<ApiKeyHandler>>();
         _handler = new ApiKeyHandler(_dbContextFactory.Object, _clock, logger.Object);
@@ -73,7 +63,7 @@ public class ApiKeyHandlerTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     [Fact]
@@ -82,7 +72,7 @@ public class ApiKeyHandlerTests : IDisposable
         var token = "noc_myapikey12345";
         var tokenHash = HashUtils.Sha256Hex(token);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -116,7 +106,7 @@ public class ApiKeyHandlerTests : IDisposable
         var legacySecret = "myplaintextsecret";
         var sha1Hash = HashUtils.Sha1Hex(legacySecret);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -155,7 +145,7 @@ public class ApiKeyHandlerTests : IDisposable
         var firstHash = HashUtils.Sha256Hex(firstToken);
         var secondHash = HashUtils.Sha256Hex(secondToken);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             foreach (var hash in new[] { firstHash, secondHash })
             {
@@ -204,7 +194,7 @@ public class ApiKeyHandlerTests : IDisposable
         var legacySecret = "myplaintextsecret";
         var storedHash = HashUtils.Sha1Hex(legacySecret); // lowercase
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -237,7 +227,7 @@ public class ApiKeyHandlerTests : IDisposable
         var legacySecret = "underscoresecret";
         var sha1Hash = HashUtils.Sha1Hex(legacySecret);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -273,7 +263,7 @@ public class ApiKeyHandlerTests : IDisposable
         var tokenHash = HashUtils.Sha256Hex(token);
         var sha1Hash = HashUtils.Sha1Hex(token);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -318,7 +308,7 @@ public class ApiKeyHandlerTests : IDisposable
         var token = "noc_revokedkey123";
         var tokenHash = HashUtils.Sha256Hex(token);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -374,7 +364,7 @@ public class ApiKeyHandlerTests : IDisposable
         var token = "noc_scopedkey456";
         var tokenHash = HashUtils.Sha256Hex(token);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -406,7 +396,7 @@ public class ApiKeyHandlerTests : IDisposable
         var token = "noc_queryparam789";
         var tokenHash = HashUtils.Sha256Hex(token);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -512,7 +502,7 @@ public class ApiKeyHandlerTests : IDisposable
     private async Task SeedGrantAsync(
         string? tokenHash, string? legacySecretHash, DateTime? expiresAt, DateTime? createdAt = null)
     {
-        await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId };
+        await using var ctx = _db.CreateContext(_testTenantId);
         ctx.OAuthGrants.Add(new OAuthGrantEntity
         {
             Id = Guid.CreateVersion7(),
@@ -566,7 +556,7 @@ public class ApiKeyHandlerTests : IDisposable
         var sha1Hash = HashUtils.Sha1Hex(legacySecret);
         var grantId = Guid.CreateVersion7();
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {
@@ -626,7 +616,7 @@ public class ApiKeyHandlerTests : IDisposable
         var legacySecret = "alreadyusedsecret";
         var sha1Hash = HashUtils.Sha1Hex(legacySecret);
 
-        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        await using (var ctx = _db.CreateContext(_testTenantId))
         {
             ctx.OAuthGrants.Add(new OAuthGrantEntity
             {

@@ -3,13 +3,13 @@
   import {
     getServicesOverview,
     getConnectorCapabilities,
+    triggerConnectorSync,
   } from "$api/generated/services.generated.remote";
   import type {
     ServicesOverview,
     UploaderApp,
     DataSourceInfo,
     ConnectorStatusDto,
-    SyncRequest,
     ConnectorCapabilities,
   } from "$lib/api/generated/nocturne-api-client";
 
@@ -48,13 +48,14 @@
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
+  import { createUploaderTokenHandoff } from "./uploader-token-handoff";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
   import DemoDataSection from "$lib/components/connectors/DemoDataSection.svelte";
   import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
   import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
-  import { getApiClient } from "$lib/api";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
@@ -132,7 +133,7 @@
   const terminalRuns = createTerminalRunTracker();
   $effect(() => {
     if (terminalRuns.hasNewlyFinishedRun(syncProgressByConnector)) {
-      connectorStatusesQuery.refresh();
+      void loadConnectorStatuses();
     }
   });
 
@@ -140,24 +141,59 @@
   let apiTokenCreateOpen = $state(false);
   let apiTokenPrefillLabel = $state("");
   let apiTokenPrefillScopes = $state<string[]>([]);
+  const uploaderHandoff = createUploaderTokenHandoff();
 
   // Deduplication state
   let showDeduplicationDialog = $state(false);
   let isDeduplicating = $state(false);
 
+  // Whether the user has already been told these lists are stale. The effect
+  // below refreshes once per finished run, so a batch of them and the refresh
+  // that follows are one thing going wrong reported many times over.
+  let staleListReported = false;
+
+  /**
+   * A refresh rejects when it fails, and every caller here is either a click
+   * handler or a completion callback whose own outcome must not be replaced by
+   * the refresh's, so the staleness is reported on its own and swallowed. It is
+   * reported once until a refresh gets through again.
+   */
+  async function refreshQuietly(...refreshes: Array<() => Promise<void>>) {
+    const outcomes = await Promise.allSettled(
+      refreshes.map((refresh) => refresh())
+    );
+
+    for (const outcome of outcomes) {
+      if (outcome.status !== "rejected") continue;
+
+      if (!staleListReported) {
+        staleListReported = true;
+        toast.error(
+          describeSubmitError(
+            outcome.reason,
+            "This list may be out of date. Reload the page to see the latest."
+          )
+        );
+      }
+      return;
+    }
+
+    staleListReported = false;
+  }
+
   async function refreshAll() {
-    await Promise.all([
-      servicesOverviewQuery.refresh(),
-      connectorStatusesQuery.refresh(),
-    ]);
+    await refreshQuietly(
+      () => servicesOverviewQuery.refresh(),
+      () => connectorStatusesQuery.refresh()
+    );
   }
 
   async function loadServices() {
-    await servicesOverviewQuery.refresh();
+    await refreshQuietly(() => servicesOverviewQuery.refresh());
   }
 
   async function loadConnectorStatuses() {
-    await connectorStatusesQuery.refresh();
+    await refreshQuietly(() => connectorStatusesQuery.refresh());
   }
 
   async function loadConnectorCapabilitiesFor(connectorId?: string) {
@@ -199,11 +235,9 @@
 
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const request: SyncRequest = { from, to };
+    const request = { from: from.toISOString(), to: to.toISOString() };
 
     try {
-      const apiClient = getApiClient();
-
       for (const connector of connectorsToSync) {
         const connectorId = connector.id;
         if (!connectorId) continue;
@@ -213,12 +247,15 @@
         let errorMsg = undefined;
 
         try {
-          const result = await apiClient.services.triggerConnectorSync(connectorId, request);
+          const result = await triggerConnectorSync({ id: connectorId, request });
           success = result.success ?? false;
           if (!success) errorMsg = result.message || "Unknown error";
         } catch (e) {
           success = false;
-          errorMsg = e instanceof Error ? e.message : "Request failed";
+          errorMsg = describeSubmitError(
+            e,
+            "We couldn't start this sync. Please try again."
+          );
         }
 
         const durationMs = performance.now() - start;
@@ -244,12 +281,15 @@
       };
 
       if (successes > 0) {
-        await Promise.all([loadServices(), loadConnectorStatuses()]);
+        await refreshAll();
       }
     } catch (e) {
       manualSyncResult = {
         success: false,
-        errorMessage: e instanceof Error ? e.message : "Failed to trigger manual sync",
+        errorMessage: describeSubmitError(
+          e,
+          "We couldn't start the sync. Please try again."
+        ),
         totalConnectors: 0,
         successfulConnectors: 0,
         failedConnectors: 0,
@@ -267,8 +307,7 @@
 
     quickSyncingById = { ...quickSyncingById, [connectorId]: true };
     try {
-      const apiClient = getApiClient();
-      const result = await apiClient.services.triggerConnectorSync(connectorId, {});
+      const result = await triggerConnectorSync({ id: connectorId, request: {} });
 
       if (result.success) {
         toast.success("Sync started");
@@ -278,7 +317,9 @@
 
       await loadConnectorStatuses();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync failed");
+      toast.error(
+        describeSubmitError(e, "We couldn't start the sync. Please try again.")
+      );
     } finally {
       quickSyncingById = { ...quickSyncingById, [connectorId]: false };
     }
@@ -677,6 +718,9 @@
         bind:createOpen={apiTokenCreateOpen}
         prefillLabel={apiTokenPrefillLabel}
         prefillScopes={apiTokenPrefillScopes}
+        onCreateClose={() => {
+          if (uploaderHandoff.resumes()) showSetupDialog = true;
+        }}
       />
     </div>
   {/if}
@@ -689,6 +733,7 @@
   onRequestApiKey={(label, scopes) => {
     apiTokenPrefillLabel = label;
     apiTokenPrefillScopes = scopes;
+    uploaderHandoff.handOff();
     apiTokenCreateOpen = true;
   }}
 />

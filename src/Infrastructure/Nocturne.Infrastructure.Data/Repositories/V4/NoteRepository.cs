@@ -53,12 +53,8 @@ public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRe
     /// <inheritdoc />
     protected override void ApplyUpdate(NoteEntity target, Note source) => NoteMapper.UpdateEntity(target, source);
 
-    /// <summary>
-    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
-    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
-    /// </summary>
-    protected override IQueryable<NoteEntity> ApplyReadVisibility(IQueryable<NoteEntity> query, NocturneDbContext ctx) =>
-        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == RecordTypeKeys.Note && !lr.IsPrimary && lr.RecordId == b.Id));
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.Note;
 
     /// <summary>
     /// Routes the base 7-arg form through the extended note query (non-primary LinkedRecords
@@ -109,9 +105,7 @@ public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRe
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
 
-        // Exclude non-primary duplicates from cross-connector deduplication
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == RecordTypeKeys.Note && !lr.IsPrimary && lr.RecordId == b.Id));
+        query = ApplyReadVisibility(query, ctx);
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);

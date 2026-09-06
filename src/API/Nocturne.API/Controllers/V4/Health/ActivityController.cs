@@ -19,9 +19,15 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// </summary>
 /// <remarks>
 /// This endpoint merges several data categories: writes are routed by record content to the
-/// heart-rate, step-count, sleep, or state-span tables. Because the destination varies per record,
-/// the category write scope is enforced per record via <see cref="ActivityWriteScopeGuard"/> rather
-/// than a single <c>RequireScope</c> attribute.
+/// heart-rate, step-count, sleep, or state-span tables. Writes are gated in two layers — a baseline
+/// <c>RequireScope</c> admits the caller, and the destination's own category scope is then enforced
+/// per record via <see cref="ActivityWriteScopeGuard"/>, because the destination is not known until
+/// the body has been read.
+/// <para>
+/// The baseline is <c>treatments.readwrite</c>, the category a StateSpan-backed activity reads
+/// under: <see cref="IActivityDecomposer.RequiredWriteScope"/> is null for those records, so the
+/// per-record guard alone gates nothing for them.
+/// </para>
 /// </remarks>
 [ApiController]
 [Tags("Health")]
@@ -121,6 +127,7 @@ public class ActivityController : ControllerBase
     /// Create one or more activity records
     /// </summary>
     [HttpPost]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IEnumerable<Activity>>> CreateActivities(
@@ -145,6 +152,7 @@ public class ActivityController : ControllerBase
     /// Update an existing activity record
     /// </summary>
     [HttpPut("{id}")]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Activity>> UpdateActivity(
@@ -177,6 +185,7 @@ public class ActivityController : ControllerBase
     /// Delete an activity record by ID
     /// </summary>
     [HttpDelete("{id}")]
+    [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteActivity(

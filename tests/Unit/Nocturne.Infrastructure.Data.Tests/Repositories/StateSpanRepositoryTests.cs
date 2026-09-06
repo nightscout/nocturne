@@ -17,6 +17,10 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 [Trait("Category", "Repository")]
 public class StateSpanRepositoryTests : IDisposable
 {
+    private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000099");
+
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
@@ -38,9 +42,11 @@ public class StateSpanRepositoryTests : IDisposable
         var httpContextAccessor = new Mock<IHttpContextAccessor>();
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
 
-        _context = TestDbContextFactory.CreateInMemoryContext(
-            interceptors: new MutationAuditInterceptor(httpContextAccessor.Object));
-        _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        _db = TestDbContextFactory.CreateSqliteWithTenant(
+                TestTenantId, "test", new MutationAuditInterceptor(httpContextAccessor.Object))
+            .SeedTenant(OtherTenantId, "other");
+
+        _context = _db.CreateContext();
         _context.AuditContext = _auditContext;
         _mockDedup = new Mock<IDeduplicationService>();
         _repository = new StateSpanRepository(
@@ -62,6 +68,7 @@ public class StateSpanRepositoryTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -377,23 +384,48 @@ public class StateSpanRepositoryTests : IDisposable
         duplicateEntity.Source = "duplicate";
 
         _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
-        _context.LinkedRecords.Add(new LinkedRecordEntity
-        {
-            Id = Guid.NewGuid(),
-            CanonicalId = Guid.NewGuid(),
-            RecordType = "statespan",
-            RecordId = duplicateEntity.Id,
-            SourceTimestamp = 0,
-            DataSource = "duplicate",
-            IsPrimary = false,
-            SysCreatedAt = DateTime.UtcNow,
-        });
+        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
         await _context.SaveChangesAsync();
 
         var current = await _repository.GetCurrentPumpModeAsync();
 
         current.Should().Be(PumpModeState.Automatic);
     }
+
+    [Fact]
+    public async Task GetStateSpansAsync_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var start = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        var state = PumpModeState.Automatic.ToString();
+
+        var primaryEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        primaryEntity.Source = "primary";
+        var duplicateEntity = SpanEntity(_context.TenantId, StateSpanCategory.PumpMode, state, start, null);
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
+        var canonicalId = Guid.NewGuid();
+        _context.LinkedRecords.AddRange(
+            Link(canonicalId, primaryEntity.Id, isPrimary: true),
+            Link(canonicalId, duplicateEntity.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var spans = (await _repository.GetStateSpansAsync()).ToList();
+
+        spans.Should().ContainSingle().Which.Source.Should().Be("primary");
+    }
+
+    private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
+    {
+        Id = Guid.NewGuid(),
+        CanonicalId = canonicalId,
+        RecordType = "statespan",
+        RecordId = recordId,
+        SourceTimestamp = 0,
+        DataSource = isPrimary ? "primary" : "duplicate",
+        IsPrimary = isPrimary,
+        SysCreatedAt = DateTime.UtcNow,
+    };
 
     // --- GetActiveAtAsync ---
 
@@ -656,9 +688,8 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task GetActiveAtAsync_respects_tenant_isolation()
     {
-        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000099");
         _context.StateSpans.Add(SpanEntity(
-            otherTenant, StateSpanCategory.Override, "Custom",
+            OtherTenantId, StateSpanCategory.Override, "Custom",
             new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
             end: null));
         await _context.SaveChangesAsync();

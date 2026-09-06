@@ -53,11 +53,10 @@ public class DemoSubjectGatedEndpointsTests
         { typeof(OidcController), nameof(OidcController.GetLinkedIdentities) },
         { typeof(OidcController), nameof(OidcController.UnlinkIdentity) },
 
-        // Chat identity bindings. GetLinks lists by tenant, not by subject, so one
-        // visitor's Discord or Telegram binding is enumerable by all of them.
+        // Chat identity bindings. The shared subject owns every visitor's binding, so one
+        // visitor's Discord or Telegram binding is readable and revocable by all of them.
         { typeof(ChatIdentityController), nameof(ChatIdentityController.GetLinks) },
         { typeof(ChatIdentityController), nameof(ChatIdentityController.ClaimLink) },
-        { typeof(ChatIdentityController), nameof(ChatIdentityController.CreateDirectLink) },
         { typeof(ChatIdentityController), nameof(ChatIdentityController.RevokeLink) },
 
         // Guest links: credential-minting, and the demo member satisfies the

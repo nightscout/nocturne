@@ -16,11 +16,8 @@ public class MemoryCacheService : ICacheService, IDisposable
     private readonly IMemoryCache _memoryCache;
     private readonly CacheConfiguration _config;
     private readonly ILogger<MemoryCacheService> _logger;
-    private readonly ConcurrentDictionary<string, HashSet<string>> _taggedKeys;
     private readonly ConcurrentDictionary<string, byte> _trackedKeys;
     private readonly string _keyPrefix;
-    private long _cacheHits;
-    private long _cacheMisses;
 
     public MemoryCacheService(
         IMemoryCache memoryCache,
@@ -31,11 +28,8 @@ public class MemoryCacheService : ICacheService, IDisposable
         _memoryCache = memoryCache;
         _config = config.Value;
         _logger = logger;
-        _taggedKeys = new ConcurrentDictionary<string, HashSet<string>>();
         _trackedKeys = new ConcurrentDictionary<string, byte>();
         _keyPrefix = $"{_config.KeyPrefix}:";
-        _cacheHits = 0;
-        _cacheMisses = 0;
     }
 
     /// <inheritdoc />
@@ -47,12 +41,10 @@ public class MemoryCacheService : ICacheService, IDisposable
             var fullKey = GetFullKey(key);
             if (_memoryCache.TryGetValue<T>(fullKey, out var cachedValue))
             {
-                Interlocked.Increment(ref _cacheHits);
                 _logger.LogDebug("Cache hit for key: {Key}", key);
                 return Task.FromResult<T?>(cachedValue);
             }
 
-            Interlocked.Increment(ref _cacheMisses);
             _logger.LogDebug("Cache miss for key: {Key}", key);
             return Task.FromResult<T?>(null);
         }
@@ -239,81 +231,6 @@ public class MemoryCacheService : ICacheService, IDisposable
         }
 
         return value ?? throw new InvalidOperationException("Factory function returned null value");
-    }
-
-    /// <inheritdoc />
-    public Task InvalidateTagsAsync(string[] tags, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Simple tag-based invalidation using tracked keys
-            foreach (var tag in tags)
-            {
-                if (_taggedKeys.TryGetValue(tag, out var keys))
-                {
-                    foreach (var key in keys)
-                    {
-                        _memoryCache.Remove(key);
-                        _trackedKeys.TryRemove(key, out _);
-                    }
-                    _taggedKeys.TryRemove(tag, out _);
-                }
-            }
-
-            _logger.LogDebug("Invalidated cache entries for tags: {Tags}", string.Join(", ", tags));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error invalidating cache tags: {Tags}", string.Join(", ", tags));
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public Task ClearAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Clear tracking collections
-            _trackedKeys.Clear();
-            _taggedKeys.Clear();
-
-            _logger.LogWarning(
-                "Clear operation cleared tracking collections. Individual entries will expire based on TTL."
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error clearing cache");
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public Task<CacheStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var totalRequests = _cacheHits + _cacheMisses;
-            var hitRate = totalRequests > 0 ? (double)_cacheHits / totalRequests : 0.0;
-
-            var stats = new CacheStatistics
-            {
-                TotalKeys = _trackedKeys.Count,
-                HitRate = hitRate,
-                MemoryUsage = 0, // Not available in IMemoryCache
-                ExpiredKeys = 0, // IMemoryCache handles expiration automatically
-            };
-
-            return Task.FromResult(stats);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving cache statistics");
-            return Task.FromResult(new CacheStatistics());
-        }
     }
 
     private string GetFullKey(string key) => $"{_keyPrefix}{key}";

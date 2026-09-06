@@ -231,7 +231,6 @@ public sealed class DemoTenantService
         var id = tenantId.ToString();
         await _cache.RemoveByPatternAsync(CacheKeyBuilder.BuildRecentEntriesPattern(id), ct);
         await _cache.RemoveByPatternAsync(CacheKeyBuilder.BuildRecentTreatmentsPattern(id), ct);
-        await _cache.RemoveByPatternAsync(CacheKeyBuilder.BuildProfileTimestampPattern(id), ct);
     }
 
     private async Task<Guid?> FindDemoTenantIdAsync(CancellationToken ct)

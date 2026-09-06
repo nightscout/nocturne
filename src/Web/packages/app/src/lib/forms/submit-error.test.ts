@@ -6,6 +6,7 @@ import { parseErrorBody } from "$lib/api/error-body";
 import {
   describeRemoteError,
   describeSubmitError,
+  errorMessage,
   GENERIC_SUBMIT_ERROR,
   MISSING_ITEM_ERROR,
   PERMISSION_GATED_MUTATION,
@@ -82,6 +83,16 @@ function problemDetails(status: number, detail: string) {
 }
 
 const NEEDS_SCOPE = "This operation requires the 'activity.write' scope.";
+
+describe("a thrown HttpError", () => {
+  it("carries its reason on body.message and nowhere else", () => {
+    const thrown = httpError(500, "We couldn't load your settings.");
+
+    expect(thrown).not.toBeInstanceOf(Error);
+    expect(thrown).not.toHaveProperty("message");
+    expect(errorMessage(thrown)).toBe("We couldn't load your settings.");
+  });
+});
 
 describe("describeSubmitError", () => {
   it("uses the handler's message for a 4xx", () => {
@@ -243,6 +254,51 @@ describe("the two halves of RemoteErrorPolicy", () => {
     expect(describeSubmitError(fault, WRITE_FALLBACK)).toBe(WRITE_FALLBACK);
     expect(remoteErrorMessage(fault, READ_FALLBACK)).toBe(
       "npgsql: connection reset"
+    );
+  });
+
+  /**
+   * SvelteKit answers a non-2xx from `/_app/remote/*` with a body of its own,
+   * and the generated client answers an undeclared status with one of two of
+   * its own — at any status, so a bare `BadRequest()` reaches a 4xx arm
+   * carrying one. Neither names a cause, so a reader gains nothing by showing
+   * them and the suppression cannot be scoped to one arm.
+   */
+  it("agrees on a body the client wrote rather than carried, at every status", () => {
+    for (const status of [400, 409, 500, 502]) {
+      for (const message of [
+        "Failed to execute remote function",
+        "An unexpected server error occurred.",
+        "A server side error occurred.",
+      ]) {
+        const synthesized = { status, body: { message } };
+
+        expect(describeSubmitError(synthesized, WRITE_FALLBACK)).toBe(
+          WRITE_FALLBACK
+        );
+        expect(remoteErrorMessage(synthesized, READ_FALLBACK)).toBe(
+          READ_FALLBACK
+        );
+      }
+    }
+  });
+
+  /**
+   * Suppression matches four known strings, so what a server wrote about a
+   * rejected write — the reason retrying unchanged cannot fix — still reaches
+   * the person who has to change it.
+   */
+  it("still carries a 4xx reason the server worded, flattened ModelState included", () => {
+    const validation = {
+      status: 400,
+      body: { message: "units: Insulin units must be greater than zero." },
+    };
+
+    expect(describeSubmitError(validation, WRITE_FALLBACK)).toBe(
+      "units: Insulin units must be greater than zero."
+    );
+    expect(remoteErrorMessage(validation, READ_FALLBACK)).toBe(
+      "units: Insulin units must be greater than zero."
     );
   });
 

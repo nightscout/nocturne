@@ -1,8 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +14,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Extensions;
 
@@ -96,7 +95,8 @@ public class AuthHandlerPriorityTests
             Mock.Of<IDbContextFactory<Nocturne.Infrastructure.Data.NocturneDbContext>>(),
             NullLogger<PublicAccessCacheService>.Instance);
 
-        var scopeFactory = CreateScopeFactoryWithDb();
+        using var db = TestDbContextFactory.CreateSqlite();
+        var scopeFactory = CreateScopeFactoryWithDb(db);
 
         var middleware = new AuthenticationMiddleware(
             next: _ => Task.CompletedTask,
@@ -213,24 +213,10 @@ public class AuthHandlerPriorityTests
     /// Creates a real IServiceScopeFactory backed by SQLite in-memory so the middleware
     /// can resolve NocturneDbContext when looking up platform admin flags.
     /// </summary>
-    private static IServiceScopeFactory CreateScopeFactoryWithDb()
-    {
-        var connection = new SqliteConnection("DataSource=:memory:");
-        connection.Open();
-
-        var services = new ServiceCollection();
-        services.AddDbContext<NocturneDbContext>(options =>
-            options.UseSqlite(connection)
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
-        var sp = services.BuildServiceProvider();
-
-        // Ensure schema is created
-        using var scope = sp.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.Database.EnsureCreated();
-
-        return sp.GetRequiredService<IServiceScopeFactory>();
-    }
+    private static IServiceScopeFactory CreateScopeFactoryWithDb(SqliteTestDatabase db) =>
+        db.AddToServices(new ServiceCollection())
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
 
     private sealed class StubAuthHandler(int priority, string name, AuthResult result)
         : IAuthHandler

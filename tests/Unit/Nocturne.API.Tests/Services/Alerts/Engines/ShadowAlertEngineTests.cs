@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;

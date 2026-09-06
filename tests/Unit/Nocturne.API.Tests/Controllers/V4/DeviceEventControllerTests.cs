@@ -54,6 +54,54 @@ public class DeviceEventControllerTests
             .ReturnsAsync(new PatientDevice { Id = patientDeviceId, DeviceCategory = DeviceCategory.InsulinPump });
 
     [Fact]
+    public async Task CreateBulk_StampsEachEventTypeWithItsOwnCategories()
+    {
+        var stamped = Guid.NewGuid();
+        var passes = new List<(IReadOnlyList<DeviceCategory> Categories, DeviceEventType[] Events)>();
+        _deviceStamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
+                (records, categories, _, _) =>
+                {
+                    passes.Add((categories, [.. records.Cast<DeviceEvent>().Select(e => e.EventType)]));
+                    foreach (var record in records)
+                        record.PatientDeviceId = stamped;
+                })
+            .Returns(Task.CompletedTask);
+
+        IEnumerable<DeviceEvent>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<DeviceEvent>, WriteOrigin, CancellationToken>((e, _, _) => persisted = e.ToList())
+            .ReturnsAsync((IEnumerable<DeviceEvent> e, WriteOrigin _, CancellationToken _) => e);
+
+        await CreateController().CreateBulk(
+        [
+            ValidRequest(eventType: DeviceEventType.SiteChange),
+            ValidRequest(eventType: DeviceEventType.SensorChange),
+            ValidRequest(patientDeviceId: Guid.Empty, eventType: DeviceEventType.ReservoirChange),
+            ValidRequest(eventType: DeviceEventType.SensorStart),
+        ]);
+
+        passes.Should().HaveCount(2, "one pass per distinct category list, not one per item");
+        passes.Should().ContainSingle(pass => pass.Categories.Single() == DeviceCategory.CGM)
+            .Which.Events.Should().Equal(DeviceEventType.SensorChange, DeviceEventType.SensorStart);
+        passes.Should().ContainSingle(pass => pass.Categories.Single() == DeviceCategory.InsulinPump)
+            .Which.Events.Should().Equal(DeviceEventType.SiteChange);
+
+        persisted.Should().NotBeNull();
+        persisted!.Should().SatisfyRespectively(
+            site => site.PatientDeviceId.Should().Be(stamped),
+            sensorChange => sensorChange.PatientDeviceId.Should().Be(stamped),
+            cleared => cleared.PatientDeviceId.Should().BeNull(),
+            sensorStart => sensorStart.PatientDeviceId.Should().Be(stamped));
+    }
+
+    [Fact]
     public async Task Create_PersistsExplicitPatientDeviceId()
     {
         var patientDeviceId = Guid.NewGuid();

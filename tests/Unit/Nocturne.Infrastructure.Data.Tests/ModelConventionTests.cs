@@ -56,6 +56,43 @@ public class ModelConventionTests
                 && i.IsUnique
                 && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+    /// <summary>
+    /// <see cref="Nocturne.Infrastructure.Data.Repositories.V4.V4RepositoryBase{TModel,TEntity}"/>
+    /// watermarks each connector sync on the newest timestamp for one tenant and data source. The
+    /// filter is load-bearing rather than a size saving: soft-deleted rows left in the index have
+    /// to be skipped a heap fetch at a time, which costs the index-only scan.
+    /// </summary>
+    [Fact]
+    public void EveryV4RecordTable_HasTheTenantSourceWatermarkIndex() =>
+        AssertFamily(
+            NocturneDbContext.V4TimeSeriesRecordEntities,
+            "_tenant_source_timestamp",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.DataSource),
+                    nameof(IV4TimeSeriesEntity.Timestamp)])
+                && !i.IsUnique
+                && i.IsDescending is not null
+                && i.IsDescending.SequenceEqual([false, false, true])
+                && i.GetFilter() == "deleted_at IS NULL");
+
+    /// <summary>
+    /// GetLatestAsync and GetLatestBeforeAsync pin no data source, so the watermark index above
+    /// cannot serve them.
+    /// </summary>
+    [Fact]
+    public void EverySnapshotTable_HasTheTenantLeadingTimestampIndex() =>
+        AssertFamily(
+            NocturneDbContext.V4SnapshotEntities,
+            "_tenant_timestamp",
+            i => Columns(i).SequenceEqual([
+                    nameof(ITenantScoped.TenantId),
+                    nameof(IV4TimeSeriesEntity.Timestamp)])
+                && !i.IsUnique
+                && i.IsDescending is not null
+                && i.IsDescending.SequenceEqual([false, true])
+                && i.GetFilter() == "deleted_at IS NULL");
+
     [Fact]
     public void EveryCorrelatedTable_HasACorrelationIdIndex() =>
         AssertFamily(

@@ -1,9 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Nocturne.API.Controllers.V4.Audit;
@@ -15,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Audit;
@@ -24,44 +23,36 @@ public class AuditControllerTests : IDisposable
 {
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly Mock<ITenantAuditConfigCache> _configCache = new();
 
     public AuditControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        // Create schema
-        using var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
-        db.Database.EnsureCreated();
-        db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
-        db.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
 
         _tenantAccessor.Setup(t => t.TenantId).Returns(TenantId);
     }
 
     public void Dispose()
     {
-        _connection.Dispose();
+        _db.Dispose();
     }
 
-    private AuditController CreateController(IReadOnlySet<string>? scopes = null)
+    private AuditController CreateController(
+        IReadOnlySet<string>? scopes = null,
+        Dictionary<string, string?>? settings = null)
     {
         var factoryMock = new Mock<IDbContextFactory<NocturneDbContext>>();
         factoryMock
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = TenantId });
+            .ReturnsAsync(() => _db.CreateContext());
 
-        // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default.
-        var configuration = new ConfigurationBuilder().Build();
+        // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default and
+        // AuditRetentionPolicy to its 90-day default.
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(settings ?? [])
+            .Build();
 
         var controller = new AuditController(
             factoryMock.Object,
@@ -216,13 +207,117 @@ public class AuditControllerTests : IDisposable
         result.Should().BeOfType<OkObjectResult>();
     }
 
+    /// <summary>
+    /// A null mutation retention is the platform default (90 days), not infinity, so it does not
+    /// automatically clear a longer soft-delete window. The tenant did not choose the failing
+    /// value, so the floor is stored rather than the save refused — otherwise they could not
+    /// change any other audit setting.
+    /// </summary>
+    [Fact]
+    public async Task UpdateConfig_NullMutationRetentionBelowSoftDeleteWindow_StoresTheFloor()
+    {
+        var controller = CreateController(
+            Scopes(Scope.AuditManage),
+            new Dictionary<string, string?>
+            {
+                ["DataRetention:SoftDeleteRetentionDays"] = "180",
+            });
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<AuditConfigDto>()
+            .Which.MutationAuditRetentionDays.Should().Be(180);
+    }
+
+    /// <summary>
+    /// A value the tenant chose explicitly is still refused rather than silently raised.
+    /// </summary>
+    [Fact]
+    public async Task UpdateConfig_ExplicitMutationRetentionBelowSoftDeleteWindow_Returns400()
+    {
+        var controller = CreateController(
+            Scopes(Scope.AuditManage),
+            new Dictionary<string, string?>
+            {
+                ["DataRetention:SoftDeleteRetentionDays"] = "180",
+            });
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 90,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_NullMutationRetentionCoveringSoftDeleteWindow_Returns200()
+    {
+        var controller = CreateController(Scopes(Scope.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// A zero or negative retention window puts the purge cutoff at or after now, which would
+    /// delete access records for reads that just happened. Model validation rejects it before the
+    /// action runs, so the bound lives on the DTO rather than in the action body.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-3650)]
+    public void AuditConfigDto_RejectsANonPositiveRetentionWindow(int days)
+    {
+        ValidationErrorsFor(new AuditConfigDto { ReadAuditRetentionDays = days })
+            .Should().Contain(m => m.Contains(nameof(AuditConfigDto.ReadAuditRetentionDays)));
+
+        ValidationErrorsFor(new AuditConfigDto { MutationAuditRetentionDays = days })
+            .Should().Contain(m => m.Contains(nameof(AuditConfigDto.MutationAuditRetentionDays)));
+    }
+
+    [Fact]
+    public void AuditConfigDto_AcceptsNullAndPositiveRetentionWindows()
+    {
+        ValidationErrorsFor(new AuditConfigDto()).Should().BeEmpty();
+
+        ValidationErrorsFor(new AuditConfigDto
+        {
+            ReadAuditRetentionDays = 1,
+            MutationAuditRetentionDays = 3650,
+        }).Should().BeEmpty();
+    }
+
+    private static List<string> ValidationErrorsFor(AuditConfigDto dto)
+    {
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+            dto,
+            new System.ComponentModel.DataAnnotations.ValidationContext(dto),
+            results,
+            validateAllProperties: true);
+        return [.. results.SelectMany(r => r.MemberNames)];
+    }
+
     // ── Query tests ─────────────────────────────────────────────────
 
     [Fact]
     public async Task GetMutations_ReturnsPaginatedResponse()
     {
         // Seed some mutation log entries
-        await using (var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId })
+        await using (var db = _db.CreateContext())
         {
             var now = DateTime.UtcNow;
             for (var i = 0; i < 5; i++)
@@ -256,7 +351,7 @@ public class AuditControllerTests : IDisposable
     public async Task GetMutations_FiltersByDateRange()
     {
         var now = DateTime.UtcNow;
-        await using (var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId })
+        await using (var db = _db.CreateContext())
         {
             db.MutationAuditLog.Add(new MutationAuditLogEntity
             {
@@ -293,7 +388,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetReads_ReturnsPaginatedResponse()
     {
-        await using (var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId })
+        await using (var db = _db.CreateContext())
         {
             var now = DateTime.UtcNow;
             for (var i = 0; i < 3; i++)
@@ -360,7 +455,7 @@ public class AuditControllerTests : IDisposable
         dto.MutationAuditRetentionDays.Should().Be(180);
 
         // Verify persisted
-        await using var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
+        await using var db = _db.CreateContext();
         var entity = await db.TenantAuditConfig.SingleOrDefaultAsync(c => c.TenantId == TenantId);
         entity.Should().NotBeNull();
         entity!.ReadAuditEnabled.Should().BeTrue();
@@ -370,7 +465,7 @@ public class AuditControllerTests : IDisposable
     public async Task UpdateConfig_UpdatesExistingConfig()
     {
         // Pre-seed a config
-        await using (var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId })
+        await using (var db = _db.CreateContext())
         {
             db.TenantAuditConfig.Add(new TenantAuditConfigEntity
             {
@@ -400,7 +495,7 @@ public class AuditControllerTests : IDisposable
         dto.ReadAuditRetentionDays.Should().Be(60);
 
         // Verify only one row exists (updated, not duplicated)
-        await using var db2 = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
+        await using var db2 = _db.CreateContext();
         var count = await db2.TenantAuditConfig.CountAsync(c => c.TenantId == TenantId);
         count.Should().Be(1);
     }
@@ -430,7 +525,7 @@ public class AuditControllerTests : IDisposable
 
     private async Task SeedSoftDeleteRetentionAsync(int? days)
     {
-        await using var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
+        await using var db = _db.CreateContext();
         db.TenantDataRetentionConfig.Add(new TenantDataRetentionConfigEntity
         {
             Id = Guid.CreateVersion7(),

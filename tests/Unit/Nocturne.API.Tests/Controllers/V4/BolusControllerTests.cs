@@ -330,7 +330,7 @@ public class BolusControllerTests
             .Callback<IEnumerable<Bolus>, WriteOrigin, CancellationToken>((b, _, _) => persisted = b.ToList())
             .ReturnsAsync((IEnumerable<Bolus> b, WriteOrigin _, CancellationToken _) => b);
 
-        await CreateController().CreateBolusesBulk(requests);
+        await CreateController().CreateBulk(requests);
 
         persisted.Should().NotBeNull();
         persisted!.Should().SatisfyRespectively(

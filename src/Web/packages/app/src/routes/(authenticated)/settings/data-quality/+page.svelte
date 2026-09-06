@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { DataQualitySettings } from '$lib/api/generated/nocturne-api-client';
 	import { getUiSettings, saveDataQualitySettings } from '$api/ui-settings.remote';
+	import { remoteErrorMessage } from '$lib/api/remote-error';
+	import { SETTINGS_LOAD_FAILED } from '$lib/api/ui-settings-messages';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
@@ -93,10 +95,9 @@
 		<Card class="border-destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
-				<div>
-					<p class="font-medium">Failed to load settings</p>
-					<p class="text-sm text-muted-foreground">{settingsQuery.error.message}</p>
-				</div>
+				<p class="font-medium">
+					{remoteErrorMessage(settingsQuery.error, SETTINGS_LOAD_FAILED)}
+				</p>
 			</CardContent>
 		</Card>
 	{:else if dataQuality}

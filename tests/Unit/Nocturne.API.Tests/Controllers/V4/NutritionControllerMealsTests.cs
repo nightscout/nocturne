@@ -1,9 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -35,8 +33,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class NutritionControllerMealsTests : IDisposable
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly BolusRepository _bolusRepo;
     private readonly CarbIntakeRepository _carbIntakeRepo;
@@ -47,16 +44,9 @@ public class NutritionControllerMealsTests : IDisposable
 
     public NutritionControllerMealsTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(_options) { TenantId = TestTenantId };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(TestTenantId);
         _dbContext.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
         _dbContext.SaveChanges();
 
@@ -80,7 +70,7 @@ public class NutritionControllerMealsTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private NutritionController CreateController()
@@ -268,7 +258,7 @@ public class NutritionControllerMealsTests : IDisposable
         await act.Should().ThrowAsync<RecreationBlockedException>()
             .WithMessage($"*{syncIdentifier}*");
 
-        await using var verify = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        await using var verify = _db.CreateContext(TestTenantId);
         var bolus = await verify.Boluses.AsNoTracking().SingleAsync();
         bolus.Id.Should().Be(liveBolusId);
         bolus.Insulin.Should().Be(5.5, "the bolus half must not have been upserted behind the refusal");
@@ -291,7 +281,7 @@ public class NutritionControllerMealsTests : IDisposable
             SyncIdentifier = syncIdentifier,
             Insulin = insulin,
         };
-        using var ctx = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        using var ctx = _db.CreateContext(TestTenantId);
         ctx.Boluses.Add(entity);
         ctx.SaveChanges();
         return entity.Id;
@@ -309,7 +299,7 @@ public class NutritionControllerMealsTests : IDisposable
             Carbs = carbs,
             DeletedAt = DateTime.UtcNow,
         };
-        using var ctx = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        using var ctx = _db.CreateContext(TestTenantId);
         var entry = ctx.CarbIntakes.Add(entity);
         entry.Property("DeletedByUser").CurrentValue = true;
         ctx.SaveChanges();

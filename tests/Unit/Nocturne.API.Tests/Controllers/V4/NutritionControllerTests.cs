@@ -1,9 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Controllers.V4.Treatments;
@@ -16,13 +14,14 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
 [Trait("Category", "Unit")]
 public class NutritionControllerTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<ICarbIntakeRepository> _repoMock = new();
     private readonly Mock<IBolusRepository> _bolusRepoMock = new();
@@ -31,16 +30,9 @@ public class NutritionControllerTests : IDisposable
 
     public NutritionControllerTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqlite();
 
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-
-        _dbContext = new NocturneDbContext(options) { TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001") };
-        _dbContext.Database.EnsureCreated();
+        _dbContext = _db.CreateContext(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         _dbContext.Tenants.Add(new Nocturne.Infrastructure.Data.Entities.TenantEntity
         {
             Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
@@ -52,7 +44,7 @@ public class NutritionControllerTests : IDisposable
     public void Dispose()
     {
         _dbContext.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
     }
 
     private NutritionController CreateController()

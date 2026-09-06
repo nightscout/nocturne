@@ -278,6 +278,8 @@
       // so configuration now has the latest backend values
       initialConfiguration = { ...configuration };
       secrets = {};
+    } catch {
+      // The parent has shown the failure; the form stays dirty for a retry.
     } finally {
       isSaving = false;
     }

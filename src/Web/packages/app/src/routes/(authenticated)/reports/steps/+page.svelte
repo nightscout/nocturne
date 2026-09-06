@@ -15,16 +15,14 @@
   } from "$lib/components/actogram";
   import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
   import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
-  import { computeDayTotals } from './steps.utils';
+  import { toDayString } from "$lib/utils/date-range";
 
   const VISIBLE_DAYS = 14;
 
   const report = useActogramReport("Error Loading Step Count Report");
   const { params: reportsParams, resource: actogramResource } = report;
 
-  const dayTotals = $derived(
-    computeDayTotals(actogramResource.current?.stepCounts ?? [], report.days)
-  );
+  const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
 
   function formatDate(date: Date): string {
     return formatShortDate(date);
@@ -146,7 +144,7 @@
           <div class="text-right pr-2">
             <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
             <div class="text-xs font-medium tabular-nums">
-              {formatNumber(dayTotals.get(day.getTime()))} <span class="text-muted-foreground font-normal">steps</span>
+              {formatNumber(dayTotals[toDayString(day)])} <span class="text-muted-foreground font-normal">steps</span>
             </div>
           </div>
         {/snippet}

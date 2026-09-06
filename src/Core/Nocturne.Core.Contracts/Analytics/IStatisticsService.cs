@@ -216,6 +216,19 @@ public interface IStatisticsService
     /// <returns>Time-of-day averaged statistics for AGP-style charts.</returns>
     IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries);
 
+    /// <summary>
+    /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's
+    /// local clock, for the week-to-week report. Readings without a timestamp or glucose value
+    /// are skipped; slots no reading falls in are absent.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <returns>The populated slots in time-of-day order.</returns>
+    IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    );
+
     // Treatment Statistics
 
     /// <summary>
@@ -293,8 +306,7 @@ public interface IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         ExtendedAnalysisConfig? config = null,
         DateTime? startDate = null,
-        DateTime? endDate = null,
-        int updateIntervalMinutes = 5
+        DateTime? endDate = null
     );
 
     // Site Change Analysis

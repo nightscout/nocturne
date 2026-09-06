@@ -280,8 +280,12 @@ public class StatisticsServiceClinicalAccuracyTests
     [Fact]
     public void CalculateTimeInRange_DurationsShouldMatchReadingCount()
     {
-        // 20 entries * 5 min interval = 100 minutes total
-        var entries = Enumerable.Range(0, 20).Select(_ => new SensorGlucose { Mgdl = 120 }).ToArray();
+        // 20 entries five minutes apart = 100 minutes total
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable
+            .Range(0, 20)
+            .Select(i => new SensorGlucose { Mgdl = 120, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
 
         var result = _sut.CalculateTimeInRange(entries);
 
@@ -1319,35 +1323,29 @@ public class StatisticsServiceClinicalAccuracyTests
     #region Edge Case: Episode Counting Across Severity Boundaries
 
     /// <summary>
-    /// When glucose drops from target → severe low → low → target,
-    /// the current implementation counts this as 1 severe low episode + 1 low episode.
-    /// Clinically this is a single continuous hypoglycemic event.
+    /// A drop from target through severe low, recovering through low, is one continuous
+    /// hypoglycemic event and is reported as one episode, against the severe zone it reached.
     /// </summary>
     [Fact]
-    public void TimeInRange_Episodes_VeryLowToLowTransition_CountsSeparateEpisodes()
+    public void TimeInRange_Episodes_VeryLowToLowTransition_CountsOneEpisode()
     {
         var entries = new[]
         {
             new SensorGlucose { Mgdl = 120 }, // target
             new SensorGlucose { Mgdl = 45 },  // severe low — episode starts
             new SensorGlucose { Mgdl = 45 },  // severe low — continues
-            new SensorGlucose { Mgdl = 60 },  // low — this is a DIFFERENT range, counts as new episode
+            new SensorGlucose { Mgdl = 60 },  // low — recovering, still the same event
             new SensorGlucose { Mgdl = 60 },  // low — continues
-            new SensorGlucose { Mgdl = 120 }, // back to target
+            new SensorGlucose { Mgdl = 120 }, // back to target — event ends
         };
 
         var result = _sut.CalculateTimeInRange(entries);
 
-        // Current behavior: counts separate episodes for severity transitions
-        // This means one continuous hypo event gets counted as 2 episodes
         result.Episodes.VeryLow.Should().Be(1);
-        result.Episodes.Low.Should().Be(1);
+        result.Episodes.Low.Should().Be(0);
 
-        // Total hypo "episodes" reported = 2, but clinically it was 1 event
         var totalHypoEpisodes = result.Episodes.VeryLow + result.Episodes.Low;
-        totalHypoEpisodes.Should().Be(2,
-            "current implementation counts severity transitions as separate episodes — " +
-            "consider whether a single continuous hypo event should be counted as 1 episode");
+        totalHypoEpisodes.Should().Be(1, "one continuous hypo event is one episode");
     }
 
     #endregion

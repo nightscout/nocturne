@@ -1,11 +1,10 @@
-using System.Data.Common;
 using System.Text;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
@@ -24,30 +23,16 @@ public class CreateProbeTests : IDisposable
 
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
-    private readonly DbConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _options;
+    private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly FoodRepository _foods;
     private readonly SettingsRepository _settings;
 
     public CreateProbeTests()
     {
-        _connection = new SqliteConnection("Filename=:memory:");
-        _connection.Open();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
-        _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .EnableSensitiveDataLogging()
-            .Options;
-
-        using (var seed = new NocturneDbContext(_options) { TenantId = TestTenantId })
-        {
-            seed.Database.EnsureCreated();
-            seed.Tenants.Add(new TenantEntity { Id = TestTenantId, Slug = "test" });
-            seed.SaveChanges();
-        }
-
-        _context = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        _context = _db.CreateContext();
         _foods = new FoodRepository(_context);
         _settings = new SettingsRepository(_context);
     }
@@ -55,7 +40,7 @@ public class CreateProbeTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
-        _connection.Dispose();
+        _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -95,13 +80,13 @@ public class CreateProbeTests : IDisposable
 
     private async Task<List<FoodEntity>> ReadFoodsAsync()
     {
-        await using var verify = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        await using var verify = _db.CreateContext();
         return await verify.Foods.AsNoTracking().ToListAsync();
     }
 
     private async Task<List<SettingsEntity>> ReadSettingsAsync()
     {
-        await using var verify = new NocturneDbContext(_options) { TenantId = TestTenantId };
+        await using var verify = _db.CreateContext();
         return await verify.Settings.AsNoTracking().ToListAsync();
     }
 

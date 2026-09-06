@@ -1,7 +1,5 @@
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -16,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Connectors;
@@ -35,8 +34,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
     private const string ConnectorId = "nightscout";
     private const string AuthType = "OAuthAccessToken";
 
-    private readonly SqliteConnection _connection;
-    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly SqliteTestDatabase _db;
     private readonly string _deviceId;
 
     private readonly Mock<ISensorGlucoseRepository> _sensorGlucose = new();
@@ -59,23 +57,16 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         _deviceId = ConnectorMetadataService.GetByConnectorId(ConnectorId)?.DataSourceId
             ?? throw new InvalidOperationException("Nightscout connector metadata failed to load");
 
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-
-        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_connection)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
+        _db = TestDbContextFactory.CreateSqlite();
 
         using var db = NewContext();
-        db.Database.EnsureCreated();
         db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
         db.SaveChanges();
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose() => _db.Dispose();
 
-    private NocturneDbContext NewContext() => new(_dbOptions) { TenantId = TenantId };
+    private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
         context,

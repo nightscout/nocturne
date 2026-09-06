@@ -45,6 +45,28 @@ public class UISettingsServiceTests
     }
 
     [Fact]
+    public async Task SaveAlarmConfigurationAsync_preservesTheEmergencyContactVisualSettings()
+    {
+        var context = NewContext();
+        var service = NewService(context);
+        var config = AlarmConfiguration("fresh", 123);
+        config.Profiles[0].Visual = new AlarmVisualSettings
+        {
+            ShowEmergencyContacts = true,
+            EmergencyInstructions = "Spare key is under the mat",
+        };
+
+        await service.SaveAlarmConfigurationAsync(config);
+
+        foreach (var stored in await EveryAlarmReadPath(service))
+        {
+            var visual = stored.Profiles.Should().ContainSingle().Subject.Visual;
+            visual.ShowEmergencyContacts.Should().BeTrue();
+            visual.EmergencyInstructions.Should().Be("Spare key is under the mat");
+        }
+    }
+
+    [Fact]
     public async Task SaveAlarmConfigurationAsync_winsOverCopiesLeftByTheEarlierLayout()
     {
         var context = NewContext();

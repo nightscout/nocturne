@@ -6,6 +6,7 @@ using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -191,6 +192,28 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The tenant's configured instance URL as an absolute origin, or null when the stored value
+    /// cannot be read as one. A listener cannot reach an unresolvable URL and the tenant's polling
+    /// path rejects it in the same words, so this reports it against the listener and leaves the
+    /// caller to fall back to polling rather than raising it as an unexpected failure.
+    /// </summary>
+    protected string? ResolveListenerBaseUrl(string? url, string tenantSlug)
+    {
+        try
+        {
+            return ConnectorUrl.ResolveBase(url, ConnectorName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(
+                "{ConnectorName} URL for tenant {TenantSlug} cannot be resolved to an absolute http(s) URL ({Reason}), will rely on polling",
+                ConnectorName, tenantSlug, ex.Message);
+
+            return null;
+        }
     }
 
     /// <summary>

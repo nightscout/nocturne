@@ -53,9 +53,10 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
+        var mintedCorrelationId = Guid.CreateVersion7();
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = mintedCorrelationId
         };
 
         if (profile.Store.Count == 0)
@@ -66,32 +67,47 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
 
         // No system attribution here — there is no batch path to take it on (see
         // DecomposerBase.SystemAttributedBatchWrites): a profile write is a user's profile edit,
-        // and byte-identical re-upserts diff to empty (bookkeeping columns are [AuditIgnored])
-        // and are skipped.
+        // and byte-identical re-upserts diff to empty and are skipped.
+        //
+        // The therapy settings row anchors the group's correlation id, and the four schedules are
+        // stamped with whatever it resolves to. Reading it back rather than reusing the minted id is
+        // what keeps an unchanged re-upsert free of writes, and stamping the schedules from it is
+        // what keeps the group whole: the five rows are written in five separate transactions, so a
+        // sibling lost to a cancelled sync is recreated on the next one, and it has to rejoin the
+        // group rather than fork it. ProfileProjectionService loads the schedules by this id.
         foreach (var (storeName, profileData) in profile.Store)
         {
             var legacyId = $"{profile.Id}:{storeName}";
             var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-            await UpsertByLegacyIdAsync(
+            var anchor = await UpsertByLegacyIdAsync(
                 _therapySettingsRepo, legacyId,
                 MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, result.CorrelationId),
-                result, origin, ct);
+                result, origin, ct, preserveStoredCorrelationId: true);
+
+            // A refused anchor leaves the schedules nothing to converge on. Writing them under the
+            // minted id would fork the group off the settings row they belong to rather than join
+            // it, which is the damage the stamping above exists to prevent.
+            if (anchor is not ({ } settings, _))
+                continue;
+
+            var groupCorrelationId = settings.CorrelationId ?? mintedCorrelationId;
+
             await UpsertByLegacyIdAsync(
                 _basalScheduleRepo, legacyId,
-                MapToBasalSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
+                MapToBasalSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
                 result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _carbRatioScheduleRepo, legacyId,
-                MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
+                MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
                 result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _sensitivityScheduleRepo, legacyId,
-                MapToSensitivitySchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
+                MapToSensitivitySchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
                 result, origin, ct);
             await UpsertByLegacyIdAsync(
                 _targetRangeScheduleRepo, legacyId,
-                MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, result.CorrelationId),
+                MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, groupCorrelationId),
                 result, origin, ct);
         }
 

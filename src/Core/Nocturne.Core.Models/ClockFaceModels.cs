@@ -170,7 +170,7 @@ public class ClockElement
 public class ClockElementStyle
 {
     /// <summary>
-    /// Text color (hex color, or "dynamic" for BG-based coloring)
+    /// Text color (hex color, "dynamic" for BG-based coloring, or "muted")
     /// </summary>
     [JsonPropertyName("color")]
     public string? Color { get; set; }

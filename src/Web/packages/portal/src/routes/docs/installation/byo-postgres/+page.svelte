@@ -106,6 +106,14 @@
             database owner your provider gave you rather than the literal
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">postgres</code> user.
         </li>
+        <li>
+            At startup Nocturne sets
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">autovacuum_analyze_scale_factor = 0.01</code>
+            on each of its tenant-scoped tables, so a newly added tenant's rows reach the query
+            planner's statistics once they exceed about 1% of the table rather than a tenth of it.
+            The value is a ceiling: a lower value set by hand on those tables is kept, a higher or
+            missing one is replaced on the next start.
+        </li>
     </ul>
 
     <SupportNocturne />

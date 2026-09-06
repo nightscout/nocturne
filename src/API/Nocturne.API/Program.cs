@@ -28,6 +28,7 @@ using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using OpenTelemetry.Logs;
@@ -94,16 +95,18 @@ var aspirePostgreSqlConnection = builder.Configuration.GetConnectionString(Servi
         $"ConnectionStrings:{ServiceNames.PostgreSql} is required."));
 var migratorConnectionString = builder.Configuration.GetConnectionString($"{ServiceNames.PostgreSql}-migrator");
 
+var postgreSqlOptions = PostgreSqlConfiguration.ResolveForEnvironment(
+    aspirePostgreSqlConnection,
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+
+// Registered whether or not the pool is built, so the resolution above is observable from a test
+// host, which always runs as Testing and so never reaches the registration below.
+builder.Services.AddSingleton(postgreSqlOptions);
+
 if (!isTesting)
 {
-    builder.Services.AddPostgreSqlInfrastructure(
-        aspirePostgreSqlConnection,
-        config =>
-        {
-            config.EnableDetailedErrors = builder.Environment.IsDevelopment();
-            config.EnableSensitiveDataLogging = builder.Environment.IsDevelopment();
-        }
-    );
+    builder.Services.AddPostgreSqlInfrastructure(postgreSqlOptions);
 }
 else
 {
@@ -293,12 +296,26 @@ else if (app.Environment.IsDevelopment())
         + "disabled (loopback origins are still allowed in Development).",
         rawCorsBaseDomain);
 }
+// The key decides more than CORS, and the rest cannot fail closed the way CORS does: the
+// WebAuthn relying-party id is fixed at startup, and a browser reports the refusal it causes as
+// an opaque security error naming nothing an operator can search for. Split by cause so each
+// names the rp.id the deployment actually ended up with.
+else if (string.IsNullOrWhiteSpace(rawCorsBaseDomain))
+{
+    app.Logger.LogError(
+        "{ConfigKey} is unset or blank. Cross-origin CORS is disabled (fail closed), passkeys "
+        + "are bound to 'localhost' so browsers will refuse to create or use one on any other "
+        + "address, and OIDC sign-in has no redirect URI to send. Set it to the address people "
+        + "browse to and restart.",
+        BaseDomainOptions.ConfigKey);
+}
 else
 {
     app.Logger.LogError(
         "CORS base domain '{RawCorsBaseDomain}' is not a valid multi-label host ({ConfigKey}). "
         + "Cross-origin CORS is disabled (fail closed) — tenant and share subdomains will be "
-        + "rejected until this is corrected.",
+        + "rejected until this is corrected, and passkeys are bound to a relying-party id derived "
+        + "from the same value, so browsers will refuse them too.",
         rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
 }
 
@@ -532,6 +549,9 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the per-category public-share RLS policies, derived from the C# category map,
         // so they cannot drift from the code. Runs under the migrator role like migrations.
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
+
+        // Apply the tenant-table storage parameters; see TenantTableStorageParameters for why.
+        await DatabaseInitializationExtensions.ReconcileTenantTableStorageParametersAsync(migratorConnectionString, logger);
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.

@@ -186,6 +186,15 @@ export const ELEMENT_INFO: Record<ClockElementType, ElementInfo> = {
   },
 };
 
+const ELEMENT_INFO_BY_TYPE: ReadonlyMap<string, ElementInfo> = new Map(
+  Object.entries(ELEMENT_INFO)
+);
+
+/** Palette entry for a stored element type, which the API models as a bare string. */
+export function elementInfo(type: string | undefined): ElementInfo | undefined {
+  return type === undefined ? undefined : ELEMENT_INFO_BY_TYPE.get(type);
+}
+
 export interface ElementGroup {
   name: string;
   types: ClockElementType[];
@@ -238,6 +247,15 @@ export const FONT_WEIGHT_OPTIONS: SelectOption[] = [
   { value: "bold", label: "Bold" },
 ];
 
+/** `custom` is not a stored colour — it reveals the hex picker. */
+export const CUSTOM_COLOR_OPTION = "custom";
+
+export const COLOR_OPTIONS: SelectOption[] = [
+  { value: "dynamic", label: "Dynamic (by glucose)" },
+  { value: "muted", label: "Muted" },
+  { value: CUSTOM_COLOR_OPTION, label: "Custom" },
+];
+
 export const VISIBILITY_OPTIONS: SelectOption[] = [
   { value: "always", label: "Always show" },
   { value: "info", label: "Info or higher" },
@@ -249,8 +267,6 @@ export const VISIBILITY_OPTIONS: SelectOption[] = [
 export const TRACKER_SHOW_OPTIONS: SelectOption[] = [
   { value: "name", label: "Name" },
   { value: "icon", label: "Icon" },
-  { value: "remaining", label: "Time remaining" },
-  { value: "urgency", label: "Urgency badge" },
 ];
 
 export const TRACKER_CATEGORIES = [

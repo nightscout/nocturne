@@ -146,9 +146,11 @@ class Program
                     .WithDataVolume(ServiceNames.Volumes.PostgresData);
             }
 
-            if (builder.Environment.IsDevelopment() && persistence == PersistenceMode.Persistent)
+            if (builder.ExecutionContext.IsRunMode
+                && builder.Environment.IsDevelopment()
+                && persistence == PersistenceMode.Persistent)
             {
-                postgres.WithPgAdmin();
+                postgres.WithPgAdmin(pgAdmin => pgAdmin.WithHostPort(1611));
             }
 
             postgres.PublishAsDockerComposeService(

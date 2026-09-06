@@ -254,15 +254,7 @@ public class MigrationJobService : IMigrationJobService
 
         try
         {
-            var response = await httpClient.GetAsync("/api/v1/status", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return new TestMigrationConnectionResult
-                {
-                    IsSuccess = false,
-                    ErrorMessage = $"Failed to connect: {response.StatusCode}",
-                };
-            }
+            await MigrationJob.ReadFromSourceAsync(httpClient, "/api/v1/status", "status", ct);
 
             return new TestMigrationConnectionResult
             {
@@ -271,12 +263,15 @@ public class MigrationJobService : IMigrationJobService
                 AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
-        catch (HttpRequestException ex)
+        catch (MigrationSourceException ex)
         {
+            // The button and the run reach the same source the same way, so a test that passes and
+            // a run that then fails on the connection would be a contradiction the user has to
+            // resolve; both report the cause in the same words.
             return new TestMigrationConnectionResult
             {
                 IsSuccess = false,
-                ErrorMessage = $"Connection failed: {ex.Message}",
+                ErrorMessage = ex.Message,
             };
         }
     }
@@ -422,6 +417,16 @@ internal class MigrationJob
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
     private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// The one shape <see cref="MigrationRunEntity.CollectionOutcomes"/> is written and read in.
+    /// Writing with one set of options and reading with another would silently lose every field.
+    /// </summary>
+    private static readonly System.Text.Json.JsonSerializerOptions s_outcomeJson = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
     public MigrationJob(
         Guid id,
         Guid tenantId,
@@ -533,7 +538,11 @@ internal class MigrationJob
                 await ExecuteMongoMigrationAsync(ct);
             }
 
+            // A run that got some collections through stays Completed rather than gaining a state
+            // the UI's badge switch does not know; the summary is what stops it reading as a clean
+            // import.
             _state = MigrationJobState.Completed;
+            _errorMessage = FailureSummary();
             _progressPercentage = 100;
             _completedAt = DateTime.UtcNow;
         }
@@ -545,10 +554,14 @@ internal class MigrationJob
         catch (Exception ex)
         {
             _state = MigrationJobState.Failed;
-            _errorMessage =
-                ex.InnerException != null
-                    ? $"{ex.Message} Inner: {ex.InnerException.Message}"
-                    : ex.Message;
+            _errorMessage = ex switch
+            {
+                // Already worded for the person who has to fix it; an inner transport message
+                // appended to it would only add jargon.
+                MigrationSourceException => ex.Message,
+                { InnerException: not null } => $"{ex.Message} Inner: {ex.InnerException.Message}",
+                _ => ex.Message,
+            };
             _completedAt = DateTime.UtcNow;
             _logger.LogError(ex, "Migration job {JobId} failed", _id);
         }
@@ -592,6 +605,9 @@ internal class MigrationJob
             run.ErrorMessage = _errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
+            run.CollectionOutcomes = _collectionProgress.IsEmpty
+                ? null
+                : System.Text.Json.JsonSerializer.Serialize(_collectionProgress.Values.ToList(), s_outcomeJson);
 
             if (_state == MigrationJobState.Completed)
             {
@@ -675,36 +691,72 @@ internal class MigrationJob
             ErrorMessage = run.ErrorMessage,
             StartedAt = run.StartedAt,
             CompletedAt = run.CompletedAt,
-            CollectionProgress = new Dictionary<string, CollectionProgress>
+            CollectionProgress = OutcomesFromRecord(run, state),
+        };
+    }
+
+    /// <summary>
+    /// Per-collection outcomes for a persisted run. Runs recorded before
+    /// <see cref="MigrationRunEntity.CollectionOutcomes"/> existed carry only the two count
+    /// columns, so those are reconstituted into the same shape.
+    /// </summary>
+    private static Dictionary<string, CollectionProgress> OutcomesFromRecord(
+        MigrationRunEntity run, MigrationJobState state)
+    {
+        // The column is free-form to the database, so a row written by another version — or by
+        // hand — must degrade to the counts below rather than break the status endpoint.
+        try
+        {
+            var stored = string.IsNullOrEmpty(run.CollectionOutcomes)
+                ? null
+                : System.Text.Json.JsonSerializer
+                    .Deserialize<List<CollectionProgress>>(run.CollectionOutcomes, s_outcomeJson);
+
+            if (stored is { Count: > 0 })
+                return stored.ToDictionary(c => c.CollectionName);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        return new Dictionary<string, CollectionProgress>
+        {
+            ["entries"] = new()
             {
-                ["entries"] = new()
-                {
-                    CollectionName = "entries",
-                    DocumentsMigrated = run.EntriesMigrated,
-                    IsComplete = state == MigrationJobState.Completed,
-                },
-                ["treatments"] = new()
-                {
-                    CollectionName = "treatments",
-                    DocumentsMigrated = run.TreatmentsMigrated,
-                    IsComplete = state == MigrationJobState.Completed,
-                },
+                CollectionName = "entries",
+                DocumentsMigrated = run.EntriesMigrated,
+                IsComplete = state == MigrationJobState.Completed,
+            },
+            ["treatments"] = new()
+            {
+                CollectionName = "treatments",
+                DocumentsMigrated = run.TreatmentsMigrated,
+                IsComplete = state == MigrationJobState.Completed,
             },
         };
     }
 
     /// <summary>Reconstructs a history entry from a persisted run.</summary>
-    public static MigrationJobInfo InfoFromRecord(MigrationRunEntity run) => new()
+    public static MigrationJobInfo InfoFromRecord(MigrationRunEntity run)
     {
-        Id = run.Id,
-        Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
-        CreatedAt = run.CreatedAt,
-        SourceDescription = run.SourceDescription,
-        State = Enum.TryParse<MigrationJobState>(run.State, out var s) ? s : MigrationJobState.Interrupted,
-        StartedAt = run.StartedAt,
-        CompletedAt = run.CompletedAt,
-        ErrorMessage = run.ErrorMessage,
-    };
+        var state = Enum.TryParse<MigrationJobState>(run.State, out var s) ? s : MigrationJobState.Interrupted;
+
+        return new MigrationJobInfo
+        {
+            Id = run.Id,
+            Mode = Enum.TryParse<MigrationMode>(run.Mode, out var m) ? m : MigrationMode.Api,
+            CreatedAt = run.CreatedAt,
+            SourceDescription = run.SourceDescription,
+            State = state,
+            StartedAt = run.StartedAt,
+            CompletedAt = run.CompletedAt,
+            ErrorMessage = run.ErrorMessage,
+            // A Failed run's message is a fault whether or not a collection recorded one — it can
+            // end before reaching any collection at all.
+            HasFailures = state is MigrationJobState.Failed
+                || OutcomesFromRecord(run, state).Values.Any(c => c.FailureReason is not null),
+        };
+    }
 
     private long _totalDocumentsAllCollections;
     private long _migratedDocumentsAllCollections; // computed by UpdateOverallProgress
@@ -760,16 +812,204 @@ internal class MigrationJob
             _totalDocumentsAllCollections += count;
         }
 
-        foreach (var (_, migrate) in collectionsToMigrate)
+        for (var i = 0; i < collectionsToMigrate.Count; i++)
         {
-            await migrate(httpClient, ct);
+            var (name, migrate) = collectionsToMigrate[i];
+            try
+            {
+                await migrate(httpClient, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Migration of {Collection} failed", name);
+
+                var failure = ex as MigrationSourceException ?? new MigrationSourceException(
+                    $"Nocturne could not store the {name} it received.",
+                    MigrationFailureCause.Internal,
+                    ex);
+
+                RecordCollectionFailure(name, ReasonFor(failure));
+
+                if (IsFatal(failure.Cause))
+                    throw new MigrationSourceException(failure.Message, failure.Cause);
+
+                if (IsConnectionLevel(failure.Cause))
+                {
+                    // The connection, not this collection, is what failed. Trying the rest would
+                    // spend a timeout each to arrive at the sentence already recorded.
+                    _abandonedAfter = failure.Cause;
+                    return;
+                }
+            }
         }
     }
+
+    /// <summary>A cause that belongs to the connection, so every remaining collection would meet it too.</summary>
+    private static bool IsConnectionLevel(MigrationFailureCause cause) =>
+        cause is MigrationFailureCause.ApiSecretRejected or MigrationFailureCause.Unreachable;
+
+    /// <summary>Set when a connection-level failure ended the run's remaining collections early.</summary>
+    private MigrationFailureCause? _abandonedAfter;
+
+    /// <summary>
+    /// Whether <paramref name="cause"/> ends the whole run. Only while nothing has been imported:
+    /// there is no partial success to preserve, and a connection-level cause defeats every
+    /// remaining collection anyway. Once records are in, the run keeps them and completes — a
+    /// connection-level cause then abandons the collections it has not reached rather than
+    /// attempting each one.
+    /// </summary>
+    private bool IsFatal(MigrationFailureCause cause)
+    {
+        if (_collectionProgress.Values.Any(c => c.DocumentsMigrated > 0))
+            return false;
+
+        return IsConnectionLevel(cause) || !_collectionProgress.Values.Any(IsCleanCompletion);
+    }
+
+    /// <summary>
+    /// A collection that was attempted and finished. A skip is excluded: Nightscout refusing an
+    /// admin route says nothing about whether the rest of the source is answering.
+    /// </summary>
+    private static bool IsCleanCompletion(CollectionProgress c) =>
+        c.IsComplete && c.FailureReason is null && c.SkippedReason is null;
+
+    /// <summary>
+    /// What to record against the collection that failed. A rejection arriving after other data
+    /// has already come across is not the "check your API_SECRET" case — the secret demonstrably
+    /// works — so it is worded as a limit on what this credential may read.
+    /// </summary>
+    private string ReasonFor(MigrationSourceException failure) =>
+        failure.Cause is MigrationFailureCause.ApiSecretRejected
+        && _collectionProgress.Values.Any(c => c.DocumentsMigrated > 0)
+            ? PartialAccessMessage
+            : failure.Message;
+
+    /// <summary>Marks a collection finished-and-failed, keeping whatever it managed to import.</summary>
+    private void RecordCollectionFailure(string collectionName, string reason) =>
+        _collectionProgress[collectionName] = Progress(collectionName) with
+        {
+            IsComplete = true,
+            FailureReason = reason,
+        };
+
+    /// <summary>Marks a collection passed over rather than attempted. See <see cref="CollectionProgress.SkippedReason"/>.</summary>
+    private void RecordCollectionSkipped(string collectionName, string reason) =>
+        _collectionProgress[collectionName] = Progress(collectionName) with
+        {
+            IsComplete = true,
+            SkippedReason = reason,
+        };
+
+    private CollectionProgress Progress(string collectionName) =>
+        _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing
+            : new CollectionProgress { CollectionName = collectionName };
+
+    /// <summary>
+    /// How much of the run got through, each collection that did not and why, and — once — the
+    /// reason any remaining collections were never attempted. <see langword="null"/> when every
+    /// collection finished, so an untroubled run carries no message at all.
+    /// </summary>
+    /// <remarks>
+    /// A collection is "not attempted" when it never completed and recorded no reason of its own:
+    /// the run stopped before reaching it. Naming those separately is what keeps one connection
+    /// failure from being reported as six. A skip is counted apart again — see
+    /// <see cref="CollectionProgress.SkippedReason"/> — so a summary can be entirely untroubled.
+    /// </remarks>
+    private string? FailureSummary()
+    {
+        var failed = _collectionProgress.Values.Where(c => c.FailureReason is not null).ToList();
+        var skipped = _collectionProgress.Values.Where(c => c.SkippedReason is not null).ToList();
+        var notAttempted = _collectionProgress.Values
+            .Count(c => c.FailureReason is null && c.SkippedReason is null && !c.IsComplete);
+
+        if (failed.Count == 0 && skipped.Count == 0 && notAttempted == 0)
+            return null;
+
+        var total = _collectionProgress.Count;
+        var counts = $"{total - failed.Count - skipped.Count - notAttempted} of {total} collections imported";
+        if (failed.Count > 0)
+            counts += $", {failed.Count} failed";
+        if (skipped.Count > 0)
+            counts += $", {skipped.Count} skipped";
+        if (notAttempted > 0)
+            counts += $", {notAttempted} not attempted";
+
+        var detail = failed.Select(c => $"{c.CollectionName}: {c.FailureReason}").ToList();
+
+        // A skip reason already names what was passed over, so prefixing the collection repeats it.
+        detail.AddRange(skipped.Select(c => c.SkippedReason!));
+
+        if (_abandonedAfter is { } cause && notAttempted > 0)
+        {
+            detail.Add(cause is MigrationFailureCause.Unreachable
+                ? "The rest were not attempted because the connection to Nightscout had already failed."
+                : "The rest were not attempted because Nightscout had already refused this credential.");
+        }
+
+        return $"{counts}. " + string.Join(" ", detail);
+    }
+
+    /// <summary>
+    /// Reads one URL from the source, classifying every failure by what the user has to fix. The
+    /// single place a migration read decides whether a response is usable, so that no page loop can
+    /// mistake a rejection for the end of the data.
+    /// </summary>
+    internal static async Task<string> ReadFromSourceAsync(
+        HttpClient httpClient, string url, string label, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(url, ct);
+        }
+        catch (Nocturne.Core.Models.Net.OutboundRefusedException ex)
+        {
+            throw new MigrationSourceException(ex.Message, MigrationFailureCause.Unreachable, ex);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new MigrationSourceException(UnreachableMessage, MigrationFailureCause.Unreachable, ex);
+        }
+
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadAsStringAsync(ct);
+
+            throw response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
+                ? new MigrationSourceException(ApiSecretRejectedMessage, MigrationFailureCause.ApiSecretRejected)
+                : new MigrationSourceException(
+                    $"Nightscout answered {(int)response.StatusCode} for {label}.",
+                    MigrationFailureCause.Status);
+        }
+    }
+
+    private const string ApiSecretRejectedMessage =
+        "Nightscout rejected the API secret. Check it matches your Nightscout API_SECRET exactly, "
+        + "or leave it blank if your site allows reading without one.";
+
+    private const string UnreachableMessage =
+        "Could not reach your Nightscout server. Check it is online and that it allows connections "
+        + "from Nocturne.";
+
+    private const string SubjectsNeedAdminSecretMessage =
+        "Skipped: listing the people and devices that can sign in needs an admin API secret.";
+
+    private const string PartialAccessMessage =
+        "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
+        + "may not be allowed to read this.";
 
     /// <summary>
     /// Fetches the document count for a collection via the Nightscout count API.
     /// Collections that don't support the count endpoint return 0.
     /// </summary>
+    /// <remarks>
+    /// A count is optional — it only sharpens the progress bar — so an error status is tolerated:
+    /// Nightscout versions that lack the route answer 404, and the collection pull that follows
+    /// reports the same status properly if it is real. A rejected secret or an unreachable host is
+    /// not tolerated: those defeat every collection, so the run fails here with the right words.
+    /// </remarks>
     private async Task<long> FetchCollectionCountAsync(
         HttpClient httpClient, string collectionName, CancellationToken ct)
     {
@@ -782,11 +1022,9 @@ internal class MigrationJob
 
         try
         {
-            var response = await httpClient.GetAsync($"/api/v1/count/{collectionName}/where", ct);
-            if (!response.IsSuccessStatusCode)
-                return 0;
+            var content = await ReadFromSourceAsync(
+                httpClient, $"/api/v1/count/{collectionName}/where", collectionName, ct);
 
-            var content = await response.Content.ReadAsStringAsync(ct);
             // Nightscout returns [{"_id": null, "count": N}]
             var results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement[]>(content);
             if (results is { Length: > 0 })
@@ -796,7 +1034,8 @@ internal class MigrationJob
                     : 0;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException
+            && (ex as MigrationSourceException)?.Cause is null or MigrationFailureCause.Status)
         {
             _logger.LogWarning(ex, "Failed to fetch count for {Collection}, continuing without total", collectionName);
         }
@@ -949,15 +1188,7 @@ internal class MigrationJob
             if (currentTo.HasValue)
                 url += collection.Cursor.Filter(currentTo.Value);
 
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError(
-                    "Failed to fetch {Collection}: {StatusCode}", collection.Label, response.StatusCode);
-                break;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
+            var content = await ReadFromSourceAsync(httpClient, url, collection.Label, ct);
             var page = System.Text.Json.JsonSerializer.Deserialize<T[]>(content) ?? [];
 
             if (page.Length == 0) break;
@@ -1005,53 +1236,39 @@ internal class MigrationJob
         var totalMigrated = 0L;
         var totalFailed = 0L;
 
-        try
+        var content = await ReadFromSourceAsync(httpClient, "/api/v1/profile.json", collectionName, ct);
+        var profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(content) ?? [];
+
+        UpdateCollectionProgress(collectionName, profiles.Length, 0, 0, false);
+        UpdateOverallProgress();
+
+        using var scope = CreateTenantScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
+
+        foreach (var profile in profiles)
         {
-            var response = await httpClient.GetAsync("/api/v1/profile.json", ct);
-            if (!response.IsSuccessStatusCode)
+            ct.ThrowIfCancellationRequested();
+
+            try
             {
-                _logger.LogError("Failed to fetch profiles: {StatusCode}", response.StatusCode);
-                return;
+                if (string.IsNullOrEmpty(profile.Id))
+                {
+                    profile.Id = Guid.CreateVersion7().ToString();
+                }
+
+                await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct);
+                totalMigrated++;
+                UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, false);
+                UpdateOverallProgress();
             }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var profiles = System.Text.Json.JsonSerializer.Deserialize<Profile[]>(content) ?? [];
-
-            UpdateCollectionProgress(collectionName, profiles.Length, 0, 0, false);
-            UpdateOverallProgress();
-
-            using var scope = CreateTenantScope();
-            var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
-
-            foreach (var profile in profiles)
+            catch
             {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    if (string.IsNullOrEmpty(profile.Id))
-                    {
-                        profile.Id = Guid.CreateVersion7().ToString();
-                    }
-
-                    await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct);
-                    totalMigrated++;
-                    UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, false);
-                    UpdateOverallProgress();
-                }
-                catch
-                {
-                    totalFailed++;
-                }
+                totalFailed++;
             }
+        }
 
-            UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating profiles via API");
-        }
+        UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
 
         _logger.LogInformation("Migrated {Count} profiles via API", totalMigrated);
     }
@@ -1071,86 +1288,71 @@ internal class MigrationJob
         var totalFailed = 0L;
         var totalSkipped = 0;
 
-        try
+        while (true)
         {
-            while (true)
+            ct.ThrowIfCancellationRequested();
+
+            var url = $"/api/v1/food.json?count={ApiPageSize}&skip={totalSkipped}";
+            var content = await ReadFromSourceAsync(httpClient, url, collectionName, ct);
+            var foods = System.Text.Json.JsonSerializer.Deserialize<Food[]>(content) ?? [];
+
+            if (foods.Length == 0) break;
+
+            foreach (var food in foods)
             {
-                ct.ThrowIfCancellationRequested();
-
-                var url = $"/api/v1/food.json?count={ApiPageSize}&skip={totalSkipped}";
-
-                var response = await httpClient.GetAsync(url, ct);
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    _logger.LogError("Failed to fetch food: {StatusCode}", response.StatusCode);
-                    break;
-                }
+                    var exists = await dbContext.Foods.AnyAsync(
+                        f => f.Name == (food.Name ?? "") && f.Type == (food.Type ?? "food"),
+                        ct
+                    );
 
-                var content = await response.Content.ReadAsStringAsync(ct);
-                var foods = System.Text.Json.JsonSerializer.Deserialize<Food[]>(content) ?? [];
-
-                if (foods.Length == 0) break;
-
-                foreach (var food in foods)
-                {
-                    try
+                    if (!exists)
                     {
-                        var exists = await dbContext.Foods.AnyAsync(
-                            f => f.Name == (food.Name ?? "") && f.Type == (food.Type ?? "food"),
-                            ct
+                        dbContext.Foods.Add(
+                            new Infrastructure.Data.Entities.FoodEntity
+                            {
+                                Id = Guid.CreateVersion7(),
+                                Type = food.Type ?? "food",
+                                Category = food.Category ?? "",
+                                Subcategory = food.Subcategory ?? "",
+                                Name = food.Name ?? "",
+                                Portion = food.Portion,
+                                Carbs = food.Carbs,
+                                Fat = food.Fat,
+                                Protein = food.Protein,
+                                Energy = food.Energy,
+                                Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
+                                Unit = food.Unit ?? "g",
+                                Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
+                                HideAfterUse = food.HideAfterUse,
+                                Hidden = food.Hidden,
+                                Position = food.Position,
+                            }
                         );
-
-                        if (!exists)
-                        {
-                            dbContext.Foods.Add(
-                                new Infrastructure.Data.Entities.FoodEntity
-                                {
-                                    Id = Guid.CreateVersion7(),
-                                    Type = food.Type ?? "food",
-                                    Category = food.Category ?? "",
-                                    Subcategory = food.Subcategory ?? "",
-                                    Name = food.Name ?? "",
-                                    Portion = food.Portion,
-                                    Carbs = food.Carbs,
-                                    Fat = food.Fat,
-                                    Protein = food.Protein,
-                                    Energy = food.Energy,
-                                    Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
-                                    Unit = food.Unit ?? "g",
-                                    Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
-                                    HideAfterUse = food.HideAfterUse,
-                                    Hidden = food.Hidden,
-                                    Position = food.Position,
-                                }
-                            );
-                        }
-                        totalMigrated++;
                     }
-                    catch
-                    {
-                        totalFailed++;
-                    }
+                    totalMigrated++;
                 }
-
-                await dbContext.SaveChangesAsync(ct);
-                totalSkipped += foods.Length;
-
-                UpdateCollectionProgress(collectionName,
-                    Math.Max(knownTotal, totalSkipped),
-                    totalMigrated, totalFailed, false);
-                UpdateOverallProgress();
-
-                if (foods.Length < ApiPageSize) break;
+                catch
+                {
+                    totalFailed++;
+                }
             }
 
-            UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
-                totalMigrated, totalFailed, true);
+            await dbContext.SaveChangesAsync(ct);
+            totalSkipped += foods.Length;
+
+            UpdateCollectionProgress(collectionName,
+                Math.Max(knownTotal, totalSkipped),
+                totalMigrated, totalFailed, false);
             UpdateOverallProgress();
+
+            if (foods.Length < ApiPageSize) break;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating food via API");
-        }
+
+        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+            totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
 
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
     }
@@ -1453,126 +1655,131 @@ internal class MigrationJob
         var totalFailed = 0L;
         var totalSkipped = 0L;
 
+        // 1. Fetch roles to build name->permissions lookup
+        var rolePermissions = await FetchNightscoutRolePermissionsAsync(httpClient, ct);
+
+        // 2. Fetch subjects
+        string content;
         try
         {
-            // 1. Fetch roles to build name->permissions lookup
-            var rolePermissions = await FetchNightscoutRolePermissionsAsync(httpClient, ct);
-
-            // 2. Fetch subjects
-            var response = await httpClient.GetAsync("/api/v2/authorization/subjects", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "Failed to fetch subjects: {StatusCode}. The API secret may lack admin access. Skipping subject migration.",
-                    response.StatusCode);
-                UpdateCollectionProgress(collectionName, 0, 0, 0, true);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
-                content,
-                s_caseInsensitiveJson) ?? [];
-
-            UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
-            UpdateOverallProgress();
-
-            // 3. Pre-load existing token hashes for duplicate detection
-            var existingHashes = await dbContext.Subjects
-                .Where(s => s.AccessTokenHash != null)
-                .Select(s => s.AccessTokenHash!)
-                .ToHashSetAsync(ct);
-
-            // 4. Pre-load existing Nocturne roles by name
-            var nocturneRoles = await dbContext.Roles
-                .ToDictionaryAsync(r => r.Name, r => r, ct);
-
-            // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
-            // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
-            // can reconstruct the full 40-char digest and store it for 1:1 legacy token matching.
-            var hashedSecret = string.IsNullOrEmpty(_request.NightscoutApiSecret)
-                ? null
-                : HashApiSecret(_request.NightscoutApiSecret);
-
-            foreach (var subject in subjects)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    if (string.IsNullOrWhiteSpace(subject.AccessToken))
-                    {
-                        totalSkipped++;
-                        continue;
-                    }
-
-                    var tokenHash = HashUtils.Sha256Hex(subject.AccessToken);
-
-                    if (existingHashes.Contains(tokenHash))
-                    {
-                        totalSkipped++;
-                        continue;
-                    }
-
-                    var roles = await ResolveRolesAsync(dbContext, nocturneRoles, rolePermissions, subject.Roles, ct);
-
-                    // Determine if subject should be inactive ("denied" is only role)
-                    var isDenied = subject.Roles is ["denied"];
-
-                    var mongoId = subject.MongoId ?? subject.Id;
-                    var legacyDigest = Auth.LegacyNightscoutToken.DeriveDigest(hashedSecret, mongoId, subject.AccessToken);
-
-                    var entity = new SubjectEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        Name = subject.Name ?? "Unnamed",
-                        AccessTokenHash = tokenHash,
-                        AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
-                        LegacyTokenDigest = legacyDigest,
-                        IsActive = !isDenied,
-                        Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
-                        OriginalId = mongoId,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                        ApprovalStatus = "Approved",
-                    };
-
-                    dbContext.Subjects.Add(entity);
-                    await dbContext.SaveChangesAsync(ct);
-
-                    foreach (var role in roles)
-                    {
-                        dbContext.SubjectRoles.Add(new SubjectRoleEntity
-                        {
-                            SubjectId = entity.Id,
-                            RoleId = role.Id,
-                            AssignedAt = DateTime.UtcNow,
-                        });
-                    }
-
-                    AddTenantMembership(dbContext, entity.Id, GrantedPermissions(roles, rolePermissions));
-                    await dbContext.SaveChangesAsync(ct);
-
-                    existingHashes.Add(tokenHash);
-                    totalMigrated++;
-                    UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, false);
-                    UpdateOverallProgress();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to migrate subject {Name}", subject.Name);
-                    totalFailed++;
-                    dbContext.ChangeTracker.Clear();
-                }
-            }
-
-            UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
+            content = await ReadFromSourceAsync(
+                httpClient, "/api/v2/authorization/subjects", collectionName, ct);
         }
-        catch (Exception ex)
+        catch (MigrationSourceException ex) when (ex.Cause is not MigrationFailureCause.Unreachable)
         {
-            _logger.LogError(ex, "Error migrating subjects via API");
+            if (ex.Cause is MigrationFailureCause.ApiSecretRejected)
+            {
+                _logger.LogInformation(
+                    "Skipping subject migration: the API secret lacks admin access ({Reason})", ex.Message);
+                RecordCollectionSkipped(collectionName, SubjectsNeedAdminSecretMessage);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to fetch subjects: {Reason}", ex.Message);
+                RecordCollectionFailure(collectionName, ex.Message);
+            }
+
+            return;
         }
+
+        var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
+            content,
+            s_caseInsensitiveJson) ?? [];
+
+        UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
+        UpdateOverallProgress();
+
+        // 3. Pre-load existing token hashes for duplicate detection
+        var existingHashes = await dbContext.Subjects
+            .Where(s => s.AccessTokenHash != null)
+            .Select(s => s.AccessTokenHash!)
+            .ToHashSetAsync(ct);
+
+        // 4. Pre-load existing Nocturne roles by name
+        var nocturneRoles = await dbContext.Roles
+            .ToDictionaryAsync(r => r.Name, r => r, ct);
+
+        // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
+        // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
+        // can reconstruct the full 40-char digest and store it for 1:1 legacy token matching.
+        var hashedSecret = string.IsNullOrEmpty(_request.NightscoutApiSecret)
+            ? null
+            : HashApiSecret(_request.NightscoutApiSecret);
+
+        foreach (var subject in subjects)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(subject.AccessToken))
+                {
+                    totalSkipped++;
+                    continue;
+                }
+
+                var tokenHash = HashUtils.Sha256Hex(subject.AccessToken);
+
+                if (existingHashes.Contains(tokenHash))
+                {
+                    totalSkipped++;
+                    continue;
+                }
+
+                var roles = await ResolveRolesAsync(dbContext, nocturneRoles, rolePermissions, subject.Roles, ct);
+
+                // Determine if subject should be inactive ("denied" is only role)
+                var isDenied = subject.Roles is ["denied"];
+
+                var mongoId = subject.MongoId ?? subject.Id;
+                var legacyDigest = Auth.LegacyNightscoutToken.DeriveDigest(hashedSecret, mongoId, subject.AccessToken);
+
+                var entity = new SubjectEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    Name = subject.Name ?? "Unnamed",
+                    AccessTokenHash = tokenHash,
+                    AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
+                    LegacyTokenDigest = legacyDigest,
+                    IsActive = !isDenied,
+                    Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
+                    OriginalId = mongoId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    ApprovalStatus = "Approved",
+                };
+
+                dbContext.Subjects.Add(entity);
+                await dbContext.SaveChangesAsync(ct);
+
+                foreach (var role in roles)
+                {
+                    dbContext.SubjectRoles.Add(new SubjectRoleEntity
+                    {
+                        SubjectId = entity.Id,
+                        RoleId = role.Id,
+                        AssignedAt = DateTime.UtcNow,
+                    });
+                }
+
+                AddTenantMembership(dbContext, entity.Id, GrantedPermissions(roles, rolePermissions));
+                await dbContext.SaveChangesAsync(ct);
+
+                existingHashes.Add(tokenHash);
+                totalMigrated++;
+                UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, false);
+                UpdateOverallProgress();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to migrate subject {Name}", subject.Name);
+                totalFailed++;
+                dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
 
         _logger.LogInformation(
             "Subject migration complete: {Migrated} migrated, {Skipped} skipped, {Failed} failed",
@@ -1688,14 +1895,8 @@ internal class MigrationJob
 
         try
         {
-            var response = await httpClient.GetAsync("/api/v2/authorization/roles", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Failed to fetch Nightscout roles: {StatusCode}. Using default role mappings.", response.StatusCode);
-                return result;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
+            var content = await ReadFromSourceAsync(
+                httpClient, "/api/v2/authorization/roles", "roles", ct);
             var roles = System.Text.Json.JsonSerializer.Deserialize<NightscoutRole[]>(
                 content,
                 s_caseInsensitiveJson) ?? [];

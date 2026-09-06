@@ -27,7 +27,8 @@ import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId } from "../api/generated/nocturne-api-client";
+import type { WidgetId } from "../api/generated/nocturne-api-client";
+import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/widget-registry";
 import type { UserDisplayPreferences } from "$lib/api";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";
@@ -301,7 +302,7 @@ export const nightModeSchedule = new SyncedPref<boolean>(
  */
 export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   "nocturne-dashboard-top-widgets",
-  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd],
+  DEFAULT_TOP_WIDGETS,
   (p) => p.dashboardTopWidgets
 );
 

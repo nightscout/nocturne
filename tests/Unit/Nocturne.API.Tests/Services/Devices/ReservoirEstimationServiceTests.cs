@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Basal;
@@ -20,7 +21,8 @@ public class ReservoirEstimationServiceTests
     private readonly Mock<IBolusRepository> _boluses = new();
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
     private readonly Mock<IBasalSegmentService> _basalSegments = new();
-    private readonly CapturingLogger _logger = new();
+    // Moq cannot proxy ILogger<ReservoirEstimationService>: the generic argument is internal.
+    private readonly ListLogger<ReservoirEstimationService> _logger = new();
     private readonly ReservoirEstimationService _sut;
 
     public ReservoirEstimationServiceTests()
@@ -147,21 +149,6 @@ public class ReservoirEstimationServiceTests
         var estimate = await _sut.GetEstimateAsync(null);
 
         estimate.Should().Be(new ReservoirEstimate(0m, IsLowerBound: false, IsEstimated: true));
-    }
-
-    /// <summary>Records warning-level messages. Moq cannot proxy
-    /// <c>ILogger&lt;ReservoirEstimationService&gt;</c> because the generic argument is internal.</summary>
-    private sealed class CapturingLogger : ILogger<ReservoirEstimationService>
-    {
-        public List<string> Warnings { get; } = [];
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel == LogLevel.Warning)
-                Warnings.Add(formatter(state, exception));
-        }
     }
 
     [Fact]

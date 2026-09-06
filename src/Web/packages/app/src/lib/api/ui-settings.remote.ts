@@ -7,7 +7,7 @@
  * rather than an in-memory copy, so nothing is lost on reload.
  */
 import { getRequestEvent, query, command } from "$app/server";
-import { error } from "@sveltejs/kit";
+import { error, redirect } from "@sveltejs/kit";
 import type {
   DataQualitySettings,
   FeatureSettings,
@@ -17,6 +17,8 @@ import {
   DataQualitySettingsSchema,
   FeatureSettingsSchema,
 } from "$lib/api/generated/schemas";
+import { errorStatus } from "$lib/forms/submit-error";
+import { SETTINGS_LOAD_FAILED } from "./ui-settings-messages";
 
 export const getUiSettings = query(async () => {
   const { locals } = getRequestEvent();
@@ -24,8 +26,24 @@ export const getUiSettings = query(async () => {
   try {
     return await locals.apiClient.uiSettings.getUISettings();
   } catch (err) {
+    // Same 401 handling as a generated query: the settings pages are behind the
+    // authenticated layout, so an expired session has to reach the login route.
+    if (errorStatus(err) === 401) {
+      const { request, url } = getRequestEvent();
+      const host =
+        request.headers.get("x-forwarded-host") ??
+        request.headers.get("host") ??
+        "";
+      if (/^[^.]+\.share\./i.test(host)) throw error(401, "Unauthorized");
+
+      throw redirect(
+        302,
+        `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`
+      );
+    }
+
     console.error("Error loading UI settings:", err);
-    throw error(500, "Failed to load settings");
+    throw error(500, SETTINGS_LOAD_FAILED);
   }
 });
 

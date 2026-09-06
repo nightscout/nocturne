@@ -23,6 +23,12 @@ public class ActogramReportData
     /// <summary>Step count samples within the requested window.</summary>
     public List<StepBubbleDto> StepCounts { get; set; } = new();
 
+    /// <summary>
+    /// Total steps per calendar day of the requested window, keyed by the tenant-local date
+    /// (<c>yyyy-MM-dd</c>). Every day the window touches is present, days without samples as 0.
+    /// </summary>
+    public Dictionary<string, int> StepDayTotals { get; set; } = new();
+
     /// <summary>Sleep spans within the requested window.</summary>
     public List<ActogramSleepSpan> SleepSpans { get; set; } = new();
 }

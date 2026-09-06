@@ -33,15 +33,34 @@ internal static class MigrationSourceFiles
 
     /// <summary>
     /// The bare table name in a captured SQL or builder reference: the leading segment, before any
-    /// argument list, alias or trailing punctuation, unquoted and lowercased. <c>tbl(col)</c>,
-    /// <c>"tbl"(col)</c> and <c>tbl (col)</c> all yield <c>tbl</c>. A derived table
+    /// argument list, alias or trailing punctuation, unqualified, unquoted and lowercased.
+    /// <c>tbl(col)</c>, <c>tbl)</c>, <c>public.tbl</c> and <c>"tbl"</c> all yield <c>tbl</c>. The
+    /// capture is migration source, not SQL, so the whitespace ending the name may be a C# escape
+    /// sequence and a quote around it is escaped as well: the escaped quote is unescaped first,
+    /// then a backslash ends the name like any other delimiter. A derived table
     /// (<c>(VALUES …)</c>) yields an empty string, which matches no table.
     /// </summary>
     public static string BareTableName(string captured) =>
-        Regex.Split(captured, @"[(;,\s]")[0].Trim('"').ToLowerInvariant();
+        Regex.Split(Unescaped(captured), @"[();,\s\\]")[0]
+            .Split('.')[^1]
+            .Trim('"')
+            .ToLowerInvariant();
+
+    /// <summary>
+    /// A captured reference with C#-escaped quotes turned back into quotes, for anything that has
+    /// to recognise the shape of a reference rather than just its leading segment.
+    /// </summary>
+    public static string Unescaped(string captured) =>
+        captured.Replace("\\\"", "\"", StringComparison.Ordinal);
 
     /// <summary>Migration name — the file name a guard reports and an allowlist keys on.</summary>
     public static string Name(string file) => Path.GetFileNameWithoutExtension(file);
+
+    /// <summary>
+    /// Whole source text, for the questions <see cref="UpBody"/> cannot answer: a migration's
+    /// table list is routinely a class-level array its <c>Up</c> only loops over.
+    /// </summary>
+    public static string Source(string file) => File.ReadAllText(file);
 
     /// <summary>
     /// Text of the migration's <c>Up</c> method. Only <c>Up</c> runs on the startup migration
@@ -55,7 +74,7 @@ internal static class MigrationSourceFiles
     /// </exception>
     public static string UpBody(string file)
     {
-        var source = File.ReadAllText(file);
+        var source = Source(file);
         var start = source.IndexOf("void Up(", StringComparison.Ordinal);
 
         if (start < 0)
@@ -77,11 +96,21 @@ internal static class MigrationSourceFiles
     /// detects offenders, withheld evidence is a false green, so scan raw text there instead.
     /// </para>
     /// </summary>
-    public static string WithCommentsBlanked(string source)
+    public static string WithCommentsBlanked(string source) => Blanked(source, Comment);
+
+    /// <summary>
+    /// <see cref="WithCommentsBlanked"/>, additionally blanking single-quoted SQL literals, for
+    /// questions about SQL structure that a keyword inside a literal would answer wrongly.
+    /// Comments go first, so an apostrophe in prose cannot pair with a real literal's quote.
+    /// </summary>
+    public static string WithCommentsAndSqlLiteralsBlanked(string source) =>
+        Blanked(WithCommentsBlanked(source), SqlLiteral);
+
+    private static string Blanked(string source, Regex region)
     {
         var blanked = source.ToCharArray();
 
-        foreach (Match match in Comment.Matches(source))
+        foreach (Match match in region.Matches(source))
             for (var i = match.Index; i < match.Index + match.Length; i++)
                 if (blanked[i] is not ('\r' or '\n'))
                     blanked[i] = ' ';
@@ -105,6 +134,10 @@ internal static class MigrationSourceFiles
     });
 
     private static readonly Regex TimestampPrefixed = new(@"^\d{14}_", RegexOptions.Compiled);
+
+    private static readonly Regex SqlLiteral = new(
+        "'[^']*'",
+        RegexOptions.Singleline | RegexOptions.Compiled);
 
     private static readonly Regex Comment = new(
         @"/\*.*?\*/|//[^\r\n]*|--[^\r\n]*",

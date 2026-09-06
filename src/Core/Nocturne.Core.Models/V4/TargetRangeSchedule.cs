@@ -8,8 +8,8 @@ namespace Nocturne.Core.Models.V4;
 /// </summary>
 /// <remarks>
 /// Each entry in <see cref="Entries"/> specifies the lower and upper target glucose bounds that
-/// APS algorithms aim for at a given time of day. All schedules decomposed from the same legacy
-/// <see cref="Profile"/> share the same <see cref="IV4Record.CorrelationId"/>.
+/// APS algorithms aim for at a given time of day. All records decomposed from one named profile store share the same
+/// <see cref="IV4Record.CorrelationId"/>.
 /// </remarks>
 /// <seealso cref="Profile"/>
 /// <seealso cref="IV4Record"/>
@@ -20,7 +20,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="TherapySettings"/>
 /// <seealso cref="ProfileSummary"/>
 [JsonSchemaFlatten]
-public class TargetRangeSchedule : V4RecordBase
+public class TargetRangeSchedule : V4RecordBase, IProfileScoped
 {
     /// <summary>
     /// Named profile this schedule belongs to

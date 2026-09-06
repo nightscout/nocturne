@@ -1,5 +1,6 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.NocturneRemote.Configurations;
@@ -48,12 +49,19 @@ public class NocturneRemoteConnectorConfiguration : BaseConnectorConfiguration
     /// <summary>
     ///     Direct grant bearer token for the remote instance.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
-    public string Token { get; set; } = string.Empty;
+    [ConnectorProperty(ConnectorPropertyKey.AccessToken, Required = true, Secret = true)]
+    public string AccessToken { get; set; } = string.Empty;
 
     /// <summary>
     ///     Page size for paginated V4 API requests.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.MaxCount, DefaultValue = "500", MinValue = 50, MaxValue = 5000)]
     public int MaxCount { get; set; } = 500;
+
+    /// <summary>
+    ///     <inheritdoc cref="ConnectorUrl.ResolveBase" path="/summary"/> A method, not a property,
+    ///     so the configuration loader's JSON clone neither carries it nor trips its guard on a
+    ///     half-filled configuration.
+    /// </summary>
+    public string ResolveBaseUrl() => ConnectorUrl.ResolveBase(Url, ConnectorName);
 }

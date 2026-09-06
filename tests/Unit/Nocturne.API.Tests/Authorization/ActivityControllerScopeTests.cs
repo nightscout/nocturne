@@ -20,9 +20,9 @@ namespace Nocturne.API.Tests.Authorization;
 /// Asserts that <c>ActivityController</c> actually calls
 /// <see cref="Nocturne.API.Authorization.ActivityWriteScopeGuard"/> and
 /// <see cref="Nocturne.API.Authorization.ActivityReadScopeGuard"/>. The guard suites exercise those
-/// functions in isolation, so removing a call from a handler would leave them and the attribute
-/// sweep in <see cref="V4WriteScopeGatingTests"/> green while the endpoint became ungated — the
-/// activity endpoints are exempted from the sweep precisely because their gate is a method call.
+/// functions in isolation, so removing a call from a handler would leave them green and the
+/// attribute sweep in <see cref="V4WriteScopeGatingTests"/> satisfied by the write actions' baseline
+/// <c>treatments.readwrite</c> alone, while the per-record category gate was gone.
 /// </summary>
 public class ActivityControllerScopeTests
 {
